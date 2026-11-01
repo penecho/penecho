@@ -1034,6 +1034,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       newCanvas: "New",
       saveCanvas: "Save canvas",
       saveCurrentSnapshot: "Save",
+      guestSignIn: "Sign in",
+      guestSignUp: "Sign up",
       canvasUntitledName: "Untitled canvas",
       canvasRename: "Rename",
       canvasRenameCurrent: "Rename current canvas",

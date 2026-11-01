@@ -2320,6 +2320,50 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
 /* The rail replaces duplicate navigation; signed-in AI keeps its normal UI. */
 :root[data-penecho-companion="minimal"] body :is(#canvasZoomControls, #canvasNavigationLock, #canvasFitContents, #canvasWelcome, #canvasAgentControl) { display: none !important; }
 :root[data-penecho-guest-ai="true"] body :is(#aiEmbodiment, #auto, #canvasAutoPausedNotice, #assistAgentMini, #smartSuggestLayer, .pen-intel-layer, #smartSuggestToggle) { display: none !important; }
+/* A visitor who is not signed in signs in or up at the end of the title row; Sign up is its one filled button. */
+.guest-account-actions[hidden] { display: none !important; }
+body .topbar #guestAccountActions { display: inline-flex; flex: 0 0 auto; order: 5; align-items: center; gap: 4px; margin-left: 2px; }
+body .topbar #guestAccountActions > button {
+  display: inline-flex; align-items: center; height: 28px; min-height: 28px; box-sizing: border-box; margin: 0; padding: 0 10px;
+  border: 1px solid transparent; border-radius: 6px; box-shadow: none; font: 500 12.5px/1 var(--pe-font-ui, system-ui); white-space: nowrap; cursor: pointer;
+}
+body .topbar #guestSignInBtn { color: var(--studio-text, #20242c); background: transparent; }
+body .topbar #guestSignInBtn:hover { background: var(--studio-toolbar, #f3f4f6); }
+body .topbar #guestSignUpBtn { color: #ffffff; background: var(--pe-accent, #4f46e5); }
+body .topbar #guestSignUpBtn:hover { background: var(--pe-accent-strong, #4338ca); }
+body .topbar #guestAccountActions > button:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: 2px; }
+:root[data-penecho-guest-ai="true"] body .topbar :is(#cloudAccountBtn, #saveCanvasBtn) { display: none !important; }
+@media (min-width: 701px) {
+  :root[data-penecho-guest-ai="true"] body[data-theme="studio"] .topbar #shareCanvasBtn { color: var(--pe-accent-strong); border: 1px solid var(--pe-accent); background: transparent; }
+  :root[data-penecho-guest-ai="true"] body[data-theme="studio"] .topbar #shareCanvasBtn:is(:hover, :active):not(:disabled) { color: var(--pe-accent-strong); border-color: var(--pe-accent); background: color-mix(in srgb, var(--pe-accent) 8%, transparent); }
+}
+/* With them in the row, labels give way sooner: the view toggle's first, then Collaborate's and Share's. */
+@media (max-width: 960px) {
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body .topbar #companionViewToggle:not([hidden]) { width: 28px; padding: 0; }
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body .topbar .companion-view-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (min-width: 701px) and (max-width: 800px) {
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body[data-theme="studio"] .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) { width: 28px; min-width: 0; padding: 0; }
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body[data-theme="studio"] .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) .canvas-share-label { display: none; }
+}
+@media (min-width: 701px) and (max-width: 1180px) {
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="full"] body .topbar #companionViewToggle:not([hidden]) { width: 28px; padding: 0; }
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="full"] body .topbar .companion-view-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  :root[data-penecho-guest-ai="true"]:not([data-penecho-companion="minimal"]) body[data-theme="studio"] .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) { width: 28px; min-width: 0; padding: 0; }
+  :root[data-penecho-guest-ai="true"]:not([data-penecho-companion="minimal"]) body[data-theme="studio"] .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) .canvas-share-label { display: none; }
+}
+/* Narrower still, Sign up stands alone (the page it opens signs in too), and on small screens the row wraps. */
+@media (min-width: 701px) and (max-width: 800px) {
+  :root[data-penecho-guest-ai="true"]:not([data-penecho-companion="minimal"]) body .topbar #guestSignInBtn { display: none; }
+}
+@media (max-width: 640px) {
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body .topbar #guestSignInBtn { display: none; }
+}
+@media (max-width: 700px) {
+  :root[data-penecho-guest-ai="true"]:not([data-penecho-companion="minimal"]) body .topbar > .top-row { flex-wrap: wrap; }
+}
 /* Hidden docked panels must not leak into the compact viewport on interaction. */
 :root[data-penecho-companion="minimal"] body:not(.canvas-agent-open) .canvas-frame > .canvas-agent-panel,
 :root[data-penecho-companion="minimal"] body .canvas-frame > .canvas-agent-panel[hidden] { display: none !important; }

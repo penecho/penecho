@@ -417,6 +417,8 @@ window.PENECHO_LOCALES.zh = {
   newCanvas: "新建",
   saveCanvas: "保存画布",
   saveCurrentSnapshot: "保存",
+  guestSignIn: "登录",
+  guestSignUp: "注册",
   exportPng: "导出 PNG",
   newCanvasTitle: "新建画布",
       closeCanvasTitle: "关闭画布",

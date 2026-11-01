@@ -1774,6 +1774,10 @@
   };
   document.querySelector("#newCanvasBtn").onclick = () => window.PenEchoCompanionCanvases ? void window.PenEchoCompanionCanvases.create() : canvasDocumentsUiAction(openNewCanvasDialog);
   document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvasFromUser;
+  // A Cloud visitor who is not signed in can sign in, or sign up, from every Canvas page.
+  document.querySelector("#guestAccountActions").hidden = !canvasGuestAiRestricted();
+  document.querySelector("#guestSignInBtn").onclick = () => canvasGuestSignIn();
+  document.querySelector("#guestSignUpBtn").onclick = () => canvasGuestSignIn({ signup:true });
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
   // A direct More-menu item: close the menu, then export.
   document.querySelector("#exportPdfBtn").onclick = () => {

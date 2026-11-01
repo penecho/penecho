@@ -3139,6 +3139,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       newCanvas: "New",
       saveCanvas: "Save canvas",
       saveCurrentSnapshot: "Save",
+      guestSignIn: "Sign in",
+      guestSignUp: "Sign up",
       canvasUntitledName: "Untitled canvas",
       canvasRename: "Rename",
       canvasRenameCurrent: "Rename current canvas",
@@ -31947,18 +31949,24 @@ var canvasDocumentIdentity = (() => {
     }
     return saveCurrentCanvas();
   }
+  // A guest signs in, or signs up, and keeps what they made here: a folder page's Canvases, or this draft.
+  function canvasGuestSignIn({ signup = false } = {}) {
+    if (window.PenEchoBrowserDraft) return window.PenEchoBrowserDraft.signIn({ intent:window.PenEchoFolderProject?.guest?.() ? "keep" : "save", signup });
+    location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}${signup ? "#signup" : ""}`);
+    return null;
+  }
   if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoBrowserDraft = {
     open:() => canvasDocumentsStartDraft(true),
     flush:canvasDocumentsFlushDraft,
     resumeIntent:() => canvasDocumentsResumeIntent().catch(error => { setStatus(String(error?.message || error)); return false; }),
-    async signIn({ intent = "" } = {}) {
+    async signIn({ intent = "", signup = false } = {}) {
       // A draft that cannot be stored keeps the user here, with nothing lost.
       try { await canvasDocumentsSettleDraft(5000, { finalize:true }); }
       catch (error) { setStatus(String(error?.message || error)); return false; }
       if (intent === "save" || intent === "keep") {
         try { sessionStorage.setItem(canvasDocumentsIntentKey(), JSON.stringify({ action:intent, documentId:canvasDocuments.activeId, createdAt:Date.now() })); } catch {}
       }
-      location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
+      location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}${signup ? "#signup" : ""}`);
     }
   };
   // Returning with Back from the sign-in page restores this page from cache.
@@ -45713,6 +45721,10 @@ var canvasDocumentIdentity = (() => {
   };
   document.querySelector("#newCanvasBtn").onclick = () => window.PenEchoCompanionCanvases ? void window.PenEchoCompanionCanvases.create() : canvasDocumentsUiAction(openNewCanvasDialog);
   document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvasFromUser;
+  // A Cloud visitor who is not signed in can sign in, or sign up, from every Canvas page.
+  document.querySelector("#guestAccountActions").hidden = !canvasGuestAiRestricted();
+  document.querySelector("#guestSignInBtn").onclick = () => canvasGuestSignIn();
+  document.querySelector("#guestSignUpBtn").onclick = () => canvasGuestSignIn({ signup:true });
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
   // A direct More-menu item: close the menu, then export.
   document.querySelector("#exportPdfBtn").onclick = () => {

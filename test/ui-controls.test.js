@@ -5263,3 +5263,19 @@ test("widget corner resizing anchors the opposite corner and respects canvas bou
     assert.ok(Math.abs(bounded.w/bounded.h - 1.5) < 0.0001);
   }
 });
+
+test("a Cloud guest's title row ends with Sign in and Sign up, and Sign up is its one filled button", () => {
+  const html = read("public/index.html"), css = read("public/studio-shell.css"), boot = read("src/client/app/ui-bootstrap.js"), core = read("src/client/app/core.js"), zh = read("public/locales/zh.js");
+  const actions = html.match(/<span id="guestAccountActions"[\s\S]*?<\/span>/)?.[0] || "";
+  assert.match(actions, /^<span id="guestAccountActions" class="guest-account-actions" hidden>/, "hidden until a guest opens the page");
+  assert.match(actions, /<button id="guestSignInBtn" type="button" data-i18n="guestSignIn"[^>]*data-pe-button="ghost"/);
+  assert.match(actions, /<button id="guestSignUpBtn" type="button" data-i18n="guestSignUp"[^>]*data-pe-button="primary"/);
+  assert.ok(html.indexOf('id="guestAccountActions"') > html.indexOf('id="settingsBtn"'), "after every other title-row control");
+  assert.match(core, /guestSignIn: "Sign in",\s*guestSignUp: "Sign up",/);
+  assert.match(zh, /guestSignIn: "登录",\s*guestSignUp: "注册",/);
+  assert.match(boot, /#guestAccountActions"\)\.hidden = !canvasGuestAiRestricted\(\);/);
+  assert.match(boot, /#guestSignUpBtn"\)\.onclick = \(\) => canvasGuestSignIn\(\{ signup:true \}\);/);
+  // The account button and Save give way to them, and Share is outlined beside Sign up.
+  assert.match(css, /:root\[data-penecho-guest-ai="true"\] body \.topbar :is\(#cloudAccountBtn, #saveCanvasBtn\) \{ display: none !important; \}/);
+  assert.match(css, /:root\[data-penecho-guest-ai="true"\] body\[data-theme="studio"\] \.topbar #shareCanvasBtn \{[^}]*background: transparent;/);
+});

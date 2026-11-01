@@ -2460,3 +2460,25 @@ test("signing in from a guest's folder page resumes by keeping its Canvases", as
   assert.equal(stored.size, 0, "the intent is used once");
   assert.equal(await h.context.window.PenEchoBrowserDraft.resumeIntent(), false);
 });
+
+test("a guest's Sign in and Sign up keep a folder page's Canvases or the draft, and Sign up opens Create account", async () => {
+  const h = harness({ browserDraftId: "draft-1" }), stored = new Map(), navigations = [];
+  h.context.sessionStorage = { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) };
+  Object.assign(h.context.location, { pathname: "/canvas/draft/draft-1", search: "?mcp=1&mode=companion", assign: url => navigations.push(new URL(url, "https://example.test")) });
+  h.context.window.PENECHO_CONFIG.guestCanvas = true;
+  h.context.setStatus = () => {};
+  h.context.canvasDocumentsSettleDraft = async () => {};
+  const intent = () => JSON.parse(stored.get("penecho-browser-draft-intent:draft-1")).action;
+  h.context.window.PenEchoFolderProject = { guest: () => true };
+  await h.context.canvasGuestSignIn({ signup: true });
+  assert.deepEqual([intent(), navigations[0].pathname, navigations[0].searchParams.get("returnTo"), navigations[0].hash], ["keep", "/auth.html", "/canvas/draft/draft-1?mcp=1&mode=companion", "#signup"]);
+  h.context.window.PenEchoFolderProject = { guest: () => false };
+  await h.context.canvasGuestSignIn();
+  assert.deepEqual([intent(), navigations[1].hash], ["save", ""]);
+  // A Collaborate link has no draft: signing in comes back to the link.
+  const shared = harness(), links = [];
+  Object.assign(shared.context.location, { pathname: "/canvas/collaborate/link-1", search: "", assign: url => links.push(new URL(url, "https://example.test")) });
+  shared.context.window.PENECHO_CONFIG.guestCanvas = true;
+  shared.context.canvasGuestSignIn({ signup: true });
+  assert.deepEqual([links[0].searchParams.get("returnTo"), links[0].hash], ["/canvas/collaborate/link-1", "#signup"]);
+});

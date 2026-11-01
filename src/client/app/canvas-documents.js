@@ -1518,18 +1518,24 @@
     }
     return saveCurrentCanvas();
   }
+  // A guest signs in, or signs up, and keeps what they made here: a folder page's Canvases, or this draft.
+  function canvasGuestSignIn({ signup = false } = {}) {
+    if (window.PenEchoBrowserDraft) return window.PenEchoBrowserDraft.signIn({ intent:window.PenEchoFolderProject?.guest?.() ? "keep" : "save", signup });
+    location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}${signup ? "#signup" : ""}`);
+    return null;
+  }
   if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoBrowserDraft = {
     open:() => canvasDocumentsStartDraft(true),
     flush:canvasDocumentsFlushDraft,
     resumeIntent:() => canvasDocumentsResumeIntent().catch(error => { setStatus(String(error?.message || error)); return false; }),
-    async signIn({ intent = "" } = {}) {
+    async signIn({ intent = "", signup = false } = {}) {
       // A draft that cannot be stored keeps the user here, with nothing lost.
       try { await canvasDocumentsSettleDraft(5000, { finalize:true }); }
       catch (error) { setStatus(String(error?.message || error)); return false; }
       if (intent === "save" || intent === "keep") {
         try { sessionStorage.setItem(canvasDocumentsIntentKey(), JSON.stringify({ action:intent, documentId:canvasDocuments.activeId, createdAt:Date.now() })); } catch {}
       }
-      location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
+      location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}${signup ? "#signup" : ""}`);
     }
   };
   // Returning with Back from the sign-in page restores this page from cache.
