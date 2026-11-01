@@ -48,16 +48,19 @@ function flatten(root) {
   return out;
 }
 
-function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther, saveEcho, currentCanvasId, widgetFrames = [], nativeReads = false, fetchResponse, statusTimeout, readyState = "complete", cookie = "", runtime = "cloud", browserDraftId } = {}) {
+function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther, saveEcho, currentCanvasId, widgetFrames = [], nativeReads = false, fetchResponse, statusTimeout, readyState = "complete", cookie = "", runtime = "cloud", browserDraftId, visibility = "visible", frames = "every", now } = {}) {
   const topRow = new FakeElement("div");
   topRow.className = "top-row";
   const brand = new FakeElement("div");
   brand.className = "brand";
   topRow.append(brand);
   const documentListeners = new Map();
+  let visibilityState = visibility, framesRun = 0;
   const document = {
     readyState,
-    addEventListener:(type, handler) => documentListeners.set(type, handler),
+    get visibilityState() { return visibilityState; },
+    addEventListener:(type, handler) => { if (!documentListeners.has(type)) documentListeners.set(type, new Set()); documentListeners.get(type).add(handler); },
+    removeEventListener:(type, handler) => documentListeners.get(type)?.delete(handler),
     baseURI,
     get cookie() { return typeof cookie === "function" ? cookie() : cookie; },
     body:new FakeElement("body"),
@@ -111,7 +114,8 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseU
     windowListeners.get(type).add(handler);
   };
   windowObject.removeEventListener = (type, handler) => windowListeners.get(type)?.delete(handler);
-  windowObject.requestAnimationFrame = (callback) => setImmediate(() => callback(Date.now()));
+  // "none": a hidden tab's frames never run; "once": the tab hides after one.
+  windowObject.requestAnimationFrame = (callback) => frames === "none" || frames === "once" && framesRun++ ? 0 : setImmediate(() => callback(Date.now()));
   windowObject.dispatchEvent = (event) => {
     for (const handler of windowListeners.get(event.type) || []) handler(event);
     return true;
@@ -131,12 +135,13 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseU
   };
   const context = {
     window:windowObject, document, location, navigator:{ language },
-    URL, URLSearchParams, Headers, Request, Response, CustomEvent, crypto:webcrypto, Date, console, AbortController, setTimeout:statusTimeout || setTimeout, clearTimeout,
+    URL, URLSearchParams, Headers, Request, Response, CustomEvent, crypto:webcrypto, Date:now ? class extends Date { static now() { return now(); } } : Date, console, AbortController, setTimeout:statusTimeout || setTimeout, clearTimeout,
   };
   vm.runInNewContext(gateScript, context, { filename:"public/remote-canvas.js" });
   const gate = document.body.children[0];
   return { gate, brand, window:windowObject, redirects, replacements, routeUpdates, fetchCalls, opened, taken, saveEchoCalls,
-    finishScripts:() => { document.readyState = "interactive"; documentListeners.get("DOMContentLoaded")?.(); },
+    finishScripts:() => { document.readyState = "interactive"; for (const handler of documentListeners.get("DOMContentLoaded") || []) handler(); },
+    setVisibility:(state) => { visibilityState = state; for (const handler of [...(documentListeners.get("visibilitychange") || [])]) handler(); },
     back:topRow.children[0],
     title:flatten(gate).find((el) => el.id === "remoteCanvasTitle"),
     detail:flatten(gate).find((el) => el.className === "remote-canvas-detail"),
@@ -452,6 +457,49 @@ test("Cloud Canvas stays covered until every visible Widget reports rendered con
   run.window.dispatchMessage({ type:"penecho-widget-capture-ready" }, secondWindow);
   await flush();
   assert.equal(run.gate.hidden, true);
+});
+
+// A hidden tab runs no animation frames, and its Widgets do not paint.
+const settle = async () => { await flush(); await new Promise((resolve) => setTimeout(resolve, 20)); await flush(); };
+
+test("a hidden tab opens its Cloud Canvas without animation frames or Widget paints", async () => {
+  const run = boot({ nativeReads:true, visibility:"hidden", frames:"none", widgetFrames:[{ contentWindow:{} }] });
+  await settle();
+  assert.equal(run.gate.hidden, true);
+});
+
+test("a tab that hides between paint frames still opens", async () => {
+  const run = boot({ nativeReads:true, frames:"once" });
+  await flush();
+  run.setVisibility("hidden");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await flush();
+  assert.equal(run.gate.hidden, true, "the paint wait falls back to its timer");
+});
+
+test("a tab hidden while its Widgets paint stops waiting for them", async () => {
+  const run = boot({ nativeReads:true, widgetFrames:[{ contentWindow:{} }] });
+  await settle();
+  assert.equal(run.gate.hidden, false, "a visible tab waits for its Widgets");
+  run.setVisibility("hidden");
+  await settle();
+  assert.equal(run.gate.hidden, true);
+});
+
+test("Widget paints that never arrive stop the wait at its deadline", async () => {
+  let offset = 0;
+  const run = boot({ nativeReads:true, widgetFrames:[{ contentWindow:{} }], now:() => Date.now() + offset,
+    // Only the Widget wait (up to its 15 s deadline) runs on the fast clock.
+    statusTimeout:(callback, ms, ...args) => { const fast = ms >= 10_000 && ms <= 15_000; return setTimeout(() => { if (fast) offset += ms; callback(...args); }, fast ? 0 : ms); } });
+  await settle();
+  assert.equal(run.gate.hidden, true);
+  assert.ok(offset > 14_000 && offset <= 15_000, `waited ${offset} ms of a 15 s deadline`);
+});
+
+test("a hidden tab that cannot load its Canvas shows why instead of spinning", async () => {
+  const run = boot({ nativeReads:true, visibility:"hidden", frames:"none", openCanvas:async () => { throw new Error("This Canvas is no longer shared."); } });
+  await settle();
+  assert.deepEqual([run.gate.hidden, run.gate.dataset.state, run.detail.textContent], [false, "error", "This Canvas is no longer shared."]);
 });
 
 test("Remote public Echo uses the linked-host bridge without redirecting to a guessed LAN origin", async () => {

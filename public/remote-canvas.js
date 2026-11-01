@@ -233,10 +233,21 @@
     })();
   });
 
-  function nextCanvasPaint() {
+  // Two animation frames let the Canvas paint. A hidden tab runs no frames, so
+  // a short timer settles the wait there, and when the tab hides mid-wait.
+  function nextCanvasPaint(fallbackMs = 250) {
     return new Promise((resolve) => {
-      if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
-      else setTimeout(resolve, 0);
+      let settled = false, frame = 0;
+      const frames = typeof window.requestAnimationFrame === "function";
+      const timer = setTimeout(done, !frames || document.visibilityState === "hidden" ? 0 : fallbackMs);
+      function done() {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (frame) window.cancelAnimationFrame?.(frame);
+        resolve();
+      }
+      if (frames) frame = window.requestAnimationFrame(() => { if (!settled) frame = window.requestAnimationFrame(done); });
     });
   }
 
@@ -249,6 +260,8 @@
     const deadline = Date.now() + timeoutMs;
     await nextCanvasPaint();
     while (true) {
+      // Nobody sees a hidden tab; its Widgets paint once it shows.
+      if (document.visibilityState === "hidden") return;
       const frames = visibleWidgetFrames();
       if (frames.every((frame) => widgetPaintReadyFrames.has(frame.contentWindow))) {
         await nextCanvasPaint();
@@ -261,10 +274,12 @@
         const finish = () => {
           clearTimeout(timer);
           widgetPaintReadyWaiters.delete(finish);
+          document.removeEventListener("visibilitychange", finish);
           resolve();
         };
         const timer = setTimeout(finish, remaining);
         widgetPaintReadyWaiters.add(finish);
+        document.addEventListener("visibilitychange", finish);
       });
     }
   }
