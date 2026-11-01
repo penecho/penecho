@@ -1341,7 +1341,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       favoriteCanvases: "Favorite Canvases",
       favoriteWidgets: "Favorite Widgets",
       projects: "Projects",
-      explore: "Public shares",
       canvasAgentChooseModel: "Choose model",
       shortcutPenHelp: "Select the pen to write on the canvas.",
       canvasAgentShort: "Agent",

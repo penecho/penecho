@@ -676,7 +676,6 @@ window.PENECHO_LOCALES.zh = {
   favoriteCanvases: "收藏的画布",
   favoriteWidgets: "收藏的组件",
   projects: "项目",
-  explore: "公开分享",
   canvasAgentChooseModel: "选择模型",
   shortcutPenHelp: "选择画笔，在画布上书写。",
   canvasAgentShort: "Agent",

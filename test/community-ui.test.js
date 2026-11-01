@@ -8,7 +8,7 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Cloud Center exposes concise Projects, Favorites, and Public shares navigation", () => {
+test("Cloud Center exposes concise Projects and Favorites navigation, with no public feed", () => {
   const html = read("public/index.html"), cloud = read("public/cloud-connect.js"), css = read("public/cloud-connect.css"), main = read("src/server/main.js");
   assert.match(html, /id="settingsBtn"/);
   assert.match(html, /id="cloudAccountBtn"/);
@@ -18,8 +18,7 @@ test("Cloud Center exposes concise Projects, Favorites, and Public shares naviga
   assert.match(cloud, /const definitions = \[\s*\["projects", "cloudProjects"\],\s*\["favorites", "favorites"\],\s*\]/);
   assert.match(cloud, /if \(state\.cloudSection === "favorites"\) return cloudFavoritesPanel\(setRefreshing\)/);
   assert.match(cloud, /\["all", "all"\],\s*\["canvas", "canvases"\],\s*\["widget", "widgets"\]/);
-  assert.match(cloud, /class:"cloud-section-tab cloud-explore-link",\s*href:new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\),\s*target:"_blank",\s*rel:"noopener"/);
-  assert.match(cloud, /text:`\$\{cloudT\("explore"\)\} ↗`/);
+  assert.doesNotMatch(cloud, /cloud-explore-link|\/community\.html|cloudT\("explore"\)/);
   assert.match(cloud, /text:cloudT\(label\)/);
   assert.doesNotMatch(cloud, /text:cloudT\(hint\)/);
   assert.doesNotMatch(cloud, /class:"cloud-panel-heading"[^\n]*cloudT\("cloudProjects"\)/);
