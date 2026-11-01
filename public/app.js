@@ -35,7 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 const modules={"src/shared/canvas-file-patch.js":function(module,exports,require){
 "use strict";
 // Shared by the MCP precheck and the browser commit path; diff is MIT licensed.
-const { parsePatch, applyPatch } = ({parsePatch:require("../../../node_modules/diff/libcjs/patch/parse.js").parsePatch,applyPatch:require("../../../node_modules/diff/libcjs/patch/apply.js").applyPatch});
+const { parsePatch, applyPatch } = ({parsePatch:require("node_modules/diff/libcjs/patch/parse.js").parsePatch,applyPatch:require("node_modules/diff/libcjs/patch/apply.js").applyPatch});
 const MAX_FILE_BYTES = 800000;
 function bridgeError(code, message, status) { return Object.assign(new Error(message), {code, status}); }
 function patchParseDiagnostic(error) {
@@ -126,7 +126,7 @@ function applyCanvasFilePatch(source, patch, virtualPath) {
 module.exports = {validateCanvasFilePatch, applyCanvasFilePatch};
 
 },
-"../../../node_modules/diff/libcjs/patch/parse.js":function(module,exports,require){
+"node_modules/diff/libcjs/patch/parse.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parsePatch = parsePatch;
@@ -644,7 +644,7 @@ function parsePatch(uniDiff) {
 }
 
 },
-"../../../node_modules/diff/libcjs/patch/apply.js":function(module,exports,require){
+"node_modules/diff/libcjs/patch/apply.js":function(module,exports,require){
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -652,10 +652,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.applyPatch = applyPatch;
 exports.applyPatches = applyPatches;
-const string_js_1 = require("../../../node_modules/diff/libcjs/util/string.js");
-const line_endings_js_1 = require("../../../node_modules/diff/libcjs/patch/line-endings.js");
-const parse_js_1 = require("../../../node_modules/diff/libcjs/patch/parse.js");
-const distance_iterator_js_1 = __importDefault(require("../../../node_modules/diff/libcjs/util/distance-iterator.js"));
+const string_js_1 = require("node_modules/diff/libcjs/util/string.js");
+const line_endings_js_1 = require("node_modules/diff/libcjs/patch/line-endings.js");
+const parse_js_1 = require("node_modules/diff/libcjs/patch/parse.js");
+const distance_iterator_js_1 = __importDefault(require("node_modules/diff/libcjs/util/distance-iterator.js"));
 /**
  * attempts to apply a unified diff patch.
  *
@@ -911,7 +911,7 @@ function applyPatches(uniDiff, options) {
 }
 
 },
-"../../../node_modules/diff/libcjs/util/string.js":function(module,exports,require){
+"node_modules/diff/libcjs/util/string.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.longestCommonPrefix = longestCommonPrefix;
@@ -1113,7 +1113,7 @@ function leadingAndTrailingWs(string, segmenter) {
 }
 
 },
-"../../../node_modules/diff/libcjs/patch/line-endings.js":function(module,exports,require){
+"node_modules/diff/libcjs/patch/line-endings.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.unixToWin = unixToWin;
@@ -1166,7 +1166,7 @@ function isWin(patch) {
 }
 
 },
-"../../../node_modules/diff/libcjs/util/distance-iterator.js":function(module,exports,require){
+"node_modules/diff/libcjs/util/distance-iterator.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = default_1;

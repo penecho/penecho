@@ -5,9 +5,10 @@ const path = require("node:path");
 function canvasFilePatchBundle() {
   const root = path.resolve(__dirname, "..");
   const modules = new Map();
-  const diffRoot = path.dirname(require.resolve("diff"));
+  const diffRoot = path.dirname(require.resolve("diff")), diffPackage = path.dirname(diffRoot);
   function add(file) {
-    const id = path.relative(root,file).split(path.sep).join("/");
+    // Name diff's files by package path, so a symlinked node_modules builds the same bundle.
+    const id = (file.startsWith(diffPackage + path.sep) ? path.join("node_modules", "diff", path.relative(diffPackage, file)) : path.relative(root,file)).split(path.sep).join("/");
     if(modules.has(id)) return id;
     modules.set(id, "");
     const code = fs.readFileSync(file,"utf8").replace(/require\(["']([^"']+)["']\)/g, (_all, name) => {
