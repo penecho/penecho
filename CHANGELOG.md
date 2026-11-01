@@ -8,6 +8,7 @@
 - **Where they are kept:** signed out, in a project of this computer's Library named after the folder; signed in, in your Cloud project for the folder, and signing in moves the Library's Canvases there.
 - **One-line agent setup:** "Set up PenEcho for me by following https://penecho.ai/agents.md".
 - **Tell us what's next:** after upgrading, PenEcho asks once what to improve next.
+- **Codex CLI 0.166.0:** PenEcho Agent's Codex moves from 0.159.1 to 0.166.0, adding GPT-6.1 Terra.
 
 ## 1.4.0
 
