@@ -486,6 +486,70 @@ test("a guest's folder page saves into its own project, shows when it is cleared
   assert.deepEqual(plain(page.requests.at(-1)), ["project/tabs", { open: "fresh" }]);
 });
 
+test("a free account's project beyond its 3 kept shows when it goes, 7 days after each save, until it is kept", async () => {
+  let renders = 0;
+  const until = Date.now() + 2 * 86400000, over = { name: "app", cloudProjectId: "project-1", expiresAt: until, overFreeLimit: true };
+  const page = folderPage({ ...saved({ views: [{ name: "app", cloudProjectId: "project-1", revision: 1, tabs: [], closed: [], expiresAt: null, overFreeLimit: false }],
+    extra: { dirty: true, liveCanvasRenderExpiry: () => { renders++; } } }), folder: over });
+  const api = page.context.window.PenEchoFolderProject;
+  assert.deepEqual([api.guest(), api.overFreeLimit(), api.expiresAt()], [false, true, until]);
+  await autosave(page);
+  assert.ok(api.expiresAt() > Date.now() + 6.9 * 86400000, "a save keeps it 7 days from now");
+  assert.ok(renders > 0, "the date on the page follows");
+  // Kept with Plus, or a slot freed: the next sync clears the date.
+  const shown = renders;
+  await api.sync();
+  assert.deepEqual([api.overFreeLimit(), api.expiresAt(), renders > shown], [false, null, true]);
+  page.context.dirty = true;
+  await autosave(page);
+  assert.equal(page.saves.length, 2);
+  assert.equal(api.expiresAt(), null, "and later saves leave it kept");
+
+  const kept = folderPage(saved({ extra: { dirty: true, liveCanvasRenderExpiry: () => { renders++; } } })), before = renders;
+  await autosave(kept);
+  assert.deepEqual([kept.context.window.PenEchoFolderProject.overFreeLimit(), kept.context.window.PenEchoFolderProject.expiresAt(), renders], [false, null, before], "a kept project has no date");
+});
+
+test("an account's folder page whose project went to Trash saves its open Canvases as new ones in the folder's new project", async () => {
+  const gone = () => Object.assign(Error("This Canvas is no longer in Cloud."), { status: 404 });
+  const notes = { id: "doc-notes", locator: { location: "cloud", id: "notes" }, revision: 1, savedRevision: 1, title: "Notes",
+    stored: { item: { projectId: "project-1", currentRevisionId: "rev-n1", widgets: [{ id: "widget-1" }], images: [], textBoxes: [] }, tileEntries: [] } };
+  const page = folderPage(saved({ docs: [notes], extra: { dirty: true, saveResults: [gone(), "rev-new"], state: { currentSnapshotProjectId: "project-1" } }, views: [
+    { name: "app", cloudProjectId: "project-1", revision: 9, tabs: [tab("plan"), tab("notes", "rev-n1")], closed: [] },
+    { name: "app", cloudProjectId: "project-2", revision: 1, tabs: [], closed: [] },
+    { name: "app", cloudProjectId: "project-2", revision: 2, tabs: [tab("new-canvas", "rev-behind")], closed: [] },
+  ] }));
+  await page.start();
+  await autosave(page);
+  await settle();
+  const config = page.context.window.PENECHO_CONFIG.folderProject, api = page.context.window.PenEchoFolderProject;
+  assert.equal(config.cloudProjectId, "project-2", "the page saves into the folder's new project from now on");
+  assert.deepEqual(plain(page.saves.map(([options]) => options.overwriteId)), ["plan", null], "the Canvas in front is saved there as a new one");
+  assert.equal(page.context.state.currentSnapshotProjectId, null);
+  assert.deepEqual(plain(page.cloud.map(([item, overwriteId]) => [item.name, item.projectId, overwriteId])), [["Notes", "project-2", null]], "so is the tab behind");
+  assert.deepEqual(plain(page.records.get("doc-notes").locator), { location: "cloud", id: "new-canvas" });
+  assert.deepEqual(plain(page.requests), [["project"], ["project"], ["project/tabs", { open: "new-canvas" }]]);
+  assert.deepEqual(plain(api.tabOrder()), ["new-canvas"], "the new project's tabs count from its own first revision");
+
+  // A page that already reads the new project still knows its Canvas was in the old one.
+  const moved = folderPage(saved({ extra: { dirty: true, saveResults: [gone(), "rev-new"], state: { currentSnapshotProjectId: "project-1" } }, views: [
+    { name: "app", cloudProjectId: "project-2", revision: 1, tabs: [], closed: [] },
+    { name: "app", cloudProjectId: "project-2", revision: 1, tabs: [], closed: [] },
+  ] }));
+  await moved.start();
+  assert.equal(moved.context.window.PENECHO_CONFIG.folderProject.cloudProjectId, "project-2");
+  await autosave(moved);
+  assert.deepEqual(plain(moved.saves.map(([options]) => options.overwriteId)), ["plan", null]);
+
+  // The folder's project is the same one: the Canvas itself is gone, and the save fails as before.
+  const same = folderPage(saved({ extra: { dirty: true, saveResults: [gone()], state: { currentSnapshotProjectId: "project-1" } }, views: [{ name: "app", cloudProjectId: "project-1", revision: 1, tabs: [], closed: [] }] }));
+  await autosave(same);
+  assert.deepEqual(plain(same.saves.map(([options]) => options.overwriteId)), ["plan"]);
+  assert.deepEqual(plain(same.requests), [["project"]]);
+  assert.equal(same.context.window.PENECHO_CONFIG.folderProject.cloudProjectId, "project-1");
+  assert.equal(same.timers.at(-1)[1], 6000, "it is tried again later");
+});
+
 test("signing in from a guest's folder page keeps its Canvases and reopens the page", async () => {
   let reloaded = 0;
   const page = folderPage({ ...saved({ views: [{ kept: 2, cloudProjectId: "account-project" }], extra: { location: { reload: () => { reloaded++; } }, setStatus: message => { page.status = message; },
@@ -530,6 +594,25 @@ test("signing in the local app keeps a signed-out folder page's Canvases in Clou
   assert.deepEqual(plain(reopened.calls), [], "the open tab is the same Canvas: nothing opens again or reloads");
 });
 
+test("signed in to a free account with no room in Cloud, the local app's folder page says its project stays on this computer and stays open", async () => {
+  let reloaded = 0;
+  const local = { name: "app", localProjectId: "project-local" }, extra = () => ({ location: { reload: () => { reloaded++; } }, companionCanvasesCopy: en => en });
+  const page = folderPage({ ...saved({ views: [{ kept: 0, stayed: true }], extra: { ...extra(), setStatus: message => { page.status = message; } } }), folder: local });
+  assert.equal(await page.context.window.PenEchoFolderProject.keep(), false);
+  assert.deepEqual(plain(page.requests), [["project/keep", {}]]);
+  assert.deepEqual([reloaded, page.status], [0, "This project stays on this computer. Plus moves every project to Cloud."]);
+  assert.equal(page.context.window.PenEchoFolderProject.expiresAt(), null, "nothing on this computer expires");
+
+  // Opened with keep, the page asks once; reopening it would only ask again.
+  const opened = folderPage({ ...saved({ views: [{ name: "app", revision: 1, tabs: [], closed: [] }, { kept: 0, stayed: true }, { name: "app", revision: 1, tabs: [], closed: [] }],
+    extra: { ...extra(), setStatus: () => {} } }), folder: { ...local, keep: true } });
+  await opened.start();
+  await settle();
+  await opened.context.window.PenEchoFolderProject.sync();
+  assert.deepEqual(plain(opened.requests), [["project"], ["project/keep", {}], ["project"]]);
+  assert.equal(reloaded, 0);
+});
+
 test("a guest's folder page shows when Cloud clears it, with Download PDF and Sign in to keep", () => {
   const host = element("span"), body = element("body"), signIns = [];
   host.parentNode = body; host.after = node => body.insertBefore(node, null);
@@ -552,6 +635,37 @@ test("a guest's folder page shows when Cloud clears it, with Download PDF and Si
   items[1].focus = () => {};
   items[1].listeners.click();
   assert.deepEqual(signIns, ["keep"]);
+});
+
+test("a free account's project beyond its 3 kept shows when it moves to Trash, with Download PDF and Keep with Plus", () => {
+  const host = element("span"), body = element("body"), opened = [];
+  host.parentNode = body; host.after = node => body.insertBefore(node, null);
+  const byId = id => body.querySelectorAll(`.${id === "liveExpiry" ? "live-expiry" : id === "liveExpiryMenu" ? "live-expiry-menu" : "-"}`)[0] || (id === "liveParticipants" ? host : null);
+  const until = new Date(2026, 10, 9, 12).getTime();
+  const context = vm.createContext({
+    document: { getElementById: byId, createElement: element, body, addEventListener: () => {}, removeEventListener: () => {} },
+    window: { PenEchoFolderProject: { expiresAt: () => until, guest: () => false, overFreeLimit: () => true }, PenEchoCloudSettings: { origin: () => "https://penecho.ai" },
+      PENECHO_CONFIG: {}, open: (...args) => { opened.push(args); } },
+    location: { origin: "http://127.0.0.1:4000" }, URL,
+    liveCanvas: { target: null, expiresAt: null }, state: { language: "en" }, liveCopy: en => en, setStatus: () => {},
+  });
+  vm.runInContext(`${clientFunction("src/client/app/live-canvas.js", "liveCanvasRenderExpiry")}\n${clientFunction("src/client/app/live-canvas.js", "liveCanvasExpiryMenu")}\nglobalThis.render=liveCanvasRenderExpiry;globalThis.menu=liveCanvasExpiryMenu;`, context);
+  context.render();
+  const chip = byId("liveExpiry");
+  assert.deepEqual([chip.textContent, chip.dataset.expiry], ["Until Nov 9", "folder"], "a narrow side panel keeps a folder project's date");
+  assert.equal(chip.title, "Free keeps 3 projects. This one moves to Trash 7 days after its last change unless you keep it with Plus.");
+  chip.focus = () => {};
+  context.menu({ currentTarget: chip });
+  const items = byId("liveExpiryMenu").children;
+  assert.deepEqual(items.map(item => item.textContent), ["Download PDF", "Keep with Plus"]);
+  items[1].focus = () => {};
+  items[1].listeners.click();
+  assert.deepEqual(opened, [["https://penecho.ai/dashboard.html#billing", "_blank", "noopener"]], "Cloud's billing page, in a new tab");
+
+  // A Canvas of that project collaborated on by a link saves its own way.
+  context.liveCanvas.target = { share: "link-token" };
+  context.menu({ currentTarget: chip });
+  assert.deepEqual(byId("liveExpiryMenu").children.map(item => item.textContent), ["Download PDF", "Sign in to save"]);
 });
 
 test("a Canvas kept with its folder page is in no Cloud library, so Collaborate starts it by a link that needs no account", () => {
