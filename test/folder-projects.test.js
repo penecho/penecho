@@ -62,22 +62,28 @@ test("signed in, a folder page saves into the account's Cloud project for the fo
 });
 
 // A Library with real revisions, and a Cloud that records what reaches it.
+// account.limited makes Cloud refuse the folder's project, as for a free
+// account that already keeps 3; account.paid is Plus.
 function keeping(t, { room = 10_000, onCreate = () => {} } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-folder-keep-"));
   t.after(() => fs.rmSync(directory, { recursive:true, force:true }));
-  const projects = new Map(), canvases = new Map(), cloudCalls = [];
+  const projects = new Map(), canvases = new Map(), cloudCalls = [], account = { limited:false, paid:false, asked:0, later:0 };
   let revision = 0, signedIn = false;
   const library = { project:id => projects.get(id) || null, createProject:({ name }) => { const project = { id:`project-${projects.size + 1}local0`, name }; projects.set(project.id, project); return project; },
     removeProject:id => projects.delete(id), list:() => [...canvases.values()], canvas:id => canvases.get(id) || null, read:id => canvases.get(id)?.bundle,
     bundle:id => canvases.get(id).bundle, size:id => canvases.get(id).bundle.size, remove:id => canvases.delete(id), revision:canvas => canvas.revisionId,
     save:(value, overwriteId) => { const saved = { id:value.id, name:value.name, projectId:value.projectId, updatedAt:++revision, revisionId:`local-${revision}`, bundle:value }; canvases.set(value.id, saved); return saved; } };
-  const cloud = { signedIn:() => signedIn, accountId:() => signedIn ? "account-1" : null, room:async () => room,
-    project:async () => ({ name:"app", cloudProjectId:CLOUD_PROJECT, revision:1, tabs:[], closed:[] }),
+  const cloud = { signedIn:() => signedIn, accountId:() => signedIn ? "account-1" : null, paid:() => account.paid, room:async () => room,
+    project:async () => {
+      account.asked++;
+      if (account.limited) throw Object.assign(Error("This account's free plan keeps 3 projects in Cloud."), { status:409, code:"project_limit" });
+      return { name:"app", cloudProjectId:CLOUD_PROJECT, revision:1, tabs:[], closed:[] };
+    },
     tabs:async (folder, change) => { cloudCalls.push(["tabs", change.open]); return {}; },
     createCanvas:async ({ name, bundle }) => { cloudCalls.push(["create", name, bundle.text]); const id = `cloud-${cloudCalls.length}`; await onCreate(id, name); return { canvas:{ id }, revision:{ id:`${id}-r1` } }; },
     saveCanvas:async ({ canvasId, baseRevisionId, bundle }) => { cloudCalls.push(["save", canvasId, baseRevisionId, bundle.text]); return { revision:{ id:`${canvasId}-r2` } }; } };
-  const service = createFolderProjects({ directory, library, cloud, origin:() => "http://127.0.0.1:4000", listCanvases:() => [] });
-  return { service, library, canvases, projects, cloudCalls, signIn:() => { signedIn = true; } };
+  const service = createFolderProjects({ directory, library, cloud, origin:() => "http://127.0.0.1:4000", listCanvases:() => [], now:() => Date.now() + account.later });
+  return { service, library, canvases, projects, cloudCalls, account, signIn:() => { signedIn = true; } };
 }
 
 test("signing in keeps a folder's Library Canvases in its Cloud project: tabs first and open, each removed only once Cloud has it", async t => {
@@ -141,13 +147,14 @@ test("signed in, a folder page opens the Cloud project of the folder's link on t
   const folder = path.join(directory, "work", "app"), file = path.join(folder, ".penecho", "project.json"), own = "own-link-".padEnd(43, "x"), agent = "agent-link-".padEnd(43, "y");
   fs.mkdirSync(folder, { recursive:true });
   const asked = [];
-  let otherSignIn = false;
+  let otherSignIn = false, limited = false;
   const service = createFolderProjects({ directory, origin:() => "http://127.0.0.1:4000", listCanvases:() => [],
     library:{ project:() => null, createProject:({ name }) => ({ id:"project-1localxx", name }), list:() => [] },
     cloud:{ signedIn:() => true, accountId:() => "account-1", origin:() => "https://penecho.ai", tabs:async () => ({}),
       project:async (requested, options = {}) => {
         asked.push(options.project || null);
         if (options.project && otherSignIn) throw Object.assign(Error("This project belongs to another PenEcho sign-in."), { status:403, code:"project_other_identity" });
+        if (limited) throw Object.assign(Error("This account's free plan keeps 3 projects in Cloud."), { status:409, code:"project_limit" });
         return { name:"app", cloudProjectId:CLOUD_PROJECT, revision:1, tabs:[], closed:[], project:{ name:"app", token:own } };
       } } });
   const { workspaceId } = await service.open({ folder });
@@ -163,4 +170,49 @@ test("signed in, a folder page opens the Cloud project of the folder's link on t
   await service.pageConfig(workspaceId);
   assert.deepEqual(asked, [null, agent, agent, null]);
   assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).projects["https://penecho.ai"].project, agent);
+  // The link's project beyond a free account's 3 kept: Cloud refuses it once, and the folder opens on this computer's Library.
+  otherSignIn = false; limited = true;
+  assert.deepEqual((await service.pageConfig(workspaceId)).folderProject, { name:"app", localProjectId:"project-1localxx" });
+  assert.deepEqual(asked.slice(4), [agent], "never asked again without the link");
+});
+
+test("signed in to a free account with no room in Cloud, a folder stays in this computer's Library, is offered to Cloud again after 6 hours or with Plus, and moves once Cloud has room", async t => {
+  const run = keeping(t), hour = 3600000;
+  run.signIn();
+  run.account.limited = true;
+  const { workspaceId } = await run.service.open({ folder:"/work/fourth" });
+  // Cloud refuses a 4th project and creates nothing: the page opens on the Library, with nothing to move.
+  const opened = (await run.service.pageConfig(workspaceId)).folderProject;
+  assert.deepEqual(opened, { name:"fourth", localProjectId:[...run.projects.keys()][0] });
+  assert.equal(run.account.asked, 1);
+  run.service.createCanvas(workspaceId, { name:"Plan", bundle:{ text:"plan", size:300 } });
+  // Reopened within 6 hours, the page does not offer its Canvases to Cloud again.
+  run.account.later = 5 * hour;
+  assert.deepEqual((await run.service.pageConfig(workspaceId)).folderProject, opened);
+  assert.equal(run.account.asked, 1, "Cloud is not asked on every load");
+  // Asked anyway, as on signing in again: nothing moves.
+  assert.deepEqual(await run.service.keep(workspaceId), { kept:0, stayed:true });
+  assert.deepEqual([run.account.asked, run.cloudCalls, run.canvases.size], [2, [], 1], "asked once, never retried, and the Canvas stays here");
+  assert.deepEqual((await run.service.pageConfig(workspaceId)).folderProject, opened);
+  // With Plus every project moves, so the page offers them at once.
+  run.account.paid = true;
+  assert.deepEqual((await run.service.pageConfig(workspaceId)).folderProject, { ...opened, keep:true });
+  run.account.paid = false;
+  assert.deepEqual((await run.service.pageConfig(workspaceId)).folderProject, opened);
+  // 6 hours after Cloud last refused, the page offers them again; once Cloud has room, they move.
+  run.account.later = 11 * hour + 1;
+  assert.deepEqual((await run.service.pageConfig(workspaceId)).folderProject, { ...opened, keep:true });
+  run.account.limited = false;
+  assert.deepEqual(await run.service.keep(workspaceId), { kept:1, cloudProjectId:CLOUD_PROJECT });
+  assert.deepEqual([run.canvases.size, run.projects.size], [0, 0]);
+  assert.deepEqual((await run.service.pageConfig(workspaceId)).folderProject, { name:"app", cloudProjectId:CLOUD_PROJECT }, "the page reopens in Cloud");
+});
+
+test("a folder page in Cloud beyond a free account's 3 kept projects opens with the date it moves to Trash; a kept one opens as before", async t => {
+  const { service, cloud } = folderProjects(t, { signedIn:true });
+  const { workspaceId } = await service.open({ folder:"/work/app" }), expiresAt = Date.now() + 7 * 86400000;
+  cloud.view = { ...cloud.view, expiresAt, overFreeLimit:true };
+  assert.deepEqual((await service.pageConfig(workspaceId)).folderProject, { name:"app", cloudProjectId:CLOUD_PROJECT, expiresAt, overFreeLimit:true });
+  cloud.view = { ...cloud.view, expiresAt:null, overFreeLimit:false };
+  assert.deepEqual((await service.pageConfig(workspaceId)).folderProject, { name:"app", cloudProjectId:CLOUD_PROJECT });
 });

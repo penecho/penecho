@@ -808,7 +808,8 @@
     const host = document.getElementById("liveParticipants");
     if (!host?.parentNode) return;
     const target = liveCanvas.target, unsaved = target?.share && (target.local || window.PENECHO_CONFIG?.liveShare && liveCanvas.expiresAt);
-    // A guest's folder project shows when Cloud clears it, until someone signs in and keeps it.
+    // A guest's folder project shows when Cloud clears it, until someone signs in and keeps it;
+    // so does a free account's project beyond its 3 kept, until it is kept with Plus.
     const folderUntil = !unsaved && window.PenEchoFolderProject?.expiresAt?.();
     let chip = document.getElementById("liveExpiry");
     if (!unsaved && !folderUntil) { if (chip) chip.hidden = true; return; }
@@ -826,9 +827,11 @@
     const until = new Date(folderUntil || (target.local ? Date.now() + 7 * 86400000 : Date.parse(liveCanvas.expiresAt)));
     const day = until.toLocaleDateString(state.language === "zh" ? "zh-CN" : undefined, { month:"short", day:"numeric" });
     chip.hidden = false;
+    chip.dataset.expiry = folderUntil ? "folder" : "link";
     chip.textContent = liveCopy(`Until ${day}`, `保留至 ${day}`);
-    chip.title = folderUntil ? liveCopy("Cloud clears this folder's Canvases 7 days after their last change unless you sign in and keep them.", "此文件夹的画布在最后一次修改 7 天后会被云端清除，除非你登录并保留。")
-      : liveCopy("Cloud clears this shared Canvas 7 days after its last change unless someone signs in and saves it.", "此共享画布在最后一次修改 7 天后会被云端清除，除非有人登录并保存。");
+    chip.title = !folderUntil ? liveCopy("Cloud clears this shared Canvas 7 days after its last change unless someone signs in and saves it.", "此共享画布在最后一次修改 7 天后会被云端清除，除非有人登录并保存。")
+      : window.PenEchoFolderProject?.overFreeLimit?.() ? liveCopy("Free keeps 3 projects. This one moves to Trash 7 days after its last change unless you keep it with Plus.", "免费账户保留 3 个项目。此项目将在最后一次修改 7 天后移到回收站，除非你升级 Plus 以保留。")
+      : liveCopy("Cloud clears this folder's Canvases 7 days after their last change unless you sign in and keep them.", "此文件夹的画布在最后一次修改 7 天后会被云端清除，除非你登录并保留。");
   }
   function liveCanvasExpiryMenu(event) {
     document.getElementById("liveExpiryMenu")?.remove();
@@ -852,13 +855,16 @@
         void Promise.resolve(pdf?.()).catch(error => setStatus(String(error?.message || error)));
       }),
       // The shared page saves its own way; the app saves this Canvas to the account it signs in to;
-      // a guest's folder page keeps all of its Canvases in that account.
-      window.PenEchoFolderProject?.guest?.() && !liveCanvas.target?.share
-        ? item(liveCopy("Sign in to keep", "登录以保留"), () => void window.PenEchoBrowserDraft?.signIn({ intent:"keep" }))
-        : item(liveCopy("Sign in to save", "登录以保存"), () => {
-          if (window.PENECHO_CONFIG?.liveShare) { if (typeof saveCurrentCanvasFromUser === "function") void saveCurrentCanvasFromUser(); }
-          else window.dispatchEvent(new CustomEvent("penecho:live-link-save"));
-        }),
+      // a guest's folder page keeps all of its Canvases in that account; Plus keeps a free account's
+      // project beyond its 3 kept.
+      window.PenEchoFolderProject?.overFreeLimit?.() && !liveCanvas.target?.share
+        ? item(liveCopy("Keep with Plus", "升级 Plus 以保留"), () => window.open(new URL("/dashboard.html#billing", window.PenEchoCloudSettings?.origin?.() || window.PENECHO_CONFIG?.cloudOrigin || location.origin).href, "_blank", "noopener"))
+        : window.PenEchoFolderProject?.guest?.() && !liveCanvas.target?.share
+          ? item(liveCopy("Sign in to keep", "登录以保留"), () => void window.PenEchoBrowserDraft?.signIn({ intent:"keep" }))
+          : item(liveCopy("Sign in to save", "登录以保存"), () => {
+            if (window.PENECHO_CONFIG?.liveShare) { if (typeof saveCurrentCanvasFromUser === "function") void saveCurrentCanvasFromUser(); }
+            else window.dispatchEvent(new CustomEvent("penecho:live-link-save"));
+          }),
     );
     Object.assign(menu.style, { position:"fixed", top:`${Math.round(anchor.bottom + 6)}px`, left:`${Math.round(anchor.left)}px`, zIndex:"1000" });
     document.body.append(menu);

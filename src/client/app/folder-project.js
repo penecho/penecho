@@ -5,20 +5,26 @@
   // happens by itself a few seconds after each change.
   const FOLDER_AUTOSAVE_MS = 3000;
   const folderProject = { view:null, queue:Promise.resolve(), pending:null, opening:new Set(), started:false, retry:0,
-    autosaveTimer:0, savedKey:"", background:new Set(), failures:0, keeping:false, expiresAt:window.PENECHO_CONFIG?.folderProject?.expiresAt || null };
+    autosaveTimer:0, savedKey:"", background:new Set(), failures:0, keeping:false, expiresAt:window.PENECHO_CONFIG?.folderProject?.expiresAt || null,
+    overFreeLimit:Boolean(window.PENECHO_CONFIG?.folderProject?.overFreeLimit) };
   const FOLDER_GUEST_DAYS_MS = 7 * 86400000;
   // A guest's project keeps its Canvases with the page until 7 days after its
   // last change; signing in keeps them in that account. A signed-out app's
   // project keeps them in that computer's Library.
   function folderProjectGuest() { return Boolean(window.PENECHO_CONFIG?.folderProject?.guest); }
   function folderProjectWithPage() { return folderProjectGuest() || Boolean(window.PENECHO_CONFIG?.folderProject?.localProjectId); }
+  // A free account keeps 3 projects; a later one moves to Trash 7 days after
+  // its last change unless it is kept with Plus.
+  function folderProjectOverFreeLimit() { return !folderProjectWithPage() && folderProject.overFreeLimit; }
+  function folderProjectTemporary() { return folderProjectGuest() || folderProjectOverFreeLimit(); }
   function folderProjectTarget() { const project = window.PENECHO_CONFIG?.folderProject; return project?.cloudProjectId || project?.guestProjectId || project?.localProjectId || null; }
   function folderProjectEnabled() {
     return Boolean(window.PENECHO_CONFIG?.browserDraftId && folderProjectTarget());
   }
+  // The date a temporary project goes; it clears once the project is kept.
   function folderProjectExpiry(expiresAt) {
-    if (!folderProjectGuest() || expiresAt === undefined) return;
-    folderProject.expiresAt = expiresAt;
+    if (expiresAt === undefined || !folderProjectTemporary() && !folderProject.expiresAt) return;
+    folderProject.expiresAt = folderProjectTemporary() ? expiresAt : null;
     if (typeof liveCanvasRenderExpiry === "function") liveCanvasRenderExpiry();
   }
   const folderProjectLocator = canvasId => ({ location:"cloud", id:canvasId });
@@ -44,9 +50,12 @@
     return canvasDocumentsPersist(doc);
   }
   async function folderProjectApply(view) {
-    if (!Array.isArray(view?.tabs) || folderProject.view && view.revision < folderProject.view.revision) return;
+    // Another project of the folder counts its tab revisions from its own start.
+    const other = typeof view?.cloudProjectId === "string" && typeof folderProject.view?.cloudProjectId === "string" && view.cloudProjectId !== folderProject.view.cloudProjectId;
+    if (!Array.isArray(view?.tabs) || folderProject.view && !other && view.revision < folderProject.view.revision) return;
     folderProject.view = view;
-    folderProjectExpiry(view.expiresAt);
+    if (typeof view.overFreeLimit === "boolean") folderProject.overFreeLimit = view.overFreeLimit;
+    folderProjectExpiry(folderProjectTemporary() ? view.expiresAt : null);
     // A page whose folder joined another project on this computer saves there from now on.
     const config = window.PENECHO_CONFIG?.folderProject;
     if (config?.cloudProjectId && typeof view.cloudProjectId === "string" && view.cloudProjectId && view.cloudProjectId !== config.cloudProjectId) config.cloudProjectId = view.cloudProjectId;
@@ -190,6 +199,28 @@
     canvasDocumentsRender();
     return name;
   }
+  // A free account's project beyond its 3 kept goes to Trash 7 days after its
+  // last change, and the folder then has a new project. A save that finds its
+  // Canvas gone asks for the folder's project: when it is another one, the page
+  // saves there from now on and its open Canvases are saved there as new ones.
+  async function folderProjectReplaced(projectId) {
+    const config = window.PENECHO_CONFIG?.folderProject;
+    if (folderProjectWithPage() || !config?.cloudProjectId) return false;
+    const view = await companionCanvasesRequest("project").catch(() => null), current = view?.cloudProjectId;
+    if (typeof current !== "string" || !current || current === projectId) return false;
+    config.cloudProjectId = current;
+    for (const doc of [...canvasDocuments.records.values()]) {
+      if (!canvasDocumentsIsActive(doc) && doc.locator?.location === "cloud" && doc.stored?.item && (doc.stored.item.projectId || projectId) === projectId) folderProjectDetach(doc);
+    }
+    await folderProjectApply(view);
+    return true;
+  }
+  function folderProjectDetach(doc) {
+    doc.locator = null;
+    if (doc.stored?.item) doc.stored.item.projectId = null;
+    doc.revision = (doc.revision || 0) + 1;
+    folderProjectChanged(doc.id);
+  }
   async function folderProjectSaveActive() {
     for (let attempt = 0; attempt < 4; attempt++) {
       const doc = canvasDocumentsCurrent(), saved = state.currentSnapshotLocation === "cloud" && Boolean(state.currentSnapshotId);
@@ -199,8 +230,8 @@
       if (folderProjectBusy()) { folderProjectChanged(); return false; }
       // A saved Canvas whose revision this page lost takes in the current save first.
       if (saved && !state.currentSnapshotRevisionId) { await folderProjectMergeActive(doc); continue; }
-      const revision = state.userRevision;
-      let conflict = false;
+      const revision = state.userRevision, saveAgain = () => { Object.assign(state, { currentSnapshotId:null, currentSnapshotLocation:null, currentSnapshotRevisionId:null }); doc.locator = null; };
+      let conflict = false, gone = null;
       setHistorySaveBusy(true);
       try {
         const id = await saveSnapshot({ location:"cloud", overwriteId:saved ? state.currentSnapshotId : null, name:folderProjectName(doc, state), allowEmpty:saved },
@@ -211,10 +242,19 @@
       } catch (error) {
         // A Canvas cleared from the page's project (7 idle days for a guest, or
         // deleted from the Library) is saved again from this page.
-        if (error.status === 404 && folderProjectWithPage() && saved) { Object.assign(state, { currentSnapshotId:null, currentSnapshotLocation:null, currentSnapshotRevisionId:null }); doc.locator = null; continue; }
-        if (error.code !== "revision_conflict") throw error;
-        conflict = true;
+        if (error.status === 404 && folderProjectWithPage() && saved) { saveAgain(); continue; }
+        if (error.status === 404 && saved) gone = error;
+        else if (error.code !== "revision_conflict") throw error;
+        else conflict = true;
       } finally { setHistorySaveBusy(false); }
+      // An account's project that went to Trash: saved again in the folder's new project.
+      if (gone) {
+        if (!await folderProjectReplaced(state.currentSnapshotProjectId || folderProjectTarget())) throw gone;
+        if (!canvasDocumentsIsActive(doc)) { folderProjectDetach(doc); continue; }
+        saveAgain();
+        state.currentSnapshotProjectId = null;
+        continue;
+      }
       if (conflict) await folderProjectMergeActive(doc);
     }
     throw Error("Other pages keep saving this Canvas. Your changes are kept here; it saves again shortly.");
@@ -275,6 +315,7 @@
         return;
       } catch (error) {
         if (error.status === 404 && folderProjectWithPage() && overwriteId) { doc.locator = null; continue; }
+        if (error.status === 404 && overwriteId && await folderProjectReplaced(projectId)) continue;
         if (error.code !== "revision_conflict") throw error;
       }
       const remote = await readSnapshot("cloud", overwriteId);
@@ -319,6 +360,12 @@
       await window.PenEchoBrowserDraft?.flush?.();
       // Nothing saves here while the Canvases move; their latest saves go with them.
       const kept = await folderProjectRun(async () => { await folderProjectAutosave(); return companionCanvasesRequest("project/keep", {}, 120000); });
+      // A free account whose Cloud has no room for another project: the
+      // folder stays in this computer's Library, and the page stays open.
+      if (kept.stayed) {
+        setStatus(companionCanvasesCopy("This project stays on this computer. Plus moves every project to Cloud.", "此项目保留在这台电脑上。升级 Plus 可将所有项目移到云端。"));
+        return false;
+      }
       setStatus(companionCanvasesCopy(`Kept ${kept.kept} Canvas${kept.kept === 1 ? "" : "es"} in your Cloud library.`, `已将 ${kept.kept} 个画布保存到你的云端资料库。`));
       location.reload();
       return true;
@@ -331,7 +378,8 @@
     enabled:folderProjectEnabled,
     guest:folderProjectGuest,
     tabOrder:() => (folderProject.view?.tabs || []).map(tab => tab.canvasId),
-    expiresAt:() => folderProjectGuest() ? folderProject.expiresAt : null,
+    expiresAt:() => folderProjectTemporary() ? folderProject.expiresAt : null,
+    overFreeLimit:folderProjectOverFreeLimit,
     keep:folderProjectKeep,
     changed:folderProjectChanged,
     renamed:folderProjectRenamed,

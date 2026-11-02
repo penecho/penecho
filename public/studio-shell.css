@@ -2381,7 +2381,8 @@ body .topbar #guestAccountActions > button:focus-visible { outline: 2px solid va
 :root[data-penecho-companion="minimal"] body main > footer { min-height: 24px; flex-basis: 24px; }
 @media (max-width: 560px) {
   :root[data-penecho-companion="minimal"] body #coords { display: none; }
-  :root[data-penecho-companion="minimal"] body .topbar #liveExpiry { display: none; }
+  /* A folder project's date stays: it says when the project goes. */
+  :root[data-penecho-companion="minimal"] body .topbar #liveExpiry:not([data-expiry="folder"]) { display: none; }
   :root[data-penecho-companion="minimal"] body .topbar #canvasDocumentSaveLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   :root[data-penecho-companion] body .topbar #companionViewToggle:not([hidden]) { width: 28px; padding: 0; }
   :root[data-penecho-companion] body .topbar .companion-view-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

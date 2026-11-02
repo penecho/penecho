@@ -4659,6 +4659,8 @@ const folderProjects = createFolderProjects({
   cloud:{
     signedIn:()=>Boolean(cloudConnector?.status().accountSession.signedIn),
     accountId:()=>cloudConnector?.status().account?.id||null,
+    // Plus (or Pro) keeps every project in Cloud.
+    paid:()=>Boolean(cloudConnector?.status().account?.membership),
     origin:()=>cloudConnector?.status().origin||null,
     project:(folder,options)=>cloudConnector.folderProject(folder,options),
     tabs:(folder,change)=>cloudConnector.folderProjectTabs(folder,change),

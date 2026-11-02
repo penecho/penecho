@@ -12,7 +12,7 @@ const path = require("node:path");
 
 const WORKSPACE_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const LOCAL_CANVAS_ID = /^\d{10,16}-[a-zA-Z0-9-]{8,64}$/;
-const MAX_PROJECTS = 500, MAX_TABS = 64, CLOUD_TIMEOUT_MS = 8000;
+const MAX_PROJECTS = 500, MAX_TABS = 64, CLOUD_TIMEOUT_MS = 8000, CLOUD_LIMIT_WAIT_MS = 6 * 3600000;
 
 // Paths and remote URLs normalize to one stable key, as on PenEcho Cloud.
 function folderKey(value) {
@@ -136,27 +136,41 @@ function createFolderProjects({ directory, library, cloud, origin, listCanvases,
   }
   const cloudTabs = (folder, change) => withFolderLink(folder, link => cloud.tabs(folder, { ...change, ...link }));
 
+  // A free account keeps 3 projects in Cloud; with no room for this folder's,
+  // Cloud refuses it and the folder stays in this computer's Library, where
+  // nothing expires. Its page then waits 6 hours before offering Cloud its
+  // Canvases again, unless the account has Plus.
+  const cloudLimited = error => error?.status === 409 && error?.code === "project_limit";
+  const cloudLimit = () => ({ accountId:cloud.accountId(), at:now() });
+  const waitsForCloud = project => Boolean(project.cloudLimit && project.cloudLimit.accountId === cloud.accountId() && !cloud.paid?.() && now() - project.cloudLimit.at < CLOUD_LIMIT_WAIT_MS);
+
   // What the folder page loads with: its project, fixed until the page opens again.
   const libraryCanvases = project => project.localProjectId && library.project(project.localProjectId) ? library.list().filter(canvas => canvas.projectId === project.localProjectId) : [];
   async function pageConfig(id) {
     const project = record(id);
-    let store = null, folderProject = { name:project.name };
+    let store = null, folderProject = { name:project.name }, limit = null;
     // Signed in, a folder whose Canvases are still in this computer's Library
     // opens there, and the page then keeps them in Cloud.
-    if (cloud.signedIn() && !libraryCanvases(project).length) {
+    const inLibrary = !cloud.signedIn() || libraryCanvases(project).length > 0;
+    if (!inLibrary) {
       try {
         const view = await cloudProject(project.folder, AbortSignal.timeout(CLOUD_TIMEOUT_MS));
-        if (WORKSPACE_ID.test(view?.cloudProjectId || "")) { store = { kind:"cloud", accountId:cloud.accountId(), cloudProjectId:view.cloudProjectId }; folderProject = { name:view.name || project.name, cloudProjectId:view.cloudProjectId }; }
-      } catch {}
-    } else {
+        if (WORKSPACE_ID.test(view?.cloudProjectId || "")) {
+          store = { kind:"cloud", accountId:cloud.accountId(), cloudProjectId:view.cloudProjectId };
+          // A project beyond a free account's 3 kept says when it goes.
+          folderProject = { name:view.name || project.name, cloudProjectId:view.cloudProjectId, ...(view.overFreeLimit === true ? { expiresAt:view.expiresAt ?? null, overFreeLimit:true } : {}) };
+        }
+      } catch (error) { if (cloudLimited(error)) limit = cloudLimit(); }
+    }
+    if (inLibrary || limit) {
       // A full Library still opens the page, which then keeps its Canvases as drafts.
       try {
         const localProjectId = localProject(project);
         store = { kind:"local", projectId:localProjectId };
-        folderProject = { name:project.name, localProjectId, ...(cloud.signedIn() ? { keep:true } : {}) };
+        folderProject = { name:project.name, localProjectId, ...(cloud.signedIn() && !limit && !waitsForCloud(project) ? { keep:true } : {}) };
       } catch {}
     }
-    update(id, item => ({ ...item, store, usedAt:now() }));
+    update(id, item => ({ ...item, store, usedAt:now(), cloudLimit:limit || (store?.kind === "cloud" ? null : item.cloudLimit || null) }));
     return { browserDraftId:id, browserDraftConnected:true, browserCanvasEditing:true, folderProject };
   }
   function localStore(id) {
@@ -239,7 +253,15 @@ function createFolderProjects({ directory, library, cloud, origin, listCanvases,
   async function keepNow(id) {
     const project = record(id);
     if (!cloud.signedIn()) throw failure(401, "sign_in_required", "Sign in to keep this folder's Canvases in your Cloud library.");
-    const view = await cloudProject(project.folder), cloudProjectId = view?.cloudProjectId;
+    let view;
+    try { view = await cloudProject(project.folder); }
+    catch (error) {
+      // No room in a free account's Cloud: nothing moves, and the folder stays here.
+      if (!cloudLimited(error)) throw error;
+      update(id, item => ({ ...item, cloudLimit:cloudLimit() }));
+      return { kept:0, stayed:true };
+    }
+    const cloudProjectId = view?.cloudProjectId;
     if (!WORKSPACE_ID.test(cloudProjectId || "")) throw failure(502, "cloud_project_unavailable", "PenEcho Cloud did not return this folder's project. Try again.");
     const tabs = project.tabs || [], order = canvas => tabs.includes(canvas.id) ? tabs.indexOf(canvas.id) : tabs.length;
     const canvases = libraryCanvases(project).sort((a, b) => order(a) - order(b) || b.updatedAt - a.updatedAt);
@@ -269,7 +291,7 @@ function createFolderProjects({ directory, library, cloud, origin, listCanvases,
     for (const canvasId of tabs) if (moved[canvasId]) await cloudTabs(project.folder, { open:moved[canvasId].to }).catch(() => {});
     const remaining = libraryCanvases(project).length;
     if (project.localProjectId && !remaining && library.project(project.localProjectId)) library.removeProject(project.localProjectId);
-    update(id, item => ({ ...item, store:{ kind:"cloud", accountId:cloud.accountId(), cloudProjectId }, localProjectId:remaining ? item.localProjectId : null, tabs:[],
+    update(id, item => ({ ...item, store:{ kind:"cloud", accountId:cloud.accountId(), cloudProjectId }, localProjectId:remaining ? item.localProjectId : null, tabs:[], cloudLimit:null,
       moved:Object.fromEntries(Object.entries(item.moved || {}).sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, 200)) }));
     return { kept:canvases.length, cloudProjectId };
   }

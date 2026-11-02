@@ -1,5 +1,5 @@
 "use strict";
-const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), os = require("node:os"), https = require("node:https"), { spawn } = require("node:child_process");
+const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), os = require("node:os"), http = require("node:http"), https = require("node:https"), { spawn } = require("node:child_process");
 
 const ROOT = path.join(__dirname, "..");
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -30,6 +30,19 @@ function mcp(http, body, session) {
     });
     req.on("error", reject); req.end(JSON.stringify({ jsonrpc:"2.0", id:1, ...body }));
   });
+}
+// An agent's penecho_open_workspace call, once the local MCP server is up.
+async function openWorkspace(origin) {
+  let status;
+  for (let attempt = 0; attempt < 100 && !status?.http?.enabled; attempt++) {
+    status = await (await fetch(`${origin}/api/mcp/status`, { headers:{ origin } })).json();
+    if (!status?.http?.enabled) await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const session = (await mcp(status.http, { method:"initialize", params:{} })).session;
+  return async folder => (await mcp(status.http, { method:"tools/call", params:{ name:"penecho_open_workspace", arguments:{ folder, sessionKey:"conversation-a" } } }, session)).body.result.structuredContent;
+}
+async function stop(child) {
+  if (child.exitCode === null && child.signalCode === null) { const exited = new Promise(resolve => child.once("exit", resolve)); child.kill(); await exited; }
 }
 
 test("an agent opens its folder's page in the local app; signed out, its Canvases save into a Library project named after the folder", async () => {
@@ -88,6 +101,51 @@ test("an agent opens its folder's page in the local app; signed out, its Canvase
     assert.equal(gone.status, 404, "a Canvas no longer in the project is saved again as new");
   } finally {
     if (child.exitCode === null && child.signalCode === null) { const exited = new Promise(resolve => child.once("exit", resolve)); child.kill(); await exited; }
+    fs.rmSync(temp, { recursive:true, force:true });
+  }
+});
+
+test("signed in to a free account whose Cloud refuses another project, a folder page keeps its Canvases in the Library and offers them again only with Plus", async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-folder-limit-"));
+  // Cloud: every folder project is one too many; the account gets Plus later.
+  const asked = [];
+  let membership = null;
+  const cloud = http.createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      const reply = (status, value) => { res.writeHead(status, { "content-type":"application/json" }); res.end(JSON.stringify(value)); };
+      if (req.method === "POST" && req.url === "/api/v1/device-sync/folder-projects") { asked.push(req.headers.authorization); return reply(409, { error:"project_limit", message:"This account's free plan keeps 3 projects in Cloud." }); }
+      if (req.url === "/api/v1/local-access/session") return reply(200, { account:{ id:"account-1", name:"Free", ...(membership ? { membership } : {}) }, expiresAt:new Date(Date.now() + 86400000).toISOString() });
+      reply(404, { error:"not_found", message:"Not found" });
+    });
+  });
+  await new Promise(resolve => cloud.listen(0, "127.0.0.1", resolve));
+  fs.mkdirSync(path.join(temp, "state"), { recursive:true });
+  fs.writeFileSync(path.join(temp, "state", "cloud-device.json"), JSON.stringify({ version:2, origin:`http://127.0.0.1:${cloud.address().port}`, accountToken:"free-account-session", enabled:false, account:{ id:"account-1", name:"Free" }, accountUpdatedAt:Date.now() }));
+  const { child, origin } = await startServer(temp);
+  try {
+    const { workspaceId } = await (await openWorkspace(origin))(path.join(temp, "work", "fourth"));
+    const page = async () => JSON.parse((await (await fetch(`${origin}/api/v1/mcp/workspaces/${workspaceId}/config.js`)).text()).match(/^Object\.assign\(window\.PENECHO_CONFIG,(.*)\);$/)[1]).folderProject;
+    const api = (route, body) => fetch(`${origin}/api/v1/mcp/workspaces/${workspaceId}/${route}`, body ? { method:"POST", headers:{ origin, "content-type":"application/json" }, body:JSON.stringify(body) } : {});
+    const opened = await page();
+    assert.deepEqual([opened.name, Boolean(opened.localProjectId), opened.keep, opened.cloudProjectId], ["fourth", true, undefined, undefined], "the Library, with nothing to move");
+    assert.deepEqual(asked, ["Bearer free-account-session"]);
+    assert.equal((await api("project/canvases", { name:"Plan", bundle:bundle("Plan") })).status, 201);
+    assert.deepEqual(await page(), opened, "reopened, it does not offer its Canvases to Cloud again");
+    assert.equal(asked.length, 1);
+    const kept = await api("project/keep", {});
+    assert.deepEqual([kept.status, await kept.json()], [200, { kept:0, stayed:true }], "signing in again moves nothing");
+    assert.equal(asked.length, 2, "Cloud's refusal is not retried");
+    assert.equal((await (await api("project")).json()).tabs.length, 0, "the page keeps working on this computer");
+    // Plus keeps every project: the page offers its Canvases to Cloud again.
+    membership = { tier:"plus", expiresAt:Date.now() + 30 * 86400000 };
+    const session = await (await fetch(`${origin}/api/local-access/status`)).json();
+    const account = await (await fetch(`${origin}/api/cloud/account`, { headers:{ "x-penecho-session":session.accessSessionToken } })).json();
+    assert.equal(account.account?.membership?.tier, "plus");
+    assert.deepEqual(await page(), { ...opened, keep:true });
+  } finally {
+    await stop(child);
+    await new Promise(resolve => cloud.close(resolve));
     fs.rmSync(temp, { recursive:true, force:true });
   }
 });
