@@ -9,7 +9,7 @@ function harness(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-roundtrip-"));
   t.after(() => fs.rmSync(directory, { recursive:true, force:true }));
   const context = vm.createContext({ fs, path, crypto, Buffer, process, CANVAS_SIZE:20000, SHARED_CANVAS_DIRECTORY:directory,
-    CANVAS_SNAPSHOT_ID_PATTERN:/^\d{10,16}-[a-zA-Z0-9-]{8,64}$/, MAX_SHARED_CANVAS_BYTES:96*1024*1024,
+    CANVAS_SNAPSHOT_ID_PATTERN:/^\d{10,16}-[a-zA-Z0-9-]{8,64}$/, SHARED_CANVAS_REVISION_PATTERN:/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, MAX_SHARED_CANVAS_BYTES:96*1024*1024,
     DEFAULT_CANVAS_PROJECT_ID:"uncategorized", normalizeCanvasTheme:value=>value, sharedCanvasProject:()=>true });
   for (const name of ["canvasSnapshotPath", "atomicJsonWrite", "sharedCanvasMetadata", "validCanvasDocumentId", "validSnapshotDataUrl", "canonicalSharedCanvasV1", "plainObject", "bundleDataUrl", "dataUrlParts", "canvasBundleAssetKey", "canvasBundleToV1", "v1ToCanvasBundle", "sharedCanvasLogicalSnapshot", "canonicalSharedCanvas", "canonicalSharedCanvasMetadata", "readSharedCanvas", "saveSharedCanvas"])
     vm.runInContext(extract(name), context);

@@ -49,14 +49,12 @@
 .cloud-mcp-heading h2 { font-size:15px; line-height:1.4; }
 .cloud-mcp-heading .cloud-mcp-help { margin-bottom:0; }
 .cloud-mcp-flow { border:1px solid var(--pe-line); border-radius:var(--pe-r-group); background:var(--pe-surface); }
-.cloud-mcp-step { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; padding:24px; }
-.cloud-mcp-step + .cloud-mcp-step { border-top:1px solid var(--pe-line); }
-.cloud-mcp-step-title { display:flex; align-items:baseline; gap:10px; margin:3px 0 0; font:500 13px/1.6 var(--pe-font-ui,system-ui); }
-.cloud-mcp-step-number { color:var(--pe-ink-3); font-variant-numeric:tabular-nums; }
-.cloud-mcp-step-body { min-width:0; }
-.cloud-mcp-step-body > .cloud-mcp-help:first-child { margin-top:0; }
-.cloud-mcp-step-body > .cloud-mcp-url { width:100%; }
-.cloud-mcp-step-body > :last-child { margin-bottom:0; }
+/* One line sets up an agent; the address and token wait under Configure manually. */
+.cloud-mcp-setup { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:20px 24px 12px; }
+.cloud-mcp-setup-prompt { flex:1 1 280px; min-width:0; box-sizing:border-box; padding:7px 12px; border:1px solid var(--pe-line); border-radius:var(--pe-r-control,8px); background:var(--pe-surface-muted,var(--paper-2,#f2f3f6)); color:var(--pe-ink); font:400 13px/1.6 ui-monospace,monospace; overflow-wrap:anywhere; }
+.cloud-mcp-setup > .cloud-mcp-copy-action { flex:none; }
+.cloud-mcp-flow > .cloud-mcp-actions { margin:0; padding:0 24px 18px; }
+.cloud-mcp-flow > .cloud-mcp-manual { margin:0; padding:14px 24px 18px; border-top:1px solid var(--pe-line); }
 .cloud-mcp-details { margin-top:16px; font:400 13px/1.6 var(--pe-font-ui,system-ui); }
 .cloud-mcp-details > summary { cursor:pointer; color:var(--pe-ink-2); width:fit-content; max-width:100%; }
 .cloud-mcp-details[open] > summary { margin-bottom:12px; }
@@ -66,16 +64,16 @@
 .cloud-mcp-status:empty { display:none; }
 .cloud-mcp-status { margin:12px 24px; }
 @media(max-width:600px) {
-  .cloud-mcp-step { grid-template-columns:minmax(0,1fr); gap:12px; padding:18px; }
-  .cloud-mcp-step-title { margin:0; }
-  .cloud-mcp-support { padding:0; }
+  .cloud-mcp-setup { padding:16px 18px 10px; }
+  .cloud-mcp-flow > .cloud-mcp-actions { padding:0 18px 16px; }
+  .cloud-mcp-flow > .cloud-mcp-manual { padding:12px 18px 16px; }
 }
 /* Embedded settings panels and enlarged text follow available panel width. */
 .cloud-mcp-panel { container:cloud-mcp / inline-size; }
 @container cloud-mcp (max-width:600px) {
-  .cloud-mcp-step { grid-template-columns:minmax(0,1fr); gap:12px; padding:18px; }
-  .cloud-mcp-step-title { margin:0; }
-  .cloud-mcp-support { padding:0; }
+  .cloud-mcp-setup { padding:16px 18px 10px; }
+  .cloud-mcp-flow > .cloud-mcp-actions { padding:0 18px 16px; }
+  .cloud-mcp-flow > .cloud-mcp-manual { padding:12px 18px 16px; }
 }
 
 .cloud-mcp-section-title { margin:16px 0 10px; font:500 13px/1.6 var(--pe-font-ui,system-ui); }
@@ -86,8 +84,7 @@
 .cloud-mcp-availability { color:var(--pe-muted, var(--muted)); font:400 12px/1.5 var(--pe-font-ui,system-ui); }
 .cloud-mcp-link-warning[hidden],.mcp-settings-tabs > button[hidden] { display:none; }
 
-/* Setup action + preview -> catalog .stack (12px); inline action feedback -> .inline (6px). */
-.cloud-mcp-prompt { display:grid; min-width:0; gap:12px; }
+/* Inline action feedback -> catalog .inline (6px). */
 .cloud-mcp-copy-action { display:flex; align-items:center; gap:6px; min-width:0; max-width:100%; }
 .cloud-mcp-copy-action > button { flex-shrink:0; }
 .cloud-mcp-copy-status { color:var(--pe-ink-2,var(--ai-muted,var(--ink-2))); font:400 13px/1.5 var(--pe-font-ui,system-ui); overflow-wrap:anywhere; min-width:0; }

@@ -505,7 +505,7 @@
     for(let column=0;column+width<=SIZE;column+=width+gap)columns.add(column);
     columns.add(SIZE-width);
     for(const column of columns){const slot=findSlot(column,0);if(slot)return slot;}
-    throw Error("No clear space remains for this work. Move the group or use another Canvas.");
+    throw Error("No clear space remains on this Canvas. Continue on a new Canvas: penecho_open_canvas with create:true, then penecho_start_session with its documentId. Or move existing work.");
   }
   function mcpReadingWorldRect(doc=null) {
     const {stage,scale,panX,panY}=mcpPresentationViewport(doc);
@@ -1003,7 +1003,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(window.PENECHO_CONFIG?.browserDraftId&&[4001,4401].includes(event?.code)){
         mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.connectionLost=true;
         mcpRuntime.connectionNotice=event.code===4001?"workspaceReplaced":"workspaceAccessRequired";
-        setStatus(mcpConnectionNotice());mcpRenderSettings();return;
+        setStatus(mcpConnectionNotice());mcpRenderSettings();window.PenEchoCompanionCanvases?.changed?.();return;
       }
       if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}
       mcpDisconnect(true);

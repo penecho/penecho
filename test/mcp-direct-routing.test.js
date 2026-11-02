@@ -174,3 +174,17 @@ test('business pressure never evicts a conversation while its browser restore is
   a.release();assert.equal(output(await restoring).documentId,original.documentId);
   clock=122000;output(await start(current,session,{sessionKey:'new'}));while(!a.disposed.length)await pause();assert.equal(a.disposed[0],original.sessionId);
 });
+
+test('a host adds its own tools: listed with the Canvas tools and answered by the host',async t=>{
+  const directory=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'penecho-host-tools-')),calls=[];
+  const tool={name:'penecho_open_workspace',description:'Open the page of a folder.',inputSchema:{type:'object',additionalProperties:false,required:['folder'],properties:{folder:{type:'string'}}}};
+  const current=await app(directory,{hostTools:{tools:[tool],call:async(ownerId,name,args)=>{calls.push([typeof ownerId,name,args]);return {workspaceId:'folder-page'};}}});
+  t.after(async()=>{await current.close();fs.rmSync(directory,{recursive:true,force:true});});
+  const session=await initialize(current),names=(await rpc(current.status,'tools/list',{},session)).body.result.tools.map(item=>item.name);
+  assert.ok(names.includes('penecho_open_workspace')&&names.includes('penecho_start_session'));
+  assert.deepEqual(output(await rpc(current.status,'tools/call',{name:'penecho_open_workspace',arguments:{folder:'/work/app'}},session)),{workspaceId:'folder-page'});
+  assert.deepEqual(calls,[['string','penecho_open_workspace',{folder:'/work/app'}]]);
+  const plain=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'penecho-no-host-tools-')),other=await app(plain);
+  t.after(async()=>{await other.close();fs.rmSync(plain,{recursive:true,force:true});});
+  assert.equal((await rpc(other.status,'tools/list',{},await initialize(other))).body.result.tools.some(item=>item.name==='penecho_open_workspace'),false,'only where the host adds it');
+});

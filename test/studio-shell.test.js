@@ -93,7 +93,7 @@ test("zoom buttons reuse the wheel zoom path and show the live scale", () => {
   assert.match(navigation, /#canvasZoomLevel'\)\?\.addEventListener\('click', \(\) => zoomCanvasBy\(1 \/ state\.scale\)\)/);
 });
 
-test("Cloud account lives in Settings and Favorites lives in the Library", () => {
+test("Cloud account lives in Settings, and the Library has no Favorites entry", () => {
   const html = read("public/index.html"), cloud = read("public/cloud-connect.js"), app = read("public/app.js");
   assert.match(html, /id="settingsNavCloud"[^>]*data-settings-page-target="cloud"[^>]*aria-controls="settingsPageCloud"/);
   assert.match(html, /<section id="settingsPageCloud"[^>]*data-settings-page="cloud" hidden>\s*<div id="settingsCloudHost" class="settings-cloud-host"><\/div>/);
@@ -102,7 +102,7 @@ test("Cloud account lives in Settings and Favorites lives in the Library", () =>
   assert.match(cloud, /settingsCloudHost\.replaceChildren\(accountPanel\(renderCloudSettings, setRefreshing\), devicePanel\(renderCloudSettings\)\)/);
   // Device polling stops when another Settings page is selected.
   assert.match(cloud, /else stopDeviceConnectionWatch\(\);/);
-  assert.match(html, /id="historyFavoritesNav"[^>]*aria-controls="historyFavoritesView"/);
+  assert.doesNotMatch(html, /id="historyFavoritesNav"|data-shell-forward="#historyBtn,#historyFavoritesNav"/);
   assert.match(html, /<section id="historyFavoritesView" class="history-favorites-view"[^>]*hidden><\/section>/);
   assert.match(cloud, /craftsButton\?\.addEventListener\("click", openFavorites\)/);
   const css = read("public/studio-shell.css");
@@ -112,7 +112,8 @@ test("Cloud account lives in Settings and Favorites lives in the Library", () =>
 test("Share shows ordered checklist steps", () => {
   const cloud = read("public/cloud-connect.js");
   const keys = [...cloud.matchAll(/shareStep\("([a-z]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(keys, ["content", "account", "cloud", "link"]);
+  // An empty Canvas can be shared, so content is not a step.
+  assert.deepEqual(keys, ["account", "cloud", "link"]);
   assert.match(cloud, /el\("ol", \{class:"live-share-steps"/);
   assert.match(cloud, /"current"/);
 });
@@ -121,4 +122,19 @@ test("the attached object toolbar shows a drag grip on its empty surface", () =>
   const css = read("public/studio-shell.css"), runtime = read("src/client/app/canvas-runtime.js");
   assert.match(css, /\.object-chrome-button\.object-toolbar-surface\)::before \{[^}]*radial-gradient\([^}]*pointer-events: none;/);
   assert.match(runtime, /button\.classList\.toggle\("has-decisions", Boolean\(spec\.objectToolbar && spec\.toolbarHasDecisions !== false\)\)/);
+});
+
+test("the side panel shows Collaborate, Share and its Canvases as tabs", () => {
+  const css = read("public/studio-shell.css"), html = read("public/index.html"), app = read("public/app.js");
+  const hidden = css.match(/:root\[data-penecho-companion="minimal"\] body \.topbar :is\(([^)]*)\) \{ display: none; \}/);
+  assert.ok(hidden && !hidden[1].includes(".canvas-file-actions"), "the file actions stay in the side panel");
+  assert.match(css, /:root\[data-penecho-companion="minimal"\] body \.topbar \.canvas-file-actions > :is\(#newCanvasBtn, #exportPngBtn, #historyBtn\) \{ display: none; \}/);
+  assert.match(html, /<nav id="companionTabs" class="companion-tabs" aria-label="Canvases" hidden><\/nav>/);
+  assert.match(app, /function renderCompanionTabs\(docs, current, disabled\)/);
+  assert.match(app, /Tabs keep the order they were opened in/);
+  assert.match(app, /The folder's project names the strip\./);
+  assert.match(app, /A folder page saves into its folder's project \(a guest's, or a signed-out app's, stays with its page\)\.\n\s*if \(window\.PENECHO_CONFIG\?\.folderProject\?\.localProjectId\) return window\.PENECHO_CONFIG\.folderProject\.localProjectId;\n\s*const folderProject = window\.PENECHO_CONFIG\?\.folderProject\?\.cloudProjectId \|\| window\.PENECHO_CONFIG\?\.folderProject\?\.guestProjectId;/);
+  // A window whose agent connection moved says so instead of claiming to reconnect.
+  assert.match(app, /connectionNotice === "workspaceReplaced" \? companionCanvasesCopy\("MCP · Other window"/);
+  assert.match(app, /"workspaceReplaced":"workspaceAccessRequired";\s*setStatus\(mcpConnectionNotice\(\)\);mcpRenderSettings\(\);window\.PenEchoCompanionCanvases\?\.changed\?\.\(\)/);
 });

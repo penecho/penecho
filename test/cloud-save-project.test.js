@@ -12,7 +12,7 @@ const PROJECT = "123e4567-e89b-42d3-a456-426614174001";
 const CANVAS = "123e4567-e89b-42d3-a456-426614174002";
 const REVISION = "123e4567-e89b-42d3-a456-426614174003";
 
-function harness({ selected = "all", libraryError = null, saveError = null, projects = [{ id:PROJECT, name:"Work" }, { id:DEFAULT, name:"Uncategorized", systemKey:"uncategorized" }] } = {}) {
+function harness({ selected = "all", libraryError = null, saveError = null, saveStatus = null, projects = [{ id:PROJECT, name:"Work" }, { id:DEFAULT, name:"Uncategorized", systemKey:"uncategorized" }] } = {}) {
   const requests = [];
   const events = [];
   const context = vm.createContext({
@@ -31,6 +31,7 @@ function harness({ selected = "all", libraryError = null, saveError = null, proj
       if (url === "/api/cloud/library") return { ok:!libraryError, status:libraryError ? 401 : 200, json:async () => libraryError
         ? { error:libraryError, code:"cloud_sign_in_required" }
         : { projects, canvases:[], sync:{ bundleVersion:2, conflictPolicy:"base-revision-required" } } };
+      if (saveStatus) return { ok:false, status:saveStatus, json:async () => ({ error:"revision_conflict" }) };
       return { ok:!saveError, status:saveError ? 500 : 201, json:async () => saveError ? { error:saveError } : { canvas:{ id:CANVAS }, revision:{ id:REVISION } } };
     },
   });
@@ -115,4 +116,32 @@ test("a failed Cloud write does not publish a saved identity or a URL synchroniz
   assert.equal(h.context.state.currentSnapshotId, null);
   assert.equal(h.context.state.currentSnapshotLocation, null);
   assert.deepEqual(h.events, []);
+});
+
+test("an autosave saves quietly on top of the revision it started from, replacing it, and reports a newer save as a conflict", async () => {
+  const saved = harness();
+  Object.assign(saved.context.state, { currentSnapshotLocation:"cloud", currentSnapshotId:CANVAS, currentSnapshotProjectId:PROJECT, currentSnapshotRevisionId:REVISION });
+  saved.run("var libraryReloads = 0; refreshSnapshots = async () => { libraryReloads++; };");
+  await saved.context.saveSnapshot({ location:"cloud", overwriteId:CANVAS, name:"Plan", allowEmpty:true }, { quiet:true, baseRevisionId:REVISION, replace:true });
+  assert.deepEqual([saved.requests.length, saved.requests[0].url, saved.requests[0].body.baseRevisionId, saved.requests[0].body.replace], [1, `/api/cloud/canvases/${CANVAS}/save`, REVISION, true]);
+  assert.equal(saved.run("libraryReloads"), 0, "an autosave does not reload the Library");
+
+  const conflicted = harness({ saveStatus:409 });
+  Object.assign(conflicted.context.state, { currentSnapshotLocation:"cloud", currentSnapshotId:CANVAS, currentSnapshotProjectId:PROJECT, currentSnapshotRevisionId:REVISION });
+  conflicted.run("var libraryReloads = 0; refreshSnapshots = async () => { libraryReloads++; };");
+  await assert.rejects(conflicted.context.saveSnapshot({ location:"cloud", overwriteId:CANVAS, name:"Plan", allowEmpty:true }, { quiet:true, baseRevisionId:REVISION, replace:true }), { code:"revision_conflict", status:409 });
+  assert.deepEqual([conflicted.requests.length, conflicted.run("libraryReloads")], [1, 0], "a conflict comes back to merge, without a retry or a Library reload");
+});
+
+test("a guest's folder page saves its Canvases with the page, through the same calls", async () => {
+  const h = harness();
+  h.context.window.PENECHO_CONFIG = { runtime:"cloud", browserCanvasEditing:true, browserDraftId:"draft-1", folderProject:{ name:"site", guest:true, guestProjectId:PROJECT } };
+  await h.context.saveSnapshot({ location:"cloud", name:"Plan", allowEmpty:true }, { quiet:true });
+  assert.deepEqual([h.requests.length, h.requests[0].url, h.requests[0].body.name], [1, "/api/v1/mcp/workspaces/draft-1/project/canvases", "Plan"], "a first save, with no Library to look up");
+  Object.assign(h.context.state, { currentSnapshotLocation:"cloud", currentSnapshotId:CANVAS, currentSnapshotRevisionId:REVISION });
+  await h.context.saveSnapshot({ location:"cloud", overwriteId:CANVAS, name:"Plan", allowEmpty:true }, { quiet:true, baseRevisionId:REVISION, replace:true });
+  assert.deepEqual([h.requests[1].url, h.requests[1].body.baseRevisionId], [`/api/v1/mcp/workspaces/draft-1/project/canvases/${CANVAS}/save`, REVISION]);
+  assert.equal(h.run(`folderPageCanvasPath("${CANVAS}")`), `/api/v1/mcp/workspaces/draft-1/project/canvases/${CANVAS}`, "and reads them from there");
+  h.context.window.PENECHO_CONFIG.folderProject = { name:"site", cloudProjectId:PROJECT };
+  assert.equal(h.run(`folderPageCanvasPath("${CANVAS}")`), "", "an account's folder page uses its Cloud library");
 });

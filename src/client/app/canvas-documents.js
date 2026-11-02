@@ -285,7 +285,7 @@
     canvasDocuments.error=String(error?.message||error);canvasDocuments.retry=retry;canvasDocumentsRender();
   }
   function canvasDocumentsChanged(doc,kind,objectId=null) {
-    if(canvasDocumentsIsActive(doc))doc.revision=state.userRevision;else doc.revision++;
+    if(canvasDocumentsIsActive(doc))doc.revision=state.userRevision;else {doc.revision++;window.PenEchoFolderProject?.changed?.(doc.id);}
     doc.changes.push({cursor:++doc.changeSequence,kind,objectId,at:Date.now()});
     if(doc.changes.length>200)doc.changes.splice(0,doc.changes.length-200);
     doc.unseen=Math.min(Number.MAX_SAFE_INTEGER,canvasDocumentsUnseen(doc.unseen)+1);
@@ -324,7 +324,9 @@
     if(execution)canvasAgentAssertToolExecution(execution);
     const doc=canvasDocuments.records.get(id);
     if(!doc)throw canvasDocumentsError("DOCUMENT_NOT_FOUND","This Canvas is not open. Resolve its saved location and retry.");
-    if(canvasDocumentsIsActive(doc)) { if(options.markSeen!==false&&doc.unseen){doc.unseen=0;canvasDocumentsRender();await canvasDocumentsPersist(doc,false,execution);} return {documentId:id,active:true}; }
+    const replacing=options.replace||null;
+    if(canvasDocumentsIsActive(doc)&&!replacing) { if(options.markSeen!==false&&doc.unseen){doc.unseen=0;canvasDocumentsRender();await canvasDocumentsPersist(doc,false,execution);} return {documentId:id,active:true}; }
+    if(replacing&&!canvasDocumentsIsActive(doc))throw canvasDocumentsError("CANVAS_CHANGED","Only the Canvas in front can take a merged save.");
     if(canvasDocuments.switching||snapshotLoadInProgress||typeof snapshotSaveInProgress!=="undefined"&&snapshotSaveInProgress)throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("A Canvas is opening or saving. Retry after it finishes.","画布正在打开或保存，完成后请重试。"));
     if(state.drawing||state.widgetGesture||state.imageGesture||state.selectionGesture)throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("Finish the current gesture, then retry switching Canvas.","请完成当前操作，再重试切换画布。"));
     if(typeof canvasAgent!=="undefined"&&(canvasAgent.running||canvasAgent.requestPending))throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("PenEcho Agent is working on this Canvas. Wait or use Stop, then retry switching.","PenEcho Agent 正在处理当前画布。请等待完成或点击停止，再重试切换。"));
@@ -334,7 +336,7 @@
     canvasDocuments.switching=true;canvasDocumentsRender();
     let decoded=null;
     try {
-      const previous=await canvasDocumentsAwait(()=>canvasDocumentsPark(execution),execution);
+      const previous=replacing?canvasDocumentsReplacing(doc,replacing,options.clean===true):await canvasDocumentsAwait(()=>canvasDocumentsPark(execution),execution);
       if(execution)canvasAgentAssertToolExecution(execution);
       const revision=state.userRevision,targetRevision=doc.revision,epoch=canvasDocuments.epoch,stored=doc.stored||{item:{widgets:[],images:[],textBoxes:[],animations:[],theme:state.theme},tileEntries:[]};
       const current=()=>epoch===canvasDocuments.epoch&&revision===state.userRevision&&targetRevision===doc.revision&&!execution?.controller?.signal.aborted;
@@ -382,13 +384,23 @@
       mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;
       restoreSnapshotCanvasObjectOrder(item.bundleExtensions);
       canvasDocumentsSyncExtension(doc);canvasDocumentsApplyView(item.view);
-      resetCanvasDefaultMode();
-      canvasAgentCanvasDidChange(doc.locator||{id:doc.id,location:"workspace"},{clearProject:true});
+      // A merged save changes only what the Canvas holds, not the tool or Agent in use.
+      if(!replacing){resetCanvasDefaultMode();canvasAgentCanvasDidChange(doc.locator||{id:doc.id,location:"workspace"},{clearProject:true});}
+      if(!replacing&&doc.locator&&!doc.base&&doc.revision===doc.savedRevision)doc.base={revisionId:item.currentRevisionId||null,stored};
       if(typeof canvasAgentInput!=="undefined"){canvasAgentInput.value=doc.agentDraft||"";canvasAgentResizeInput();canvasAgentSyncPromptSuggestions();}
       if(options.markSeen!==false)doc.unseen=0;canvasDocuments.error=null;canvasDocuments.retry=null;render();canvasAgentSyncAutomaticAIStatus();mcpRenderCanvasStatus();
       canvasDocumentsRetireEmptyPlaceholder(previous);
       window.PenEchoStudioNavigator?.updateDocument?.();window.dispatchEvent(new Event("penecho:live-share-context-changed"));await canvasDocumentsPersist(doc,false,execution);return {documentId:id,active:true};
     } finally {if(decoded?.size)releaseSnapshotTileCanvases(decoded);if(canvasDocuments.switchToken===switchToken){canvasDocuments.switching=false;canvasDocuments.switchToken=null;canvasDocumentsRender();}}
+  }
+  // The shown tab takes merged content in place. It keeps its Undo; entries
+  // made before then undo only what still holds their change.
+  function canvasDocumentsReplacing(doc,stored,clean) {
+    doc.undo=state.history;doc.redo=state.future;doc.agentDraft=typeof canvasAgentInput!=="undefined"?canvasAgentInput.value:"";
+    doc.feedback=mcpRuntime.feedback;doc.feedbackSequence=mcpRuntime.feedbackSequence;
+    for(const entry of [...doc.undo,...doc.redo])if(entry&&typeof entry==="object"&&!Array.isArray(entry))entry.rebased=true;
+    doc.stored=stored;doc.title=stored.item.name||doc.title;doc.revision=state.userRevision+1;if(clean)doc.savedRevision=doc.revision;
+    return null;
   }
   function canvasDocumentsApplyView(view) {
     if(view===null){state.viewInitialized=false;fit();}
@@ -427,7 +439,9 @@
       state.history=[];state.future=[];
     }
     await canvasDocumentsAdopt({...item,id:storedId,updatedAt:canvasDocumentsSavedAt(item.updatedAt)||Date.now()},location);
-    const doc=canvasDocumentsCurrent();doc.savedRevision=state.snapshotSavedRevision;doc.stored={item:{...item,id:storedId},tileEntries};canvasDocumentsSyncExtension(doc);
+    // The stored copy names its Cloud revision, so a reopened page saves on top of it.
+    const doc=canvasDocumentsCurrent();doc.savedRevision=state.snapshotSavedRevision;doc.stored={item:{...item,id:storedId,currentRevisionId:state.currentSnapshotRevisionId||null},tileEntries};canvasDocumentsSyncExtension(doc);
+    doc.base={revisionId:state.currentSnapshotRevisionId||null,stored:doc.stored};
     const epoch=canvasDocuments.epoch,settled=Number.isSafeInteger(recoveryCommitVersion)&&recoveryCommitVersion===canvasDocumentsDraft.commitVersion&&state.userRevision===state.snapshotSavedRevision;
     // Save can leave userRevision unchanged, including an empty Canvas's first
     // name. Persist now rather than relying on the content-only recovery timer.
@@ -585,7 +599,7 @@
   }
   function canvasDocumentsCapacity(doc,kind,delta=1) {
     const limit=kind==="text"?50:100;
-    if(canvasDocumentsObjects(doc).filter(o=>o.kind===kind).length+delta>limit)throw canvasDocumentsError("OBJECT_LIMIT",canvasDocumentsCopy("This Canvas has reached its object limit. Remove an unused object or create another Canvas, then retry.","此画布的对象数量已达上限。请移除不用的对象，或新建画布后重试。"),{kind,limit,retryable:true});
+    if(canvasDocumentsObjects(doc).filter(o=>o.kind===kind).length+delta>limit)throw canvasDocumentsError("OBJECT_LIMIT",canvasDocumentsCopy("This Canvas is full. Continue on a new Canvas: penecho_open_canvas with create:true, then penecho_start_session with its documentId. Or remove unused objects and retry.","此画布已满。可新建画布继续：用 penecho_open_canvas（create:true）新建，再用它的 documentId 调用 penecho_start_session；或移除不用的对象后重试。"),{kind,limit,retryable:true});
   }
   function canvasDocumentsEndEdit(doc,kind,id=null) {
     if(canvasDocumentsIsActive(doc)){state.userRevision++;save();requestRender();canvasAgentSyncState();}
@@ -703,6 +717,8 @@
   // Rename metadata without capturing, saving or showing the Canvas content.
   async function canvasDocumentsRenameSaved(doc,title,execution) {
     if(!doc.locator)return false;
+    // A folder project's Canvas takes its new name with its next save.
+    if(window.PenEchoFolderProject?.renamed?.(doc))return true;
     const {id,location}=doc.locator,controller=new AbortController(),signal=execution?.controller?.signal;
     const abort=()=>controller.abort(signal.reason||canvasDocumentsError("REQUEST_CANCELLED","The rename was cancelled."));
     signal?.addEventListener("abort",abort,{once:true});if(signal?.aborted)abort();
@@ -814,6 +830,64 @@
     canvasAgentAssertToolExecution(execution);await canvasDocumentsPersist(doc,false,execution);
     if(args.show)await canvasDocumentsShow(doc.id,execution,{markSeen:false});
     canvasDocumentsRender();return {documentId:doc.id,title:doc.title,active:canvasDocumentsIsActive(doc),locator:doc.locator||null,created:args.create===true};
+  }
+  // A folder project's shared tabs: open one of its saved Canvases as a tab
+  // without switching to it, reusing a copy that is already open.
+  async function canvasDocumentsOpenSaved(locator,{show=false}={}) {
+    await canvasDocumentsReady();
+    let doc=[...canvasDocuments.records.values()].find(d=>d.locator?.location===locator.location&&d.locator?.id===locator.id);
+    if(!doc) {
+      if(canvasDocuments.records.size>=CANVAS_DOCUMENT_LIMIT)throw canvasDocumentsError("DOCUMENT_LIMIT",canvasDocumentsLimitMessage());
+      const stored=await canvasDocumentsBound(readSnapshot(locator.location,locator.id));
+      if(!stored)throw canvasDocumentsError("DOCUMENT_NOT_FOUND","The saved Canvas was not found at this location.");
+      const meta=canvasDocumentIdentity.normalizeMetadata(stored.item.bundleExtensions?.[CANVAS_DOCUMENT_EXTENSION])||{version:1,documentId:await canvasDocumentIdentity.legacyId(locator),title:stored.item.name||""};
+      doc=canvasDocuments.records.get(meta.documentId);
+      if(!doc) {
+        doc=canvasDocumentsRecord({...meta,title:stored.item.name||meta.title},stored);doc.locator=locator;doc.savedAt=canvasDocumentsSnapshotSavedAt(stored.item);doc.savedRevision=doc.revision;canvasDocumentsRestoreWorkspace(doc,stored.item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
+        doc.base={revisionId:stored.item.currentRevisionId||null,stored:canvasDocumentsCopyStored(stored)};
+        canvasDocuments.records.set(doc.id,doc);await canvasDocumentsPersist(doc);
+      }
+    }
+    if(show&&!canvasDocumentsIsActive(doc))await canvasDocumentsShow(doc.id,null,{markSeen:false});
+    canvasDocumentsRender();
+    return doc;
+  }
+  // The save a tab's changes start from (its base) is kept for merging a newer
+  // save. A background tab's stored copy changes in place, so its base is a copy;
+  // files stay shared, since merges tell images apart by the identity of their bytes.
+  function canvasDocumentsCopyStored(stored) {
+    const copy = value => value instanceof Blob ? value : Array.isArray(value) ? value.map(copy)
+      : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, copy(entry)])) : value;
+    return stored?.item ? { item:copy(stored.item), tileEntries:[...(stored.tileEntries || [])] } : null;
+  }
+  // A tab in front or being switched to, with unsaved changes, or in use by an
+  // agent is left as it is.
+  function canvasDocumentsBackgroundClean(doc) {
+    const item=doc?.stored?.item,blank=Boolean(item)&&!(doc.stored.tileEntries||[]).length&&![item.widgets,item.images,item.textBoxes].some(list=>list?.length);
+    return Boolean(doc)&&!canvasDocuments.switching&&!canvasDocumentsIsActive(doc)&&(blank||doc.revision===doc.savedRevision)&&![...mcpRuntime.sessions.values()].some(session=>session.documentId===doc.id&&!session.closed);
+  }
+  // A newer save of a background tab, made on another page of the folder,
+  // replaces this page's copy. Its Undo belonged to the older copy.
+  async function canvasDocumentsRefreshSaved(id) {
+    const doc=canvasDocuments.records.get(id);
+    if(!doc?.locator||!canvasDocumentsBackgroundClean(doc))return false;
+    const stored=await canvasDocumentsBound(readSnapshot(doc.locator.location,doc.locator.id)),revision=doc.revision;
+    if(!stored||canvasDocuments.records.get(id)!==doc||revision!==doc.revision||!canvasDocumentsBackgroundClean(doc))return false;
+    doc.stored=stored;doc.title=stored.item.name||doc.title;doc.savedAt=canvasDocumentsSnapshotSavedAt(stored.item);doc.savedRevision=doc.revision;doc.undo=[];doc.redo=[];
+    doc.base={revisionId:stored.item.currentRevisionId||null,stored:canvasDocumentsCopyStored(stored)};
+    canvasDocumentsRestoreWorkspace(doc,stored.item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
+    await canvasDocumentsPersist(doc);canvasDocumentsRender();
+    return true;
+  }
+  // Drops this page's copy of a tab that another page of the folder closed, or
+  // of a blank first page once the project's tabs are here.
+  async function canvasDocumentsForget(id) {
+    const doc=canvasDocuments.records.get(id);
+    if(!canvasDocumentsBackgroundClean(doc))return false;
+    const db=await canvasDocumentsDb();
+    await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");tx.objectStore("documents").delete(id);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error);}));
+    canvasDocuments.records.delete(id);canvasDocumentsRender();
+    return true;
   }
   async function canvasDocumentsOnce(store,key,args,work) {
     if(!key)return work();
@@ -1288,7 +1362,11 @@
       await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");for(const closingId of deleted)tx.objectStore("documents").delete(closingId);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not close the Canvas. Retry."));}));
     }
     for(const session of mcpRuntime.sessions.values())if(closingIds.has(session.documentId))session.closed=true;
-    for(const closingId of closingIds)canvasDocuments.records.delete(closingId);canvasDocumentsRender();return true;
+    // A folder project closes the same tab on its other pages.
+    const closedLocators=[...closingIds].map(closingId=>canvasDocuments.records.get(closingId)?.locator).filter(Boolean);
+    for(const closingId of closingIds)canvasDocuments.records.delete(closingId);canvasDocumentsRender();
+    if(typeof window.dispatchEvent==="function"&&typeof CustomEvent==="function")window.dispatchEvent(new CustomEvent("penecho:canvas-documents-closed",{detail:{locators:closedLocators}}));
+    return true;
   }
   document.getElementById("canvasWorkspaceClose")?.addEventListener("click",()=>{const documentId=canvasDocumentsCurrent().id;canvasDocumentsUiAction(()=>requestCanvasTransition({type:"close",documentId}));});
   document.getElementById("canvasWorkspaceRetry")?.addEventListener("click",()=>{const retry=canvasDocuments.retry;if(retry)canvasDocumentsUiAction(retry);});
@@ -1342,6 +1420,7 @@
     return canvasDocumentsDraft.opening;
   }
   function canvasDocumentsScheduleDraft(committed = true) {
+    window.PenEchoFolderProject?.changed?.();
     if (!canvasDocumentsDraft?.ready || window.PENECHO_CONFIG?.runtime === "viewer") return;
     // AI commits and coalesced Widget changes can save history without changing
     // userRevision. Track them separately from the user-edit conflict guard.
@@ -1398,7 +1477,7 @@
       sessionStorage.removeItem(canvasDocumentsIntentKey());
     } catch { return null; }
     const age = now - Number(intent?.createdAt);
-    return intent?.action === "save" && age >= 0 && age < BROWSER_DRAFT_INTENT_TTL_MS ? intent : null;
+    return ["save", "keep"].includes(intent?.action) && age >= 0 && age < BROWSER_DRAFT_INTENT_TTL_MS ? intent : null;
   }
   async function canvasDocumentsSettleDraft(timeoutMs = 5000, { finalize = false } = {}) {
     if (canvasDocumentsDraft.opening) await canvasDocumentsDraft.opening;
@@ -1419,6 +1498,8 @@
       setStatus(canvasDocumentsCopy("Sign-in was not completed. Your draft is kept in this browser; choose Save again when ready.", "未完成登录。草稿仍保留在此浏览器中，准备好后可再次保存。"));
       return false;
     }
+    // Signed in from a guest's folder page: keep its Canvases in this account.
+    if (intent.action === "keep") return Boolean(await window.PenEchoFolderProject?.keep?.());
     if (intent.documentId && intent.documentId !== canvasDocuments.activeId) {
       setStatus(canvasDocumentsCopy("Signed in. Open the Canvas you were saving and choose Save.", "已登录。请打开要保存的画布，然后选择保存。"));
       return false;
@@ -1427,21 +1508,34 @@
     return true;
   }
   function saveCurrentCanvasFromUser() {
+    // A folder project saves by itself, a guest's too.
+    if (window.PenEchoFolderProject?.enabled()) return window.PenEchoFolderProject.saveNow();
     if (window.PENECHO_CONFIG?.guestCanvas && window.PenEchoBrowserDraft) return window.PenEchoBrowserDraft.signIn({ intent:"save" });
+    // Edits on a shared Canvas are already kept live; Save makes your own copy.
+    if (window.PENECHO_CONFIG?.liveShare && !state.currentSnapshotId) {
+      if (window.PENECHO_CONFIG.guestCanvas) { location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname)}`); return null; }
+      setStatus(canvasDocumentsCopy("Your edits are already shared live. Saving your own copy…", "你的改动已实时共享。正在保存你自己的副本…"));
+    }
     return saveCurrentCanvas();
+  }
+  // A guest signs in, or signs up, and keeps what they made here: a folder page's Canvases, or this draft.
+  function canvasGuestSignIn({ signup = false } = {}) {
+    if (window.PenEchoBrowserDraft) return window.PenEchoBrowserDraft.signIn({ intent:window.PenEchoFolderProject?.guest?.() ? "keep" : "save", signup });
+    location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}${signup ? "#signup" : ""}`);
+    return null;
   }
   if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoBrowserDraft = {
     open:() => canvasDocumentsStartDraft(true),
     flush:canvasDocumentsFlushDraft,
     resumeIntent:() => canvasDocumentsResumeIntent().catch(error => { setStatus(String(error?.message || error)); return false; }),
-    async signIn({ intent = "" } = {}) {
+    async signIn({ intent = "", signup = false } = {}) {
       // A draft that cannot be stored keeps the user here, with nothing lost.
       try { await canvasDocumentsSettleDraft(5000, { finalize:true }); }
       catch (error) { setStatus(String(error?.message || error)); return false; }
-      if (intent === "save") {
-        try { sessionStorage.setItem(canvasDocumentsIntentKey(), JSON.stringify({ action:"save", documentId:canvasDocuments.activeId, createdAt:Date.now() })); } catch {}
+      if (intent === "save" || intent === "keep") {
+        try { sessionStorage.setItem(canvasDocumentsIntentKey(), JSON.stringify({ action:intent, documentId:canvasDocuments.activeId, createdAt:Date.now() })); } catch {}
       }
-      location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
+      location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}${signup ? "#signup" : ""}`);
     }
   };
   // Returning with Back from the sign-in page restores this page from cache.

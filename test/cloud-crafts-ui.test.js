@@ -35,7 +35,7 @@ test("toolbar ships a left-navigation Favorites workbench with list and grid vie
   assert.match(page, /id="craftsViewSwitch"[^>]*role="group"[^>]*data-i18n-aria="savedView"/);
   assert.match(page, /id="craftsViewList"[^>]*aria-pressed="true"[^>]*data-i18n-aria="savedListView"/);
   assert.match(page, /id="craftsViewGrid"[^>]*aria-pressed="false"[^>]*data-i18n-aria="savedGridView"/);
-  assert.match(page, /id="craftsEchoesLink"[^>]*target="_blank"[^>]*rel="noopener"/);
+  assert.doesNotMatch(page, /craftsEchoesLink|community\.html/, "no public Echoes feed to browse");
   assert.match(page, /id="craftsCount"[^>]*aria-live="polite"/);
   assert.match(page, /id="craftsClose"[^>]*data-i18n-aria="closeSavedCrafts"[^>]*data-i18n-title="closeSavedCrafts"[\s\S]*?<svg viewBox="0 0 24 24"/);
   assert.match(page, /class="crafts-empty"[^>]*data-i18n="savedLoading"/);
@@ -59,7 +59,7 @@ test("toolbar ships a left-navigation Favorites workbench with list and grid vie
   assert.match(script, /craftsSearch\?\.addEventListener\("input"/);
   assert.doesNotMatch(script, /craftsSearch[^\n]*\.focus/);
   assert.match(script, /function updateCraftView/);
-  assert.match(script, /function updateCraftsEchoesLink/);
+  assert.doesNotMatch(script, /updateCraftsEchoesLink/);
   assert.match(script, /function favoriteCraftTime/);
   assert.match(script, /favoriteCraftTime\(b\) - favoriteCraftTime\(a\)/);
   assert.match(script, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/);
@@ -82,7 +82,7 @@ test("toolbar ships a left-navigation Favorites workbench with list and grid vie
   assert.match(locale, /savedCraftsTitle: "收藏"/);
   assert.match(locale, /savedCraftsSubtitle: "画布与组件"/);
   assert.match(locale, /savedGridView: "网格视图"/);
-  assert.match(locale, /browseEchoes: "浏览公开分享"/);
+  assert.doesNotMatch(locale, /browseEchoes:/);
   assert.match(locale, /savedCount: "\{count\} 个收藏"/);
   assert.match(locale, /savedSourceSynced: "云端 \+ 本机"/);
   assert.match(locale, /savedRemoveConfirmTitle: "从收藏中移除？"/);
@@ -143,15 +143,16 @@ test("toolbar ships a left-navigation Favorites workbench with list and grid vie
   assert.match(craftsCss, /@media \(max-width: 560px\)\s*\{[\s\S]*?\.crafts-list:not\(\.is-grid\) \.crafts-row\s*\{[^}]*grid-template-columns:\s*80px minmax\(0,\s*1fr\) auto[^}]*column-gap:\s*10px[^}]*row-gap:\s*4px/);
   assert.match(craftsCss, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.crafts-refresh-spinner\s*\{[^}]*animation:\s*none/);
   assert.match(css, /:is\(#pe-type-contract, \.crafts-modal, \.crafts-remove-dialog\) :where\(\*\)\s*\{\s*font-weight:\s*400;/);
-  assert.match(css, /:is\(#pe-type-contract, \.crafts-modal\) :is\([\s\S]*?\.crafts-nav-item > span,[\s\S]*?\.crafts-echoes-link > span[\s\S]*?\)\s*\{\s*font-weight:\s*500;/);
+  assert.match(css, /:is\(#pe-type-contract, \.crafts-modal\) :is\([\s\S]*?\.crafts-nav-item > span[\s\S]*?\)\s*\{\s*font-weight:\s*500;/);
+  assert.doesNotMatch(css, /crafts-echoes-link/);
 
   const bilingualKeys = [
-    "savedCrafts", "savedCraftsTitle", "savedCraftsSubtitle", "savedType", "savedSearch", "savedSearchLabel", "savedView", "savedListView", "savedGridView", "browseEchoes", "savedCount", "savedLoading", "savedRefreshing", "savedNoMatches", "savedEmptyIn", "savedEmptyOut",
+    "savedCrafts", "savedCraftsTitle", "savedCraftsSubtitle", "savedType", "savedSearch", "savedSearchLabel", "savedView", "savedListView", "savedGridView", "savedCount", "savedLoading", "savedRefreshing", "savedNoMatches", "savedEmptyIn", "savedEmptyOut",
     "savedAdd", "savedAdding", "savedOpen", "savedOpening", "savedCanvas", "savedWidget", "savedRemoveTitle", "savedRemoveConfirmTitle", "savedRemoveConfirmDescription", "savedRemoveAction", "savedSourceLocal", "savedSourceCloud", "savedSourceCommunity",
     "savedSourceSynced", "savedSourceSyncedTitle", "savedSourceLocalTitle", "savedSourceCloudTitle", "savedErrorAdd", "savedErrorOpen", "savedErrorToggle",
     "closeSavedCrafts", "shareCanvasCloud", "shareWidget", "snapshotCloudSignInRequired", "snapshotCloudSignInHint",
     "openPenEchoCloud", "openPenEchoCloudExternal", "opensInNewTab", "openCloudCanvasUnsaved", "openInNewPage",
-    "openCanvas", "addToCanvas", "favorites", "all", "canvases", "widgets", "favoriteCanvases", "favoriteWidgets", "projects", "explore",
+    "openCanvas", "addToCanvas", "favorites", "all", "canvases", "widgets", "favoriteCanvases", "favoriteWidgets", "projects",
   ];
   for (const key of bilingualKeys) {
     assert.match(app, new RegExp(`\\b${key}:`), `English locale is missing ${key}`);

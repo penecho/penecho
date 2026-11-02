@@ -38,6 +38,7 @@ const JEVISION = require("./jevision.js");
 const { createJeVisionRequestTracer } = require("./jevision-request-trace.js");
 const { hostCompiledWidget, resolveWidgetEditPatchCommands, widgetSourceMirrorsHtml, widgetPatchContract, widgetPatchFiles } = require("./widget-patch.js");
 const { CloudConnector, cloudAiConnectionHeaders } = require("./cloud-connector.js");
+const { createFolderProjects } = require("./folder-projects.js");
 const { createStaticResponder } = require("./static-response.js");
 const { createRemoteCanvasHttpExecutor } = require("./remote-canvas-http.js");
 const { attachCanvasAgent } = require("./canvas-agent/http.js");
@@ -209,6 +210,7 @@ const SHARED_CANVAS_DIRECTORY = STATE_DIRECTORY
   ? path.join(STATE_DIRECTORY, "canvases", "shared")
   : path.join(os.homedir(), ".penecho", "canvases", "shared");
 const SHARED_CANVAS_PROJECTS_FILE = path.join(SHARED_CANVAS_DIRECTORY, "projects.json");
+const SHARED_CANVAS_REVISION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_LOG = 2 * 1024 * 1024;
 const MAX_SHARED_CANVAS_BYTES = 96 * 1024 * 1024;
 const CANVAS_SIZE = 20000;
@@ -1324,6 +1326,7 @@ function sharedCanvasMetadata(snapshot, projectId = DEFAULT_CANVAS_PROJECT_ID, i
     name:logical.name,
     theme:logical.theme,
     projectId,
+    ...(SHARED_CANVAS_REVISION_PATTERN.test(identity.revisionId||"")?{revisionId:identity.revisionId}:{}),
     ...(snapshot.extensions?.penechoDocument?.version===1&&validCanvasDocumentId(snapshot.extensions.penechoDocument.documentId)?{documentId:snapshot.extensions.penechoDocument.documentId}:{}),
     tileCount:logical.tiles.length,
     animationCount:logical.animations.length,
@@ -1532,6 +1535,7 @@ function canonicalSharedCanvasMetadata(item,id) {
     version:item.version===2?2:1,id,createdAt:item.createdAt,updatedAt,
     name:typeof item.name==="string"?item.name.slice(0,48):"",theme:normalizeCanvasTheme(item.theme),
     projectId:sharedCanvasProject(item.projectId)?item.projectId:DEFAULT_CANVAS_PROJECT_ID,
+    ...(SHARED_CANVAS_REVISION_PATTERN.test(item.revisionId||"")?{revisionId:item.revisionId}:{}),
     ...(validCanvasDocumentId(item.documentId)?{documentId:item.documentId}:{}),
     tileCount:count("tileCount"),animationCount:count("animationCount"),widgetCount:count("widgetCount"),textBoxCount:count("textBoxCount"),imageCount:count("imageCount"),preview:item.preview,
   };
@@ -1644,9 +1648,21 @@ function readSharedCanvas(id) {
       projectId:metadata?.projectId||DEFAULT_CANVAS_PROJECT_ID,
     };
 }
-function saveSharedCanvas(value, overwriteId = null) {
+// Each save has a revision. Canvases saved before revisions use one made from
+// their last change, so a save that names the revision it starts from never
+// replaces a newer one.
+function sharedCanvasRevision(metadata) {
+  return metadata.revisionId||`r-${metadata.updatedAt}`;
+}
+function sharedCanvasMetadataOf(id) {
+  const file=canvasSnapshotPath(id,true);
+  if(!file)return null;
+  try{return canonicalSharedCanvasMetadata(JSON.parse(fs.readFileSync(file,"utf8")),id)}catch{return null}
+}
+function saveSharedCanvas(value, overwriteId = null, { baseRevisionId } = {}) {
   let existingMetadata=null;
   if(overwriteId)try{existingMetadata=canonicalSharedCanvasMetadata(JSON.parse(fs.readFileSync(canvasSnapshotPath(overwriteId,true),"utf8")),overwriteId)}catch{}
+  if(baseRevisionId!==undefined&&existingMetadata&&sharedCanvasRevision(existingMetadata)!==baseRevisionId)throw Object.assign(new Error("This Canvas was saved elsewhere since this save started."),{status:409,code:"revision_conflict"});
   const now=Date.now(),suppliedId=value?.id??value?.manifest?.id,
     suppliedCreatedAt=Number(value?.createdAt??value?.manifest?.createdAt),
     suppliedUpdatedAt=Number(value?.updatedAt??value?.manifest?.updatedAt),
@@ -1655,6 +1671,7 @@ function saveSharedCanvas(value, overwriteId = null) {
       createdAt:existingMetadata?.createdAt||(Number.isSafeInteger(suppliedCreatedAt)?suppliedCreatedAt:now),
       updatedAt:Number.isSafeInteger(suppliedUpdatedAt)?suppliedUpdatedAt:now,
       name:typeof value?.name==="string"?value.name:existingMetadata?.name||"",
+      revisionId:crypto.randomUUID(),
     };
   if(overwriteId&&suppliedId&&suppliedId!==overwriteId)throw Object.assign(new Error("Canvas id does not match the request."),{status:400});
   if(identity.updatedAt<identity.createdAt)identity.updatedAt=now;
@@ -1684,6 +1701,28 @@ function deleteSharedCanvas(id) {
   if(!fs.existsSync(file)&&!fs.existsSync(metadataFile))throw Object.assign(new Error("Canvas was not found."),{status:404});
   for(const target of [file,metadataFile])try{fs.unlinkSync(target)}catch(error){if(error.code!=="ENOENT")throw error}
   return {id};
+}
+const RESEARCH_IMPROVE = new Map([["drawing", "Drawing and handwriting"], ["ai", "AI that understands my Canvas"], ["agents", "Working with my AI agent"], ["collaboration", "Collaboration and sharing"],
+  ["projects", "Folder projects and saving"], ["diagrams", "Diagrams and visual explanations"], ["speed", "Speed and reliability"], ["setup", "Desktop app and setup"]]);
+const RESEARCH_USE = new Map([["agent", "With an AI coding agent"], ["thinking", "To sketch and think on my own"], ["teaching", "To teach or explain"], ["together", "To work with others"]]);
+// Sent through PenEcho Cloud's contact form, so no account is needed.
+async function sendResearchAnswers(input) {
+  const improve = Array.isArray(input?.improve) ? [...new Set(input.improve)].filter(key => RESEARCH_IMPROVE.has(key)).slice(0, 3) : [],
+    use = RESEARCH_USE.has(input?.use) ? input.use : "",
+    text = typeof input?.text === "string" ? input.text.trim().slice(0, 2000) : "";
+  if (!improve.length && !use && !text) throw Object.assign(new Error("Choose an answer or write a note."), { status:400 });
+  const version = APP_PACKAGE.version, body = [
+    `PenEcho ${version}: what should we improve next?`,
+    `Improve next: ${improve.map(key => RESEARCH_IMPROVE.get(key)).join("; ") || "-"}`,
+    `Mostly used: ${RESEARCH_USE.get(use) || "-"}`,
+    `App: ${process.env.PENECHO_DESKTOP_APP === "true" ? "desktop" : "npm"} ${version}, ${process.platform}, ${input?.language === "zh" ? "zh" : "en"}`,
+    ...(text ? ["", text] : []),
+  ].join("\n");
+  const response = await fetch(`${DEFAULT_CLOUD_ORIGIN}/api/v1/contact`, { method:"POST", redirect:"error", signal:AbortSignal.timeout(10000),
+    headers:{ "content-type":"application/json", accept:"application/json" },
+    body:JSON.stringify({ topic:"product-feedback", subject:`PenEcho ${version}: what to improve next`, body }) });
+  if (!response.ok) throw Object.assign(new Error("PenEcho could not send your answers. Try again later."), { status:502 });
+  return { sent:true };
 }
 function visibleCliDiagnostic(value) {
   return String(value || "").replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, " ").replace(/\s+/g, " ").trim().slice(0, 800);
@@ -3490,6 +3529,13 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res,404,{error:"Not found"});
   }
+  // Answers to "what should we improve next?" reach the team as product feedback.
+  if (req.method === "POST" && url.pathname === "/api/research") {
+    const researchError = browserRequestError(req);
+    if (researchError) return send(res, 403, { error:researchError });
+    try { return send(res, 202, await sendResearchAnswers(await readJson(req, 16 * 1024))); }
+    catch (error) { return send(res, Number.isInteger(error?.status) ? error.status : 502, { error:error?.message || "PenEcho could not send your answers." }); }
+  }
   if (url.pathname.startsWith("/api/cloud/")) {
     const mutation=req.method!=="GET",localError=cloudBrowserRequestError(req,mutation);
     if(localError)return send(res,403,{error:localError});
@@ -3501,9 +3547,23 @@ const server = http.createServer(async (req, res) => {
         if(req.method==='GET'&&url.pathname==='/api/cloud/mcp')result.local={cloudMcpEnabled:cloudConnector.status().cloudMcpEnabled,device:cloudConnector.status().device};
         return send(res,req.method==="POST"?201:200,result);
       }
-      if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/share$/i.test(url.pathname) && ["GET","POST","DELETE"].includes(req.method)) {
+      if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/(?:share|collaboration)$/i.test(url.pathname) && ["GET","POST","DELETE"].includes(req.method)) {
         const path=url.pathname.replace("/api/cloud/","/api/v1/")+(req.method==="GET"?url.search:"");
         return send(res,200,await cloudConnector.cloudRequest(path,{method:req.method,...(req.method!=="GET"?{body:await readJson(req,4096)}:{})}));
+      }
+      // Collaborating needs no account: a link Canvas lives on the Cloud this computer uses
+      // for 7 days after its last change. Signing in and saving keeps it, with the same link.
+      if(req.method==="POST"&&url.pathname==="/api/cloud/live/links"){
+        const body=await readJson(req,16*1024*1024),started=await cloudConnector.linkRequest("/api/v1/live/links",{method:"POST",body,origin:DEFAULT_CLOUD_ORIGIN});
+        return send(res,201,{...started,publicUrl:new URL(started.url,started.origin).toString()});
+      }
+      // The key that proves who started the link travels in its own header, as Cloud expects it.
+      const ownerKey=String(req.headers["x-penecho-owner-key"]||"").slice(0,128);
+      if(/^\/api\/cloud\/live\/links\/[0-9a-f-]{36}$/i.test(url.pathname)&&req.method==="DELETE")
+        return send(res,200,await cloudConnector.linkRequest(url.pathname.replace("/api/cloud/","/api/v1/"),{method:"DELETE",ownerKey,origin:DEFAULT_CLOUD_ORIGIN}));
+      if(/^\/api\/cloud\/live\/links\/[0-9a-f-]{36}\/adopt$/i.test(url.pathname)&&req.method==="POST"){
+        const {canvasId}=await readJson(req,4096);
+        return send(res,200,await cloudConnector.cloudRequest(url.pathname.replace("/api/cloud/","/api/v1/"),{method:"POST",body:{canvasId},headers:{"x-penecho-owner-key":ownerKey}}));
       }
       if(req.method==="GET"&&url.pathname==="/api/cloud/status")return send(res,200,cloudConnector.status());
       if(req.method==="GET"&&url.pathname==="/api/cloud/account")return send(res,200,await cloudConnector.refreshAccount({force:true}));
@@ -3560,7 +3620,7 @@ const server = http.createServer(async (req, res) => {
       if(cloudCanvasSaveMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudCanvasSaveMatch[1])&&req.method==="POST"){
         const body=await readJson(req,35*1024*1024);
         if(!body?.bundle)return send(res,400,{error:"A Canvas bundle is required."});
-        return send(res,200,await cloudConnector.saveCloudCanvas({canvasId:cloudCanvasSaveMatch[1],baseRevisionId:body.baseRevisionId||null,bundle:body.bundle}));
+        return send(res,200,await cloudConnector.saveCloudCanvas({canvasId:cloudCanvasSaveMatch[1],baseRevisionId:body.baseRevisionId||null,bundle:body.bundle,replace:body.replace===true}));
       }
       if(cloudCanvasMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudCanvasMatch[1])){
         if(req.method==="GET")return send(res,200,await cloudConnector.loadCloudCanvas(cloudCanvasMatch[1]));
@@ -3981,6 +4041,33 @@ const server = http.createServer(async (req, res) => {
       clearTimeout(timeout);
       req.removeListener("aborted", abortForDisconnect);
       res.removeListener("close", abortForDisconnect);
+    }
+  }
+  // A folder page: its config, its project's tabs and, while signed out, the
+  // folder's Canvases in this computer's Library.
+  const folderPageMatch=/^\/api\/v1\/mcp\/workspaces\/([0-9a-f-]{36})\/(config\.js|documents|selection|project|project\/tabs|project\/keep|project\/canvases(?:\/(\d{10,16}-[a-zA-Z0-9-]{8,64})(\/save)?)?)$/.exec(url.pathname);
+  if(folderPageMatch) {
+    const [,workspaceId,route,canvasId,save]=folderPageMatch;
+    if(route==="config.js") {
+      let config={};
+      if(req.method==="GET"&&!sharedCanvasReadError(req))try{config=await folderProjects.pageConfig(workspaceId)}catch{}
+      return send(res,200,`Object.assign(window.PENECHO_CONFIG,${JSON.stringify(config)});`,"application/javascript; charset=utf-8");
+    }
+    const authorizationError=req.method==="GET"?sharedCanvasReadError(req):browserRequestError(req);
+    if(authorizationError)return send(res,403,{error:authorizationError,code:"forbidden",message:authorizationError});
+    try {
+      if(req.method==="GET"&&route==="documents")return send(res,200,folderProjects.documents(workspaceId));
+      if(req.method==="POST"&&route==="selection")return send(res,200,folderProjects.select(workspaceId,await readJson(req,2048)));
+      if(req.method==="GET"&&route==="project")return send(res,200,await folderProjects.projectView(workspaceId));
+      if(req.method==="POST"&&route==="project/tabs")return send(res,200,await folderProjects.updateTabs(workspaceId,await readJson(req,1024)));
+      if(req.method==="POST"&&route==="project/keep")return send(res,200,await folderProjects.keep(workspaceId));
+      if(req.method==="POST"&&route==="project/canvases")return send(res,201,folderProjects.createCanvas(workspaceId,await readJson(req,MAX_SHARED_CANVAS_BYTES+64*1024)));
+      if(req.method==="GET"&&canvasId&&!save)return send(res,200,folderProjects.readCanvas(workspaceId,canvasId));
+      if(req.method==="POST"&&canvasId&&save)return send(res,200,folderProjects.saveCanvas(workspaceId,canvasId,await readJson(req,MAX_SHARED_CANVAS_BYTES+64*1024)));
+      return send(res,405,{error:"Method Not Allowed",code:"method_not_allowed",message:"Method Not Allowed"});
+    } catch(error) {
+      const status=Number.isInteger(error?.status)?error.status:error?.message==="Request too large"?413:400,message=error?.message||"Unable to reach this folder's project.";
+      return send(res,status,{error:message,code:error?.code||"folder_project_failed",message});
     }
   }
   const sharedCanvasProjectMatch=/^\/api\/canvas-projects\/(project-[a-zA-Z0-9-]{8,64})$/.exec(url.pathname),
@@ -4496,6 +4583,13 @@ ${WIDGET_PATCH_FORMAT_POLICY}`,
     // stuck on an old script. Only the pinned vendor release is immutable.
     headers["Cache-Control"] = "public, max-age=0, must-revalidate";
   }
+  // A folder page is the Canvas page that also loads its folder's config.
+  const folderPageId = served === "/index.html" ? url.searchParams.get("workspace") : null;
+  if (folderPageId && folderProjects.known(folderPageId)) {
+    const page = fs.readFileSync(file, "utf8").replace('<script src="/api/config.js"></script>', `<script src="/api/config.js"></script><script src="/api/v1/mcp/workspaces/${folderPageId}/config.js"></script>`);
+    res.writeHead(200, headers);
+    return res.end(req.method === "HEAD" ? undefined : page);
+  }
   try { return await sendStatic(req, res, file, headers); }
   catch { if (!res.headersSent) return send(res, 500, "Could not read resource", "text/plain; charset=utf-8"); res.destroy(); }
 });
@@ -4544,8 +4638,42 @@ const canvasAgent = attachCanvasAgent({
 });
 server.applyCliResolution = applyCliResolution;
 const { createMcpService } = require("./mcp/service.js");
+// Agents in one folder share one page whose tabs are the folder's Canvases,
+// kept in this computer's Library while signed out and in Cloud while signed in.
+const folderProjects = createFolderProjects({
+  directory:SHARED_CANVAS_DIRECTORY,
+  library:{
+    project:sharedCanvasProject,
+    createProject:createSharedCanvasProject,
+    removeProject:deleteSharedCanvasProject,
+    list:listSharedCanvases,
+    canvas:sharedCanvasMetadataOf,
+    read:readSharedCanvas,
+    // Cloud takes version 2 bundles; Canvases saved before them convert.
+    bundle:id=>{const canvas=readSharedCanvas(id);return canvas.bundleVersion===2?canvas:{...v1ToCanvasBundle(canvas),name:canvas.name};},
+    size:id=>fs.statSync(canvasSnapshotPath(id)).size,
+    save:saveSharedCanvas,
+    remove:deleteSharedCanvas,
+    revision:sharedCanvasRevision,
+  },
+  cloud:{
+    signedIn:()=>Boolean(cloudConnector?.status().accountSession.signedIn),
+    accountId:()=>cloudConnector?.status().account?.id||null,
+    // Plus (or Pro) keeps every project in Cloud.
+    paid:()=>Boolean(cloudConnector?.status().account?.membership),
+    origin:()=>cloudConnector?.status().origin||null,
+    project:(folder,options)=>cloudConnector.folderProject(folder,options),
+    tabs:(folder,change)=>cloudConnector.folderProjectTabs(folder,change),
+    room:async()=>{const {workspace}=await cloudConnector.library(new URLSearchParams({limit:"1",previews:"0"}));return Number(workspace?.storageLimitBytes)-Number(workspace?.storageUsedBytes)-Number(workspace?.storageReservedBytes||0);},
+    createCanvas:({projectId,name,bundle})=>cloudConnector.createAndSaveCloudCanvas({projectId,name,bundle}),
+    saveCanvas:({canvasId,baseRevisionId,bundle})=>cloudConnector.saveCloudCanvas({canvasId,baseRevisionId,bundle,replace:true}),
+  },
+  origin:()=>`http://127.0.0.1:${server.address()?.port}`,
+  listCanvases:()=>mcpService.listCanvases(),
+});
 const mcpService = createMcpService({
   server,
+  hostTools:folderProjects,
   attachCloudBrowser:socket=>cloudConnector.attachCloudMcpBrowser(socket),
   authorizeBrowser:browserRequestError,
   isLocalBrowserAddress:address=>isLoopback(normalizedIp(address))||LOCAL_INTERFACE_ADDRESSES.has(normalizedIp(address)),
@@ -4557,8 +4685,29 @@ const mcpService = createMcpService({
   requestTraceLimit:REQUEST_TRACE_LIMIT,
 });
 server.setCliResolutionTask = setCliResolutionTask;
+// Cloud Canvases opened here join their live room through this host.
+const { CloudLiveBridge } = require("./cloud-live-bridge.js");
+const cloudLiveBridge = new CloudLiveBridge();
+const cloudLiveSockets = new (require("ws").WebSocketServer)({ noServer:true, maxPayload:12 * 1024 * 1024, perMessageDeflate:false });
+server.on("upgrade", (req, socket, head) => {
+  let url;
+  try { url = new URL(req.url, "http://localhost"); } catch { return; }
+  if (url.pathname !== "/api/cloud/live/socket") return;
+  const reject = (status, text) => { socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${text}`); socket.destroy(); };
+  const query = CloudLiveBridge.query(url.search);
+  if (!query) return reject(400, "Bad Request");
+  if (cloudBrowserRequestError(req, true)) return reject(403, "Forbidden");
+  let account = null;
+  try { account = cloudConnector.requireCloudAccount(); } catch {
+    // A link is its own credential: without an account this computer joins by the link alone.
+    if (!query.has("share")) return reject(401, "Unauthorized");
+  }
+  const origin = account?.origin || cloudConnector.status().origin || DEFAULT_CLOUD_ORIGIN;
+  cloudLiveSockets.handleUpgrade(req, socket, head, ws => cloudLiveBridge.attach(ws, { origin, token:account?.accountToken || null, query }));
+});
 server.on("close",()=>{
   clearInterval(noteSyncTimer);
+  cloudLiveBridge.close();
   void mcpService.close().catch(error=>log({type:"mcp-close-error",errorCode:String(error?.code||"close_failed")}));
   cloudConnector?.close();
   void canvasAgent.close().catch(error=>log({type:"canvas-agent-close-error",error:String(error?.message||error)}));

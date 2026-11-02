@@ -102,6 +102,7 @@ test("feature tour follows the requested concise order with stable targets", () 
       "core-lasso-v3",
       "core-image-v1",
       "core-fullscreen-v1",
+      "cloud-collaborate-v1",
       "cloud-share-canvas-v1",
       "cloud-workspace-v1",
       "canvas-agent-launcher-v2",
@@ -111,7 +112,7 @@ test("feature tour follows the requested concise order with stable targets", () 
       "core-navigation-v1",
     ];
   for (let index = 1; index < ordered.length; index++) assert.ok(app.indexOf(ordered[index - 1]) < app.indexOf(ordered[index]));
-  for (const selector of ["#aiEffortButton", "#craftsButton", "#historyBtn", "#handToolBtn", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#canvasAgentToggle", "#canvasAgentPanel", "#aiOrb", "#aiStatusArea", "#viewport"])
+  for (const selector of ["#aiEffortButton", "#craftsButton", "#historyBtn", "#handToolBtn", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#collaborateCanvasBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#canvasAgentToggle", "#canvasAgentPanel", "#aiOrb", "#aiStatusArea", "#viewport"])
     assert.match(app, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(app, /canvas-agent-panel-v2[^\n]*preview: "canvas-agent-panel"/);
   assert.match(app, /openCanvasAgent\(\{ focus:false, connect:false, animate:false \}\)/);
@@ -192,7 +193,7 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.doesNotMatch(app, /resolveInitialLanguage\([^)]*navigator/);
 });
 
-test("1.4.0 release notes summarize the major updates in both languages", () => {
+test("1.5.0 release notes summarize the new features in both languages", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -203,11 +204,11 @@ test("1.4.0 release notes summarize the major updates in both languages", () => 
   assert.doesNotMatch(layer, /aria-describedby=/);
   for (const id of ["changelogClose", "changelogTitle"]) assert.match(layer, new RegExp(`id="${id}"`));
   for (const id of ["changelogIntro", "changelogCurrentVersion", "changelogDone"]) assert.doesNotMatch(layer, new RegExp(`id="${id}"`));
-  assert.match(layer, />1\.4\.0</);
+  assert.match(layer, />1\.5\.0</);
   assert.doesNotMatch(layer, /class="changelog-release changelog-earlier"/);
   assert.doesNotMatch(layer, /changelog-demo|penecho-architecture/);
   assert.match(app, /CHANGELOG_STORAGE_KEY = "penecho-changelog-seen"/);
-  assert.match(app, /CHANGELOG_VERSION = "1\.4\.0"/);
+  assert.match(app, /CHANGELOG_VERSION = "1\.5\.0"/);
   assert.match(app, /localStorage\.getItem\(CHANGELOG_STORAGE_KEY\) === CHANGELOG_VERSION/);
   assert.match(app, /localStorage\.setItem\(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION\)/);
   assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(window\.PENECHO_CONFIG\?\.runtime === "viewer" \|\| settings\.open\) return false;\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
@@ -215,21 +216,84 @@ test("1.4.0 release notes summarize the major updates in both languages", () => 
   assert.match(app, /changelogLayer\.addEventListener\("keydown", handleChangelogKeydown\)/);
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(900px,[^}]*max-height:/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogAssist", "changelogLasso", "changelogNotesCards", "changelogWidgetRefine", "changelogCanvasPolish"]) {
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogCollaborate", "changelogShare", "changelogFolders", "changelogLibrary", "changelogSetup"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
-  for (const key of ["changelogIntro", "changelogDone"]) {
+  for (const key of ["changelogIntro", "changelogDone", "changelogAssist", "changelogLasso"]) {
     assert.doesNotMatch(app, new RegExp(`${key}:`));
     assert.doesNotMatch(zh, new RegExp(`${key}:`));
   }
   assert.equal((layer.match(/<li data-i18n="changelog/g) || []).length, 5);
-  assert.match(app, /changelogAssist:[^\n]*handwriting, text and images/);
-  assert.match(app, /changelogLasso:[^\n]*selected content/);
-  assert.match(app, /changelogNotesCards:[^\n]*reusable notes and knowledge cards/);
-  assert.match(zh, /changelogAssist:[^\n]*手写、文字和图片/);
-  assert.match(zh, /changelogLasso:[^\n]*选中的内容/);
-  assert.match(zh, /changelogNotesCards:[^\n]*笔记与知识卡片/);
+  assert.match(app, /changelogCollaborate:[^\n]*No account needed/);
+  assert.match(app, /changelogFolders:[^\n]*share one page/);
+  assert.match(app, /changelogSetup:[^\n]*https:\/\/penecho\.ai\/agents\.md/);
+  assert.match(zh, /changelogCollaborate:[^\n]*无需账号/);
+  assert.match(zh, /changelogFolders:[^\n]*共用一个页面/);
+  // The question asked once after an upgrade: choices to pick, and room to write.
+  const form = layer.match(/<form id="researchForm"[\s\S]*?<\/form>/)?.[0] || "";
+  assert.match(form, /class="changelog-research" hidden/);
+  assert.equal((form.match(/type="checkbox" name="improve"/g) || []).length, 8);
+  assert.equal((form.match(/type="radio" name="use"/g) || []).length, 4);
+  assert.match(form, /<textarea id="researchText"[^>]*maxlength="2000"/);
+  assert.match(form, /id="researchSend" type="submit"/);
+  for (const key of [...form.matchAll(/data-i18n(?:-placeholder)?="([^"]+)"/g)].map(match => match[1])) {
+    assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
+    assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
+  }
+});
+
+function researchPage({ seen, asked = null, runtime = "local", response = { ok:true } } = {}) {
+  const app = read("src/client/app/core.js"), stored = new Map(Object.entries({ "penecho-changelog-seen":seen, "penecho-research-asked":asked }).filter(([, value]) => value != null));
+  const inputs = [...Array(8)].map((_, index) => ({ name:"improve", value:`choice-${index}`, checked:false, disabled:false })),
+    use = { name:"use", value:"agent", checked:false, disabled:false }, text = { value:"", disabled:false },
+    send = { disabled:false, hidden:false }, status = { textContent:"" }, requests = [];
+  const researchForm = { hidden:true,
+    querySelector:selector => selector === "#researchStatus" ? status : selector === "#researchSend" ? send : selector === "#researchText" ? text : selector === 'input[name="use"]:checked' ? (use.checked ? use : null) : null,
+    querySelectorAll:selector => selector === 'input[name="improve"]:checked' ? inputs.filter(input => input.checked) : selector === "input, textarea" ? [...inputs, use, text] : [] };
+  const context = vm.createContext({
+    window:{ PENECHO_CONFIG:{ runtime } }, CANVAS_COMPANION_REQUESTED:false, researchForm,
+    localStorage:{ getItem:key => stored.has(key) ? stored.get(key) : null, setItem:(key, value) => stored.set(key, value) },
+    state:{ language:"en" }, t:key => key, authenticatedApiHeaders:headers => headers, JSON,
+    fetch:async (url, options) => { requests.push([url, JSON.parse(options.body)]); return response; },
+    changelogLayer:{ hidden:true, setAttribute() {} }, changelogDialog:{ focus() {} }, changelog:{ active:false }, featureTour:{ active:false }, pluginPopover:{ hidden:true },
+    hideAutoDelayControl() {}, hideEffortControl() {}, hidePluginControl() {}, document:{ activeElement:null, body:{ classList:{ add() {} } } }, tourLayer:{ contains:() => false }, screen:{}, tourMain:{}, requestAnimationFrame:() => {},
+  });
+  vm.runInContext(`const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen", CHANGELOG_VERSION = "1.5.0", RESEARCH_STORAGE_KEY = "penecho-research-asked";
+    ${["changelogSeen", "researchDue", "markResearchAsked", "limitResearchChoices", "sendResearch", "maybeShowChangelog"].map(name => (name === "sendResearch" ? "async " : "") + functionSource(app, name)).join("\n")}`, context);
+  return { context, researchForm, inputs, use, text, send, status, requests, stored };
+}
+
+test("people who upgrade are asked once what to improve next, with choices and their own words", async () => {
+  const fresh = researchPage({ seen:null });
+  assert.equal(fresh.context.maybeShowChangelog(), true);
+  assert.equal(fresh.researchForm.hidden, true, "a new install is not asked");
+  const upgraded = researchPage({ seen:"1.4.0" });
+  assert.equal(upgraded.context.maybeShowChangelog(), true);
+  assert.equal(upgraded.researchForm.hidden, false, "someone who used 1.4 is asked");
+  assert.equal(upgraded.stored.get("penecho-research-asked"), "1.5.0", "and only this once");
+  assert.equal(researchPage({ seen:"1.4.0", asked:"1.5.0" }).context.researchDue(), false);
+  assert.equal(researchPage({ seen:"1.4.0", runtime:"cloud" }).context.researchDue(), false, "only the app asks");
+  const reopened = researchPage({ seen:"1.4.0" });
+  reopened.context.maybeShowChangelog(true);
+  assert.equal(reopened.researchForm.hidden, true, "reopening What's new does not ask again");
+
+  // At most three choices; a note alone is enough.
+  const page = researchPage({ seen:"1.4.0" });
+  for (const input of page.inputs.slice(0, 4)) { input.checked = true; page.context.limitResearchChoices({ target:input }); }
+  assert.deepEqual(page.inputs.map(input => input.checked), [true, true, true, false, false, false, false, false]);
+  const submit = { preventDefault() {} };
+  for (const input of page.inputs) input.checked = false;
+  await page.context.sendResearch(submit);
+  assert.deepEqual([page.requests.length, page.status.textContent], [0, "researchEmpty"], "nothing chosen, nothing sent");
+  page.inputs[1].checked = true; page.use.checked = true; page.text.value = "  Undo across tabs  ";
+  await page.context.sendResearch(submit);
+  assert.deepEqual(JSON.parse(JSON.stringify(page.requests)), [["/api/research", { improve:["choice-1"], use:"agent", text:"Undo across tabs", language:"en" }]]);
+  assert.deepEqual([page.status.textContent, page.send.hidden, page.text.disabled], ["researchThanks", true, true]);
+  const failing = researchPage({ seen:"1.4.0", response:{ ok:false, status:502 } });
+  failing.text.value = "More export formats";
+  await failing.context.sendResearch(submit);
+  assert.deepEqual([failing.status.textContent, failing.send.disabled], ["researchFailed", false], "a failed send can be tried again");
 });
 
 test("README version badges match the package version in every language", () => {
@@ -321,6 +385,8 @@ test("feature tour copy is complete in English and Chinese", () => {
       "tourFullscreenBody",
       "tourFavoritesTitle",
       "tourFavoritesBody",
+      "tourCollaborateTitle",
+      "tourCollaborateBody",
       "tourShareCanvasTitle",
       "tourShareCanvasBody",
       "tourCloudTitle",
@@ -347,8 +413,10 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.doesNotMatch(zh, /控制动态图讲解/);
   assert.match(app, /tourFavoritesBody:[^\n]*saved favorites[^\n]*favorite Widget[^\n]*favorite Canvas/);
   assert.match(zh, /tourFavoritesBody:[^\n]*收藏[^\n]*收藏组件[^\n]*收藏画布/);
-  assert.match(app, /tourShareCanvasBody:[^\n]*read-only link[^\n]*future saved changes[^\n]*Share publicly[^\n]*after review/);
-  assert.match(zh, /tourShareCanvasBody:[^\n]*只读链接[^\n]*之后保存的改动[^\n]*公开展示[^\n]*审核通过/);
+  assert.match(app, /tourCollaborateBody:[^\n]*draw on this Canvas with you[^\n]*collaboration link[^\n]*same time/);
+  assert.match(zh, /tourCollaborateBody:[^\n]*一起创作[^\n]*协作链接[^\n]*同时编辑/);
+  assert.match(app, /tourShareCanvasBody:[^\n]*view-only link[^\n]*as they happen[^\n]*Share publicly[^\n]*after review/);
+  assert.match(zh, /tourShareCanvasBody:[^\n]*只读链接[^\n]*实时看到[^\n]*公开展示[^\n]*审核通过/);
   assert.match(app, /tourCloudBody:[^\n]*private versioned Canvases[^\n]*favorite Canvases or publicly shared Widgets/);
   assert.match(zh, /tourCloudBody:[^\n]*私密画布[^\n]*收藏的画布或组件/);
   assert.match(zh, /请求进度|正在观察/);

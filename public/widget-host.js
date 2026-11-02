@@ -2244,13 +2244,14 @@
   function forwardWidgetState() {
     inner.contentWindow?.postMessage({ type:"penecho-widget-state", ...widgetState }, "*");
   }
-  function announceWidgetHostReady() {
+  function announceWidgetHostReady(probe = false) {
     snapshotDebugLog("host-ready-announced");
-    parent.postMessage({ type:"penecho-widget-host-ready" }, parentOrigin);
+    // A probe's answer comes from a document that may already have painted.
+    parent.postMessage({ type:"penecho-widget-host-ready", ...(probe ? { probe:true } : {}) }, parentOrigin);
   }
   function respondToWidgetHostProbe(event) {
     if (event.source !== parent || event.origin !== parentOrigin || event.data?.type !== "penecho-widget-host-probe") return false;
-    announceWidgetHostReady();
+    announceWidgetHostReady(true);
     return true;
   }
   function flushDragMove() {

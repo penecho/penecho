@@ -98,6 +98,10 @@
     return cloudCanvasProjects.find((project) => project.systemKey === "uncategorized")?.id || cloudCanvasProjects[0]?.id || null;
   }
   function selectedCloudSaveProjectId() {
+    // A folder page saves into its folder's project (a guest's, or a signed-out app's, stays with its page).
+    if (window.PENECHO_CONFIG?.folderProject?.localProjectId) return window.PENECHO_CONFIG.folderProject.localProjectId;
+    const folderProject = window.PENECHO_CONFIG?.folderProject?.cloudProjectId || window.PENECHO_CONFIG?.folderProject?.guestProjectId;
+    if (folderProject !== CLOUD_ALL_PROJECTS_ID && validCloudProjectSelection(folderProject)) return folderProject;
     return selectedCloudProjectId === CLOUD_ALL_PROJECTS_ID ? cloudDefaultProjectId() : selectedCloudProjectId;
   }
   function snapshotLocationLabel(location = state.snapshotLocation) {
@@ -324,6 +328,8 @@
     }
   }
   async function saveCurrentCanvas() {
+    // A folder project page saves the way its autosave does, merging a newer save first.
+    if (window.PenEchoFolderProject?.enabled()) return window.PenEchoFolderProject.saveNow();
     if (snapshotSaveInProgress) return;
     // Every guest save entry (button, Mod+S, menu) resumes the save after sign-in.
     if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn({ intent:"save" });return;}
@@ -702,7 +708,7 @@
       bottom = Math.ceil(ink.y + ink.h) + TILE;
     return { x, y, w: right - x, h: bottom - y };
   }
-  async function renderExportCanvas(selected = null, assertCurrent = null) {
+  async function renderExportCanvas(selected = null, assertCurrent = null, maxPixels = EXPORT_MAX_PIXELS) {
     const region = selected ? { ...selected.box } : exportRegion();
     if (!region) return null;
     // Only Widgets that the lasso itself touches contribute pixels. Lasso
@@ -712,8 +718,10 @@
     if (!prepared.complete) throw widgetSnapshotsUnavailableError(prepared);
     if (prepared.failures.length) debug("widget-export-cached", { error:String(prepared.failures[0]?.message || prepared.failures[0]).slice(0, 300) });
     assertCurrent?.();
-    const scale = Math.min(CANVAS_DOWNLOAD_RESOLUTION_SCALE, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h))),
-      canvas = offscreen(Math.max(1, Math.ceil(region.w * scale)), Math.max(1, Math.ceil(region.h * scale))),
+    let scale = Math.min(CANVAS_DOWNLOAD_RESOLUTION_SCALE, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h)));
+    // A smaller pixel budget (Download PDF) renders less instead of downsampling later.
+    scale = Math.min(scale, Math.sqrt(maxPixels / (region.w * region.h)));
+    const canvas = offscreen(Math.max(1, Math.ceil(region.w * scale)), Math.max(1, Math.ceil(region.h * scale))),
       context = canvas.getContext("2d");
     const captureTime = performance.now();
     context.imageSmoothingEnabled = true;
@@ -781,6 +789,32 @@
       setStatusKey("exportComplete");
     } catch (error) {
       setStatus(`${t("exportError")}${error.message}`);
+    } finally {
+      if (canvas) canvas.width = canvas.height = 1;
+      for (const button of buttons) button.disabled = false;
+    }
+  }
+  // The PNG export's rendering, within the PDF pixel budget, split into pages.
+  // #exportPdfBtn runs it; other surfaces may click that control or call this.
+  async function exportCanvasPdf() {
+    const buttons = [document.querySelector("#exportPdfBtn"), document.querySelector("#exportPngBtn"), canvasViewDownloadButton].filter(Boolean);
+    if (buttons.some(button => button.disabled)) return false;
+    for (const button of buttons) button.disabled = true;
+    let canvas = null;
+    try {
+      setStatusKey("pdfPreparing");
+      canvas = await renderExportCanvas(null, null, PenEchoPdf.MAX_TOTAL_PIXELS);
+      if (!canvas) {
+        setStatusKey("emptyCanvas");
+        return false;
+      }
+      const blob = await PenEchoPdf.fromImage(canvas, { opaque:true, pointsPerPixel:PenEchoPdf.POINTS_PER_CSS_PIXEL / CANVAS_DOWNLOAD_RESOLUTION_SCALE, title:currentCanvasDisplayName() || "" });
+      PenEchoPdf.save(blob, exportFilename().replace(/\.png$/, ".pdf"));
+      setStatusKey("pdfDownloaded");
+      return true;
+    } catch (error) {
+      setStatus(`${t("pdfFailed")}: ${String(error?.message || error)}`);
+      return false;
     } finally {
       if (canvas) canvas.width = canvas.height = 1;
       for (const button of buttons) button.disabled = false;
@@ -991,9 +1025,10 @@
     }
   }
   function snapshotCanvasObjectExtensions() {
-    return { ...snapshotExtensionObject(state.currentSnapshotBundleExtensions), penechoObjectOrder:{
+    const { penechoLive, ...extensions } = snapshotExtensionObject(state.currentSnapshotBundleExtensions);
+    return { ...extensions, penechoObjectOrder:{
       version:1, frontKind:state.frontCanvasObjectKind, placedKind:state.frontPlacedCanvasObjectKind,
-    } };
+    }, ...(typeof liveCanvasSaveExtension === "function" ? liveCanvasSaveExtension() : {}) };
   }
   function restoreSnapshotCanvasObjectOrder(extensions) {
     const order = extensions?.penechoObjectOrder;
@@ -1133,7 +1168,7 @@
   // tool keep the restored objects read-only while fitViewerCanvas() frames
   // the complete artifact instead of its publishing-time pan/zoom.
   async function viewCommunityCanvasArtifact(artifact) {
-    if (window.PENECHO_CONFIG?.runtime !== "viewer") throw Error("Read-only Canvas viewing is unavailable in this runtime.");
+    if (window.PENECHO_CONFIG?.runtime !== "viewer" && !window.PENECHO_CONFIG?.liveShare) throw Error("Read-only Canvas viewing is unavailable in this runtime.");
     const parsed = await readSnapshotBundle(artifact),
       { item, tileEntries } = parsed,
       loadGeneration = ++state.snapshotLoadGeneration,
@@ -1271,29 +1306,50 @@
     });
     await snapshotApiResponse(response);
   }
-  async function saveCloudSnapshot(item, tileEntries, overwriteId) {
-    const bundle = await serverSnapshotPayload(item, tileEntries);
+  // A guest's folder project, and a signed-out app's, keep their Canvases with
+  // the folder page's server, not in a Cloud library.
+  function folderPageCanvasPath(id = "") {
+    const config = window.PENECHO_CONFIG || {};
+    return (config.folderProject?.guest || config.folderProject?.localProjectId) && config.browserDraftId ? `/api/v1/mcp/workspaces/${encodeURIComponent(config.browserDraftId)}/project/canvases${id ? `/${encodeURIComponent(id)}` : ""}` : "";
+  }
+  async function saveCloudSnapshot(item, tileEntries, overwriteId, options) {
+    const bundle = await serverSnapshotPayload(item, tileEntries), { baseRevisionId:knownBase, replace = false } = options || {};
     if (overwriteId) {
-      const existing = snapshotItems.find((entry) => entry.id === overwriteId),
-        baseRevisionId = existing?.currentRevisionId || state.currentSnapshotRevisionId || null,
-        response = await fetch(`/api/cloud/canvases/${encodeURIComponent(overwriteId)}/save`, {
+      const post = (baseRevisionId) => fetch(folderPageCanvasPath(overwriteId) ? `${folderPageCanvasPath(overwriteId)}/save` : `/api/cloud/canvases/${encodeURIComponent(overwriteId)}/save`, {
           method:"POST",
           credentials:"same-origin",
           headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
-          body:JSON.stringify({ baseRevisionId, bundle }),
-        }),
-        body = await snapshotApiResponse(response).catch(async (error) => {
-          if (error.status === 409) {
-            await refreshSnapshots();
-            throw Error(t("cloudCanvasConflict"));
-          }
-          throw error;
+          body:JSON.stringify({ baseRevisionId, bundle, ...(replace ? { replace:true } : {}) }),
         });
+      // A folder project's autosave names the save its changes start from; a
+      // newer save from another page comes back as a conflict to merge.
+      if (knownBase) {
+        const body = await snapshotApiResponse(await post(knownBase)).catch((error) => {
+          throw error.status === 409 ? Object.assign(Error(t("cloudCanvasConflict")), { code:"revision_conflict", status:409 }) : error;
+        });
+        return { id:overwriteId, revisionId:body?.revision?.id || null };
+      }
+      const existing = snapshotItems.find((entry) => entry.id === overwriteId);
+      let retried = false;
+      const attempt = async (baseRevisionId) => snapshotApiResponse(await post(baseRevisionId)).catch(async (error) => {
+        if (error.status === 409) {
+          await refreshSnapshots();
+          // Another live copy saved first. Live copies converge, so save on top of it once.
+          const latest = snapshotItems.find((entry) => entry.id === overwriteId)?.currentRevisionId;
+          if (!retried && latest && typeof liveCanvas === "object" && liveCanvas.target?.canvas === overwriteId && liveCanvas.status === "live") {
+            retried = true;
+            return attempt(latest);
+          }
+          throw Error(t("cloudCanvasConflict"));
+        }
+        throw error;
+      });
+      const body = await attempt(existing?.currentRevisionId || state.currentSnapshotRevisionId || null);
       return { id:overwriteId, revisionId:body?.revision?.id || null };
     }
     const projectId = item.projectId || selectedCloudSaveProjectId();
     if (!projectId) throw Error(t("snapshotLibraryLoadFailed").replace("{location}", snapshotLocationLabel("cloud")));
-    const response = await fetch(`/api/cloud/projects/${encodeURIComponent(projectId)}/save`, {
+    const response = await fetch(folderPageCanvasPath() || `/api/cloud/projects/${encodeURIComponent(projectId)}/save`, {
         method:"POST",
         credentials:"same-origin",
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
@@ -1303,7 +1359,10 @@
     if (!body?.canvas?.id || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid save confirmation");
     return { id:body.canvas.id, revisionId:body.revision.id };
   }
-  async function saveSnapshot({ overwriteId = null, name = null, location = state.snapshotLocation, allowEmpty = false } = {}) {
+  // autosave: { quiet } neither announces the save nor reloads the Library;
+  // { baseRevisionId, replace } save on top of a known Cloud save, replacing it.
+  async function saveSnapshot({ overwriteId = null, name = null, location = state.snapshotLocation, allowEmpty = false } = {}, autosave) {
+    const { quiet = false, baseRevisionId, replace = false } = autosave || {};
     if (selectionAIBusy()) {
       setStatusKey(selectionAIStatusKey());
       return null;
@@ -1320,7 +1379,7 @@
     // Every new Cloud save resolves its destination here. Deep links skip the
     // Library prefetch, and title/close/copy saves may never open the Library.
     // Fetch after any storage switch so it cannot clear the resolved projects.
-    if (location === "cloud" && !overwriteId) await cloudSnapshotItems();
+    if (location === "cloud" && !overwriteId && !(quiet && (window.PENECHO_CONFIG?.folderProject?.cloudProjectId || window.PENECHO_CONFIG?.folderProject?.guestProjectId || window.PENECHO_CONFIG?.folderProject?.localProjectId))) await cloudSnapshotItems();
     // Widget source is authoritative; preview failure must not prevent saving it.
     await prepareVisibleWidgetSnapshots(null, true);
     const savedUserRevision = state.userRevision,
@@ -1376,7 +1435,7 @@
       storedRevisionId = null;
     if (location === "server") await saveServerSnapshot(item, tileEntries, overwriteId);
     else if (location === "cloud") {
-      const saved = await saveCloudSnapshot(item, tileEntries, overwriteId);
+      const saved = await saveCloudSnapshot(item, tileEntries, overwriteId, { baseRevisionId, replace });
       storedId = saved.id;
       storedRevisionId = saved.revisionId;
     } else await saveDeviceSnapshot(item, tileEntries, overwriteId);
@@ -1394,10 +1453,16 @@
     state.snapshotSavedRevision = savedUserRevision;
     if(typeof canvasDocumentsDidSave==="function")await canvasDocumentsDidSave(item,location,storedId,tileEntries,savedRecoveryCommitVersion);
     canvasAgentCanvasDidPersist(location, storedId);
-    await refreshSnapshots();
-    window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
-    setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
+    if (quiet) {
+      const listed = snapshotItems.find((entry) => entry.id === storedId);
+      if (listed) Object.assign(listed, { name:item.name, updatedAt:item.updatedAt, currentRevisionId:storedRevisionId });
+    } else {
+      await refreshSnapshots();
+      window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
+      setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
+    }
     window.PenEchoStudioNavigator?.updateDocument?.();
+    if (typeof CustomEvent === "function") window.dispatchEvent(new CustomEvent("penecho:canvas-saved", { detail:{ location, id:storedId, projectId:item.projectId || null } }));
     window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     return storedId;
   }
@@ -1488,7 +1553,7 @@
     } else early?.cancel();
     // Only a network rejection of the early request retries here. HTTP failures
     // keep their response and follow the existing authorization/error handling.
-    if (!response) response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
+    if (!response) response = await fetch(folderPageCanvasPath(id) || `/api/cloud/canvases/${encodeURIComponent(id)}`, {
         credentials:"same-origin",
         cache:"no-store",
         headers:authenticatedApiHeaders(),
@@ -1937,13 +2002,24 @@
   }
   async function saveLiveShareToCloud(widgetId = null) {
     await finalizeCanvasForSnapshot();
-    if (!widgetId && !canvasHasShareableContent()) throw Error(t("emptyCanvas"));
+    // An empty Canvas can be shared or opened for collaboration and filled in live.
     const currentId = state.currentSnapshotLocation === "cloud" ? state.currentSnapshotId : null;
     if (currentId && !widgetId && !canvasHasUnsavedChanges()) return currentId;
     setSnapshotLocation("cloud", { refresh:false });
     const id = await saveSnapshot({ location:"cloud", overwriteId:currentId, name:currentCanvasDisplayName(), allowEmpty:true });
     if (!id) throw Error("The Canvas could not be saved to Cloud.");
     return id;
+  }
+  // This Canvas as it is now, to start a link Canvas from it without an account.
+  async function liveLinkCanvasBundle() {
+    await finalizeCanvasForSnapshot();
+    const stamp = Date.now(), tileEntries = await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob:await canvasBlob(canvas) })));
+    return serverSnapshotPayload({
+      version:2, id:`link-${crypto.randomUUID?.() || stamp}`, createdAt:stamp, updatedAt:stamp, name:currentCanvasDisplayName(), projectId:null, theme:state.theme,
+      view:{ scale:state.scale, panX:state.panX, panY:state.panY, navigationLocked:state.navigationLocked },
+      animations:serializedAnimations(), widgets:serializedWidgets(), textBoxes:storedTextBoxes(), images:storedImages(), preview:await snapshotPreviewBlob(),
+      bundleExtensions:snapshotCanvasObjectExtensions(), manifestExtensions:{},
+    }, tileEntries);
   }
   function canvasHasShareableContent() {
     return Boolean(tiles.size || state.images.length || state.textBoxes.length || state.preservedSnapshotAnimations.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length);
@@ -3510,7 +3586,9 @@
     const coalesced = options?.coalesceWidgetsInto;
     if (coalesced && state.history.at(-1) === coalesced && !state.future.length && state.widgetHistoryBefore
       && !state.historyBefore.size && !state.animationHistoryBefore && !state.imageHistoryBefore && !state.textBoxHistoryBefore) {
+      const previousWidgets = coalesced.widgetsAfter;
       coalesced.widgetsAfter = serializedWidgets();
+      if (typeof liveCanvasCaptureWidgets === "function") liveCanvasCaptureWidgets(previousWidgets, coalesced.widgetsAfter);
       state.widgetHistoryBefore = null;
       state.dirtyHistoryBefore = null;
       if (typeof refreshDirtyHistoryAfter === "function") refreshDirtyHistoryAfter(coalesced);
@@ -3562,6 +3640,7 @@
     state.textBoxHistoryBefore = null;
     if (state.history.length > MAX_HISTORY) state.history.shift();
     state.future = [];
+    if (typeof liveCanvasCapture === "function") liveCanvasCapture(entry);
     updateHistoryButtons();
     window.PenEchoStudioNavigator?.updateDocument?.();
     if (typeof canvasDocumentsScheduleDraft === "function") canvasDocumentsScheduleDraft();
@@ -3574,7 +3653,8 @@
     return canvasAgentDidCommitUserCanvasChange(save(options), { allowAutoHide:canvasSnapshotFinalizationDepth === 0 });
   }
   function applyHistory(entry, side, fallbackDirty = null) {
-    const changes = Array.isArray(entry) ? entry : entry?.tiles || [];
+    const live = typeof liveCanvasApplyHistory === "function" ? liveCanvasApplyHistory(entry, side) : null;
+    const changes = live ? [] : Array.isArray(entry) ? entry : entry?.tiles || [];
     for (const change of changes) {
       const value = change[side];
       if (value) tiles.set(change.k, cloneCanvas(value));
@@ -3583,12 +3663,13 @@
     }
     const animationState = !Array.isArray(entry) ? entry?.[side === "before" ? "animationsBefore" : "animationsAfter"] : null;
     if (animationState) restoreAnimations(animationState);
-    let objectsRestored = entry?.objectScope ? canvasHistoryRestoreObjects(entry,side) : null;
-    const widgetState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "widgetsBefore" : "widgetsAfter"] : null;
+    const wholeLists = !Array.isArray(entry) && !entry?.objectScope && !live;
+    let objectsRestored = live ? live.objects : entry?.objectScope ? canvasHistoryRestoreObjects(entry,side) : null;
+    const widgetState = wholeLists ? entry?.[side === "before" ? "widgetsBefore" : "widgetsAfter"] : null;
     if (widgetState) restoreWidgets(widgetState);
-    const imageState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
+    const imageState = wholeLists ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
     if (imageState) restoreImages(imageState);
-    const textBoxState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "textBoxesBefore" : "textBoxesAfter"] : null;
+    const textBoxState = wholeLists ? entry?.[side === "before" ? "textBoxesBefore" : "textBoxesAfter"] : null;
     if (textBoxState) objectsRestored = restoreTextBoxes(textBoxState);
     restorePendingHistoryState(entry, side);
     const dirty = entry?.[side === "before" ? "dirtyBefore" : "dirtyAfter"] || fallbackDirty;

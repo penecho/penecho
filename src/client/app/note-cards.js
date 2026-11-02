@@ -966,10 +966,14 @@
     const NOTE = noteCardRuntime();
     return `${NOTE.digest(entry.note)}:${NOTE.LOOK}:preview-900-webp96-v3:${noteCardMathRenderer() ? "math" : "plain"}`;
   }
-  async function noteLibrarySnapshot(note) {
-    const NOTE = noteCardRuntime(), html = noteCardDocument(note), frame = document.createElement("iframe"),
+  // `pdf` captures the whole note at high resolution: the card grows with its
+  // body instead of scrolling it, and the result carries its content size.
+  async function noteLibrarySnapshot(note, { pdf = false } = {}) {
+    const NOTE = noteCardRuntime(), card = noteCardDocument(note),
+      expanded = pdf ? card.replace("</head>", "<style>html,body{height:auto!important;overflow:visible!important;scrollbar-width:none!important}html::-webkit-scrollbar{display:none!important}.nc{position:relative!important;inset:auto!important;min-height:100vh}.nc-scroll{flex:1 0 auto!important}.nc-scroll::after{display:none!important}.nc-body{overflow:visible!important}</style></head>") : card,
+      html = expanded.length <= NOTE.MAX_DOCUMENT_CHARS ? expanded : card, frame = document.createElement("iframe"),
       hostUrl = widgetHostUrl({ id:"general", connect:[] }), hostOrigin = new URL(hostUrl).origin,
-      requestId = `note-preview-${canvasClientId()}`;
+      requestId = `note-${pdf ? "pdf" : "preview"}-${canvasClientId()}`;
     frame.title = note.title;
     frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
     frame.setAttribute("aria-hidden", "true");
@@ -977,7 +981,7 @@
     Object.assign(frame.style, { position:"fixed", left:"-20000px", top:"0", width:`${NOTE.CONTENT.w}px`, height:`${NOTE.CONTENT.h}px`, border:"0", pointerEvents:"none" });
     let receive, timer;
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
+      const snapshot = await new Promise((resolve, reject) => {
         let requested = false;
         receive = event => {
           if (event.source !== frame.contentWindow || event.origin !== hostOrigin) return;
@@ -987,24 +991,28 @@
             frame.contentWindow.postMessage({ type:"penecho-widget-state", active:true, selected:false, interactive:false, maximized:false, scaleX:1, scaleY:1 }, hostOrigin);
           } else if (message?.type === "penecho-widget-capture-ready" && !requested) {
             requested = true;
-            frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:NOTE.CONTENT.w, height:NOTE.CONTENT.h, waitForViewport:true, timeoutMs:10000 }, hostOrigin);
+            frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:NOTE.CONTENT.w, height:NOTE.CONTENT.h, waitForViewport:true, timeoutMs:pdf ? 17000 : 10000, ...(pdf ? { highResolution:true, fullContent:true } : {}) }, hostOrigin);
           } else if (message?.requestId === requestId && message.type === "penecho-widget-snapshot") {
-            if (message.width !== NOTE.CONTENT.w || message.height !== NOTE.CONTENT.h || typeof message.dataUrl !== "string"
-              || !message.dataUrl.startsWith("data:image/png;base64,") || message.dataUrl.length > 24 * 1024 * 1024) reject(Error("Invalid note preview snapshot."));
-            else resolve(message.dataUrl);
+            if ((pdf ? !(message.width > 0 && message.height > 0 && message.contentWidth >= NOTE.CONTENT.w && message.contentHeight >= NOTE.CONTENT.h) : message.width !== NOTE.CONTENT.w || message.height !== NOTE.CONTENT.h) || typeof message.dataUrl !== "string"
+              || !message.dataUrl.startsWith("data:image/png;base64,") || message.dataUrl.length > (pdf ? 64 : 24) * 1024 * 1024) reject(Error("Invalid note preview snapshot."));
+            else resolve(message);
           } else if (message?.requestId === requestId && message.type === "penecho-widget-snapshot-error") reject(Error(message.error || "Note preview capture failed."));
         };
-        timer = setTimeout(() => reject(Error("Note preview capture timed out.")), 15000);
+        timer = setTimeout(() => reject(Error("Note preview capture timed out.")), pdf ? 30000 : 15000);
         window.addEventListener("message", receive);
         frame.src = hostUrl;
         document.body.append(frame);
       });
-      return await decodeWidgetSnapshot(dataUrl);
+      const image = await decodeWidgetSnapshot(snapshot.dataUrl);
+      return pdf ? { image, contentWidth:snapshot.contentWidth, contentHeight:snapshot.contentHeight } : image;
     } finally {
       clearTimeout(timer);
       window.removeEventListener("message", receive);
       frame.remove();
     }
+  }
+  function noteCardPdfSnapshot(note) {
+    return noteLibrarySnapshot(note, { pdf:true });
   }
   async function noteEncodeThumbnail(image) {
     let canvas = offscreen(NOTE_THUMB_W, Math.round(NOTE_THUMB_W * noteCardRuntime().ASPECT));
@@ -1730,6 +1738,7 @@
       noteChip(noteCopy("Read", "单独浏览"), "↗", "note-detail-action primary", () => noteLibraryReadEntry(entry)),
       noteChip(noteCopy("Add to current canvas", "添加到当前画布"), "+", "note-detail-action", () => void noteLibraryAddToCanvas(entry)),
       share,
+      noteChip(t("downloadPdf"), "↓", "note-detail-action note-detail-pdf", event => void noteLibraryDownloadPdf(entry, event.currentTarget)),
     );
     secondary.append(
       noteChip(note.bookmarked ? noteCopy("Bookmarked", "已收藏") : noteCopy("Bookmark", "收藏"), note.bookmarked ? "★" : "☆", `note-detail-action${note.bookmarked ? " active" : ""}`, () => noteLibraryToggleBookmark(entry)),
@@ -1909,6 +1918,29 @@
     dialog.addEventListener("close", () => { observer.disconnect(); window.removeEventListener("message",receive); dialog.remove(); if (noteCards.reader === dialog) noteCards.reader = null; trigger?.focus(); }, {once:true});
     dialog.addEventListener("keydown", event => event.stopPropagation());
     document.body.append(dialog); noteCards.reader = dialog; dialog.showModal(); fit();
+  }
+  // Renders the library copy, so notes whose canvas is closed download too.
+  async function noteLibraryDownloadPdf(entry, button = null) {
+    if (noteCards.pdfBusy || !entry?.note) return false;
+    noteCards.pdfBusy = true;
+    if (button) button.disabled = true;
+    const panel = noteCards.panel;
+    setStatusKey("pdfPreparing");
+    try {
+      const snapshot = await noteCardPdfSnapshot(structuredClone(entry.note)), pixels = snapshot.image.naturalWidth || snapshot.image.width,
+        blob = await PenEchoPdf.fromImage(snapshot.image, { title:entry.note.title || "", pointsPerPixel:PenEchoPdf.POINTS_PER_CSS_PIXEL * snapshot.contentWidth / pixels });
+      PenEchoPdf.save(blob, PenEchoPdf.filename(entry.note.title, "penecho-note"));
+      setStatusKey("pdfDownloaded");
+      return true;
+    } catch (error) {
+      const message = `${t("pdfFailed")}: ${String(error?.message || error)}`;
+      if (noteCards.panel === panel && panel) panel.status.textContent = message;
+      setStatus(message);
+      return false;
+    } finally {
+      noteCards.pdfBusy = false;
+      if (button) button.disabled = false;
+    }
   }
   function noteLibraryRequestForget(entry) {
     if (document.querySelector(".note-remove-dialog")) return;

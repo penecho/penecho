@@ -4647,6 +4647,30 @@
       .slice(0, 120);
     return `${title || "penecho-widget"}.png`;
   }
+  // A PDF of the complete Widget content. A note card renders from its note
+  // source, so the whole note is included, not only what fits on the card.
+  async function downloadWidgetPdf(widget) {
+    if (!widget || widget.pdfBusy) return false;
+    widget.pdfBusy = true;
+    syncObjectChrome();
+    setStatusKey("pdfPreparing");
+    try {
+      const note = typeof noteCardWidget === "function" && noteCardWidget(widget) ? noteCardSource(widget) : null,
+        snapshot = note ? await noteCardPdfSnapshot(note) : await requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, null, true, true),
+        pixels = snapshot?.image?.naturalWidth || snapshot?.image?.width;
+      if (!pixels) throw Error(t("widgetExportFailed"));
+      const blob = await PenEchoPdf.fromImage(snapshot.image, { title:widget.title || "", pointsPerPixel:snapshot.contentWidth > 0 ? PenEchoPdf.POINTS_PER_CSS_PIXEL * snapshot.contentWidth / pixels : undefined });
+      PenEchoPdf.save(blob, PenEchoPdf.filename(widget.title, "penecho-widget"));
+      setStatusKey("pdfDownloaded");
+      return true;
+    } catch (error) {
+      setStatus(`${t("pdfFailed")}: ${String(error?.message || error)}`);
+      return false;
+    } finally {
+      widget.pdfBusy = false;
+      syncObjectChrome();
+    }
+  }
   async function downloadWidgetImage(widget) {
     if (!widget || widget.downloadBusy) return false;
     widget.downloadBusy = true;
@@ -4763,6 +4787,7 @@
     echo:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>',
     share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
     download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>',
+    downloadpdf:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M12 10v7M9 14l3 3 3-3"/></svg>',
     notecategory:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5 11 5h8.5v8.5L12 21Z"/><circle cx="15.5" cy="9" r="1.6"/></svg>',
     notebookmark:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11v17L12 16.6l-5.5 3.9Z"/></svg>',
     notelibrary:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="7" height="9.5" rx="1.6"/><rect x="13.5" y="4.5" width="7" height="9.5" rx="1.6"/><path d="M3.5 18h17M3.5 21h11"/></svg>',
@@ -4839,28 +4864,6 @@
       });
     }
     if (options.community && window.PenEchoCommunityUI) {
-      const favoriteLabelKey = widget.favoriteBusy ? "favoriteWidgetSaving" : widget.favorite ? "unfavoriteWidget" : "favoriteWidget";
-      items.push({
-        key:`widget:${widget.id}:tool-favorite`,
-        kind:"favorite",
-        label:window.PenEchoCommunityUI.label?.(favoriteLabelKey) || "Favorite",
-        baseWidth:28,
-        iconOnly:true,
-        pressed:widget.favorite === true,
-        busy:widget.favoriteBusy === true,
-        activate:() => {
-          if (widget.favoriteBusy) return;
-          window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{
-            action:"favorite",
-            widgetId:widget.id,
-            favorite:widget.favorite === true,
-            favoriteArtifactSha256:widget.favoriteArtifactSha256 || null,
-            sourceWidgetId:widget.favoriteSourceId,
-            favoriteCloudId:widget.favoriteCloudId || null,
-            favoriteCommunityItemId:widget.favoriteCommunityItemId || null,
-          } }));
-        },
-      });
       const liveShared = window.PenEchoLiveShareStatus?.widgetShared?.(widget.id, widget.shareSourceId) === true;
       items.push({
         key:`widget:${widget.id}:tool-share`,
@@ -4888,11 +4891,19 @@
       iconOnly:true,
       busy:widget.downloadBusy === true,
       activate:() => void downloadWidgetImage(widget),
+    }, {
+      key:`widget:${widget.id}:tool-download-pdf`,
+      kind:"downloadpdf",
+      label:t("downloadPdf"),
+      baseWidth:28,
+      iconOnly:true,
+      busy:widget.pdfBusy === true,
+      activate:() => void downloadWidgetPdf(widget),
     });
     if (options.objectToolbarKey && !widget.pending) {
       if (typeof noteCardWidget === "function" && noteCardWidget(widget)) items.push(...noteCardToolbarItems(widget));
       items.push({key:`widget:${widget.id}:delete`, kind:"delete", label:t("widgetDelete"), baseWidth:28, iconOnly:true, activate:() => deleteWidget(widget)});
-      const order = ["interact", "suggest", "refine", "notecategory", "notebookmark", "notelibrary", "favorite", "copy", "echo", "share", "download", "delete"];
+      const order = ["interact", "suggest", "refine", "notecategory", "notebookmark", "notelibrary", "favorite", "copy", "echo", "share", "download", "downloadpdf", "delete"];
       items.sort((a,b) => order.indexOf(a.kind)-order.indexOf(b.kind));
     }
     if (!items.length) return;
@@ -5151,6 +5162,7 @@
     if (kind === "favorite") return window.PenEchoCommunityUI?.label?.("favoriteWidget") || "Favorite Widget";
     if (kind === "share") return window.PenEchoCommunityUI?.label?.("shareWidget") || "Share Widget";
     if (kind === "download") return t("downloadWidget");
+    if (kind === "downloadpdf") return t("downloadPdf");
     return t("hand");
   }
   // The Refine panel replaces the former yes/no confirmation. It drops down
@@ -5808,6 +5820,7 @@
     positionImageSelectionMaterial();
     syncObjectChrome();
     syncWidgetInteractionStatus();
+    if (typeof liveCanvasPositionPresence === "function") liveCanvasPositionPresence();
   }
   function clientPoint(e) {
     const point = canvasClientPosition(e.clientX, e.clientY);

@@ -341,17 +341,40 @@ class CloudConnector {
     return { ...this.configuration, accountToken: token };
   }
 
-  async cloudRequest(pathname, { method = "GET", body, signal, timeoutMs = CLOUD_REQUEST_TIMEOUT_MS, responseTrace } = {}) {
+  // A link Canvas needs no account: this computer starts and ends one on the
+  // Cloud it uses, proving ownership with the key Cloud returned at the start.
+  async linkRequest(pathname, { method = "POST", body, ownerKey, origin } = {}) {
+    if (!(method === "POST" && pathname === "/api/v1/live/links" || method === "DELETE" && /^\/api\/v1\/live\/links\/[0-9a-f-]{36}$/i.test(pathname))) throw new Error("Unsupported link Canvas request.");
+    const cloudOrigin = normalizedOrigin(this.configuration?.origin || origin);
+    let response;
+    try {
+      response = await fetch(`${cloudOrigin}${pathname}`, {
+        method, redirect:"error",
+        headers:{ accept:"application/json", ...(body === undefined ? {} : { "content-type":"application/json" }), ...(ownerKey ? { "x-penecho-owner-key":ownerKey } : {}) },
+        body:body === undefined ? undefined : JSON.stringify(body),
+        signal:AbortSignal.timeout(60_000),
+      });
+    } catch (error) {
+      throw temporaryCloudError(error, cloudOrigin);
+    }
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(response.status === 413 ? "This Canvas is too large to collaborate on without an account. Sign in to collaborate on it." : payload.message || `PenEcho Cloud refused this link (HTTP ${response.status}).`), { status:response.status, code:payload.error || "cloud_link_failed" });
+    return { ...payload, origin:cloudOrigin };
+  }
+
+  async cloudRequest(pathname, { method = "GET", body, headers = {}, signal, timeoutMs = CLOUD_REQUEST_TIMEOUT_MS, responseTrace } = {}) {
     const configuration = this.requireCloudAccount();
     const notesRequest = method === "GET" && /^\/api\/v1\/notes(?:\?cursor=[^&#]+)?$/.test(pathname)
       || ["GET", "PUT"].includes(method) && /^\/api\/v1\/notes\/[^/?#]+$/.test(pathname);
-    if (!notesRequest && !(/^\/api\/v1\/canvases\/[0-9a-f-]{36}\/share(?:\?widgetId=[0-9a-f-]{36})?$/i.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !(/^\/api\/v1\/mcp(?:\/(?:tokens|canvases)|\/grants\/[0-9a-f-]{36})?$/.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix)) && !(method === "GET" && ["/api/v1/models", "/api/v1/credits"].includes(pathname))) throw new Error("Unsupported cloud account request.");
+    const linkAdoption = method === "POST" && /^\/api\/v1\/live\/links\/[0-9a-f-]{36}\/adopt$/i.test(pathname);
+    if (!notesRequest && !linkAdoption && !(/^\/api\/v1\/canvases\/[0-9a-f-]{36}\/(?:share(?:\?widgetId=[0-9a-f-]{36})?|collaboration)$/i.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !(/^\/api\/v1\/mcp(?:\/(?:tokens|canvases)|\/grants\/[0-9a-f-]{36})?$/.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix)) && !(method === "GET" && ["/api/v1/models", "/api/v1/credits"].includes(pathname))) throw new Error("Unsupported cloud account request.");
     let response;
     try {
       response = await fetch(`${configuration.origin}${pathname}`, {
         method,
         redirect: "error",
         headers: {
+          ...headers,
           authorization: `Bearer ${configuration.accountToken}`,
           accept: "application/json",
           ...(body === undefined ? {} : { "content-type": "application/json" }),
@@ -1010,6 +1033,16 @@ class CloudConnector {
     return this.cloudRequest(`/api/v1/device-sync/projects/${encodeURIComponent(projectId)}`, { method:"DELETE" });
   }
 
+  // The account's Cloud project for a folder on this computer; project is the
+  // folder's link, shared with Cloud's agents here.
+  folderProject(folder, { signal, project } = {}) {
+    return this.cloudRequest("/api/v1/device-sync/folder-projects", { method:"POST", body:{ folder, ...(project ? { project } : {}) }, signal });
+  }
+
+  folderProjectTabs(folder, change) {
+    return this.cloudRequest("/api/v1/device-sync/folder-projects/tabs", { method:"POST", body:{ folder, ...change } });
+  }
+
   createCloudCanvas(projectId, input) {
     return this.cloudRequest(`/api/v1/device-sync/projects/${encodeURIComponent(projectId)}/canvases`, { method: "POST", body: input });
   }
@@ -1045,7 +1078,9 @@ class CloudConnector {
     return { bytes, contentType };
   }
 
-  async saveCloudCanvas({ canvasId, baseRevisionId = null, bundle }) {
+  // replace: the save takes the place of the one it starts from (no versions),
+  // under the bundle's name.
+  async saveCloudCanvas({ canvasId, baseRevisionId = null, bundle, replace = false }) {
     if (!canvasId || bundle?.bundleVersion !== 2 || !bundle.manifest || !Array.isArray(bundle.assets)) throw new Error("The cloud Canvas bundle is invalid.");
     const bundleBytes = Buffer.from(JSON.stringify(bundle));
     if (!bundleBytes.length || bundleBytes.length > MAX_CLOUD_BUNDLE_BYTES) throw new Error("The cloud Canvas bundle is too large for local synchronization.");
@@ -1061,7 +1096,8 @@ class CloudConnector {
     });
     try {
       await this.assetRequest(reservation.bundle.upload, { method: "PUT", bytes: bundleBytes });
-      return await this.completeCloudCanvasRevision(canvasId, reservation.revisionId);
+      const name = typeof bundle.name === "string" ? bundle.name.trim().slice(0, 160) : "";
+      return await this.completeCloudCanvasRevision(canvasId, reservation.revisionId, { replace, name });
     } catch (error) {
       // A best-effort cancel releases the Cloud quota reservation. If completion
       // actually succeeded, Cloud treats this as a no-op and keeps the revision.
@@ -1085,11 +1121,11 @@ class CloudConnector {
     }
   }
 
-  async completeCloudCanvasRevision(canvasId, revisionId) {
+  async completeCloudCanvasRevision(canvasId, revisionId, { replace = false, name = "" } = {}) {
     let lastError = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const completed = await this.cloudRequest(`/api/v1/device-sync/canvas-revisions/${encodeURIComponent(revisionId)}/complete`, { method: "POST", body: {} });
+        const completed = await this.cloudRequest(`/api/v1/device-sync/canvas-revisions/${encodeURIComponent(revisionId)}/complete`, { method: "POST", body: replace ? { replace:true, ...(name ? { name } : {}) } : {} });
         if (completed?.revision?.id === revisionId) return completed;
         lastError = new Error("PenEcho Cloud returned an invalid Canvas revision confirmation.");
       } catch (error) {

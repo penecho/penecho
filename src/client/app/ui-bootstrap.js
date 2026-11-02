@@ -1774,7 +1774,17 @@
   };
   document.querySelector("#newCanvasBtn").onclick = () => window.PenEchoCompanionCanvases ? void window.PenEchoCompanionCanvases.create() : canvasDocumentsUiAction(openNewCanvasDialog);
   document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvasFromUser;
+  // A Cloud visitor who is not signed in can sign in, or sign up, from every Canvas page.
+  document.querySelector("#guestAccountActions").hidden = !canvasGuestAiRestricted();
+  document.querySelector("#guestSignInBtn").onclick = () => canvasGuestSignIn();
+  document.querySelector("#guestSignUpBtn").onclick = () => canvasGuestSignIn({ signup:true });
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
+  // A direct More-menu item: close the menu, then export.
+  document.querySelector("#exportPdfBtn").onclick = () => {
+    const menu = document.querySelector("#canvasMoreMenu");
+    if (menu && !menu.hidden) { menu.hidden = true; document.querySelector("#canvasMoreBtn")?.setAttribute("aria-expanded", "false"); }
+    return exportCanvasPdf();
+  };
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
   document.querySelector("#historyRecentNav").onclick = openHistoryRecent;
   document.querySelector("#historyCanvasNav").onclick = openHistoryCanvas;
@@ -1971,9 +1981,12 @@
   tourSkipButton.addEventListener("click", skipFeatureTour);
   changelogCloseButton.addEventListener("click", closeChangelog);
   changelogLayer.addEventListener("pointerdown", (event) => {
-    if (event.target === changelogLayer) closeChangelog();
+    // An open question waits for its answer or the close button.
+    if (event.target === changelogLayer && researchForm?.hidden !== false) closeChangelog();
   });
   changelogLayer.addEventListener("keydown", handleChangelogKeydown);
+  researchForm?.addEventListener("change", limitResearchChoices);
+  researchForm?.addEventListener("submit", sendResearch);
   settingsButton.addEventListener("click", () => {
     if (settings.open) closeSettings();
     else openSettings();
@@ -2215,15 +2228,20 @@
   });
   window.PenEchoCloudProjects = Object.freeze({
     currentExecutionScope:canvasAgentCloudExecutionScope,
-    currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) ? state.currentSnapshotId : null,
+    // A Canvas kept with its folder page (a guest's, or a signed-out app's) is in
+    // no Cloud library, so it collaborates by a link that needs no account.
+    currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) && !folderPageCanvasPath() ? state.currentSnapshotId : null,
     saveEcho:saveEchoToCloud,
     saveForShare:saveLiveShareToCloud,
+    linkBundle:liveLinkCanvasBundle,
     hasShareableContent:canvasHasShareableContent,
     shareWidgetId:(id) => state.widgets.find(widget => widget.id === id)?.shareSourceId || null,
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
     confirmExternalOpen:confirmExternalCanvasOpen,
   });
+  // Collaborate offers the same PDF as the More menu.
+  window.PenEchoCanvasExport = Object.freeze({ pdf:exportCanvasPdf });
   // Companion view controller. The minimal view keeps the narrow rail and
   // hides PenEcho's own Agent and AI chrome; the full view is the complete
   // Canvas. Both show the same document in this tab, and switching is reversible.
@@ -2293,7 +2311,10 @@
   if(window.PENECHO_CONFIG?.runtime!=="cloud")void window.PenEchoPlayground?.start().catch(error=>setStatus(String(error.message)));
   setNavigating(true);
   scheduleAIOrbIdle();
-  if(window.PENECHO_CONFIG?.runtime!=="viewer")void (window.PENECHO_CONFIG?.browserDraftId ? canvasDocumentsReady() : canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")).catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")));
+  // A folder page of this app opens its draft and connects its agents, as the
+  // Cloud gate does for Cloud's folder pages.
+  const localFolderPage=Boolean(window.PENECHO_CONFIG?.browserDraftId)&&window.PENECHO_CONFIG?.runtime!=="cloud";
+  if(window.PENECHO_CONFIG?.runtime!=="viewer")void (localFolderPage ? canvasDocumentsStartDraft(true).then(()=>{if(new URLSearchParams(location.search).get("mcp")==="1")window.dispatchEvent(new CustomEvent("penecho:open-cloud-mcp"));}) : window.PENECHO_CONFIG?.browserDraftId ? canvasDocumentsReady() : canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")).catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")));
   requestAnimationFrame(() => {
     if (window.PENECHO_CONFIG?.runtime !== "viewer") void loadCanvasSettings().finally(maybeStartOnboarding);
   });

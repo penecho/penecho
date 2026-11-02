@@ -20,20 +20,19 @@ test("Cloud storage help stays concise in both languages", () => {
   assert.doesNotMatch(cloudScript, /Every successful save creates an immutable revision|每次成功保存都会创建不可变版本/);
 });
 
-test("an empty Canvas shows why live sharing is unavailable", async () => {
+test("an empty Canvas can be shared by link, with no public listing", async () => {
   const run=boot({status:deviceStatus()});
   run.window.PenEchoCloudProjects.hasShareableContent=() => false;
   run.window.PenEchoCloudProjects.currentCanvasId=() => null;
-  run.window.PenEchoCloudProjects.saveForShare=async () => { throw Error("empty Canvas must not be saved"); };
   await run.flush();
   run.shareButton.click();
   await run.flush();
   const dialog=run.overlay();
   assert.ok(dialog);
   const enable=flatten(dialog).find(node => node.textContent === "Save to Cloud and share");
-  assert.equal(enable?.disabled,true);
-  assert.match(dialog.textContent,/Add content to the Canvas before sharing\./);
-  assert.equal(run.fetchCalls.some(call => call.url.includes("/share")),false);
+  assert.equal(enable?.disabled,false);
+  assert.doesNotMatch(dialog.textContent,/Add content to the Canvas before sharing/);
+  assert.equal(flatten(dialog).some(node => node.className === "live-share-public-toggle"),false);
 });
 
 test("Canvas and Widget share icons follow confirmed live share state", async () => {
@@ -602,11 +601,6 @@ test("Remote Canvas reads Cloud-owned libraries directly instead of relaying the
   assert.equal(run.fetchCalls.some((call) => call.url === "/api/cloud/library"), false);
   assert.equal(run.statusCalls(), 0);
 
-  flatten(run.overlay()).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites").click();
-  await run.flush();
-  assert.ok(run.fetchCalls.some((call) => call.url === "/api/v1/favorites/feed?kind=all&limit=20"));
-  assert.equal(run.fetchCalls.some((call) => call.url.startsWith("/api/cloud/community?scope=favorites")), false);
-  assert.equal(run.fetchCalls.some((call) => call.url === "/api/favorites?view=summary"), false, "Remote Canvas must not wait for or mirror linked-device favorites");
 });
 
 test("Cloud Center shell does not wait for a slow local status refresh", async () => {
@@ -887,71 +881,8 @@ test("Cloud Center refreshes data on open or tab switch without an always-visibl
   assert.equal(run.statusCalls(), initialStatusCalls, "time and visibility changes do not refresh status");
   assert.equal(count("/api/cloud/library"), 1, "time and visibility changes do not reload Projects");
 
-  const favorites = flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites");
-  favorites.click();
-  await run.flush();
-  assert.equal(count("/api/cloud/favorites/feed?kind=all&limit=20"), 1, "one Favorites load makes one lightweight mixed-feed request");
-
-  const projects = flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Projects");
-  projects.click();
-  await run.flush();
-  assert.equal(count("/api/cloud/library"), 2, "switching back intentionally reloads Projects once");
   assert.equal(run.statusCalls(), initialStatusCalls);
   assert.equal(flatten(overlay).filter((node) => node.getAttribute("aria-label") === "Refresh").length, 0);
-});
-
-test("Cloud Center keeps cached Projects and Favorites usable while background refreshes are pending", async () => {
-  const projectLibrary = (projectName) => ({
-    workspace:{},
-    projects:[{ id:"project-1", name:projectName }],
-    canvases:[{ id:"canvas-1", projectId:"project-1", name:`${projectName} Canvas`, updatedAt:Date.now(), sizeBytes:10 }],
-    sync:{ bundleVersion:2, conflictPolicy:"base-revision-required" },
-  });
-  const oldFavorite = { id:"favorite-old", kind:"canvas", name:"Cached Favorite", author:{ name:"A" } };
-  const newFavorite = { id:"favorite-new", kind:"canvas", name:"Fresh Favorite", author:{ name:"B" } };
-  const run = boot({ status:deviceStatus(), library:projectLibrary("Cached Project"), communityFavorites:[oldFavorite] });
-  await run.flush();
-  const overlay = await openCloudCenter(run);
-  const tab = (name) => flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === name);
-  const indicator = () => flatten(overlay).find((node) => node.className.includes("cloud-section-refresh-indicator"));
-
-  assert.ok(overlay.textContent.includes("Cached Project"));
-  tab("Favorites").click();
-  await run.flush();
-  assert.ok(overlay.textContent.includes("Cached Favorite"));
-
-  run.freezeLibrary(projectLibrary("Fresh Project"));
-  tab("Projects").click();
-  await run.flush(2);
-  assert.ok(overlay.textContent.includes("Cached Project"), "the previous Project remains visible and usable");
-  assert.equal(indicator().hidden, false, "refresh indicator appears only while the replacement is loading");
-  run.releaseLibrary();
-  await run.flush();
-  assert.ok(overlay.textContent.includes("Fresh Project"));
-  assert.equal(indicator().hidden, true);
-
-  run.freezeCommunityFavorites([newFavorite]);
-  tab("Favorites").click();
-  await run.flush(2);
-  assert.ok(overlay.textContent.includes("Cached Favorite"), "the previous Favorite remains visible and usable");
-  assert.equal(indicator().hidden, false);
-  run.releaseCommunityFavorites();
-  await run.flush();
-  assert.ok(overlay.textContent.includes("Fresh Favorite"));
-  assert.equal(indicator().hidden, true);
-});
-
-test("Cloud Center shows local favorites without waiting for a slow Cloud page", async () => {
-  const local = { id:"local-fast", name:"Local fast Widget", artifactSha256:"7".repeat(64), artifact:{ format:"penecho-widget", formatVersion:1, widget:{ title:"Local fast Widget" } }, createdAt:Date.now(), cloudId:"already-uploaded" },
-    run = boot({ status:deviceStatus(), localFavoriteItems:[local] });
-  await run.flush();
-  run.freezeCommunityFavorites([]);
-  const overlay = await openCloudCenter(run);
-  flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites").click();
-  await run.flush(2);
-
-  assert.ok(overlay.textContent.includes("Local fast Widget"));
-  assert.ok(overlay.textContent.includes("Loading favorites…"));
 });
 
 test("Cloud Center ignores a stale forced-refresh error after a newer status succeeds", async () => {
@@ -990,11 +921,6 @@ test("Cloud Center preserves a confirmed signed-in account across transient stat
   await run.flush();
   assert.equal(run.cloudButton.dataset.state, "signed-in", "a failed reopen refresh cannot imply sign-out");
 
-  const favorites = flatten(reopened).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites");
-  favorites.click();
-  await run.flush();
-  assert.ok(flatten(reopened).some((node) => node.tagName === "BUTTON" && node.textContent === "Add to this Canvas"));
-  assert.ok(!reopened.textContent.includes("Sign in to view favorites"));
 });
 
 test("Cloud Center uses History-style vertical navigation with Account and Link device pages", async () => {
@@ -1002,25 +928,21 @@ test("Cloud Center uses History-style vertical navigation with Account and Link 
   await run.flush();
   const overlay = await openCloudCenter(run);
   const tabs = flatten(overlay).filter((node) => node.getAttribute("role") === "tab");
-  assert.deepEqual(tabs.map((tab) => tab.getAttribute("data-cloud-section")), ["account", "device", "mcp", "projects", "favorites"]);
+  assert.deepEqual(tabs.map((tab) => tab.getAttribute("data-cloud-section")), ["account", "device", "mcp", "projects"]);
   assert.equal(tabs.find(tab=>tab.getAttribute("data-cloud-section")==="projects").getAttribute("aria-selected"), "true");
   assert.ok(tabs[0].textContent.includes("Test User"), "the Account entry exposes the signed-in name");
   assert.ok(tabs[1].textContent.includes("My PenEcho"), "the Link device entry exposes the configured device name");
   const tablist = flatten(overlay).find((node) => node.getAttribute("role") === "tablist");
   assert.equal(tablist.getAttribute("aria-orientation"), "vertical");
-  const explore = flatten(overlay).find((node) => node.tagName === "A" && node.className.includes("cloud-explore-link"));
-  assert.ok(explore, "Public shares remains a Cloud navigation link");
-  assert.equal(explore.textContent, "Public shares ↗");
-  assert.equal(explore.getAttribute("href"), "https://internaltest.penecho.ai/community.html");
-  assert.equal(explore.getAttribute("target"), "_blank");
-  assert.equal(explore.getAttribute("rel"), "noopener");
+  // Echoes is retired: the Cloud Center links to no public feed.
+  assert.equal(flatten(overlay).some((node) => node.tagName === "A" && node.className.includes("cloud-explore-link")), false);
   const navigation = flatten(overlay).find((node) => node.className.includes("cloud-navigation"));
   assert.ok(navigation, "the Cloud Center keeps a dedicated navigation column");
   const libraryHeading = tablist.children.find((node) => node.className === "cloud-nav-heading");
   assert.equal(libraryHeading?.textContent, "Library");
   assert.equal(libraryHeading?.getAttribute("role"), "presentation");
   assert.equal(tabs[2].getAttribute("data-nav-heading"), null, "the Library label must not live inside the selected Projects row");
-  assert.deepEqual(tablist.children.map((node) => node.getAttribute("data-cloud-section")), ["account", "device", "mcp", null, "projects", "favorites", "echoes"]);
+  assert.deepEqual(tablist.children.map((node) => node.getAttribute("data-cloud-section")), ["account", "device", "mcp", null, "projects"]);
 });
 
 test("Link device navigation shows the live connection state with a semantic status dot", async () => {
@@ -1113,8 +1035,8 @@ test("Cloud Center keeps the concise account and device copy bilingual", async (
   assert.ok(overlay.textContent.includes("登录后即可使用私有项目和收藏；API 密钥仍保存在此设备。"));
   selectCloudSection(overlay, "device");
   assert.ok(overlay.textContent.includes("登录后即可一键启用 Linked Device。"));
-  assert.deepEqual(flatten(overlay).filter((node) => node.getAttribute("role") === "tab").map((node) => node.getAttribute("data-cloud-section")), ["account", "device", "mcp", "projects", "favorites"]);
-  assert.ok(flatten(overlay).some((node) => node.tagName === "A" && node.textContent === "公开分享 ↗"));
+  assert.deepEqual(flatten(overlay).filter((node) => node.getAttribute("role") === "tab").map((node) => node.getAttribute("data-cloud-section")), ["account", "device", "mcp", "projects"]);
+  assert.equal(flatten(overlay).some((node) => node.tagName === "A" && node.textContent === "公开分享 ↗"), false);
   assert.ok(!overlay.textContent.includes("Sign in for private projects"));
 });
 
@@ -1151,44 +1073,6 @@ test("local mutable image proxies revalidate instead of caching stale Canvas and
   assert.match(serverSource, /sendPrivateMutableImage\(req,res,bytes\)/);
 });
 
-test("Cloud Center opens favorite Canvases in the current local Canvas", async () => {
-  const canvas = { id:"123e4567-e89b-42d3-a456-426614174004", kind:"canvas", name:"Plan", author:{ name:"Ada" } };
-  const canvasArtifact = { version:2, bundleVersion:2, mode:"snapshot", manifest:{ format:"penecho-raster-tiles" } };
-  const run = boot({ status:deviceStatus(), communityItem:canvas, communityArtifact:canvasArtifact, communityFavorites:[canvas] });
-  await run.flush();
-  let overlay = await openCloudCenter(run);
-  flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites").click();
-  await run.flush();
-  assert.match(cloudScript, /favoriteCanvasesHint:"Public Canvases in Favorites"/);
-  assert.doesNotMatch(cloudScript, /favoriteCanvasesHint:"Saved public Canvases"/);
-  assert.equal(flatten(overlay).filter((node) => node.tagName === "H3" && node.textContent === "Favorites").length, 1, "the active detail pane keeps one semantic heading");
-  assert.deepEqual(flatten(overlay).filter((node) => node.className?.split?.(/\s+/).includes("cloud-favorite-filter")).map((node) => node.textContent), ["All", "Canvases", "Widgets"]);
-  const activeFilter = () => flatten(overlay).find((node) => node.className?.split?.(/\s+/).includes("active") && node.className?.split?.(/\s+/).includes("cloud-favorite-filter"));
-  assert.equal(activeFilter().textContent, "All");
-  flatten(overlay).find((node) => node.className?.split?.(/\s+/).includes("cloud-favorite-filter") && node.textContent === "Canvases").click();
-  assert.equal(activeFilter().textContent, "Canvases");
-  assert.equal(activeFilter().getAttribute("aria-pressed"), "true");
-  flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Open Canvas").click();
-  await run.flush();
-  assert.deepEqual(run.imported, [{ kind:"canvas", artifact:canvasArtifact, item:canvas }]);
-  assert.deepEqual(run.opened, []);
-});
-
-test("Cloud Center proxies community favorite thumbnails through the local Canvas", async () => {
-  const id = "123e4567-e89b-42d3-a456-426614174024",
-    canvas = { id, kind:"canvas", name:"Plan", author:{ name:"Ada" }, thumbnailUrl:`/api/v1/community/items/${id}/thumbnail` },
-    run = boot({ status:deviceStatus(), communityFavorites:[canvas] });
-  await run.flush();
-  const overlay = await openCloudCenter(run);
-  flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites").click();
-  await run.flush();
-
-  const thumbnail = flatten(overlay).find((node) => node.className === "cloud-library-thumb");
-  assert.ok(thumbnail);
-  assert.equal(thumbnail.getAttribute("src"), `/api/cloud/community/${id}/thumbnail`);
-  assert.notEqual(thumbnail.getAttribute("src"), canvas.thumbnailUrl, "a Cloud API path must never resolve against the local 192.168/localhost origin");
-});
-
 test("the toolbar Favorites picker proxies community Widget thumbnails with the community item id", async () => {
   const id = "123e4567-e89b-42d3-a456-426614174025",
     widget = { id, kind:"widget", name:"Timer", artifactSha256:"c".repeat(64), thumbnailUrl:`/api/v1/community/items/${id}/thumbnail` },
@@ -1214,30 +1098,6 @@ test("the toolbar Favorites picker shows local rows while its first Cloud page i
 
   assert.ok(run.craftsList.textContent.includes("Local picker Widget"));
   assert.equal(run.craftsRefreshStatus.hidden, false);
-});
-
-test("Cloud Center requests the next cursor page only after the first favorites page", async () => {
-  const favorites = Array.from({ length:21 }, (_, index) => ({
-    id:`123e4567-e89b-42d3-a456-${String(index + 1).padStart(12, "0")}`,
-    kind:"canvas",
-    name:`Canvas ${index + 1}`,
-    favoritedAt:10_000 - index,
-  }));
-  const run = boot({ status:deviceStatus(), communityFavorites:favorites });
-  await run.flush();
-  const overlay = await openCloudCenter(run);
-  flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites").click();
-  await run.flush();
-
-  assert.equal(flatten(overlay).filter((node) => node.className === "cloud-library-row").length, 20);
-  const more = flatten(overlay).find((node) => node.className?.includes?.("cloud-favorites-load-more"));
-  assert.equal(more?.textContent, "Load more");
-  assert.equal(run.fetchCalls.filter((call) => call.url.startsWith("/api/cloud/favorites/feed?")).length, 1);
-
-  more.click();
-  await run.flush();
-  assert.equal(flatten(overlay).filter((node) => node.className === "cloud-library-row").length, 21);
-  assert.ok(run.fetchCalls.some((call) => call.url === "/api/cloud/favorites/feed?kind=all&limit=20&cursor=20"));
 });
 
 test("the toolbar Favorites picker appends its next cursor page", async () => {
@@ -1444,7 +1304,6 @@ test("the toolbar Favorites picker switches between list and grid views without 
   assert.equal(run.craftsViewList.getAttribute("aria-pressed"), "true");
   assert.equal(run.craftsViewGrid.getAttribute("aria-pressed"), "false");
   assert.equal(run.craftsList.classList.contains("is-grid"), false);
-  assert.equal(run.craftsEchoesLink.getAttribute("href"), "https://internaltest.penecho.ai/community.html");
 
   run.craftsViewGrid.click();
   assert.equal(run.craftsViewGrid.getAttribute("aria-pressed"), "true");
@@ -1511,34 +1370,6 @@ test("the toolbar Favorites picker keeps its last successful rows interactive wh
   assert.doesNotMatch(run.craftsList.textContent, /Cached Canvas|Cached Widget/);
 });
 
-test("Cloud Center adds favorite Widgets to the current Canvas", async () => {
-  const widget = { id:"123e4567-e89b-42d3-a456-426614174003", sourceWidgetId:"123e4567-e89b-42d3-a456-426614174103", name:"Timer", artifactSha256:"a".repeat(64), artifact:{ widget:{ title:"Timer" } } };
-  const run = boot({ status:deviceStatus(), widgetFavorites:[widget] });
-  await run.flush();
-  const overlay = await openCloudCenter(run);
-  const tab = flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites");
-  tab.click();
-  await run.flush();
-  const add = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Add to this Canvas");
-  assert.ok(add);
-  add.click();
-  await run.flush();
-  assert.deepEqual(plain(run.imported), [{
-    kind:"widget",
-    artifact:widget.artifact,
-    item:null,
-    options:{ favoriteState:{
-      selected:true,
-      sourceWidgetId:widget.sourceWidgetId,
-      artifactSha256:widget.artifactSha256,
-      cloudFavoriteId:widget.id,
-      communityItemId:null,
-    } },
-  }]);
-  assert.ok(run.fetchCalls.some((call) => call.url === "/api/cloud/favorites/feed?kind=all&limit=20"), "the list uses the metadata-only feed");
-  assert.ok(run.fetchCalls.some((call) => call.url === `/api/cloud/favorites/${widget.id}`), "the complete artifact is fetched only when the Widget is added");
-});
-
 test("adding a local favorite preserves its logical Widget identity and selected toolbar state", async () => {
   const favorite = {
     id:"123e4567-e89b-42d3-a456-426614174004",
@@ -1571,204 +1402,10 @@ test("adding a local favorite preserves its logical Widget identity and selected
   }]);
 });
 
-test("adding a community favorite preserves the community favorite reference", async () => {
-  const item = { id:"123e4567-e89b-42d3-a456-426614174005", kind:"widget", name:"Community timer", artifactSha256:"d".repeat(64) },
-    artifact = { format:"penecho-widget", formatVersion:1, widget:{ title:"Community timer" } },
-    run = boot({ status:deviceStatus(), communityItem:item, communityArtifact:artifact, communityFavorites:[item] });
-  await run.flush();
-  const overlay = await openCloudCenter(run);
-  flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites").click();
-  await run.flush();
-  flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Add to this Canvas").click();
-  await run.flush();
-
-  assert.deepEqual(plain(run.imported), [{
-    kind:"widget",
-    artifact,
-    item,
-    options:{ favoriteState:{
-      selected:true,
-      sourceWidgetId:item.id,
-      artifactSha256:item.artifactSha256,
-      cloudFavoriteId:null,
-      communityItemId:item.id,
-    } },
-  }]);
-});
-
-test("Remote Canvas favorites a Widget through Cloud without calling the linked host local store", async () => {
-  const sourceWidgetId = "123e4567-e89b-42d3-a456-426614174106",
-    cloudFavoriteId = "123e4567-e89b-42d3-a456-426614174199",
-    run = boot({
-      runtime:"cloud",
-      status:deviceStatus(),
-      widgetShareArtifact:{ format:"penecho-widget", formatVersion:1, widget:{ id:"widget-1", title:"Cloud timer" } },
-    });
-  await run.flush();
-
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1", sourceWidgetId } });
-  await run.flush();
-
-  assert.ok(run.fetchCalls.some((call) => call.url === "/api/v1/favorites" && call.options.method === "POST"));
-  assert.ok(!run.fetchCalls.some((call) => call.url === "/api/favorites"));
-  assert.deepEqual(run.favoriteStates, [
-    { widgetId:"widget-1", favorite:undefined, busy:true },
-    { widgetId:"widget-1", favorite:true, busy:false, artifactSha256:"c".repeat(64) },
-  ]);
-  assert.deepEqual(plain(run.favoriteReferences), [{ widgetId:"widget-1", reference:{ cloudFavoriteId, communityItemId:null } }]);
-
-  await run.window.dispatch("penecho:community-widget-action", { detail:{
-    action:"favorite",
-    widgetId:"widget-1",
-    favorite:true,
-    favoriteArtifactSha256:"c".repeat(64),
-    sourceWidgetId,
-    favoriteCloudId:cloudFavoriteId,
-  } });
-  await run.flush();
-
-  assert.ok(run.fetchCalls.some((call) => call.url === `/api/v1/favorites/${cloudFavoriteId}` && call.options.method === "DELETE"));
-  assert.ok(!run.fetchCalls.some((call) => call.url.startsWith("/api/favorites/") && call.options.method === "DELETE"));
-  assert.deepEqual(run.favoriteStates.at(-1), { widgetId:"widget-1", favorite:false, busy:false, artifactSha256:"" });
-});
-
-test("unfavoriting an older Canvas instance resolves the latest favorite by source Widget id", async () => {
-  const sourceWidgetId = "123e4567-e89b-42d3-a456-426614174107",
-    oldSha = "e".repeat(64),
-    latestSha = "f".repeat(64),
-    favorite = { id:"123e4567-e89b-42d3-a456-426614174007", name:"Updated timer", artifactSha256:latestSha, artifact:{ widget:{ title:"Updated timer" } }, sourceWidgetId, cloudId:null },
-    run = boot({ status:signedOutStatus(), localFavoriteItems:[favorite] });
-  await run.flush();
-
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1", favorite:true, favoriteArtifactSha256:oldSha, sourceWidgetId } });
-  await run.flush();
-
-  assert.ok(run.fetchCalls.some((call) => call.url === `/api/favorites/${oldSha}`), "the saved snapshot locator is checked first");
-  assert.ok(run.fetchCalls.some((call) => call.url === `/api/favorites/${latestSha}` && call.options.method === "DELETE"), "the stable Widget identity resolves the current favorite version");
-  assert.deepEqual(run.favoriteStates.at(-1), { widgetId:"widget-1", favorite:false, busy:false, artifactSha256:"" });
-});
-
-test("favoriting a Widget works on LAN HTTP without Web Crypto", async () => {
-  const sourceWidgetId = "123e4567-e89b-42d3-a456-426614174101";
-  const run = boot({
-    status:signedOutStatus(),
-    widgetShareArtifact:{ widget:{ id:"widget-1", title:"LAN Widget" } },
-  });
-  await run.flush();
-
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1", sourceWidgetId } });
-  await run.flush();
-
-  assert.deepEqual(run.alerts, []);
-  assert.deepEqual(run.favoriteStates, [
-    { widgetId:"widget-1", favorite:undefined, busy:true },
-    { widgetId:"widget-1", favorite:true, busy:false, artifactSha256:"b".repeat(64) },
-  ]);
-  const request = run.fetchCalls.find((call) => call.url === "/api/favorites" && call.options.method === "PUT");
-  assert.ok(request, "the local PenEcho service hashes and stores the favorite");
-  assert.equal(JSON.parse(request.options.body).artifact.widget.title, "LAN Widget");
-  assert.equal(JSON.parse(request.options.body).sourceWidgetId, sourceWidgetId);
-  assert.doesNotMatch(cloudScript, /crypto\.subtle\.digest/);
-});
-
-test("Cloud quota failure leaves the newly saved local favorite intact and explains local-only storage", async () => {
-  const sourceWidgetId = "123e4567-e89b-42d3-a456-426614174102";
-  const run = boot({
-    status:deviceStatus(),
-    widgetShareArtifact:{ widget:{ id:"widget-1", title:"Keep local" }, communityThumbnail:{ contentType:"image/webp", dataBase64:"A".repeat(200_000) } },
-    cloudFavoriteSaveError:{ code:"storage_quota_exceeded" },
-  });
-  await run.flush();
-
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1", sourceWidgetId } });
-  await run.flush();
-
-  assert.deepEqual(run.alerts, ["Cloud storage is full. Saved locally only."], "the user sees one concise local-only result");
-  assert.deepEqual(run.favoriteStates, [
-    { widgetId:"widget-1", favorite:undefined, busy:true },
-    { widgetId:"widget-1", favorite:true, busy:false, artifactSha256:"b".repeat(64) },
-  ]);
-  assert.equal(run.fetchCalls.filter((call) => call.url === "/api/favorites" && call.options.method === "PUT").length, 1);
-  assert.ok(run.fetchCalls.some((call) => call.url === "/api/cloud/favorites" && call.options.method === "POST"));
-  assert.ok(!run.fetchCalls.some((call) => call.url.startsWith("/api/favorites/") && call.options.method === "DELETE"));
-});
-
-test("clicking an already-favorite Widget removes the server-identified favorite", async () => {
-  const sourceWidgetId = "123e4567-e89b-42d3-a456-426614174103",
-    artifact = { widget:{ id:"widget-1", title:"LAN Widget" } },
-    existing = { id:"local-favorite-1", name:"LAN Widget", artifact, artifactSha256:"a".repeat(64), sourceWidgetId, cloudId:null, createdAt:1 },
-    run = boot({ status:signedOutStatus(), widgetShareArtifact:artifact, localFavoriteItems:[existing] });
-  await run.flush();
-
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1", favorite:true, favoriteArtifactSha256:"a".repeat(64), sourceWidgetId } });
-  await run.flush();
-
-  assert.deepEqual(run.alerts, []);
-  assert.deepEqual(run.favoriteStates, [
-    { widgetId:"widget-1", favorite:undefined, busy:true },
-    { widgetId:"widget-1", favorite:false, busy:false, artifactSha256:"" },
-  ]);
-  assert.ok(run.fetchCalls.some((call) => call.url === `/api/favorites/${"a".repeat(64)}` && call.options.method === "DELETE"));
-});
-
-test("Widget favorite busy state clears after a failed snapshot", async () => {
-  const run = boot({ status:signedOutStatus(), widgetArtifactError:new Error("snapshot failed") });
-  await run.flush();
-
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1" } });
-  await run.flush();
-
-  assert.deepEqual(run.alerts, ["snapshot failed"]);
-  assert.deepEqual(run.favoriteStates, [
-    { widgetId:"widget-1", favorite:undefined, busy:true },
-    { widgetId:"widget-1", favorite:undefined, busy:false },
-  ]);
-});
-
-test("Widget favorite ignores repeat activation while its snapshot is still saving", async () => {
-  const sourceWidgetId = "123e4567-e89b-42d3-a456-426614174104";
-  let releaseArtifact;
-  const widgetArtifactPromise = new Promise((resolve) => { releaseArtifact = resolve; });
-  const run = boot({ status:signedOutStatus(), widgetArtifactPromise });
-  await run.flush();
-
-  const first = run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1", sourceWidgetId } });
-  await run.flush();
-  const second = run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1", sourceWidgetId } });
-  await run.flush();
-
-  assert.deepEqual(run.favoriteStates, [{ widgetId:"widget-1", favorite:undefined, busy:true }]);
-  releaseArtifact({ widget:{ id:"widget-1", title:"One snapshot" } });
-  await Promise.all([first, second]);
-  await run.flush();
-  assert.deepEqual(run.favoriteStates, [
-    { widgetId:"widget-1", favorite:undefined, busy:true },
-    { widgetId:"widget-1", favorite:true, busy:false, artifactSha256:"b".repeat(64) },
-  ]);
-  assert.equal(run.fetchCalls.filter((call) => call.url === "/api/favorites" && call.options.method === "PUT").length, 1);
-});
-
-test("stale repeat favorite requests stay selected and never turn an existing Widget favorite into a delete", async () => {
-  const sourceWidgetId = "123e4567-e89b-42d3-a456-426614174105",
-    existing = { id:"local-favorite-1", name:"LAN Widget", artifactSha256:"a".repeat(64), sourceWidgetId, cloudId:null, createdAt:1 },
-    run = boot({ status:signedOutStatus(), localFavoriteItems:[existing], widgetShareArtifact:{ widget:{ id:"widget-1", title:"LAN Widget" } } });
-  await run.flush();
-
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1", favorite:false, sourceWidgetId } });
-  await run.flush();
-
-  assert.deepEqual(run.favoriteStates, [
-    { widgetId:"widget-1", favorite:undefined, busy:true },
-    { widgetId:"widget-1", favorite:true, busy:false, artifactSha256:"a".repeat(64) },
-  ]);
-  assert.equal(run.fetchCalls.filter((call) => call.url === "/api/favorites" && call.options.method === "PUT").length, 1);
-  assert.equal(run.fetchCalls.filter((call) => call.options.method === "DELETE").length, 0);
-});
-
 test("share and widget-favorite flows do not embed user-facing English outside Cloud copy", () => {
   const shareSource = cloudScript.slice(cloudScript.indexOf("function shareDialog"), cloudScript.indexOf("async function takeFurther"));
   assert.match(shareSource, /return liveShareDialog/);
-  assert.match(shareSource, /publicIntent:true/);
+  assert.doesNotMatch(shareSource, /publicIntent/);
   const favoriteSource = cloudScript.slice(cloudScript.indexOf("async function toggleWidgetFavorite"), cloudScript.indexOf("async function syncLocalFavorites"));
   assert.doesNotMatch(shareSource, /Preserve this moment|Generating preview|Use no more than 8 tags|Enter a name before publishing|Craft published safely|Copy link|Preview ready\.|Could not generate the preview/);
   assert.doesNotMatch(shareSource, /creativecommons\.org|opensource\.org|public-craft-training|Public Craft ML License/);
@@ -1899,7 +1536,7 @@ test("Cloud Center keeps narrow layouts and theme contrast token-driven", () => 
   assert.match(cloudCss, /\.cloud-button\.primary:hover:not\(:disabled\), \.cloud-button\.primary:focus-visible\s*\{[^}]*color:\s*var\(--ai-primary-ink\)/);
   assert.match(cloudCss, /\.penecho-cloud-dialog\s*\{[^}]*color-scheme:\s*light[^}]*--ai-bg:\s*color-mix\(in srgb, var\(--studio-shell, #f2f3f5\) 76%, var\(--studio-panel, #ffffff\)\)[^}]*--ai-surface:\s*var\(--studio-panel, #ffffff\)[^}]*--ai-accent:\s*var\(--studio-accent, #4f46e5\)[^}]*--ai-primary:\s*var\(--studio-accent-strong, #4338ca\)/);
   assert.match(cloudCss, /\.cloud-center \.cloud-dialog-titlebar\s*\{[^}]*background:\s*var\(--penecho-workbench-navigation-surface,[^}]*68%, transparent\)\)/);
-  assert.match(cloudCss, /\.cloud-share-canvas\s*\{\s*color:\s*var\(--studio-accent-strong, #4338ca\)/);
+  assert.match(cloudCss, /\.cloud-share-canvas, \.cloud-collaborate-canvas\s*\{\s*color:\s*var\(--studio-accent-strong, #4338ca\)/);
   assert.match(cloudCss, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?animation:\s*none/);
   assert.doesNotMatch(cloudCss, /body\[data-theme="(?:studio|research|arcane|scifi)"\] \.penecho-cloud-dialog/);
 });
