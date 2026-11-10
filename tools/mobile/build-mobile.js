@@ -49,13 +49,30 @@ async function writePng(source, target, width, height = width) {
   await sharp(source).resize(width, height, { fit:"contain", background:{ r:255, g:255, b:255, alpha:0 } }).png().toFile(target);
 }
 
+// The icon source is an opaque white square: round its corners where it sits on the dark splash.
+async function roundedIcon(sharp, size) {
+  const radius = Math.round(size * 0.225);
+  const mask = Buffer.from(`<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" rx="${radius}" fill="#fff"/></svg>`);
+  return sharp(ICON_SOURCE).resize(size, size, { fit:"contain" }).composite([{ input:mask, blend:"dest-in" }]).png().toBuffer();
+}
+
+// Adaptive launchers show only the centre of the foreground layer and may mask it to a circle:
+// inset the icon so the pen and both ripples stay inside the safe zone.
+async function writeAdaptiveForeground(target, size) {
+  const sharp = require("sharp");
+  ensureDir(path.dirname(target));
+  const icon = await sharp(ICON_SOURCE).resize(Math.round(size * 0.7), Math.round(size * 0.7), { fit:"contain" }).png().toBuffer();
+  await sharp({ create:{ width:size, height:size, channels:4, background:{ r:255, g:255, b:255, alpha:1 } } })
+    .composite([{ input:icon, gravity:"center" }]).png().toFile(target);
+}
+
 async function writeSplash(target) {
   const sharp = require("sharp");
   const metadata = await sharp(target).metadata();
   const width = metadata.width || 2732;
   const height = metadata.height || 2732;
   const logoSize = Math.max(96, Math.round(Math.min(width, height) * 0.28));
-  const logo = await sharp(ICON_SOURCE).resize(logoSize, logoSize, { fit:"contain" }).png().toBuffer();
+  const logo = await roundedIcon(sharp, logoSize);
   const temporary = `${target}.penecho.png`;
   await sharp({
     create:{ width, height, channels:4, background:{ r:16, g:24, b:39, alpha:1 } },
@@ -77,7 +94,7 @@ async function generateAndroidIcons() {
     const directory = path.join(MOBILE_ROOT, "android", "app", "src", "main", "res", `mipmap-${density}`);
     await writePng(ICON_SOURCE, path.join(directory, "ic_launcher.png"), size);
     await writePng(ICON_SOURCE, path.join(directory, "ic_launcher_round.png"), size);
-    await writePng(ICON_SOURCE, path.join(directory, "ic_launcher_foreground.png"), size);
+    await writeAdaptiveForeground(path.join(directory, "ic_launcher_foreground.png"), size);
   }
   const adaptiveDirectory = path.join(MOBILE_ROOT, "android", "app", "src", "main", "res", "mipmap-anydpi-v26");
   const adaptiveXml = [
@@ -135,6 +152,7 @@ function configureIosNetwork() {
     NSAllowsLocalNetworking:true,
   };
   info.NSLocalNetworkUsageDescription = "Connect to a PenEcho server on your local network.";
+  info.ITSAppUsesNonExemptEncryption = false;
   fs.writeFileSync(plistPath, plist.build(info));
 }
 
@@ -152,6 +170,22 @@ function copyArtifact(source, extension, suffix) {
   const target = path.join(RELEASE_DIR, `PenEcho-${APP_PACKAGE.version}-${suffix}.${extension}`);
   fs.copyFileSync(source, target);
   console.log(target);
+}
+
+function iosBuildNumber() {
+  const explicit = Number.parseInt(process.env.IOS_BUILD_NUMBER || process.env.GITHUB_RUN_NUMBER || "", 10);
+  return Number.isSafeInteger(explicit) && explicit > 0 ? explicit : buildNumber(APP_PACKAGE.version);
+}
+
+function iosSigning() {
+  const teamId = String(process.env.APPLE_TEAM_ID || "").trim();
+  const profile = String(process.env.IOS_PROVISIONING_PROFILE_SPECIFIER || "").trim();
+  const identity = String(process.env.IOS_SIGNING_IDENTITY || "Apple Distribution").trim();
+  const requested = Boolean(teamId || profile || process.env.IOS_SIGNING_IDENTITY);
+  if (requested && (!teamId || !profile || !identity)) {
+    throw new Error("Signed iOS builds require APPLE_TEAM_ID, IOS_PROVISIONING_PROFILE_SPECIFIER, and IOS_SIGNING_IDENTITY.");
+  }
+  return requested ? { teamId, profile, identity } : null;
 }
 
 async function buildAndroid() {
@@ -189,21 +223,60 @@ async function buildIos() {
   await generateIosIcons();
   configureIosNetwork();
   cap("sync", "ios");
+  const signing = iosSigning();
+  const projectVersion = String(iosBuildNumber());
   const archiveRoot = path.join(RELEASE_DIR, "ios", "PenEcho.xcarchive");
   fs.rmSync(archiveRoot, { recursive:true, force:true });
-  run("xcodebuild", [
+  const archiveArgs = [
     "archive",
     "-workspace", path.join(iosRoot, "App", "App.xcworkspace"),
     "-scheme", "App",
     "-configuration", "Release",
     "-sdk", "iphoneos",
     "-archivePath", archiveRoot,
-    "CODE_SIGNING_ALLOWED=NO",
-    "CODE_SIGNING_REQUIRED=NO",
-    "CODE_SIGN_IDENTITY=",
     `MARKETING_VERSION=${APP_PACKAGE.version}`,
-    `CURRENT_PROJECT_VERSION=${buildNumber(APP_PACKAGE.version)}`,
-  ], MOBILE_ROOT);
+    `CURRENT_PROJECT_VERSION=${projectVersion}`,
+  ];
+  if (signing) {
+    archiveArgs.push(
+      `DEVELOPMENT_TEAM=${signing.teamId}`,
+      "CODE_SIGN_STYLE=Manual",
+      `CODE_SIGN_IDENTITY=${signing.identity}`,
+      `PROVISIONING_PROFILE_SPECIFIER=${signing.profile}`,
+    );
+  } else {
+    archiveArgs.push("CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGN_IDENTITY=");
+  }
+  run("xcodebuild", archiveArgs, MOBILE_ROOT);
+
+  if (signing) {
+    const exportRoot = path.join(RELEASE_DIR, "ios", "export");
+    const exportOptionsPath = path.join(RELEASE_DIR, "ios", "ExportOptions.plist");
+    fs.rmSync(exportRoot, { recursive:true, force:true });
+    ensureDir(exportRoot);
+    fs.writeFileSync(exportOptionsPath, require("plist").build({
+      method:"app-store-connect",
+      destination:"export",
+      signingStyle:"manual",
+      signingCertificate:signing.identity,
+      teamID:signing.teamId,
+      provisioningProfiles:{ "ai.penecho.mobile":signing.profile },
+      manageAppVersionAndBuildNumber:false,
+      stripSwiftSymbols:true,
+      uploadSymbols:true,
+    }));
+    run("xcodebuild", [
+      "-exportArchive",
+      "-archivePath", archiveRoot,
+      "-exportPath", exportRoot,
+      "-exportOptionsPlist", exportOptionsPath,
+    ], MOBILE_ROOT);
+    const exported = filesBelow(exportRoot).find(file => path.extname(file).toLowerCase() === ".ipa");
+    if (!exported) throw new Error("Xcode export succeeded without producing an IPA.");
+    copyArtifact(exported, "ipa", "ios");
+    return;
+  }
+
   const appPath = path.join(archiveRoot, "Products", "Applications", "App.app");
   const payloadRoot = path.join(RELEASE_DIR, "ios", "Payload");
   fs.rmSync(payloadRoot, { recursive:true, force:true });

@@ -1,0 +1,201 @@
+{
+  "activations": [
+    {
+      "from": "j1",
+      "participant": "sched",
+      "to": "j11"
+    },
+    {
+      "from": "j1",
+      "participant": "queue",
+      "to": "j2"
+    },
+    {
+      "from": "j5",
+      "participant": "wa",
+      "to": "j6"
+    },
+    {
+      "from": "j7",
+      "participant": "wb",
+      "to": "j8"
+    }
+  ],
+  "description": "A job scheduler retries failed work with parallel input fetching; nesting depth 2 (loop > par, loop > alt).",
+  "details": [
+    {
+      "domain": "core",
+      "items": [
+        "Idempotency key stays constant across attempts; workers dedupe side effects.",
+        "Backoff: 2 s, 4 s, 8 s with ±20% jitter."
+      ],
+      "title": "Retry semantics"
+    },
+    {
+      "domain": "core",
+      "items": [
+        "Parts A/B are independent S3 ranges fetched by separate workers.",
+        "Checkpoint stores output URI + attempt count."
+      ],
+      "title": "Checkpointing"
+    }
+  ],
+  "domains": [
+    {
+      "color": "orange",
+      "id": "core",
+      "label": "Scheduler"
+    },
+    {
+      "color": "teal",
+      "id": "exec",
+      "label": "Workers"
+    },
+    {
+      "color": "purple",
+      "id": "store",
+      "label": "Storage"
+    }
+  ],
+  "fragments": [
+    {
+      "from": "j4",
+      "kind": "loop",
+      "label": "up to 3 attempts",
+      "to": "j11"
+    },
+    {
+      "branches": [
+        {
+          "from": "j7",
+          "label": "part B stream"
+        }
+      ],
+      "from": "j5",
+      "kind": "par",
+      "label": "part A stream",
+      "to": "j8"
+    },
+    {
+      "branches": [
+        {
+          "from": "j10",
+          "label": "attempt failed"
+        }
+      ],
+      "from": "j9",
+      "kind": "alt",
+      "label": "attempt succeeded",
+      "to": "j11"
+    }
+  ],
+  "messages": [
+    {
+      "from": "sched",
+      "id": "j1",
+      "label": "Claim next job",
+      "to": "queue"
+    },
+    {
+      "from": "queue",
+      "id": "j2",
+      "kind": "return",
+      "label": "Job #42 + idempotency key",
+      "to": "sched"
+    },
+    {
+      "from": "sched",
+      "id": "j3",
+      "label": "Load checkpoint",
+      "to": "sched"
+    },
+    {
+      "from": "sched",
+      "id": "j4",
+      "label": "Attempt n: reset scratch area",
+      "to": "sched"
+    },
+    {
+      "from": "sched",
+      "id": "j5",
+      "label": "Fetch part A",
+      "to": "wa"
+    },
+    {
+      "from": "wa",
+      "id": "j6",
+      "kind": "return",
+      "label": "Part A ready",
+      "to": "sched"
+    },
+    {
+      "from": "sched",
+      "id": "j7",
+      "label": "Fetch part B",
+      "to": "wb"
+    },
+    {
+      "from": "wb",
+      "id": "j8",
+      "kind": "return",
+      "label": "Part B ready",
+      "to": "sched"
+    },
+    {
+      "from": "sched",
+      "id": "j9",
+      "label": "Write output + checkpoint",
+      "to": "store"
+    },
+    {
+      "from": "sched",
+      "id": "j10",
+      "label": "Record failure, backoff 2^n s",
+      "to": "sched"
+    },
+    {
+      "from": "sched",
+      "id": "j11",
+      "kind": "async",
+      "label": "Requeue with same idempotency key",
+      "to": "queue"
+    }
+  ],
+  "notes": [
+    "After the 3rd failed attempt the job moves to a dead-letter queue (not shown)."
+  ],
+  "participants": [
+    {
+      "domain": "core",
+      "id": "sched",
+      "label": "Scheduler",
+      "subtitle": "state machine"
+    },
+    {
+      "domain": "exec",
+      "id": "wa",
+      "label": "Worker A",
+      "type": "backend"
+    },
+    {
+      "domain": "exec",
+      "id": "wb",
+      "label": "Worker B",
+      "type": "backend"
+    },
+    {
+      "domain": "core",
+      "id": "queue",
+      "label": "Job queue",
+      "type": "messagebus"
+    },
+    {
+      "domain": "store",
+      "id": "store",
+      "label": "Object store",
+      "type": "cloud"
+    }
+  ],
+  "title": "Resilient job scheduler",
+  "version": 1
+}

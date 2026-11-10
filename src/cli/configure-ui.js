@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { DEFAULT_MAX_TOKENS, MIN_MAX_TOKENS, configuredMaxTokens } = require("../server/api-config.js");
 
 const PROVIDERS = {
   kimi: "kimi-cli",
@@ -103,11 +104,13 @@ function textValidator(label, options = {}) {
   };
 }
 
-function numberValidator(label, minimum, maximum, integer = false) {
+function numberValidator(label, minimum, maximum, integer = false, exclusiveMinimum = false) {
   return value => {
     const text = cleanText(value), number = Number(text);
-    if (!text || !Number.isFinite(number) || number < minimum || number > maximum || integer && !Number.isInteger(number)) {
-      return `${label} must be ${integer ? "an integer " : "a number "}from ${minimum} to ${maximum}.`;
+    if (!text || !Number.isFinite(number) || (exclusiveMinimum ? number <= minimum : number < minimum) || number > maximum || integer && !Number.isInteger(number)) {
+      return exclusiveMinimum
+        ? `${label} must be ${integer ? "an integer " : "a number "}larger than ${minimum}.`
+        : `${label} must be ${integer ? "an integer " : "a number "}from ${minimum} to ${maximum}.`;
     }
     return true;
   };
@@ -149,15 +152,15 @@ async function chooseModel(ui, provider, configuration) {
 
 async function chooseEffort(ui, provider, current, format = "") {
   const isKimi = provider === PROVIDERS.kimi, isCodex = provider === PROVIDERS.codex, isClaude = provider === PROVIDERS.claude,
-    defaultValue = current || (format === "anthropic" ? "medium" : isKimi ? "high" : isClaude ? "max" : "xhigh");
+    defaultValue = current || "medium";
   const levels = isCodex
-    ? [["low","Low"],["medium","Medium"],["high","High"],["xhigh","Extra high (maximum for Codex)"]]
+    ? [["low","Low"],["medium","Medium (recommended default)"],["high","High"],["xhigh","Extra high"],["max","Maximum"]]
     : isKimi
-      ? [["low","Low"],["high","High (recommended)"],["max","Max"]]
+      ? [["none","None (maps to Kimi low)"],["low","Low"],["medium","Medium (maps to Kimi high)"],["high","High"],["xhigh","Extra high (maps to Kimi max)"],["max","Max"]]
       : isClaude
-      ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium"],["high","High"],["max","Max"]]
+      ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium (recommended default)"],["high","High"],["xhigh","Extra high"],["max","Max"]]
       : format === "anthropic"
-        ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium (recommended)"],["high","High"],["max","Max"]]
+        ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium (recommended default)"],["high","High"],["xhigh","Extra high"],["max","Max"]]
         : [["low","Low"],["medium","Medium"],["high","High"],["xhigh","Extra high (OpenAI-compatible maximum)"],["max","Max"]];
   const choices = [
     ...((isKimi || isCodex || isClaude) ? [{ name:`Use the ${isKimi ? "Kimi" : isCodex ? "Codex" : "Claude"} CLI default`, value:"", description:"Do not pass an explicit effort." }] : []),
@@ -171,9 +174,8 @@ async function chooseEffort(ui, provider, current, format = "") {
 }
 
 async function finishProviderConfiguration(ui, configuration, values, options) {
-  const isCli = [PROVIDERS.kimi, PROVIDERS.codex, PROVIDERS.claude].includes(values.AI_PROVIDER);
   const action = await ui.select("Action", [
-    { name:"Test & Save", value:"save", description:isCli ? "Save, then verify the local CLI executable without making a model request." : "Save first, then send one small real model request." },
+    { name:"Test & Save", value:"save", description:"Save first, then send one small image request through the selected model." },
     { name:"Cancel", value:"cancel", description:"Discard these changes and return." },
   ], "save");
   if (action === "cancel") return false;
@@ -215,7 +217,7 @@ async function configureKimi(ui, configuration, options) {
 
 async function configureCodex(ui, configuration, options) {
   ui.header("Codex CLI", "Main menu  ›  LLM source  ›  Codex CLI",
-    "Use GPT-5.5 or newer. gpt-5.6-sol is recommended; xhigh is the highest listed Codex effort.");
+    "Use GPT-5.5 or newer. gpt-5.6-sol is recommended and supports PenEcho's medium default plus higher effort levels.");
   const model = await chooseModel(ui, PROVIDERS.codex, configuration),
     effort = await chooseEffort(ui, PROVIDERS.codex, cleanText(configuration.env.AI_EFFORT));
   return finishProviderConfiguration(ui, configuration, {
@@ -263,10 +265,12 @@ async function configureApi(ui, configuration, options) {
 
 async function configureSettings(ui, configuration, options) {
   const env = configuration.env;
+  const savedMaxTokens = configuredMaxTokens(env.MAX_TOKENS);
   ui.header("Settings", "Main menu  ›  Settings",
     `Request details are stored in ${path.join(configuration.stateDir, "logs", "requests")} when recording is enabled.`);
   const legacyTimeout = cleanText(env.CODEX_CLI_TIMEOUT_SECONDS || env.CLAUDE_CLI_TIMEOUT_SECONDS),
     timeout = cleanText(await ui.input("Unified model timeout in seconds", cleanText(env.AI_TIMEOUT_SECONDS) || legacyTimeout || "180", numberValidator("Timeout", 10, 600, true))),
+    maxTokens = cleanText(await ui.input("Maximum response tokens (including thinking)", String(savedMaxTokens ?? DEFAULT_MAX_TOKENS), numberValidator("MAX_TOKENS", MIN_MAX_TOKENS, Number.MAX_SAFE_INTEGER, true, true))),
     currentImageFormat = ["webp","png"].includes(cleanText(env.PENECHO_AI_IMAGE_FORMAT).toLowerCase()) ? cleanText(env.PENECHO_AI_IMAGE_FORMAT).toLowerCase() : "webp",
     imageFormat = await ui.select("Image format sent to the model", [
       { name:"WebP (recommended, default)", value:"webp", description:"Lossless and usually much smaller; applies to API, Kimi CLI, Codex CLI, and Claude CLI." },
@@ -285,6 +289,7 @@ async function configureSettings(ui, configuration, options) {
     port = cleanText(await ui.input("Listening port", cleanText(env.PORT) || "3888", numberValidator("Port", 0, 65535, true))),
     autoDelay = cleanText(await ui.input("Initial Auto AI delay in seconds", cleanText(env.AUTO_AI_DELAY_SECONDS) || "5", numberValidator("Auto AI delay", 0, 10)));
   ui.note("Auto AI delay", "This is the startup value. It can also be changed directly on the canvas.");
+  ui.note("Response token limit", "This includes thinking tokens. Do not set it too low or the model may run out of budget while reasoning.");
   const action = await ui.select("Action", [
     { name:"Save settings", value:"save" },
     { name:"Cancel", value:"cancel" },
@@ -292,6 +297,7 @@ async function configureSettings(ui, configuration, options) {
   if (action === "cancel") return false;
   await options.save({
     AI_TIMEOUT_SECONDS:timeout,
+    MAX_TOKENS:maxTokens,
     PENECHO_AI_IMAGE_FORMAT:imageFormat,
     PENECHO_REQUEST_TRACE:trace ? "true" : "false",
     PENECHO_REQUEST_TRACE_LIMIT:traceLimit,

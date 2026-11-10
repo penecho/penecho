@@ -10,11 +10,23 @@ const mapKimiEffort = effort => require("./kimi-cli.js").mapKimiEffort(effort);
 const ACP_HANDSHAKE_TIMEOUT_MS = 45000;
 const ACP_SHUTDOWN_TIMEOUT_MS = 3000;
 const ACP_RESPAWN_BACKOFF_MS = 15000;
+const MAX_KIMI_TOOL_RECOVERIES = 2;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const SESSION_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const SESSION_BUCKET_PREFIX = "wd_penecho-kimi-acp";
-const TOOL_ERROR = "Kimi Code CLI attempted to use a tool while tools are disabled.";
+const TOOL_ERROR = "Kimi Code CLI repeatedly attempted to invoke its own built-in tools.";
+
+const normalizeKimiToolName = value => require("./kimi-cli.js").normalizeKimiToolName(value);
+const kimiToolRecoveryPrompt = value => require("./kimi-cli.js").kimiToolRecoveryPrompt(value);
+
+function toolNameFromUpdate(update) {
+  return normalizeKimiToolName(update?.title || update?.toolName || update?.tool_name);
+}
+
+function toolNameFromPermission(params) {
+  return normalizeKimiToolName(params?.toolCall?.title || params?.tool_call?.title);
+}
 
 let penechoVersion = "0";
 try { penechoVersion = require("../../package.json").version || "0"; } catch {}
@@ -22,6 +34,24 @@ try { penechoVersion = require("../../package.json").version || "0"; } catch {}
 function abortError() { return Object.assign(new Error("Kimi Code CLI request aborted."), { name:"AbortError" }); }
 function acpInfraError(message) { return Object.assign(new Error(message), { acpInfraFailure:true }); }
 function transportError(message) { return Object.assign(new Error(message), { acpTransport:true }); }
+
+async function stopChildProcess(child, timeoutMs = 2000) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise(resolve => {
+    let timer;
+    const finish = () => {
+      clearTimeout(timer);
+      child.removeListener("exit", finish);
+      child.removeListener("error", finish);
+      resolve();
+    };
+    child.once("exit", finish);
+    child.once("error", finish);
+    timer = setTimeout(finish, timeoutMs);
+    try { child.stdin.end(); } catch {}
+    try { child.kill(); } catch { finish(); }
+  });
+}
 
 class KimiAcpClient {
   constructor({ launch, env, workDir, kimiHome, logger = null }) {
@@ -157,8 +187,7 @@ class KimiAcpClient {
       this._send({ jsonrpc:"2.0", id, result:{ outcome:{ outcome:"selected", optionId:"reject" } } });
       const active = this.activeRequest;
       if (active && params?.sessionId === active.sessionId) {
-        this._notify("session/cancel", { sessionId:active.sessionId });
-        active.fail(new Error(TOOL_ERROR));
+        active.rejectToolInvocation(toolNameFromPermission(params));
       }
       return;
     }
@@ -170,8 +199,12 @@ class KimiAcpClient {
     if (!update || typeof update !== "object") return;
     const active = this.activeRequest;
     if (!active || params.sessionId !== active.sessionId) return;
+    try { active.onActivity?.(); } catch {}
     const kind = update.sessionUpdate;
+    const usage = update.usage || update.tokenUsage || update.token_usage;
+    if (usage && typeof usage === "object" && !Array.isArray(usage)) try { active.onUsage?.(usage); } catch {}
     if (kind === "agent_message_chunk") {
+      if (active.toolViolation) return;
       const contentText = update.content?.text;
       if (typeof contentText === "string") {
         active.text += contentText;
@@ -183,8 +216,7 @@ class KimiAcpClient {
       return;
     }
     if (kind === "tool_call" || kind === "tool_call_update") {
-      this._notify("session/cancel", { sessionId:active.sessionId });
-      active.fail(new Error(TOOL_ERROR));
+      active.rejectToolInvocation(toolNameFromUpdate(update));
     }
   }
 
@@ -211,7 +243,7 @@ class KimiAcpClient {
     });
   }
 
-  async _request({ model, effort, prompt, image, signal }) {
+  async _request({ model, effort, prompt, image, images, signal, onActivity, onUsage }) {
     if (this.closed) throw acpInfraError("Kimi ACP client is closed.");
     if (signal?.aborted) throw abortError();
     const requestKeepAlive = setInterval(() => {}, 60_000);
@@ -233,7 +265,17 @@ class KimiAcpClient {
         if (thinking.error) throw new Error(`Kimi ACP rejected thinking effort "${mapped}": ${thinking.error.message}`);
       }
       stage = "prompted";
-      return await this._prompt({ sessionId, prompt, image, signal });
+      let activePrompt = prompt, activeImage = image, activeImages = images;
+      for (let recoveries = 0;;) {
+        const result = await this._prompt({ sessionId, prompt:activePrompt, image:activeImage, images:activeImages, signal, onActivity, onUsage });
+        if (!result.toolViolation) return result.text;
+        if (recoveries >= MAX_KIMI_TOOL_RECOVERIES) throw new Error(`${TOOL_ERROR} Last rejected tool: ${result.toolViolation}.`);
+        recoveries += 1;
+        this.log("acp-tool-recovery", { tool:result.toolViolation, attempt:recoveries });
+        activePrompt = kimiToolRecoveryPrompt(result.toolViolation);
+        activeImage = null;
+        activeImages = [];
+      }
     } catch (error) {
       if (stage !== "prompted" && error.acpTransport && !error.acpInfraFailure) error.acpInfraFailure = true;
       throw error;
@@ -242,17 +284,29 @@ class KimiAcpClient {
     }
   }
 
-  _prompt({ sessionId, prompt, image, signal }) {
+  _prompt({ sessionId, prompt, image, images, signal, onActivity, onUsage }) {
     return new Promise((resolve, reject) => {
       const blocks = [];
-      if (image) blocks.push({ type:"image", data:image.data, mimeType:image.mimeType });
+      const activeImages = (Array.isArray(images) ? images : image ? [image] : []).filter(Boolean).slice(0, 5);
+      for (const activeImage of activeImages) blocks.push({ type:"image", data:activeImage.data, mimeType:activeImage.mimeType });
       blocks.push({ type:"text", text:String(prompt || "") });
       const state = {
         sessionId,
         text:"",
+        toolViolation:null,
+        onActivity,
+        onUsage,
         settled:false,
         fail:error => { if (state.settled) return; state.settled = true; cleanup(); reject(error); },
-        succeed:() => { if (state.settled) return; state.settled = true; cleanup(); resolve(state.text.trim()); },
+        succeed:() => { if (state.settled) return; state.settled = true; cleanup(); resolve({ text:state.text.trim(), toolViolation:null }); },
+        recover:() => { if (state.settled) return; state.settled = true; cleanup(); resolve({ text:"", toolViolation:state.toolViolation }); },
+        rejectToolInvocation:value => {
+          if (state.settled || state.toolViolation) return;
+          state.toolViolation = normalizeKimiToolName(value);
+          state.text = "";
+          this.log("acp-tool-rejected", { tool:state.toolViolation });
+          this._notify("session/cancel", { sessionId });
+        },
       };
       const cleanup = () => {
         signal?.removeEventListener("abort", onAbort);
@@ -266,8 +320,11 @@ class KimiAcpClient {
       signal?.addEventListener("abort", onAbort, { once:true });
       this._rpc("session/prompt", { sessionId, prompt:blocks }).then(message => {
         if (state.settled) return;
+        if (state.toolViolation) return state.recover();
         if (message.error) return state.fail(new Error(`Kimi Code CLI failed: ${message.error.message}`));
         if (signal?.aborted) return state.fail(abortError());
+        const usage = message.result?.usage || message.result?.tokenUsage || message.result?.token_usage || message.usage;
+        if (usage && typeof usage === "object" && !Array.isArray(usage)) try { onUsage?.(usage); } catch {}
         if (!state.text.trim()) return state.fail(new Error("Kimi Code CLI returned no assistant response."));
         state.succeed();
       }, error => state.fail(error));
@@ -290,14 +347,7 @@ class KimiAcpClient {
     for (const { reject } of this.pending.values()) reject(error);
     this.pending.clear();
     this.activeRequest?.fail(error);
-    if (child) {
-      try {
-        child.stdin.end();
-      } catch { }
-      try {
-        child.kill();
-      } catch { }
-    }
+    await stopChildProcess(child);
     if (childClosePromise) {
       let timer;
       try {

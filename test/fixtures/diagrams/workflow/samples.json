@@ -1,0 +1,441 @@
+{
+  "linear": {
+    "version": 1,
+    "title": "内容发布 · 简单流程",
+    "description": "开始、处理与结束；宽度不足时本地重新纵向布局。",
+    "domains": [
+      {
+        "id": "user",
+        "label": "申请人",
+        "color": "blue"
+      },
+      {
+        "id": "review",
+        "label": "审核",
+        "color": "orange"
+      },
+      {
+        "id": "system",
+        "label": "自动处理",
+        "color": "teal"
+      },
+      {
+        "id": "result",
+        "label": "结果",
+        "color": "green"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "start",
+        "label": "收到草稿",
+        "type": "start",
+        "domain": "user"
+      },
+      {
+        "id": "validate",
+        "label": "检查内容与附件",
+        "type": "process",
+        "domain": "system"
+      },
+      {
+        "id": "publish",
+        "label": "发布内容",
+        "type": "process",
+        "domain": "system"
+      },
+      {
+        "id": "end",
+        "label": "发布完成",
+        "type": "end",
+        "domain": "result"
+      }
+    ],
+    "edges": [
+      {
+        "from": "start",
+        "to": "validate"
+      },
+      {
+        "from": "validate",
+        "to": "publish",
+        "label": "检查通过"
+      },
+      {
+        "from": "publish",
+        "to": "end"
+      }
+    ],
+    "details": [
+      {
+        "title": "处理规则",
+        "domain": "system",
+        "items": [
+          "此处是示例流程。细节放在图外，主图只保留活动与关系。"
+        ]
+      }
+    ]
+  },
+  "approval": {
+    "version": 1,
+    "title": "费用审批 · 条件与退回",
+    "description": "条件写在箭头旁；退回后修订并重新进入审核。",
+    "domains": [
+      {
+        "id": "user",
+        "label": "申请人",
+        "color": "blue"
+      },
+      {
+        "id": "review",
+        "label": "审核",
+        "color": "orange"
+      },
+      {
+        "id": "system",
+        "label": "自动处理",
+        "color": "teal"
+      },
+      {
+        "id": "result",
+        "label": "结果",
+        "color": "green"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "start",
+        "label": "提交费用单",
+        "type": "start",
+        "domain": "user"
+      },
+      {
+        "id": "review",
+        "label": "材料完整？",
+        "type": "decision",
+        "domain": "review",
+        "details": [
+          "检查发票、金额和申请理由。"
+        ]
+      },
+      {
+        "id": "edit",
+        "label": "补充材料",
+        "type": "process",
+        "domain": "user"
+      },
+      {
+        "id": "approve",
+        "label": "负责人批准？",
+        "type": "decision",
+        "domain": "review"
+      },
+      {
+        "id": "pay",
+        "label": "安排付款",
+        "type": "process",
+        "domain": "system"
+      },
+      {
+        "id": "done",
+        "label": "付款完成",
+        "type": "end",
+        "domain": "result"
+      },
+      {
+        "id": "reject",
+        "label": "申请终止",
+        "type": "end",
+        "domain": "result"
+      }
+    ],
+    "edges": [
+      {
+        "from": "start",
+        "to": "review"
+      },
+      {
+        "from": "review",
+        "to": "edit",
+        "label": "不完整"
+      },
+      {
+        "from": "edit",
+        "to": "review",
+        "label": "补齐后重审",
+        "kind": "loop"
+      },
+      {
+        "from": "review",
+        "to": "approve",
+        "label": "完整"
+      },
+      {
+        "from": "approve",
+        "to": "pay",
+        "label": "批准"
+      },
+      {
+        "from": "approve",
+        "to": "reject",
+        "label": "拒绝"
+      },
+      {
+        "from": "pay",
+        "to": "done"
+      }
+    ],
+    "details": [
+      {
+        "title": "申请人",
+        "domain": "user",
+        "items": [
+          "材料不足时只补充缺失内容，不重复创建申请。"
+        ]
+      },
+      {
+        "title": "审核规则",
+        "domain": "review",
+        "items": [
+          "材料完整性与是否批准是两个独立判断。"
+        ]
+      }
+    ]
+  },
+  "retry": {
+    "version": 1,
+    "title": "任务执行 · 重试与失败出口",
+    "description": "循环必须有退出条件，虚线表示返回重试。",
+    "domains": [
+      {
+        "id": "user",
+        "label": "申请人",
+        "color": "blue"
+      },
+      {
+        "id": "review",
+        "label": "审核",
+        "color": "orange"
+      },
+      {
+        "id": "system",
+        "label": "自动处理",
+        "color": "teal"
+      },
+      {
+        "id": "result",
+        "label": "结果",
+        "color": "green"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "start",
+        "label": "接收任务",
+        "type": "start",
+        "domain": "system"
+      },
+      {
+        "id": "run",
+        "label": "执行任务",
+        "type": "process",
+        "domain": "system"
+      },
+      {
+        "id": "ok",
+        "label": "执行成功？",
+        "type": "decision",
+        "domain": "system"
+      },
+      {
+        "id": "retry",
+        "label": "还可以重试？",
+        "type": "decision",
+        "domain": "review"
+      },
+      {
+        "id": "wait",
+        "label": "等待退避间隔",
+        "type": "process",
+        "domain": "system"
+      },
+      {
+        "id": "done",
+        "label": "任务完成",
+        "type": "end",
+        "domain": "result"
+      },
+      {
+        "id": "fail",
+        "label": "记录失败并通知",
+        "type": "end",
+        "domain": "result"
+      }
+    ],
+    "edges": [
+      {
+        "from": "start",
+        "to": "run"
+      },
+      {
+        "from": "run",
+        "to": "ok"
+      },
+      {
+        "from": "ok",
+        "to": "done",
+        "label": "成功"
+      },
+      {
+        "from": "ok",
+        "to": "retry",
+        "label": "失败"
+      },
+      {
+        "from": "retry",
+        "to": "wait",
+        "label": "重试次数 < 3"
+      },
+      {
+        "from": "wait",
+        "to": "run",
+        "label": "等待后再次执行",
+        "kind": "loop"
+      },
+      {
+        "from": "retry",
+        "to": "fail",
+        "label": "已达上限"
+      }
+    ],
+    "notes": [
+      "示例策略：最多重试 3 次。流程图用于解释过程，不执行任务。"
+    ]
+  },
+  "parallel": {
+    "version": 1,
+    "title": "发布准备 · 并行与汇合",
+    "description": "并行工作全部完成后再发布；分组表示同一团队的职责。",
+    "domains": [
+      {
+        "id": "user",
+        "label": "申请人",
+        "color": "blue"
+      },
+      {
+        "id": "review",
+        "label": "审核",
+        "color": "orange"
+      },
+      {
+        "id": "system",
+        "label": "自动处理",
+        "color": "teal"
+      },
+      {
+        "id": "result",
+        "label": "结果",
+        "color": "green"
+      }
+    ],
+    "groups": [
+      {
+        "id": "team",
+        "label": "发布团队",
+        "domain": "system"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "start",
+        "label": "开始准备",
+        "type": "start",
+        "domain": "user"
+      },
+      {
+        "id": "fork",
+        "label": "并行准备",
+        "type": "fork",
+        "domain": "system",
+        "group": "team"
+      },
+      {
+        "id": "security",
+        "label": "安全检查与依赖项审核",
+        "type": "process",
+        "domain": "review",
+        "group": "team"
+      },
+      {
+        "id": "tests",
+        "label": "运行回归测试",
+        "type": "process",
+        "domain": "system",
+        "group": "team"
+      },
+      {
+        "id": "docs",
+        "label": "更新发布说明",
+        "type": "process",
+        "domain": "user",
+        "group": "team"
+      },
+      {
+        "id": "join",
+        "label": "全部完成",
+        "type": "join",
+        "domain": "system",
+        "group": "team"
+      },
+      {
+        "id": "release",
+        "label": "发布新版本",
+        "type": "end",
+        "domain": "result"
+      }
+    ],
+    "edges": [
+      {
+        "from": "start",
+        "to": "fork"
+      },
+      {
+        "from": "fork",
+        "to": "security"
+      },
+      {
+        "from": "fork",
+        "to": "tests"
+      },
+      {
+        "from": "fork",
+        "to": "docs"
+      },
+      {
+        "from": "security",
+        "to": "join"
+      },
+      {
+        "from": "tests",
+        "to": "join"
+      },
+      {
+        "from": "docs",
+        "to": "join"
+      },
+      {
+        "from": "join",
+        "to": "release"
+      }
+    ],
+    "details": [
+      {
+        "title": "发布团队",
+        "domain": "system",
+        "items": [
+          "此示例中的三个任务可以并行完成。汇合节点表示全部完成，不表示条件二选一。"
+        ]
+      }
+    ]
+  }
+}

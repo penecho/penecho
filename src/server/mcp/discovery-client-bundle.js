@@ -1,0 +1,4 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path');
+function discoveryClientBundle(){const names=['lan-discovery','http-client-config','discovery-client'];const modules=names.map(name=>{const source=fs.readFileSync(path.join(__dirname,name+'.js'),'utf8').replace(/^#![^\n]*\n/,'');return `${JSON.stringify('./'+name+'.js')}:function(module,exports,require){\n${source}\n}`;}).join(',\n');return Buffer.from(`#!/usr/bin/env node\n'use strict';\nconst nativeRequire=require, factories={${modules}},cache={};\nfunction bundledRequire(id){if(!factories[id])return nativeRequire(id);if(cache[id])return cache[id].exports;const m=cache[id]={exports:{}};factories[id](m,m.exports,bundledRequire);return m.exports;}\nbundledRequire('./discovery-client.js').main().then(code=>{process.exitCode=code;});\n`);}
+module.exports={discoveryClientBundle};

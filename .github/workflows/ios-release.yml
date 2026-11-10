@@ -1,0 +1,129 @@
+name: iOS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_testflight:
+        description: Upload the signed IPA to TestFlight
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    runs-on: macos-15
+    environment: ios-signing
+    env:
+      IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64 }}
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+      IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      IOS_BUILD_NUMBER: ${{ github.run_number }}
+      # Version tags always build a signed IPA artifact. TestFlight remains an
+      # explicit release choice so a tag cannot submit an unaccepted mobile
+      # runtime change to App Store Connect.
+      UPLOAD_TESTFLIGHT: ${{ inputs.upload_testflight == true }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tools/mobile/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix tools/mobile
+      - name: Validate iOS signing credentials
+        shell: bash
+        run: |
+          required=(
+            IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64
+            IOS_DISTRIBUTION_CERTIFICATE_PASSWORD
+            IOS_PROVISIONING_PROFILE_BASE64
+            APPLE_TEAM_ID
+          )
+          if [[ "$UPLOAD_TESTFLIGHT" == "true" ]]; then
+            required+=(APPLE_API_KEY_P8_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER)
+          fi
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing required ios-signing environment secret: $name"
+              exit 1
+            fi
+          done
+      - name: Import distribution certificate and provisioning profile
+        shell: bash
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/penecho-ios.p12"
+          PROFILE_PATH="$RUNNER_TEMP/penecho-ios.mobileprovision"
+          PROFILE_PLIST="$RUNNER_TEMP/penecho-ios-profile.plist"
+          KEYCHAIN_PATH="$RUNNER_TEMP/penecho-ios-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | /usr/bin/base64 -D > "$PROFILE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
+          PROFILE_UUID="$(plutil -extract UUID raw "$PROFILE_PLIST")"
+          PROFILE_NAME="$(plutil -extract Name raw "$PROFILE_PLIST")"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          echo "IOS_PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" >> "$GITHUB_ENV"
+          if [[ -z "$IOS_SIGNING_IDENTITY" ]]; then
+            echo "IOS_SIGNING_IDENTITY=Apple Distribution" >> "$GITHUB_ENV"
+          fi
+      - run: npm run check:client
+      - run: node --test test/mobile-package.test.js
+      - name: Build signed IPA
+        run: npm run mobile:ipa
+      - name: Verify signed IPA
+        shell: bash
+        run: |
+          IPA="$(find release/mobile -maxdepth 1 -type f -name 'PenEcho-*-ios.ipa' -print -quit)"
+          if [[ -z "$IPA" ]]; then
+            echo "::error::Signed IPA was not produced"
+            exit 1
+          fi
+          VERIFY_ROOT="$RUNNER_TEMP/penecho-ios-verify"
+          ditto -x -k "$IPA" "$VERIFY_ROOT"
+          APP="$(find "$VERIFY_ROOT/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv --verbose=4 "$APP"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penecho-ios
+          path: release/mobile/PenEcho-*-ios.ipa
+          if-no-files-found: error
+      - name: Restore App Store Connect API key
+        if: env.UPLOAD_TESTFLIGHT == 'true'
+        shell: bash
+        run: |
+          API_KEY_DIRECTORY="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$API_KEY_DIRECTORY"
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | /usr/bin/base64 -D > "$API_KEY_DIRECTORY/AuthKey_${APPLE_API_KEY_ID}.p8"
+          chmod 600 "$API_KEY_DIRECTORY/AuthKey_${APPLE_API_KEY_ID}.p8"
+      - name: Upload to TestFlight
+        if: env.UPLOAD_TESTFLIGHT == 'true'
+        shell: bash
+        run: |
+          IPA="$(find release/mobile -maxdepth 1 -type f -name 'PenEcho-*-ios.ipa' -print -quit)"
+          xcrun altool --upload-app --type ios --file "$IPA" --apiKey "$APPLE_API_KEY_ID" --apiIssuer "$APPLE_API_ISSUER"

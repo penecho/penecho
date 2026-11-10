@@ -1,0 +1,1116 @@
+{
+  "note": "Model-step time includes upstream wait, generation and retries; native steps can also include tools. Incomplete-step time is not attributed to tools. Output counts use per-step last usage, never cumulative session totals.",
+  "count": 40,
+  "completed": 25,
+  "completedWallSeconds": 6927.157,
+  "completedModelStepSeconds": 6875.215,
+  "rows": [
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-08T12:06:06.463Z",
+      "status": "completed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 22.352,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 22.27,
+      "outsideCompletedStepsSeconds": 0.082,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 22.27
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-07T17:23:59.477Z",
+      "status": "completed",
+      "model": "glm-5.3-flash",
+      "engine": "harness",
+      "wallSeconds": 983.901,
+      "completedSteps": 15,
+      "steps": 15,
+      "modelStepSeconds": 976.03,
+      "outsideCompletedStepsSeconds": 7.871,
+      "outputTokens": 41943,
+      "toolCalls": 14,
+      "tools": {
+        "canvas_read": 1,
+        "canvas_patch_widget": 5,
+        "canvas_capture": 6,
+        "canvas_inspect": 1,
+        "canvas_set_view": 1
+      },
+      "toolErrors": 1,
+      "retries": 1,
+      "slowestSteps": [
+        {
+          "step": 2,
+          "seconds": 532.478
+        },
+        {
+          "step": 10,
+          "seconds": 141.686
+        },
+        {
+          "step": 12,
+          "seconds": 75.856
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-07T17:23:08.998Z",
+      "status": "failed",
+      "model": "configured-model",
+      "engine": "harness",
+      "wallSeconds": 2.13,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 2.126,
+      "outsideCompletedStepsSeconds": 0.004,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 2.126
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-07T17:19:09.421Z",
+      "status": "abandoned",
+      "model": "configured-model",
+      "engine": "harness",
+      "wallSeconds": 217.941,
+      "completedSteps": 1,
+      "steps": 2,
+      "modelStepSeconds": 33.076,
+      "outsideCompletedStepsSeconds": 184.865,
+      "outputTokens": 1140,
+      "toolCalls": 1,
+      "tools": {
+        "canvas_read": 1
+      },
+      "toolErrors": 0,
+      "retries": 1,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 33.076
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-07T14:27:09.422Z",
+      "status": "cancelled",
+      "model": "glm-5.3-flash",
+      "engine": "harness",
+      "wallSeconds": 226.074,
+      "completedSteps": 6,
+      "steps": 6,
+      "modelStepSeconds": 225.894,
+      "outsideCompletedStepsSeconds": 0.18,
+      "outputTokens": 10291,
+      "toolCalls": 5,
+      "tools": {
+        "canvas_inspect": 1,
+        "canvas_create": 4
+      },
+      "toolErrors": 4,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 52.084
+        },
+        {
+          "step": 2,
+          "seconds": 45.252
+        },
+        {
+          "step": 6,
+          "seconds": 36.489
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T19:16:31.862Z",
+      "status": "completed",
+      "model": "configured-model",
+      "engine": "harness",
+      "wallSeconds": 8.98,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 8.961,
+      "outsideCompletedStepsSeconds": 0.019,
+      "outputTokens": 7,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 8.961
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T19:10:26.091Z",
+      "status": "failed",
+      "model": "configured-model",
+      "engine": "harness",
+      "wallSeconds": 2.15,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 2.141,
+      "outsideCompletedStepsSeconds": 0.009,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 2.141
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T19:08:58.731Z",
+      "status": "completed",
+      "model": "configured-model",
+      "engine": "harness",
+      "wallSeconds": 8.254,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 8.236,
+      "outsideCompletedStepsSeconds": 0.018,
+      "outputTokens": 19,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 8.236
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T19:06:08.526Z",
+      "status": "failed",
+      "model": "configured-model",
+      "engine": "harness",
+      "wallSeconds": 1.773,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 1.763,
+      "outsideCompletedStepsSeconds": 0.01,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 1.763
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T19:05:32.606Z",
+      "status": "failed",
+      "model": "configured-model",
+      "engine": "harness",
+      "wallSeconds": 1.793,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 1.785,
+      "outsideCompletedStepsSeconds": 0.008,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 1.785
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T17:34:26.253Z",
+      "status": "completed",
+      "model": "configured-model",
+      "engine": "harness",
+      "wallSeconds": 9.92,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 9.903,
+      "outsideCompletedStepsSeconds": 0.017,
+      "outputTokens": 147,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 9.903
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T15:35:20.977Z",
+      "status": "cancelled",
+      "model": "claude-opus-5",
+      "engine": "harness",
+      "wallSeconds": 1.486,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 1.472,
+      "outsideCompletedStepsSeconds": 0.014,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 1.472
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T13:36:37.386Z",
+      "status": "completed",
+      "model": "claude-opus-5",
+      "engine": "harness",
+      "wallSeconds": 46.578,
+      "completedSteps": 2,
+      "steps": 2,
+      "modelStepSeconds": 45.868,
+      "outsideCompletedStepsSeconds": 0.71,
+      "outputTokens": 1149,
+      "toolCalls": 1,
+      "tools": {
+        "canvas_create": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 2,
+          "seconds": 27.377
+        },
+        {
+          "step": 1,
+          "seconds": 18.491
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T13:32:16.740Z",
+      "status": "completed",
+      "model": "claude-opus-5",
+      "engine": "harness",
+      "wallSeconds": 194.551,
+      "completedSteps": 4,
+      "steps": 4,
+      "modelStepSeconds": 194.221,
+      "outsideCompletedStepsSeconds": 0.33,
+      "outputTokens": 14236,
+      "toolCalls": 3,
+      "tools": {
+        "load_visual_skill": 1,
+        "canvas_create": 1,
+        "canvas_capture": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 2,
+          "seconds": 141.155
+        },
+        {
+          "step": 1,
+          "seconds": 22.398
+        },
+        {
+          "step": 4,
+          "seconds": 21.062
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-06T03:50:38.849Z",
+      "status": "completed",
+      "model": "gpt-6-astra",
+      "engine": "codex-native",
+      "wallSeconds": 152.756,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 152.735,
+      "outsideCompletedStepsSeconds": 0.021,
+      "outputTokens": null,
+      "toolCalls": 5,
+      "tools": {
+        "canvas_create": 1,
+        "canvas_capture": 2,
+        "canvas_edit": 1,
+        "canvas_set_view": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 152.735
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T17:08:10.950Z",
+      "status": "completed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 167.319,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 167.309,
+      "outsideCompletedStepsSeconds": 0.01,
+      "outputTokens": null,
+      "toolCalls": 5,
+      "tools": {
+        "load_widget_contract": 1,
+        "canvas_inspect": 1,
+        "canvas_create": 1,
+        "canvas_capture": 1,
+        "canvas_set_view": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 167.309
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T16:42:17.951Z",
+      "status": "failed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 189.385,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 189.38,
+      "outsideCompletedStepsSeconds": 0.005,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 189.38
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T16:40:38.168Z",
+      "status": "completed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 334.507,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 334.498,
+      "outsideCompletedStepsSeconds": 0.009,
+      "outputTokens": null,
+      "toolCalls": 11,
+      "tools": {
+        "load_widget_contract": 1,
+        "canvas_create": 1,
+        "canvas_capture": 3,
+        "canvas_read": 3,
+        "canvas_patch_widget": 3
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 334.498
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T16:38:16.688Z",
+      "status": "completed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 89.167,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 89.158,
+      "outsideCompletedStepsSeconds": 0.009,
+      "outputTokens": null,
+      "toolCalls": 3,
+      "tools": {
+        "canvas_read": 1,
+        "canvas_patch_widget": 1,
+        "canvas_capture": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 89.158
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T16:17:29.248Z",
+      "status": "completed",
+      "model": "glm-5.3-flash",
+      "engine": "harness",
+      "wallSeconds": 434.385,
+      "completedSteps": 6,
+      "steps": 6,
+      "modelStepSeconds": 432.329,
+      "outsideCompletedStepsSeconds": 2.056,
+      "outputTokens": 19397,
+      "toolCalls": 5,
+      "tools": {
+        "canvas_read": 1,
+        "canvas_patch_widget": 2,
+        "canvas_capture": 2
+      },
+      "toolErrors": 0,
+      "retries": 1,
+      "slowestSteps": [
+        {
+          "step": 2,
+          "seconds": 210.101
+        },
+        {
+          "step": 6,
+          "seconds": 93.276
+        },
+        {
+          "step": 4,
+          "seconds": 80.525
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T16:11:52.596Z",
+      "status": "failed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 216.324,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 21.575,
+      "outsideCompletedStepsSeconds": 194.749,
+      "outputTokens": null,
+      "toolCalls": 2,
+      "tools": {
+        "load_widget_contract": 1,
+        "canvas_inspect": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 21.575
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T15:53:43.151Z",
+      "status": "failed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 213.871,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 213.868,
+      "outsideCompletedStepsSeconds": 0.003,
+      "outputTokens": null,
+      "toolCalls": 2,
+      "tools": {
+        "load_widget_contract": 1,
+        "canvas_inspect": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 213.868
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T15:53:16.349Z",
+      "status": "cancelled",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 6.239,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 6.234,
+      "outsideCompletedStepsSeconds": 0.005,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 6.234
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T15:49:07.768Z",
+      "status": "completed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 214.864,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 214.856,
+      "outsideCompletedStepsSeconds": 0.008,
+      "outputTokens": null,
+      "toolCalls": 5,
+      "tools": {
+        "load_widget_contract": 1,
+        "canvas_read": 1,
+        "canvas_patch_widget": 2,
+        "canvas_capture": 1
+      },
+      "toolErrors": 1,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 214.856
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T15:45:41.897Z",
+      "status": "completed",
+      "model": "gpt-5.6-sol",
+      "engine": "codex-native",
+      "wallSeconds": 128.468,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 128.456,
+      "outsideCompletedStepsSeconds": 0.012,
+      "outputTokens": null,
+      "toolCalls": 3,
+      "tools": {
+        "canvas_read": 2,
+        "canvas_patch_widget": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 128.456
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T13:41:59.487Z",
+      "status": "completed",
+      "model": "gpt-6-astra",
+      "engine": "codex-native",
+      "wallSeconds": 1618.382,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 1618.369,
+      "outsideCompletedStepsSeconds": 0.013,
+      "outputTokens": null,
+      "toolCalls": 26,
+      "tools": {
+        "canvas_read": 8,
+        "load_widget_contract": 1,
+        "canvas_patch_widget": 9,
+        "canvas_inspect": 1,
+        "canvas_capture": 6,
+        "canvas_revert": 1
+      },
+      "toolErrors": 6,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 1618.369
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T13:21:08.278Z",
+      "status": "completed",
+      "model": "gpt-6-astra",
+      "engine": "codex-native",
+      "wallSeconds": 1197.686,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 1197.678,
+      "outsideCompletedStepsSeconds": 0.008,
+      "outputTokens": null,
+      "toolCalls": 20,
+      "tools": {
+        "canvas_read": 8,
+        "load_visual_skill": 1,
+        "canvas_patch_widget": 6,
+        "canvas_capture": 4,
+        "canvas_set_view": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 1197.678
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T13:20:55.031Z",
+      "status": "cancelled",
+      "model": "gpt-6-astra",
+      "engine": "codex-native",
+      "wallSeconds": 5.829,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 5.826,
+      "outsideCompletedStepsSeconds": 0.003,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 5.826
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T13:18:12.892Z",
+      "status": "completed",
+      "model": "gpt-6-astra",
+      "engine": "codex-native",
+      "wallSeconds": 37.05,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 37.042,
+      "outsideCompletedStepsSeconds": 0.008,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 37.042
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-05T13:02:44.125Z",
+      "status": "failed",
+      "model": "gpt-6-astra",
+      "engine": "codex-native",
+      "wallSeconds": 24.806,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 24.8,
+      "outsideCompletedStepsSeconds": 0.006,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 24.8
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-04T17:33:42.162Z",
+      "status": "completed",
+      "model": "glm-5.3-flash",
+      "engine": "harness",
+      "wallSeconds": 377.954,
+      "completedSteps": 15,
+      "steps": 15,
+      "modelStepSeconds": 351.564,
+      "outsideCompletedStepsSeconds": 26.39,
+      "outputTokens": 18658,
+      "toolCalls": 14,
+      "tools": {
+        "canvas_inspect": 1,
+        "canvas_create": 3,
+        "canvas_read": 2,
+        "canvas_patch_widget": 5,
+        "canvas_capture": 3
+      },
+      "toolErrors": 6,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 2,
+          "seconds": 85.218
+        },
+        {
+          "step": 4,
+          "seconds": 63.877
+        },
+        {
+          "step": 3,
+          "seconds": 42.004
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-04T17:31:13.316Z",
+      "status": "completed",
+      "model": "glm-5.3-flash",
+      "engine": "harness",
+      "wallSeconds": 58.612,
+      "completedSteps": 7,
+      "steps": 7,
+      "modelStepSeconds": 58.406,
+      "outsideCompletedStepsSeconds": 0.206,
+      "outputTokens": 1100,
+      "toolCalls": 6,
+      "tools": {
+        "list_directory": 1,
+        "penecho_canvas_decision_feedback": 1,
+        "read": 1,
+        "load_project_plugin": 1,
+        "read_document": 2
+      },
+      "toolErrors": 1,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 7,
+          "seconds": 21.481
+        },
+        {
+          "step": 6,
+          "seconds": 10.549
+        },
+        {
+          "step": 4,
+          "seconds": 6.728
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-04T06:35:15.288Z",
+      "status": "completed",
+      "model": "deepseek-v4-flash-vision-exp",
+      "engine": "harness",
+      "wallSeconds": 251.355,
+      "completedSteps": 8,
+      "steps": 8,
+      "modelStepSeconds": 248.605,
+      "outsideCompletedStepsSeconds": 2.75,
+      "outputTokens": 25643,
+      "toolCalls": 7,
+      "tools": {
+        "penecho_canvas_decision_feedback": 1,
+        "canvas_read": 1,
+        "canvas_capture": 2,
+        "load_widget_contract": 1,
+        "canvas_patch_widget": 1,
+        "canvas_set_view": 1
+      },
+      "toolErrors": 1,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 5,
+          "seconds": 123.893
+        },
+        {
+          "step": 4,
+          "seconds": 39.657
+        },
+        {
+          "step": 1,
+          "seconds": 32.208
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-04T06:19:33.054Z",
+      "status": "completed",
+      "model": "deepseek-v4-flash-vision-exp",
+      "engine": "harness",
+      "wallSeconds": 297.121,
+      "completedSteps": 17,
+      "steps": 17,
+      "modelStepSeconds": 289.435,
+      "outsideCompletedStepsSeconds": 7.686,
+      "outputTokens": 27050,
+      "toolCalls": 16,
+      "tools": {
+        "penecho_canvas_decision_feedback": 1,
+        "canvas_set_view": 1,
+        "canvas_capture": 6,
+        "canvas_inspect": 1,
+        "load_widget_contract": 1,
+        "canvas_create": 1,
+        "canvas_read": 2,
+        "canvas_patch_widget": 3
+      },
+      "toolErrors": 2,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 6,
+          "seconds": 59.201
+        },
+        {
+          "step": 4,
+          "seconds": 41.083
+        },
+        {
+          "step": 9,
+          "seconds": 29.709
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-03T19:55:41.748Z",
+      "status": "completed",
+      "model": "claude-opus-5",
+      "engine": "harness",
+      "wallSeconds": 173.86,
+      "completedSteps": 8,
+      "steps": 8,
+      "modelStepSeconds": 170.173,
+      "outsideCompletedStepsSeconds": 3.687,
+      "outputTokens": 9144,
+      "toolCalls": 7,
+      "tools": {
+        "canvas_capture": 4,
+        "canvas_read": 2,
+        "canvas_patch_widget": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 4,
+          "seconds": 51.586
+        },
+        {
+          "step": 7,
+          "seconds": 24.15
+        },
+        {
+          "step": 8,
+          "seconds": 19.138
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-03T19:53:55.334Z",
+      "status": "abandoned",
+      "model": "kimi-k3",
+      "engine": "harness",
+      "wallSeconds": 50.308,
+      "completedSteps": 0,
+      "steps": 1,
+      "modelStepSeconds": 0,
+      "outsideCompletedStepsSeconds": 50.308,
+      "outputTokens": null,
+      "toolCalls": 0,
+      "tools": {},
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": []
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-03T16:00:51.607Z",
+      "status": "cancelled",
+      "model": "kimi-k3",
+      "engine": "harness",
+      "wallSeconds": 245.719,
+      "completedSteps": 2,
+      "steps": 2,
+      "modelStepSeconds": 245.668,
+      "outsideCompletedStepsSeconds": 0.051,
+      "outputTokens": 6452,
+      "toolCalls": 1,
+      "tools": {
+        "canvas_inspect": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 179.867
+        },
+        {
+          "step": 2,
+          "seconds": 65.801
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-03T15:51:19.679Z",
+      "status": "completed",
+      "model": "gpt-5.6-luna",
+      "engine": "codex-native",
+      "wallSeconds": 84.156,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 84.148,
+      "outsideCompletedStepsSeconds": 0.008,
+      "outputTokens": null,
+      "toolCalls": 7,
+      "tools": {
+        "canvas_inspect": 1,
+        "canvas_create": 1,
+        "canvas_capture": 4,
+        "canvas_set_view": 1
+      },
+      "toolErrors": 4,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 84.148
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-03T15:50:38.816Z",
+      "status": "completed",
+      "model": "gpt-5.6-luna",
+      "engine": "codex-native",
+      "wallSeconds": 15.403,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 15.395,
+      "outsideCompletedStepsSeconds": 0.008,
+      "outputTokens": null,
+      "toolCalls": 1,
+      "tools": {
+        "canvas_edit": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 15.395
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "startedAt": "2026-09-03T15:49:39.574Z",
+      "status": "completed",
+      "model": "gpt-5.6-luna",
+      "engine": "codex-native",
+      "wallSeconds": 19.576,
+      "completedSteps": 1,
+      "steps": 1,
+      "modelStepSeconds": 19.57,
+      "outsideCompletedStepsSeconds": 0.006,
+      "outputTokens": null,
+      "toolCalls": 1,
+      "tools": {
+        "canvas_create": 1
+      },
+      "toolErrors": 0,
+      "retries": 0,
+      "slowestSteps": [
+        {
+          "step": 1,
+          "seconds": 19.57
+        }
+      ]
+    }
+  ]
+}

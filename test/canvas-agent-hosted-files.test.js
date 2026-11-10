@@ -1,0 +1,25 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs/promises');
+const os=require('node:os');
+const path=require('node:path');
+test('hosted file resource seam uses only authorized turn IDs without enabling local projects',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'penecho-file-seam-'));
+ const {CanvasHarnessHost}=await import('../src/server/canvas-agent/runtime.mjs');
+ const id='cloud-file-11111111-1111-4111-8111-111111111111',calls=[];
+ const fileResources={async prepare(session,ids){assert.equal(session.logicalConversationId,'conversation-test');return ids.map(id=>({id,project:{id,kind:'file',reader:'document',name:'notes.pdf',bytes:200}}));},async read(session,fileId,args,signal){calls.push({fileId,args,conversationId:session.logicalConversationId});signal.throwIfAborted();return{text:'1: extracted text'};}};
+ const connection={id:'test',provider:'api',apiFormat:'openai',apiUrl:'http://127.0.0.1:9/v1',apiModel:'test-model',apiKey:'test-key'};
+ const host=new CanvasHarnessHost({stateDirectory:root,rootDirectory:path.resolve(__dirname,'..'),resolveConnection:()=>connection,listConnections:()=>[connection],capabilities:{hostProjects:false,publicWeb:false},fileResources});
+ t.after(async()=>{await host.dispose();await fs.rm(root,{recursive:true,force:true});});
+ const session=await host.connect({clientId:'file-test',connectionId:'test',conversationId:'conversation-test',principal:{accountId:'account',canvasId:'canvas'},binding:{},send(){}});
+ session.turnFiles=await fileResources.prepare(session,[id]);
+ const schemas=session.handle.agent.ctx.tools.schemas(session.handle.agent);
+ assert.ok(schemas.some(tool=>tool.name==='read_attachment'));
+ assert.equal(schemas.find(tool=>tool.name==='read_attachment').parameters.properties.render,undefined);
+ assert.equal(schemas.some(tool=>['read_document','bash','read','glob'].includes(tool.name)),false);
+ const run=args=>host.context.tools.execute({callId:String(Math.random()),name:'read_attachment',arguments:args,agent:session.handle.agent,signal:new AbortController().signal});
+ const result=await run({file_id:id,offset:1,limit:1});assert.equal(result.isError,false,JSON.stringify(result));assert.match(result.content[0].text,/extracted text/);
+ const denied=await run({file_id:'another-file'});assert.equal(denied.isError,true);assert.equal(calls.length,1);
+ assert.equal(session.project,null);
+});

@@ -1,331 +1,280 @@
-<h1 align="center">
-  <img src="public/penecho-readme-header.png" alt="PenEcho" width="760">
-</h1>
-
 <p align="center">
-  <strong>English</strong> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.pt-BR.md">Português (Brasil)</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.de.md">Deutsch</a>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/penecho-readme-header-dark.webp">
+    <img src="public/penecho-readme-header.webp" alt="PenEcho" width="320">
+  </picture>
 </p>
 
-<p align="center"><strong>Think with AI beyond the chat box.</strong></p>
+<h1 align="center">AI that shows, not just tells.</h1>
 
-<p align="center">PenEcho is a shared canvas where handwriting, equations, diagrams, and spatial context become part of the conversation.</p>
+<p align="center">Bring a question, a sketch, or your notes. PenEcho's built-in AI — or Codex, Claude Code and any MCP client — shows you the answer as diagrams, documents and working widgets, right beside your work.</p>
 
 <p align="center">
-  <a href="https://discord.gg/3jrPJ3mXdX">
-    <img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="Join the PenEcho Discord">
-  </a>
-  <a href="https://github.com/penecho/penecho/stargazers">
-    <img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="Star PenEcho on GitHub">
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="License: AGPL v3">
-  </a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.2-087f83" alt="Release v1.4.2"></a>
+  <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
+  <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Join Discord"></a>
+  <a href="docs/mcp-setup.md"><img src="https://img.shields.io/badge/MCP-ready-6f42c1" alt="MCP ready"></a>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> &bull;
-  <a href="#recommended-model-configurations">Recommended Models</a> &bull;
-  <a href="docs/architecture.md">Architecture</a> &bull;
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/DOWNLOAD_FOR_MACOS-24292f?style=for-the-badge&amp;logo=apple&amp;logoColor=white" alt="Download for macOS"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/DOWNLOAD_FOR_WINDOWS-0969da?style=for-the-badge&amp;logo=windows&amp;logoColor=white" alt="Download for Windows"></a>
+  <a href="https://penecho.ai"><img src="https://img.shields.io/badge/OPEN_PENECHO.AI-087f83?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="Open penecho.ai"></a>
+</p>
+
+<p align="center">
+  <a href="https://buymeacoffee.com/penecho"><img src="docs/assets/support-penecho.svg" alt="Support PenEcho open source — buy us a coffee to help fund development, testing, and documentation" width="820"></a>
+</p>
+
+<p align="center">
+  <a href="#new-in-1-4">What's new in 1.4</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#connect-your-ai-agent-mcp">Connect your AI (MCP)</a> ·
+  <a href="docs/">Docs</a> ·
+  <a href="#support-penecho">Support PenEcho</a> ·
   <a href="https://discord.gg/3jrPJ3mXdX">Discord</a>
 </p>
 
 <p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho plugins demo" width="100%">
+  <sub><strong>English</strong> ·
+  <a href="docs/readme/README.zh-CN.md">简体中文</a> ·
+  <a href="docs/readme/README.ja.md">日本語</a> ·
+  <a href="docs/readme/README.ko.md">한국어</a> ·
+  <a href="docs/readme/README.ru.md">Русский</a> ·
+  <a href="docs/readme/README.es.md">Español</a> ·
+  <a href="docs/readme/README.pt-BR.md">Português</a> ·
+  <a href="docs/readme/README.fr.md">Français</a> ·
+  <a href="docs/readme/README.de.md">Deutsch</a></sub>
 </p>
 
 <p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho full demo" width="100%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="From a hand sketch to a diagram and working widget on one PenEcho canvas" width="100%">
+</p>
+<p align="center"><em>From a hand sketch to an interactive result in one canvas.</em></p>
+
+<a name="new-in-1-4"></a>
+
+## New in 1.4: it knows what you need
+
+<p align="center">
+  <a href="https://penecho.ai/#knows-you"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.webp" alt="Watch the PenEcho 1.4 tour (2:30)" width="100%"></a>
+</p>
+<p align="center"><a href="https://penecho.ai/#knows-you"><strong>▶ Watch with sound and chapters</strong></a> · <a href="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.mp4">Download MP4</a><br><sub>Smart Assist · PenEchoLLM · Notes &amp; Cards · live graphs · simulations · 3D</sub></p>
+
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=16#knows-you"><img src="docs/assets/release-1.4/penechollm-suggest.webp" alt="PenEchoLLM suggests Solve for a handwritten integral; one tap and the answer lands in place" width="100%"></a><br>
+      <strong>PenEchoLLM suggests the next step</strong><br>
+      Pause after writing and PenEchoLLM ranks what you need next: Solve, Typeset, Plot graph, Make diagram, Organize as Note and more. One tap and the answer lands where you wrote, with the next step already suggested. It learns from the suggestions you choose, on your device. Free to try every day, no API key needed.
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=43#knows-you"><img src="docs/assets/release-1.4/notes-cards.webp" alt="Handwritten notes circled on the canvas become a knowledge card, then appear in the searchable Library" width="100%"></a><br>
+      <strong>Notes &amp; Cards keep what matters</strong><br>
+      Circle a formula, sketch or answer and keep it as a knowledge card or work note, with your original handwriting. Cards are categorized automatically and collected in the Library, where you can search, bookmark, review and bring them into any canvas.
+    </td>
+  </tr>
+</table>
+
+## What you can do
+
+<table width="100%">
+  <tr>
+    <td width="33%" valign="top">
+      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho responding to notes and sketches on a canvas" width="100%"><br>
+      <strong>Sketch, then ask</strong><br>
+      Handwriting, equations, text and images on an endless canvas. PenEchoLLM suggests the next step when you pause.
+    </td>
+    <td width="33%" valign="top">
+      <a href="docs/assets/professional-diagrams/kubernetes.webp"><img src="docs/assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes architecture diagram" width="100%"></a><br>
+      <strong>Professional diagrams</strong><br>
+      Architecture, sequence and workflow diagrams with automatic layout. Export SVG or PNG.
+    </td>
+    <td width="33%" valign="top">
+      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="Interactive widget running on a PenEcho canvas" width="100%"><br>
+      <strong>Working widgets</strong><br>
+      Calculators, quizzes and prototypes that run on the canvas and can be favourited or shared.
+    </td>
+  </tr>
+</table>
+
+## Quick start
+
+| | Get started |
+| --- | --- |
+| **Desktop app** | macOS and Windows from [GitHub Releases](https://github.com/penecho/penecho/releases/latest). Includes everything, updates itself. |
+| **npm** | Node.js 22.19+. Run `npm i -g penecho` then `penecho` and open `localhost:3888`. |
+| **Browser** | Sign in at [penecho.ai](https://penecho.ai) for hosted models and Cloud canvases. Nothing to install. |
+
+```bash
+npm install -g penecho
+penecho             # opens http://localhost:3888
+```
+
+> [!TIP]
+> On first start, choose a six-digit access code (or open access on a trusted network). Add a model in **Settings → AI & connections**: your own API key, a signed-in Codex / Claude Code / Kimi CLI, or PenEcho models.
+
+<details>
+<summary>Run from source</summary>
+
+```bash
+git clone https://github.com/penecho/penecho.git
+cd penecho
+npm install
+npm start
+```
+
+</details>
+
+## Connect your AI agent (MCP)
+
+Keep talking in the agent you already use. PenEcho gives the work a place to live — your agent draws on the canvas, you mark it up, and it reads your feedback on the next turn.
+
+1. In PenEcho, open **Settings → MCP service** and turn on the current canvas.
+2. Use **Auto configure** for a supported client, or copy the generated setup prompt into your client (Codex, Claude Code, Kimi, Cursor...). For a global npm installation, clients that accept `mcpServers` JSON can also use the compatibility entry below:
+
+   ```json
+   {
+     "mcpServers": {
+       "penecho": { "command": "penecho", "args": ["mcp"] }
+     }
+   }
+   ```
+
+3. Ask: *“Show the architecture we discussed on my PenEcho canvas.”*
+
+### Cloud Canvas beside your chat: one paste, no install
+
+Paste this into Claude Code, Codex, Cursor or another MCP agent:
+
+```text
+Set up PenEcho Canvas for me:
+1. Download https://penecho.ai/downloads/penecho-cloud-plugin.zip, unzip it, and follow its INSTALL.md for the app you are running in.
+2. Add the PenEcho MCP server https://penecho.ai/mcp. If it needs authorization, open the authorization page once; I'll choose "Continue as guest".
+3. Confirm the PenEcho tools respond, then tell me it's ready.
+From now on, when I ask you to draw, diagram or show something on a canvas, use PenEcho and open the canvas beside our chat.
+```
+
+Then just ask:
+
+- *“Draw this project's architecture on the canvas.”*
+- *“Turn our login flow into a sequence diagram on the canvas.”*
+- *“Make an interactive binary-search demo on the canvas.”*
+- *“Read my handwritten notes on the canvas and revise the diagram.”*
+
+The canvas opens beside your chat: in Codex's right panel, the Claude desktop browser pane, or your default browser. No account is needed; choose **Continue as guest** if asked. Sign in only when you want to save to Cloud. MCP uses no PenEcho credits. Claude Chat and Cowork install through the app's own plugin upload or connector settings ([`.plugin` file](integrations/penecho-cloud/penecho-cloud.plugin)). See [installation details](integrations/penecho-cloud/INSTALL.md).
+
+<p align="center">
+  <a href="docs/assets/mcp-spatial-example.webp"><img src="docs/assets/mcp-spatial-example.webp" alt="An architecture discussion from Claude Code with handwritten annotations on a PenEcho canvas" width="760"></a>
+</p>
+<p align="center"><em>An architecture discussion from Claude Code, annotated by hand on the canvas.</em></p>
+
+> [!NOTE]
+> Agents only see canvases you turn on. Local MCP stays on your computer; Cloud MCP uses separate OAuth authorization and supports guest browser drafts. [MCP guide →](docs/mcp-setup.md)
+
+## Diagram gallery
+
+<table width="100%">
+  <tr>
+    <td width="33%" valign="top"><a href="docs/assets/professional-diagrams/kubernetes.webp"><img src="docs/assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes cluster diagram" width="100%"></a><br><strong>Kubernetes cluster</strong></td>
+    <td width="33%" valign="top"><a href="docs/assets/professional-diagrams/migration.webp"><img src="docs/assets/professional-diagrams/previews/migration.webp" alt="Monolith to microservices diagram" width="100%"></a><br><strong>Monolith → microservices</strong></td>
+    <td width="33%" valign="top"><a href="docs/assets/professional-diagrams/notifications.webp"><img src="docs/assets/professional-diagrams/previews/notifications.webp" alt="Event-driven notifications diagram" width="100%"></a><br><strong>Event-driven notifications</strong></td>
+  </tr>
+  <tr>
+    <td valign="top"><a href="docs/assets/professional-diagrams/mcp-request.webp"><img src="docs/assets/professional-diagrams/previews/mcp-request.webp" alt="How MCP reaches the canvas diagram" width="100%"></a><br><strong>How MCP reaches the canvas</strong></td>
+    <td valign="top"><a href="docs/assets/professional-diagrams/release.webp"><img src="docs/assets/professional-diagrams/previews/release.webp" alt="Release parallel tasks diagram" width="100%"></a><br><strong>Release: parallel tasks</strong></td>
+    <td valign="top"><a href="docs/assets/professional-diagrams/rollout.webp"><img src="docs/assets/professional-diagrams/previews/rollout.webp" alt="Multi-region rollout diagram" width="100%"></a><br><strong>Multi-region rollout</strong></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Click any diagram for the full-size version.</sub></p>
+
+## How it works
+
+<p align="center"><img src="public/penecho-architecture.webp" alt="A browser connects to PenEcho Cloud or your local PC. An AI agent can connect through optional Cloud MCP or Local MCP." width="100%"></p>
+
+- **On your computer** — the desktop app or CLI serves the canvas and uses your own model API or agent CLI.
+- **In the cloud** — penecho.ai adds hosted models, synced projects and favorites, and can reach your linked computer.
+- **Your agent** — connects through Local or Cloud MCP. Both are optional.
+
+Details: [architecture notes](docs/architecture.md).
+
+## Choose your AI
+
+| Connection | Cost | Best for |
+| --- | --- | --- |
+| **PenEcho models** — sign in, pick a model | Account credits | Getting started, no keys |
+| **Your model API** — OpenAI- or Anthropic-compatible | Your provider | Full control of model and cost |
+| **Your CLI** — Codex, Claude Code or Kimi, signed in | Your plan | Reusing a subscription you have |
+
+Which model and effort to pick: [recommended models](#recommended-models) (updated with each release).
+
+<a name="recommended-models"></a>
+<details>
+<summary>Recommended models</summary>
+
+These recommendations balance answer quality against the latency of PenEcho's real canvas workload, based on current hands-on testing; actual response time varies with the provider, canvas complexity, and reasoning behavior.
+
+| Model | Effort | Notes | Recommended use |
+| --- | --- | --- | --- |
+| Claude Opus 4.8 / 5.0 (`claude-opus-4-8` / `claude-opus-5-0`) | `medium` | Strong quality with a better latency balance | Everyday canvas work |
+| Claude Opus 4.8 / 5.0 (`claude-opus-4-8` / `claude-opus-5-0`) | `high` | Higher reasoning quality, longer and more variable waits | Complex handwriting, mathematics, diagrams, or layout |
+| Fable 5 (`claude-fable-5` or `fable`) | `medium` | Often around half the response time of `gpt-5.6-sol` at `xhigh` | Fast, high-quality general use |
+| [Kimi K3](https://platform.kimi.ai?aff=penecho) (`kimi-k3`) | `medium` | Very good quality; `medium` keeps the balance practical | Recommended Kimi default |
+| `gpt-5.6-terra` | `low` to `high` | Surprisingly strong and responsive | Flexible quality and latency targets |
+| `gpt-5.6-luna` | `xhigh` | Very good canvas results with strong speed | Quality-first, still responsive |
+| `gpt-5.6-sol` | `high` | Good enough for most requests, more responsive than `xhigh` | Default when responsiveness matters |
+| `gpt-5.6-sol` | `xhigh` | Very good but slower and more variable | Difficult canvas tasks |
+| `deepseek-v4-flash-vision-exp` | `medium` | Good | Vision-capable work through the DeepSeek API |
+| `glm-5.3-flash` | `medium` | Good | Fast work through the GLM Anthropic-compatible API |
+
+</details>
+
+## What's new in 1.4.0
+
+- **Smart Assist with PenEchoLLM:** context-aware actions for handwriting, text and images, ranked by PenEchoLLM, with quick answers, visual creation and follow-up questions.
+- **Lasso AI:** circle any part of the canvas to solve, visualize, animate or organize just the selected content.
+- **Notes & Cards:** turn canvas content into reusable notes and knowledge cards; browse, search and bring them into other canvases.
+- **Widget refinement:** refine results through written feedback and contextual actions, with clearer controls and better content fitting.
+- **Canvas polish:** improved pen gestures, stroke deletion, navigation and collaboration with Agent and MCP.
+
+[Watch the 1.4 tour →](https://penecho.ai/#knows-you) · [Full changelog →](CHANGELOG.md#140)
+
+## Support PenEcho
+
+Help keep PenEcho's open-source canvas improving. Your support funds development, bug fixes, cross-platform testing, accessibility, and documentation.
+
+<p align="center">
+  <a href="https://github.com/sponsors/penecho"><img src="https://img.shields.io/badge/GitHub_Sponsors-Support_PenEcho-db61a2?style=for-the-badge&amp;logo=githubsponsors&amp;logoColor=white" alt="Support PenEcho on GitHub Sponsors" height="32"></a>
 </p>
 
-## A Kimi Open Source Friend
+Choose [Buy Me a Coffee](https://buymeacoffee.com/penecho) for a quick thank-you, or [GitHub Sponsors](https://github.com/sponsors/penecho) for monthly or one-time support. Contributions support open-source maintenance; they do not purchase a commercial license, dedicated support, or guaranteed features.
+
+## Community
+
+| [Discord](https://discord.gg/3jrPJ3mXdX) | [Discussions](https://github.com/penecho/penecho/discussions) | [Issues](https://github.com/penecho/penecho/issues) | [Contributing](CONTRIBUTING.md) |
+| --- | --- | --- | --- |
+| Chat with the team | Ideas and questions | Report a bug | Run `npm run check` first |
+
+Licensed under [AGPL-3.0-only](LICENSE); [commercial licence](COMMERCIAL-LICENSE.md) available. [Trademark policy](TRADEMARKS.md) · [Contributor agreement](CONTRIBUTOR-LICENSE-AGREEMENT.md).
+
+Diagram renderers adapt SVG and geometry helpers from [Archify](https://github.com/tt-a1i/archify) by tt-a1i (MIT). See [NOTICE](NOTICE).
 
 <p align="center">
   <a href="https://www.kimi.com/code?aff=penecho">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kimi-open-source-friends-dark.svg">
-      <img alt="Kimi Open Source Friends" src="docs/assets/kimi-open-source-friends-light.svg">
+      <img src="docs/assets/kimi-open-source-friends-light.svg" alt="Kimi Open Source Friends" width="326" height="56">
     </picture>
   </a>
 </p>
 
-PenEcho is an official member of **Kimi Open Source Friends**, [Moonshot AI](https://www.kimi.com/)'s program supporting outstanding open source projects. The Kimi team backs PenEcho's development with API credits, and Kimi K3 is one of the [recommended models](#recommended-model-configurations) for demanding canvas work — accurate on handwriting, strong on diagrams, and fast in practice.
-
-Using these links directly supports the project:
-
-- **[Kimi Code](https://www.kimi.com/code?aff=penecho)** — Kimi's coding subscription, available worldwide
-- **[Kimi Open Platform · China](https://platform.kimi.com?aff=penecho)** — API access for mainland China
-- **[Kimi Open Platform · Global](https://platform.kimi.ai?aff=penecho)** — API access for the rest of the world
-
-## Contents
-
-- [Quick start](#quick-start)
-- [Think on the canvas](#think-on-the-canvas)
-- [What's new in 0.7.2](#whats-new-in-072)
-- [What's new in 0.7.1](#whats-new-in-071)
-- [What's new in 0.7.0](#whats-new-in-070)
-- [Earlier releases](#earlier-releases)
-- [How it works](#how-it-works)
-- [Recommended model configurations](#recommended-model-configurations)
-- [Token use and cost](#token-use-and-cost)
-- [Safe deployment](#safe-deployment)
-- [Useful configuration](#useful-configuration)
-- [Build it with us](#build-it-with-us)
-- [License and commercial use](#license-and-commercial-use)
-
-## Quick start
-
-### Desktop app
-
-[Download from GitHub Releases](https://github.com/penecho/penecho/releases/latest).
-
-For npm installation, you need [Node.js 20.3+](https://nodejs.org/) and one of the following: an API key, an authenticated [Codex CLI](https://developers.openai.com/codex/cli), or an authenticated [Claude Code CLI](https://code.claude.com/docs/en/overview).
-
-```bash
-npm install -g penecho
-penecho configure
-penecho
-```
-
-Interactive starts print the current version immediately. After the server is listening, PenEcho displays `Checking latest PenEcho version...` and queries npm without delaying availability. If a newer version exists, press Enter at the default `Y` prompt to install it globally. The current service then stops without launching a background process; run `penecho` again when you are ready to start the updated version. When the installed version is current, PenEcho says so explicitly. Offline checks and non-interactive starts continue without blocking the running service.
-
-`penecho configure` opens the interactive configuration center. Its main menu contains `LLM source`, `Settings`, and `Exit`. Use the arrow keys and Enter to navigate:
-
-- `LLM source -> Claude CLI` selects a detected, recommended, default, or manually entered model and an effort level. Opus 4.8 or newer is recommended; Sonnet and Opus 4.6 can respond but may produce weaker canvas results.
-- `LLM source -> Codex CLI` selects a model and effort. GPT-5.5 or newer is required for good results, `gpt-5.6-sol` is recommended, and `xhigh` is the highest listed Codex effort.
-- `LLM source -> API` selects the OpenAI-compatible or Anthropic/Claude-compatible request format, then asks for the URL, model, effort, and hidden key. Anthropic API offers `none` to disable thinking and defaults new configurations to the recommended `medium` adaptive-thinking level. Existing values are offered as defaults and a blank key keeps the saved key.
-- `Settings` controls the unified model timeout, the image format sent to every model executor, request recording and retention, listening interface and port, and initial Auto AI delay. WebP is the default; PNG is also available. The delay can also be changed on the canvas.
-
-Every LLM page ends with `Test & Save`, and PenEcho always saves before checking. Codex CLI uses a fast offline check: it verifies the executable and login, then reads `codex debug models --bundled` to confirm the selected model exists. It does not run inference, attach an image, refresh the online catalog, or consume model tokens. Claude CLI and API configuration still send one small real request to verify the selected endpoint/model settings. Whether a check passes or fails, the configuration remains saved and the UI returns to the parent menu with a clear diagnostic.
-
-The canvas toolbar exposes a fixed-width clickable `Reasoning` menu beside Auto AI for frequent per-request changes: `Configured`, `none`, `low`, `medium`, `high`, and the provider's highest practical level. `Configured` omits the per-request effort field so the server preserves the configured custom effort or the underlying CLI default. The last explicit position maps to `xhigh` for OpenAI API and Codex CLI, and to `max` for Anthropic API and Claude CLI. `none` sends OpenAI `reasoning_effort=none`; for Claude it disables thinking. Model support remains provider-dependent, so an endpoint may reject a level its selected model does not implement. The saved `AI_EFFORT` initializes this control, while a toolbar change overrides it for subsequent canvas requests without rewriting the configuration file. The menu closes after a selection or five seconds of inactivity.
-
-The default configuration is `~/.penecho/config.env`. API credentials are plaintext in this local file, receive owner-only permissions on POSIX systems, and are never sent to browser code. Protect it like any other credential. If `penecho` is started before this file exists, it opens the configuration center automatically in an interactive terminal.
-
-Use a different env-style configuration file for a particular launch when needed:
-
-```bash
-penecho configure --config ./team.env
-penecho --config ./team.env
-```
-
-An explicit `--config` file replaces the default global file for that command. PenEcho does not automatically read a project-directory `.env` or a package-directory `.env`.
-
-### CLI prerequisites
-
-Installing the Codex desktop app alone does not guarantee that a `codex` executable is available on the shell `PATH`. Install and authenticate the CLI separately before selecting Codex:
-
-```bash
-npm install -g @openai/codex@latest
-hash -r
-codex --version
-codex login status
-```
-
-If needed, run `codex login`. Claude CLI mode similarly requires an installed and authenticated Claude Code CLI, normally through `claude auth login`.
-
-PenEcho uses the selected CLI locally and does not need an API key for that source. Normal startup checks the executable and login without consuming model tokens. Codex `Test & Save` additionally verifies the selected model against the installed CLI's bundled catalog without making a model request; Claude `Test & Save` sends a small real request.
-
-Canvas requests through Codex use `codex exec --json`. PenEcho returns as soon as Codex emits the final agent message and `turn.completed`; if the CLI process remains alive afterward, it is terminated and cleaned up in the background instead of delaying the canvas response.
-
-Claude CLI requests use one isolated `claude -p` turn with tools, agents, MCP, prompt suggestions, session persistence, and other nonessential background traffic disabled. Selecting effort `none` sets `MAX_THINKING_TOKENS=0`, causing Claude Code to send `thinking.type=disabled`; because `none` is not a valid Claude CLI effort value, PenEcho also passes an internal `low` effort and per-process `--settings` override to neutralize any user-level `CLAUDE_CODE_EFFORT_LEVEL=max`. Selecting `low`, `medium`, `high`, or `max` leaves thinking enabled and applies the chosen value through both Claude's `--effort` flag and the same settings override. PenEcho incrementally validates the stream and returns as soon as Claude emits its successful final `result`; any attempted tool use aborts the request, while a CLI process that remains alive after the result is terminated and cleaned up in the background.
-
-Transient launch overrides remain available:
-
-```bash
-penecho doctor --codex
-penecho --codex --model gpt-5.6-sol --effort xhigh
-penecho --claude --model opus --effort max
-penecho --port 4000
-```
-
-`--model`, `--effort`, and `--port` apply only to that process and take precedence over the selected configuration file. Omit them to use the saved choice or the underlying CLI default. Other model-specific effort strings are accepted and passed through.
-
-### Run from this source directory
-
-Install dependencies and start this checkout through the same production entry point as the installed CLI:
-
-```bash
-npm install
-npm start
-```
-
-The first interactive start opens the configuration center when needed. Arguments after `--` are passed to PenEcho, for example `npm start -- --port 4000`.
-
-To expose this checkout's `penecho` command globally instead, use:
-
-```bash
-npm link
-penecho configure
-penecho
-```
-
-`npm link` creates the local command link; it does not publish the package. There is no separate build step.
-
-Open [http://localhost:3888](http://localhost:3888). On each PenEcho start, the first browser must either create a shared six-digit security code or explicitly keep the process open to the local network. The code is stored only as a salted in-memory hash and is cleared when PenEcho restarts; Canvas files and settings are not affected.
-
-With the default `0.0.0.0` listener, startup also prints the machine's concrete LAN URLs on the following lines. Open one of those URLs on another device and enter the same security code; if it cannot connect, allow the configured inbound TCP port in the host operating system's firewall or applicable routing policy.
-
-## Think on the canvas
-
-Put a question, equation, diagram, or half-formed idea anywhere on the canvas and pause. PenEcho reads your marks and their spatial relationships, then answers beside them. You can work through a problem without translating every step into a chat message or rebuilding it with rigid diagram tools.
-
-- Get answers, hints, explanations, continuations, formulas, plots, and diagrams directly on the canvas.
-- Drag AI drafts directly on the canvas, resize them by group or axis, copy returned text or formulas, then accept or discard them before they become part of your work.
-- Draw naturally with a stylus or mouse, then pan and zoom across a sparse `20,000 x 20,000` canvas.
-- Draw a freehand lasso around confirmed ink to move, resize, recolor, delete, or send only that selection to Typeset; ordinary selection edits and cancellation never trigger an AI request.
-- Choose Arcane, Sci-fi, Research, or Studio mode to match the kind of problem you are exploring.
-- Save lightweight snapshots locally in your browser. Starting a new canvas can overwrite the current snapshot, save a new copy, or continue without saving; unconfirmed AI drafts are never included.
-- Export confirmed canvas ink as a cropped PNG with one `512`-pixel tile of paper margin on every side.
-
-PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where ink exists, so the huge logical canvas does not become a huge bitmap.
-
-## What's new in 0.7.2
-
-- **Built-in real photos and professional flowcharts.** Real Photo Search displays sourced web images directly on the canvas, using one result by default and an alternate source when the primary image fails. Flowchart creates process, decision, architecture, sequence, and state diagrams with copyable Mermaid source.
-- **Reliable canvas editing, saving, and export.** Hand moves images, animations, and AI-returned widgets directly; images and widgets can be resized without an artificial maximum. Saving updates the loaded snapshot by default, while Save New remains available, and remote images are preserved in thumbnails and PNG exports.
-- **Local access and stronger desktop integration.** A shared six-digit code can protect local and LAN browser entry without changing model requests after unlock. Desktop setup supports Kimi API and Kimi CLI alongside generic API, Codex CLI, and Claude CLI, with improved update and packaging behavior.
-
-## What's new in 0.7.1
-
-- **Images and photos on the canvas.** Add pictures through the system picker—photo library or camera on phones and tablets, image files on desktop. Large pictures are downscaled and compressed automatically, so canvases and snapshots stay lightweight.
-- **Long-press editing with clear actions.** Long-press an image to move or resize it again, then choose Place, Merge, or Delete. Place keeps the image floating under your ink so you can draw over it; Merge turns it into real strokes you can erase.
-- **No surprise AI requests.** Images never start AI requests on their own; if you work with an image while AI is still processing, the in-flight result is discarded and handwriting recognition resumes automatically. Images participate in undo and redo, local snapshots, and PNG export.
-- **Direct canvas navigation.** The Hand tool pans the canvas and moves images, animations, and live widgets without starting an AI request.
-- **Copyable professional flowcharts.** The Flowchart plugin renders process, decision, architecture, sequence, and state diagrams, with a trusted toolbar button that copies portable Mermaid source.
-- **Visible online image results.** The Image Search plugin finds up to five relevant images from Wikimedia Commons by default and displays the actual images in a responsive layout with source and license context.
-
-## What's new in 0.7.0
-
-- **Live, interactive HTML on the canvas.** The new General HTML plugin lets the model build focused clocks, calculators, dashboards, and other responsive interfaces as sandboxed canvas widgets. Widget content remains directly interactive; long-press switches into canvas editing for moving, resizing, confirming, or deleting it.
-- **Useful data without a PenEcho data service.** Focused plugins cover weather, stocks, technology news, exchange rates, earthquakes, natural events, space weather, and GitHub activity. Requests go directly from the user's browser to each declared API origin; PenEcho does not proxy or cache plugin data.
-- **Explicit security boundaries.** Every data plugin declares its allowed `connect` origins. Widget networking is restricted to that allowlist, HTML runs in an isolated iframe, and disabled plugins contribute no prompt, payload, message hook, or widget runtime behavior.
-- **Local plugin creation.** A compact Markdown format combines metadata, runtime rules, and required one-shot examples in a prompt budget of roughly 1,000 tokens or less. The Preview creator can improve a draft with AI, fill its title, save and enable it locally, and delete personal plugins later; personal and built-in plugins stay clearly separated in the catalog.
-- **Canvas-native persistence and export.** Confirmed widgets participate in local snapshots and PNG export. Width and height handles reflow the interface without scaling its text, while the corner handle scales the whole widget like an image; deletion remains undoable.
-- **Sensible defaults.** General HTML, Animation scenes, and Weather start enabled for new users. All other data plugins remain opt-in, and every choice is remembered locally.
-
-## Earlier releases
-
-- **0.6.0 — Animation scenes.** Added optional, safe Canvas2D animations with canvas-native editing and snapshot persistence, alongside sharper Markdown/LaTeX rendering, more reliable model output, and non-blocking npm update checks.
-
-## How it works
-
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg">
-    <img alt="How PenEcho works: canvas ink becomes a visual atlas, the server routes it to the configured executor, and a structured editable draft returns to the canvas" src="docs/assets/how-it-works-light.svg">
-  </picture>
+  <a href="https://www.star-history.com/?repos=penecho%2Fpenecho&amp;type=date&amp;legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;theme=dark&amp;legend=top-left">
+      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="PenEcho GitHub star history chart" width="800">
+    </picture>
+  </a>
 </p>
-
-The browser sends only the relevant canvas crop and geometry. The server validates the request, uses the selected executor, and returns a movable draft that stays separate from confirmed ink until you accept it.
-
-## Recommended model configurations
-
-These recommendations balance answer quality against the latency of PenEcho's real canvas workload. They are based on current hands-on testing rather than synthetic benchmarks; actual response time still varies with the provider, canvas complexity, image size, and reasoning behavior.
-
-| Model | Effort | Quality and speed | Recommended use |
-| --- | --- | --- | --- |
-| `claude-opus-4-8` | `medium` | Strong quality with a better latency balance | Recommended Opus default for everyday canvas work |
-| `claude-opus-4-8` | `high` | Higher reasoning quality, with longer and more variable waits | Complex handwriting, mathematics, diagrams, or layout decisions where quality matters more than speed |
-| Fable 5 (`claude-fable-5` or `fable`) | `medium` | Very good results; in current tests, often around half the response time of `gpt-5.6-sol` at `xhigh` | A fast, high-quality general-purpose choice |
-| [Kimi K3](https://platform.kimi.ai?aff=penecho) (`kimi-k3`) | `medium` | Very good quality in the current comparison; `medium` keeps the quality/speed balance practical | Recommended Kimi Open Platform default for demanding canvas work |
-| `gpt-5.6-terra` | `low` to `high` | Surprisingly strong and responsive; current PenEcho canvas tests produced better results than `gpt-5.6-sol` with fast response times | Recommended OpenAI option across a flexible range of quality and latency targets |
-| `gpt-5.6-luna` | `xhigh` | Very good canvas results with strong response speed | A responsive quality-first option when `xhigh` reasoning is appropriate |
-| `gpt-5.6-sol` | `high` | Good enough for most requests and more responsive than `xhigh` | Recommended Sol default when responsiveness matters |
-| `gpt-5.6-sol` | `xhigh` | Very good results, but slower and more variable | Quality-first Sol configuration for difficult canvas tasks |
-
-Google models have not been tested yet. Contributions are welcome: if you try Gemini or another Google model, please share the model ID, provider or executor, reasoning configuration, approximate latency, and a representative canvas example in an issue.
-
-## Token use and cost
-
-For a typical PenEcho canvas request, total output usage—including hidden reasoning tokens when the provider reports them—roughly follows the selected effort level:
-
-| Effort | Typical output usage | Practical guidance |
-| --- | --- | --- |
-| `low` | Around `1,000` tokens | Usually enough for most everyday canvas requests |
-| `medium` | Around `3,000` tokens | More reasoning headroom for recognition, mathematics, diagrams, and layout |
-| `xhigh` or `max` | Around `5,000–8,000` tokens | Common for quality-first `gpt-5.6-sol` and other maximum-effort requests; expect higher latency and cost |
-
-These are practical estimates rather than enforced PenEcho limits. Actual usage can vary substantially by model, provider, canvas complexity, and reasoning behavior. The cost example below continues to use the typical `low` case: `10,000` input tokens and `1,000` output tokens. At standard short-context API rates, that would be:
-
-- `gpt-5.6-sol`: `10,000 x $5.00 / 1M + 1,000 x $30.00 / 1M = $0.080`
-- `gpt-5.6-terra`: `10,000 x $2.50 / 1M + 1,000 x $15.00 / 1M = $0.040`
-- `gpt-5.6-luna`: `10,000 x $1.00 / 1M + 1,000 x $6.00 / 1M = $0.016`
-
-At those example quantities, that is about 1.6 to 8 cents per request. Medium, `xhigh`, and `max` requests can cost more because their reasoning tokens are billed as output. Prices can change, so check the [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) page for current rates.
-
-If you sign in to Codex with ChatGPT, PenEcho uses the Codex usage included with your plan instead of an API key. Included limits vary by plan, and additional usage may require ChatGPT credits. See [Codex pricing](https://learn.chatgpt.com/docs/pricing) for current plans and limits. Claude CLI mode similarly uses the account authenticated by Claude Code; it is distinct from Anthropic API billing.
-
-## Safe deployment
-
-PenEcho listens on `0.0.0.0:3888` by default so localhost and trusted-LAN access work immediately. Each process starts in an undecided local-access state: choose a shared six-digit code to protect the Canvas, or explicitly acknowledge the risk and continue without one. A browser receives an `HttpOnly`, same-site process-lifetime session only after setting or entering the code. Repeated failures are rate-limited. This code is a practical trusted-LAN guard, not Internet-grade authentication.
-
-- **Kimi CLI, Codex CLI, and Claude CLI modes:** use them only on the local machine or a trusted, directly connected LAN. A valid request starts a local CLI process, so do not expose these modes directly to the public internet or an untrusted reverse proxy. PenEcho checks the Host, client network, exact Origin, process-lifetime session cookie, and JSON content type before launching the selected CLI. Each valid new request immediately supersedes the prior request; it never waits in a queue or returns a busy response.
-- **API mode:** the six-digit-code choice protects browser access and AI requests while it is active. If the operator explicitly continues without a code, API requests retain the previous unrestricted remote behavior. For any public exposure, place PenEcho behind HTTPS, stronger authentication, rate limiting, and request-size controls. Keep the selected configuration file and provider keys private; credentials remain in the Node.js process and are never sent to browser code.
-
-For either mode, keep debug artifacts and request tracing disabled in production unless you are actively diagnosing a problem, and never publish configuration files, logs, screenshots, or saved requests containing private content. When request recording is enabled in `Settings`, each valid AI request is stored under `~/.penecho/logs/requests` by default, including the source `atlas.png`, the outbound image, credential-redacted request body, raw and parsed responses, fallback details, and final status. The UI also displays this path and configures retention.
-
-## Useful configuration
-
-The configuration center writes these settings to `~/.penecho/config.env`, or to the file selected with `--config`:
-
-| Setting | Purpose |
-| --- | --- |
-| `AI_PROVIDER` | Executor: `api`, `codex-cli`, or `claude-cli` |
-| `AI_API_FORMAT` | API request format: `openai` (default example) or `anthropic` |
-| `AI_API_URL` / `AI_API_KEY` | API endpoint and credential; used only in API mode |
-| `AI_API_MODEL` | Model used in API mode |
-| `AI_EFFORT` | Startup reasoning effort for the canvas control; the toolbar's `Configured` option preserves this value verbatim, including custom names, while an empty CLI value leaves the CLI default untouched; Anthropic API and Claude CLI support `none` (wire value `thinking.type=disabled`), while OpenAI sends `reasoning_effort=none`; explicit toolbar levels override this value per request without modifying the file |
-| `AI_TIMEOUT_SECONDS` | Unified timeout for API, Codex CLI, and Claude CLI model attempts; default 180, allowed range 10–600 |
-| `PENECHO_AI_IMAGE_FORMAT` | Image format sent to API, Codex CLI, and Claude CLI: `webp` (default) or `png` |
-| `CODEX_CLI_MODEL` | Optional model override for Codex CLI mode |
-| `CLAUDE_CLI_MODEL` | Optional alias or model-ID override for Claude CLI mode |
-| `AUTO_AI_DELAY_SECONDS` | Initial delay before automatic recognition; the browser control can override it from 0 to 10 seconds |
-| `PENECHO_REQUEST_TRACE` | Save local per-request image, outbound request, response, and outcome traces; disabled by default |
-| `PENECHO_REQUEST_TRACE_LIMIT` | Number of local request traces retained, default 100 and maximum 1000 |
-| `HOST` / `PORT` | Listening interface and port, default `0.0.0.0:3888` |
-
-For installed CLI starts, `--model` overrides the selected executor's model setting and `--effort` overrides `AI_EFFORT` for that process only. Command-line options and process environment variables take precedence over the selected configuration file.
-
-Run the checks before submitting a change:
-
-```bash
-npm run check
-```
-
-For implementation details, see the [architecture notes](docs/architecture.md).
-
-## Build it with us
-
-PenEcho is young and built in the open. The problems that matter most — handwriting recognition, on-canvas visual tools, wider model support, and natural pen interaction — are still open, and you do not need to write code to help move them forward.
-
-Ways to help:
-
-- **Use it and share what happened.** A canvas that worked well, or one that fell apart, tells us more than any benchmark. A screenshot with secrets removed is enough.
-- **Test a model.** PenEcho supports model selection independently for API, Codex CLI, and Claude CLI execution, and behavior still varies by model. Report the executor, model ID, effort, rough latency, and a sample result. Google/Gemini models are still untested and especially welcome.
-- **Report rough edges.** Recognition misses, layout glitches, and awkward pen behavior are all worth an issue, however small. For model-specific issues, include a reproducible canvas example and expected and actual results.
-- **Write code.** Recognition, visual tools, model adapters, and pen input each have room to grow. `npm run check` runs the full suite before you open a pull request.
-- **Help more people read it.** The UI ships English and Chinese today; more translations and clearer docs are welcome.
-
-Where to talk:
-
-- [Discord](https://discord.gg/3jrPJ3mXdX) — real-time discussion, model-testing notes, and shared canvas workflows. New faces and works-in-progress are always welcome.
-- [GitHub Discussions](https://github.com/penecho/penecho/discussions) — ideas and questions worth keeping searchable.
-- [GitHub Issues](https://github.com/penecho/penecho/issues) — reproducible bugs and confirmed work.
-
-New contributors start with [CONTRIBUTING.md](CONTRIBUTING.md). If PenEcho clicks for you, star the repo and share the demo — that visibility is what brings the next person in.
-
-## License and commercial use
-
-PenEcho is open source under [GNU AGPL v3.0 only](LICENSE). Commercial use is allowed under the AGPL. If you modify PenEcho and provide that version to users over a network, you must offer those users the corresponding source code as required by the license.
-
-An alternative [commercial license](COMMERCIAL-LICENSE.md) is available for proprietary products and hosted services that cannot meet the AGPL requirements. The PenEcho name and logo are governed separately by the [PenEcho trademark policy](TRADEMARKS.md).
-
-Contributors keep ownership of their work and grant the project the rights needed to offer both AGPL and commercial editions. See the [contributor agreement](CONTRIBUTOR-LICENSE-AGREEMENT.md).

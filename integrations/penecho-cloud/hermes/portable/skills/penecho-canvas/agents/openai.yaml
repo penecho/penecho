@@ -1,0 +1,13 @@
+interface:
+  display_name: "PenEcho Canvas"
+  short_description: "Draw or revise a Cloud canvas beside this chat"
+  default_prompt: "Use $penecho-canvas to set up any missing production connection and show my plan on a canvas beside this chat."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "penecho-cloud"
+      description: "PenEcho production Cloud MCP"
+      transport: "streamable_http"
+      url: "https://penecho.ai/mcp"
+policy:
+  allow_implicit_invocation: true

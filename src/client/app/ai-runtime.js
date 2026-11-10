@@ -1,37 +1,224 @@
 // AI requests, validation, generated drafts, plotting, and draft interaction.
+  let aiPreparationGeneration = 0,
+    aiPreparation = null;
+  const AI_STREAM_IDLE_GRACE_MS = 10_000;
+  function aiTimeoutMultiplier(effort) {
+    return ["xhigh", "max"].includes(String(effort || "").trim().toLowerCase()) ? 2 : 1;
+  }
+  function activeAiRequestTimeoutMs() {
+    const effort = state.reasoningEffort === "config" ? configuredAiEffort : state.reasoningEffort;
+    return state.aiRequestTimeoutMs * aiTimeoutMultiplier(effort);
+  }
+  function createActivityAwareAbortTimeout(controller, totalTimeoutMs, idleGraceMs = AI_STREAM_IDLE_GRACE_MS) {
+    const deadline = Date.now() + totalTimeoutMs;
+    let lastActivityAt = null, timer = 0, cleared = false;
+    const schedule = delay => { timer = setTimeout(check, Math.max(1, Math.ceil(delay))); };
+    const check = () => {
+      if (cleared || controller.signal.aborted) return;
+      const now = Date.now();
+      if (now < deadline) return schedule(deadline - now);
+      if (lastActivityAt !== null && now - lastActivityAt < idleGraceMs) return schedule(idleGraceMs - (now - lastActivityAt));
+      controller.abort();
+    };
+    schedule(totalTimeoutMs);
+    return {
+      activity() { if (!cleared && !controller.signal.aborted) lastActivityAt = Date.now(); },
+      clear() { cleared = true; clearTimeout(timer); timer = 0; },
+    };
+  }
+  function activeWidgetRefinement() {
+    return aiPreparation?.widgetEdit || state.activeAI?.widgetEdit
+      || (assistAgent.resultTarget?.inputTarget?.refinement ? assistAgent.resultTarget.inputTarget.widget : null);
+  }
+  function finishAIPreparation(preparation) {
+    if (aiPreparation !== preparation) return false;
+    aiPreparation = null;
+    if (!state.activeAI) {
+      setBusy(false);
+      state.summonAnchor = null;
+    }
+    if (typeof assistRequestFinished === "function") assistRequestFinished(preparation, "failed");
+    return true;
+  }
+  // Canvas AI creates new objects or replaces one Widget source. Other virtual
+  // files and geometry are independent writes; the canvas revision is not a lock.
+  function aiWidgetSourceSignature(widget) {
+    return JSON.stringify(canvasAgentWidgetSourceState(widgetEditContext(widget, "refine")));
+  }
+  function aiWidgetEditSnapshot(target, revision) {
+    return target ? { target, targetId:target.id, pluginId:target.pluginId, revision, sourceSignature:aiWidgetSourceSignature(target) } : null;
+  }
+  function aiWidgetEditChanged(edit) {
+    return Boolean(edit && !edit.committed && (!state.widgets.includes(edit.target)
+      || edit.target.id !== edit.targetId || aiWidgetSourceSignature(edit.target) !== edit.sourceSignature));
+  }
+  function aiInputInvalid(run) {
+    return run.recognitionGeneration !== state.recognitionGeneration;
+  }
+  function aiPreparationInvalid(preparation, generation, revision) {
+    if (generation !== aiPreparationGeneration || preparation.superseded || aiPreparation !== preparation) return true;
+    if (!aiInputInvalid(preparation) && !aiWidgetEditChanged(preparation.widgetEdit)) return false;
+    preparation.superseded = true;
+    preparation.controller.abort();
+    finishAIPreparation(preparation);
+    setStatusKey(aiWidgetEditChanged(preparation.widgetEdit) ? "aiWidgetChanged" : "deferred");
+    return true;
+  }
   function supersedeActiveAI(reason) {
+    aiPreparationGeneration++;
+    const preparation = aiPreparation;
+    let cancelled = false;
+    if (preparation && !preparation.superseded) {
+      preparation.superseded = true;
+      preparation.controller.abort();
+      if (aiPreparation === preparation) aiPreparation = null;
+      cancelled = true;
+      debug("ai-deferred", { requestId:state.lastRequestId, reason, phase:"preparing" });
+    }
     const active = state.activeAI;
     if (active && !active.superseded) {
+      const wasCurrent = state.activeAI === active;
       active.superseded = true;
       active.controller.abort();
-      if (state.activeAI === active) {
+      if (wasCurrent) {
         state.activeAI = null;
         setBusy(false);
+        setStatusKey(reason === "user-input-started" ? "aiCancelledForInput" : "aiCancelled");
       }
-      if (!active.dirtyRestored && !active.oneShotInput && active.recognitionGeneration === state.recognitionGeneration) {
-        restoreDirty(active.dirtySnapshot);
+      if (!active.isolatedSelection && (reason === "user-stop" || !active.dirtyRestored) && !active.inputConsumed && !active.oneShotInput && active.recognitionGeneration === state.recognitionGeneration) {
+        if (active.inputCleared) restoreDirty(active.dirtySnapshot);
         active.dirtyRestored = true;
         state.autoEligible = Boolean(state.dirty);
+        if (reason === "user-stop") refreshWidgetRefineHoverCandidate();
       }
       debug("ai-deferred", { requestId: state.lastRequestId, reason });
     }
+    if (cancelled && !state.activeAI) {
+      setBusy(false);
+      state.summonAnchor = null;
+      setStatusKey(reason === "user-input-started" ? "aiCancelledForInput" : "aiCancelled");
+      if (reason === "user-stop") refreshWidgetRefineHoverCandidate();
+    }
+    const outcome = reason === "user-stop" ? "stopped" : "superseded";
+    if (typeof assistRequestFinished === "function") {
+      if (preparation) assistRequestFinished(preparation, outcome);
+      if (active) assistRequestFinished(active.assistRequestOwner, outcome);
+    }
+  }
+  function stopActiveAIRequests() {
+    const active = state.activeAI || aiPreparation;
+    if (!active || active.superseded) return false;
+    supersedeActiveAI("user-stop");
+    return true;
+  }
+  function stopActiveAutomaticAI(reason = "automatic-ai-cancelled") {
+    const preparation = aiPreparation,
+      active = state.activeAI;
+    if (preparation?.action !== "auto" && active?.action !== "auto") return false;
+    supersedeActiveAI(reason);
+    return true;
+  }
+  function consumeAIRequestInput(run) {
+    if (!run || run.inputConsumed || run.superseded || run.recognitionGeneration !== state.recognitionGeneration) return;
+    run.inputConsumed = true;
+    run.dirtyRestored = true;
+    state.lastUserBox = run.requestBox;
+    consumeAllDirtyInput();
   }
   function hasUnsettledToolbox() {
     return Boolean(state.pending || state.pendingWidget || state.pendingGesture || state.widgetEdit || state.widgetGesture || state.imageEdit || state.imageGesture || state.imageImporting || state.selection || state.selectionGesture || state.textEditors.size);
   }
+  const AI_PROGRESS_STATUS_KEYS = Object.freeze({
+    received:"aiRequestReceived",
+    "preparing-image":"aiPreparingImage",
+    connecting:"aiConnecting",
+    waiting:"aiWaitingResponse",
+    receiving:"aiReceivingResponse",
+    validating:"aiValidatingResponse",
+    retrying:"aiRetrying",
+    "image-fallback":"aiImageFallback",
+    slow:"aiStillWaiting",
+  });
+  function aiProgressText(event) {
+    const key=AI_PROGRESS_STATUS_KEYS[event?.phase];
+    if(!key)return "";
+    return t(key)
+      .replace("{attempt}",String(Math.max(1,Number(event.attempt)||1)))
+      .replace("{seconds}",String(Math.max(10,Number(event.timeoutSeconds)||10)));
+  }
+  function applyAiProgress(run,event) {
+    if(!run||run.superseded||state.activeAI!==run)return;
+    const previous=state.aiProgressEvent;
+    if(event?.phase==="waiting"&&["retrying","image-fallback"].includes(previous?.phase)&&previous.attempt===event.attempt)return;
+    const text=aiProgressText(event);
+    if(!text)return;
+    if(event.requestId)run.requestId=event.requestId;
+    state.aiProgressEvent={phase:event.phase,attempt:event.attempt||null,requestId:event.requestId||null,timeoutSeconds:event.timeoutSeconds||null};
+    setStatus(text,AI_PROGRESS_STATUS_KEYS[event.phase]);
+  }
+  async function readAiCommandResponse(response,onProgress,onActivity) {
+    onActivity?.();
+    const contentType=String(response.headers.get("content-type")||"").split(";",1)[0].trim().toLowerCase();
+    if(contentType!=="application/x-ndjson")return{ok:response.ok,status:response.status,data:await response.json()};
+    if(!response.body)throw new Error("PenEcho returned an empty progress stream.");
+    const reader=response.body.getReader(),decoder=new TextDecoder();
+    let buffer="",terminal=null;
+    const consume=(line)=>{
+      if(!line.trim())return;
+      let event;
+      try{event=JSON.parse(line)}catch{throw new Error("PenEcho returned an invalid progress event.")}
+      if(event?.type==="progress")onProgress?.(event);
+      else if(event?.type==="result"||event?.type==="error")terminal=event;
+    };
+    while(true){
+      const{done,value}=await reader.read();
+      if(value?.byteLength)onActivity?.();
+      buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});
+      let newline;
+      while((newline=buffer.indexOf("\n"))>=0){consume(buffer.slice(0,newline));buffer=buffer.slice(newline+1)}
+      if(done)break;
+    }
+    if(buffer.trim())consume(buffer);
+    if(!terminal)throw new Error("PenEcho progress stream ended before the model response arrived.");
+    const status=Number.isInteger(terminal.status)?terminal.status:terminal.type==="result"?200:500;
+    return{ok:terminal.type==="result"&&status>=200&&status<300,status,data:terminal.data||{}};
+  }
+  function aiCommandFailure(data,status) {
+    const error=typeof data?.error==="string"?data.error:"";
+    const code=typeof data?.errorCode==="string"?data.errorCode:typeof data?.code==="string"?data.code:error;
+    const detail=typeof data?.message==="string"?data.message.trim():"";
+    const fallback=error&&!/^[a-z][a-z0-9_]*$/i.test(error)?error:"";
+    return Object.assign(Error(detail||fallback||`${t("aiRequestFailed")} (HTTP ${status})`),{code,status});
+  }
   function launchAutomaticAI(reason) {
-    if (!state.auto || !state.dirty || !state.autoEligible || state.drawing) return;
+    if (canvasAgentSuppressesAutomaticAI()) return;
+    if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible || state.drawing || state.widgetRefineConfirmation) return;
+    if (aiPreparation || state.activeAI) return;
+    if (currentWidgetRefineCandidate()) {
+      if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
+      return;
+    }
     if (hasUnsettledToolbox()) {
       if (state.statusKey !== "autoToolboxPending") setStatusKey("autoToolboxPending");
       return;
     }
+    // The user's Auto AI deadline takes priority over optional pen analysis.
+    if (typeof clearPenGesture === "function") clearPenGesture("auto-ai");
+    if (typeof dismissPenGestureOffer === "function") dismissPenGestureOffer("auto-ai", false);
+    clearWidgetRefineCandidate();
     supersedeActiveAI(reason);
     requestAI("auto");
   }
   function schedule(delay = state.autoDelayMs) {
     clearTimeout(state.timer);
     state.timer = 0;
-    if (!state.auto || !state.dirty || !state.autoEligible) return;
+    if (canvasAgentSuppressesAutomaticAI()) return;
+    if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible) return;
+    if (activeWidgetRefinement() || state.widgetRefineConfirmation) return;
+    if (currentWidgetRefineCandidate()) {
+      if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
+      return;
+    }
     state.timer = setTimeout(() => {
       state.timer = 0;
       launchAutomaticAI("new-stroke-deadline");
@@ -65,67 +252,197 @@
       bottom = Math.min(a.y + a.h, b.y + b.h);
     return right > x && bottom > y ? { x, y, w: right - x, h: bottom - y } : null;
   }
+  function containsRect(outer, inner) {
+    return Boolean(outer && inner
+      && inner.x >= outer.x && inner.y >= outer.y
+      && inner.x + inner.w <= outer.x + outer.w
+      && inner.y + inner.h <= outer.y + outer.h);
+  }
+  function aiFinishDrawingInk(action, packed, options) {
+    if (action !== "continue" || options.suggestion !== "finish_drawing" || packed.selectionContext || !options.sourceInk) return null;
+    // Capture can clip an offscreen target. Omit geometry that no longer fits
+    // the actual attention region rather than transmit invisible anchors.
+    return PenEchoFinishDrawing.canonicalInk(options.sourceInk, packed.changedBox) || null;
+  }
+  function aiSketchInk(action, packed, options) {
+    if (action !== "plot" || options.suggestion !== "animate_sketch" || !options.sketchInk) return null;
+    // Only ink inside the captured attention region can be rigged.
+    return PenEchoSketchPuppet.canonicalInk(options.sketchInk, packed.changedBox) || null;
+  }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
     requestOptions = requestOptions || {};
+    if (canvasGuestAiRestricted()) {
+      clearTimeout(state.timer);
+      state.timer = 0;
+      state.autoEligible = false;
+      if (action !== "auto") showCanvasGuestAiHint({ explicit:true });
+      return false;
+    }
     const automatic = action === "auto",
-      isolatedSelection = Boolean(requestOptions.isolatedSelection),
+      returnToHand = state.mode === "select" && !state.viewMode && !state.selection
+        && !state.pending && !state.pendingWidget && !state.imageEdit && !state.animationEdit;
+    if (!requireAiConnectionSelection()) {
+      clearTimeout(state.timer);
+      state.timer = 0;
+      // Keep the ink, but do not retry the same automatic request after dismissal.
+      state.autoEligible = false;
+      setStatusKey("canvasAgentChooseConnection");
+      return false;
+    }
+    if (!automatic) {
+      clearTimeout(state.timer);
+      state.timer = 0;
+    }
+    const preparationGeneration = ++aiPreparationGeneration;
+    clearWidgetRefineCandidate();
+    const isolatedSelection = Boolean(requestOptions.isolatedSelection),
       oneShotInput = Boolean(requestOptions.oneShotInput),
       captureCurrentViewport = Boolean(requestOptions.captureCurrentViewport),
+      widgetEditTarget = requestOptions.widgetEditTarget || null,
+      widgetEditContext = requestOptions.widgetEditContext || null,
+      requestedAttentionBox = requestOptions.attentionBox || null,
       revision = state.userRevision,
       recognitionGeneration = state.recognitionGeneration,
       aiColor = state.aiColor,
       dirtySnapshot = state.dirty ? { ...state.dirty } : null,
       latestBox = dirtySnapshot || state.lastUserBox,
       hotspotCount = isolatedSelection ? 0 : state.hotspotTrail.length,
-      packed = packedOverride || (captureCurrentViewport ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), null, true) : latestBox ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), latestBox) : null),
-      typedInput = isolatedSelection || (captureCurrentViewport && state.latestTypedInput && (!packed?.sourceRect || !intersection(state.latestTypedInput.box, packed.sourceRect))) ? null : state.latestTypedInput,
-      preservedRecognition = isolatedSelection
-        ? {
-            dirty: state.dirty ? { ...state.dirty } : null,
-            autoEligible: state.autoEligible,
-            lastUserBox: state.lastUserBox ? { ...state.lastUserBox } : null,
-            hotspotTrail: state.hotspotTrail.slice(),
-            latestTypedInput: state.latestTypedInput,
-          }
-        : null;
-    if (!packed) {
-      discardUncapturableInput(hotspotCount, Boolean(dirtySnapshot));
-      if (preservedRecognition) {
-        state.dirty = preservedRecognition.dirty;
-        state.autoEligible = preservedRecognition.autoEligible;
-        state.lastUserBox = preservedRecognition.lastUserBox;
-        state.hotspotTrail = preservedRecognition.hotspotTrail;
-        state.latestTypedInput = preservedRecognition.latestTypedInput;
+      controller = new AbortController(),
+      preparation = {
+        controller,
+        generation:preparationGeneration,
+        recognitionGeneration,
+        superseded:false,
+        action,
+        widgetEdit:aiWidgetEditSnapshot(widgetEditTarget, revision),
+      };
+    let attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox);
+    if (requestedAttentionBox) attentionBox = requestedAttentionBox;
+    aiPreparation = preparation;
+    if (typeof assistRequestStarted === "function") assistRequestStarted(preparation, { hideSuggestions:Boolean(requestOptions.fromSuggestBar) });
+    // Follow the request's explicit target or its complete pending input.
+    const thinkingBox = requestOptions.thinkingBox || requestedAttentionBox || dirtySnapshot || state.lastUserBox;
+    state.summonAnchor = thinkingBox ? { ...thinkingBox } : null;
+    // Typeset already reports progress beside the selection; it is not a
+    // general Canvas-understanding request and should not show a spatial echo.
+    setBusy(true, action !== "normalize");
+    setStatusKey("aiPreparingCanvas");
+    if (pluginEnabled("flowchart")) {
+      try { await ensurePluginRuntime("flowchart"); }
+      catch (error) {
+        if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+        debug("ai-preparation-degraded", { stage:"flowchart-runtime", error:String(error?.message || error).slice(0, 300) });
       }
-      setStatusKey(latestBox ? "cannotCapture" : "noInk");
-      return;
     }
+    if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+    // Suggest actions focus their complete pending input target.
+    const focusBox = requestOptions.focusAttention && requestedAttentionBox ? requestedAttentionBox : null,
+      focusMargin = focusBox ? Math.max(24, Math.min(focusBox.w, focusBox.h) * 0.1) : 0,
+      hotspotPoints = state.hotspotTrail.slice(0, hotspotCount).filter(point => !focusBox || point.x >= focusBox.x - focusMargin && point.x <= focusBox.x + focusBox.w + focusMargin && point.y >= focusBox.y - focusMargin && point.y <= focusBox.y + focusBox.h + focusMargin);
+    let capturePlan = null,
+      packed = packedOverride;
+    if (isolatedSelection && requestOptions.selection?.regionOnly) {
+      const selection = requestOptions.selection;
+      try {
+        // Every Widget the lasso touches must have current pixels; a masked
+        // image with a missing Widget would misrepresent the selection.
+        const prepared = await ensureWidgetSnapshots(widgetsRequiredForCapture(selection.box, selectionPathFor(selection)), { signal:controller.signal, currentFrame:true });
+        if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+        if (!prepared.complete) throw widgetSnapshotsUnavailableError(prepared);
+        packed = state.selection === selection ? buildSelectionImage(selection) : null;
+        if (!packed) {
+          finishAIPreparation(preparation);
+          setStatusKey("selectionEmpty");
+          return false;
+        }
+      } catch (error) {
+        if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+        finishAIPreparation(preparation);
+        debug("selection-snapshot-failed", { error:String(error?.message || error).slice(0, 300) });
+        setStatusKey("widgetExportFailed");
+        return false;
+      }
+    }
+    if (!packed) {
+      try {
+        capturePlan = captureCurrentViewport || attentionBox ? planViewportImage(attentionBox, captureCurrentViewport, requestOptions.captureRegion, requestOptions.captureWholeInput) : null;
+      } catch (error) {
+        debug("ai-preparation-degraded", { stage:"capture-plan", error:String(error?.message || error).slice(0, 300) });
+      }
+      let snapshotRegion = capturePlan?.sourceRect || null;
+      if (!snapshotRegion) {
+        try { snapshotRegion = viewportRect(); } catch {}
+      }
+      // Best effort: the request proceeds after this wait, and any Widget that
+      // is still unavailable is drawn as a labelled placeholder, never as blank.
+      let snapshots = null;
+      try { snapshots = await ensureWidgetSnapshots(capturableWidgets(snapshotRegion), { signal:controller.signal, timeoutMs:AI_WIDGET_SNAPSHOT_WAIT_MS }); }
+      catch (error) {
+        if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+        debug("ai-preparation-degraded", { stage:"widget-snapshot", error:String(error?.message || error).slice(0, 300) });
+      }
+      if (snapshots?.missing) debug("ai-preparation-degraded", { stage:"widget-snapshot", total:snapshots.total, captured:snapshots.captured, missing:snapshots.missing, widgetIds:snapshots.missingWidgets.map(widget => widget.id) });
+      if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+      try {
+        packed = captureCurrentViewport || attentionBox
+          ? buildViewportImage(hotspotPoints, attentionBox, captureCurrentViewport, capturePlan, requestOptions.captureRegion, requestOptions.captureWholeInput)
+          : null;
+      } catch (error) {
+        debug("ai-preparation-degraded", { stage:"viewport-atlas", error:String(error?.message || error).slice(0, 300) });
+      }
+      if (!packed) {
+        packed = emergencyViewportImage(hotspotPoints, attentionBox, requestOptions.captureRegion, requestOptions.captureWholeInput);
+        if (!packed) {
+          finishAIPreparation(preparation);
+          setStatusKey("widgetExportFailed");
+          return false;
+        }
+        debug("ai-preparation-degraded", { stage:"viewport-atlas-fallback", sourceRect:packed.sourceRect, atlasSize:packed.atlasSize });
+      }
+    }
+    if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+    const
+      typedInput = !isolatedSelection && requestOptions.question ? { text:requestOptions.question, box:{ ...packed.changedBox } }
+        : !isolatedSelection && state.latestTypedInput && containsRect(packed?.sourceRect, state.latestTypedInput.box)
+        ? state.latestTypedInput
+        : isolatedSelection && requestOptions.selectionQuestion ? { text:requestOptions.selectionQuestion, box:{ ...packed.sourceRect } } : null;
     const requestBox = packed.changedBox;
-    if (!isolatedSelection) {
-      state.dirty = null;
-      state.autoEligible = false;
-    }
-    const controller = new AbortController(),
-      // A selection-scoped request never consumes the normal recognition state. Mark its
-      // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
-      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, action };
+    // Preserve all pending input until a successful result is committed.
+    // A masked lasso still sends only its captured selection.
+    const run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputCleared:false, inputSnapshot:requestOptions.inputSnapshot, inputConsumed:false, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:preparation.widgetEdit, action, onResultCommitted:requestOptions.onResultCommitted, beforeWidgetReplacementSave:requestOptions.beforeWidgetReplacementSave,
+        requestBox, hotspotCount, typedInput, assistRequestOwner:preparation, strokeId:typeof smartSuggest === "object" ? smartSuggest.strokes.at(-1)?.id || 0 : 0 };
+    if (aiPreparation !== preparation) return;
+    aiPreparation = null;
     state.activeAI = run;
-    setBusy(true);
-    setStatusKey(isolatedSelection && action === "normalize" ? "selectionTypesetting" : "observing");
-    const timeout = setTimeout(() => controller.abort(), state.aiRequestTimeoutMs);
+    setStatusKey("aiSendingRequest");
+    const requestTimeoutMs=activeAiRequestTimeoutMs(),slowNoticeDelay=Math.min(60000,Math.max(10000,Math.floor(requestTimeoutMs/3)));
+    run.slowNoticeTimer=setTimeout(()=>{
+      if(run.superseded||state.activeAI!==run)return;
+      const phase=state.aiProgressEvent?.phase;
+      if(!phase||["received","preparing-image","connecting","waiting","slow"].includes(phase))
+        applyAiProgress(run,{phase:"slow",requestId:run.requestId||null,timeoutSeconds:Math.ceil(requestTimeoutMs/1000)});
+    },slowNoticeDelay);
+    const timeout = createActivityAwareAbortTimeout(controller,requestTimeoutMs);
     try {
+      const connectionId = selectedAiConnectionId(), sourceInk = aiFinishDrawingInk(action, packed, requestOptions), sketchInk = !automatic ? aiSketchInk(action, packed, requestOptions) : null;
+      run.connectionSelection = { id:connectionId, scope:aiConnectionScope(connectionId.startsWith("hosted:")) };
       const res = await fetch("/api/ai/command", {
           signal: controller.signal,
           method: "POST",
           credentials: "same-origin",
-          headers: authenticatedApiHeaders({ "Content-Type": "application/json" }),
+          headers: aiRequestHeaders({ "Content-Type": "application/json", Accept:"application/x-ndjson, application/json" }),
           body: JSON.stringify({
             ...packed,
             trigger: automatic ? "user_paused" : "manual",
             userAction: action,
             ...(state.reasoningEffort === "config" ? {} : { reasoningEffort: state.reasoningEffort }),
             ...pluginRequestPayload(),
+            ...(widgetEditContext ? { widgetEdit:widgetEditContext } : {}),
             ...(typedInput ? { typedInput } : {}),
+            ...(!automatic && typeof requestOptions.suggestion === "string" ? { suggestion:requestOptions.suggestion } : {}),
+            ...(!automatic && requestOptions.suggestion === "vivid" ? { illustrationStyle:PenEchoIllustrationStyle.normalize(state.illustrationStyle), illustrationBackground:PenEchoIllustrationStyle.normalizeBackground(state.illustrationBackground) } : {}),
+            ...(sourceInk ? { sourceInk } : {}),
+            ...(sketchInk ? { sketchInk } : {}),
             canvasSize: { w: SIZE, h: SIZE },
             uiTheme: state.theme,
             persona: {
@@ -136,19 +453,25 @@
             }[state.theme],
           }),
         }),
-        data = await res.json();
+        streamed = await readAiCommandResponse(res,event=>applyAiProgress(run,event),timeout.activity),
+        data = streamed.data;
       if (run.superseded || state.activeAI !== run) throw Error(AI_SUPERSEDED);
       rememberRequest(data.requestId);
-      if (!res.ok) {
-        const error = Error(data.error || `HTTP ${res.status}`);
-        error.status = res.status;
-        throw error;
+      if (!streamed.ok) {
+        throw aiCommandFailure(data,streamed.status);
       }
+      // Draft confirmation is a separate interaction after the model request has
+      // ended. Stop request-only timers now so they cannot report a slow model
+      // while the user is deciding whether to keep the completed draft.
+      timeout.clear();
+      clearTimeout(run.slowNoticeTimer);
+      run.slowNoticeTimer = 0;
+      if (state.activeAI === run) setBusy(false);
+      if (typeof requestOptions.transformCommands === "function") data.commands = requestOptions.transformCommands(Array.isArray(data.commands) ? data.commands : []);
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
-        animationLimitReached = pluginEnabled("animation") && state.animations.length >= MAX_VISIBLE_ANIMATIONS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "animate_scene"),
-        widgetLimitReached = state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "html_widget"),
-        commands = normalizeCommandPlacements(validate(rawCommands, aiColor), packed, requestBox),
+        widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => ["html_widget", "diagram_source"].includes(command?.tool || command?.type || command?.name)),
+        commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget, packed.visibleRect), packed, requestBox),
         meta = { requestId: data.requestId };
       if (action === "normalize")
         for (let index = commands.length - 1; index >= 0; index--)
@@ -166,32 +489,32 @@
         rejectedCount: rawCount - commands.length,
         tools: commands.map((c) => c.tool),
       });
-      if (state.userRevision !== revision) {
-        if (!isolatedSelection && !oneShotInput && state.recognitionGeneration === recognitionGeneration) {
-          restoreDirty(dirtySnapshot);
-          state.autoEligible = Boolean(state.dirty);
-          schedule();
-        }
-        setStatusKey("deferred");
-        debug("ai-deferred", { ...meta, reason: "user-revision-changed" });
-        return;
+      checkAI(revision, run);
+      if (state.images.length + commands.filter((command) => command.tool === "plot_function").length > MAX_VISIBLE_IMAGES) {
+        setStatusKey("imageLimitReached");
+        throw Error(t("imageLimitReached"));
       }
       if (commands.length) {
+        if (typeof assistTrackAIResult === "function") assistTrackAIResult(run, requestBox, requestOptions.suggestion);
         setStatusKey("writing");
-        if (commands.length === 1 && !["draw", "erase"].includes(commands[0].tool)) {
-          if (state.userRevision !== revision) throw Error(AI_CANCELLED);
-          await animate(commands[0], revision, meta, run);
-          checkAI(revision, run);
+        // Live Widgets use their existing insertion path rather than raster drafts.
+        if (commands.every(command => ["html_widget", "diagram_source"].includes(command.tool))
+          || commands.length === 1 && !["draw", "erase"].includes(commands[0].tool)) {
+          for (const command of commands) {
+            checkAI(revision, run);
+            await animate(command, revision, meta, run);
+            checkAI(revision, run);
+          }
         } else {
           const items = [];
           for (const c of commands) {
-            if (state.userRevision !== revision) throw Error(AI_CANCELLED);
+            checkAI(revision, run);
             const item = await preparePendingItem(c, revision, meta, run);
             if (item) items.push(item);
             checkAI(revision, run);
           }
           const activeItems = pluginEnabled("animation") ? items : items.filter((item) => !item.animationScene);
-          if (!activeItems.length) throw Error(AI_REJECTED);
+          if (!activeItems.length) throw Error("AI response tools could not be prepared");
           resolvePendingItemOverlaps(activeItems, meta);
           checkAI(revision, run);
           const outcome = await startPendingBatch(activeItems, revision, meta);
@@ -201,48 +524,37 @@
           if (!outcome?.acceptedCount) throw Error(AI_REJECTED);
           debug("tool-complete", { ...meta, batch: true, acceptedCount: outcome.acceptedCount, discardedCount: commands.length - outcome.acceptedCount });
         }
-        if (!run.inputConsumed) {
-          if (!isolatedSelection) {
-            state.lastUserBox = requestBox;
-            if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
-            if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
-          }
-          run.inputConsumed = true;
-        }
+        consumeAIRequestInput(run);
+        run.completed = true;
         if (!isolatedSelection) save();
-        if (animationLimitReached) setStatusKey("animationLimitReached");
-        else if (widgetLimitReached) setStatusKey("widgetLimitReached");
+        if (widgetLimitReached) setStatusKey("widgetLimitReached");
         else if (data.message) setStatus(data.message);
         else setStatusKey("aiDone");
       } else {
-        if (!isolatedSelection) {
-          state.lastUserBox = requestBox;
-          if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
-          if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
-        }
-        if (animationLimitReached) setStatusKey("animationLimitReached");
-        else if (widgetLimitReached) setStatusKey("widgetLimitReached");
-        else if (typeof data.message === "string" && data.message.trim()) setStatus(data.message.trim());
+        if (widgetLimitReached) setStatusKey("widgetLimitReached");
+        // Model prose can claim success even when all commands were rejected.
+        // Completion must reflect the commands that can actually be displayed.
         else setStatusKey("aiNoVisibleResponse");
       }
     } catch (e) {
-      if (run.superseded) {
+      if (run.superseded || state.activeAI !== run) {
         debug("ai-deferred", { requestId: state.lastRequestId, reason: "request-superseded" });
       } else if (e.message === AI_REJECTED) {
-        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
-          state.lastUserBox = requestBox;
-          if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
-        }
         setStatusKey("draftRejected");
       } else if (e.message === AI_SUPERSEDED) {
-        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
-          state.lastUserBox = requestBox;
-          if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
-        }
         setStatusKey("ready");
-      } else if (state.userRevision !== revision) {
+      } else if (e.code === "SOURCE_CONFLICT") {
+        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+          if (run.inputCleared) restoreDirty(run.dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
+          state.autoEligible = false;
+        }
+        setStatusKey("aiWidgetChanged");
+        debug("ai-deferred", { requestId:state.lastRequestId, reason:"target-source-changed", targetId:run.widgetEdit?.targetId });
+      } else if (aiInputInvalid(run)) {
         if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
-          restoreDirty(dirtySnapshot);
+          if (run.inputCleared) restoreDirty(run.dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
           schedule();
         }
@@ -250,7 +562,7 @@
         debug("ai-deferred", { requestId: state.lastRequestId, reason: "stale-request-error" });
       } else if (e.message === AI_CANCELLED) {
         if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
-          restoreDirty(dirtySnapshot);
+          if (run.inputCleared) restoreDirty(run.dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
           schedule();
         }
@@ -259,14 +571,27 @@
           requestId: state.lastRequestId,
           reason: "animation-cancelled",
         });
+      } else if (["hosted_request_superseded","hosted_execution_session_stale"].includes(e.code)) {
+        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+          if (run.inputCleared) restoreDirty(run.dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
+          state.autoEligible = false;
+        }
+        setStatusKey("aiRequestSuperseded");
+        debug("ai-deferred", { requestId:state.lastRequestId, reason:e.code });
       } else {
         const timedOut = e.name === "AbortError",
           message = timedOut ? t("timeout") : e.message;
         if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
-          restoreDirty(dirtySnapshot);
+          if (run.inputCleared) restoreDirty(run.dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
           state.autoEligible = false;
         }
-        setStatus(`${t("aiError")}${message}`);
+        if (e.code === "CONNECTION_STALE") {
+          if (promptForAiConnectionSelection(run.connectionSelection)) setStatusKey("canvasAgentChooseConnection");
+        } else setStatus(`${t("aiError")}${message}`);
         debug("ai-error", {
           requestId: state.lastRequestId,
           action,
@@ -274,19 +599,28 @@
         });
       }
     } finally {
-      clearTimeout(timeout);
+      timeout.clear();
+      clearTimeout(run.slowNoticeTimer);
       if (state.activeAI === run) {
         state.activeAI = null;
         setBusy(false);
       }
+      if (!state.activeAI) state.summonAnchor = null;
+      if (returnToHand && run.completed && !run.superseded && state.mode === "select" && !state.viewMode
+        && !state.selection && !state.selectionGesture && !state.drawing && !state.pending && !state.pendingWidget) setCanvasMode("hand");
+      if (typeof assistRequestFinished === "function") assistRequestFinished(run.assistRequestOwner, run.completed ? "completed" : "failed");
+      run.resolveAssistResult?.();
+      if (typeof requestOptions.onSettled === "function") {
+        try { requestOptions.onSettled({ completed:Boolean(run.completed), superseded:Boolean(run.superseded) }); } catch (error) { debug("ai-settled-callback-failed", { error:String(error?.message || error).slice(0, 160) }); }
+      }
     }
   }
   function viewportRect() {
-    const r = view.getBoundingClientRect(),
+    const { width, height } = canvasViewportMetrics(),
       x = Math.max(0, -state.panX / state.scale),
       y = Math.max(0, -state.panY / state.scale),
-      right = Math.min(SIZE, (r.width - state.panX) / state.scale),
-      bottom = Math.min(SIZE, (r.height - state.panY) / state.scale);
+      right = Math.min(SIZE, (width - state.panX) / state.scale),
+      bottom = Math.min(SIZE, (height - state.panY) / state.scale);
     return right > x && bottom > y ? { x, y, w: right - x, h: bottom - y } : null;
   }
   function visibleInkBounds(visible) {
@@ -316,7 +650,7 @@
     }
     return bounds;
   }
-  function mapHotspots(sourceRect, imageSize, points) {
+  function mapHotspots(sourceRect, imageSize, points, latestRect = sourceRect) {
     const columns = 8,
       rows = 8,
       cellW = sourceRect.w / columns,
@@ -324,6 +658,7 @@
       result = [];
     for (const point of points) {
       if (point.x < sourceRect.x || point.x > sourceRect.x + sourceRect.w || point.y < sourceRect.y || point.y > sourceRect.y + sourceRect.h) continue;
+      if (point.x < latestRect.x || point.x >= latestRect.x + latestRect.w || point.y < latestRect.y || point.y >= latestRect.y + latestRect.h) continue;
       const col = Math.min(columns - 1, Math.max(0, Math.floor((point.x - sourceRect.x) / cellW))),
         row = Math.min(rows - 1, Math.max(0, Math.floor((point.y - sourceRect.y) / cellH))),
         previous = result.at(-1);
@@ -342,7 +677,7 @@
       columns,
       rows,
       order: "oldest-to-newest",
-      attention: "use only to refine reading order inside latestInput.imageRect",
+      attention: "newest unconsumed pen path; use ordered cells to read and apply every edit inside latestInput.imageRect",
       hotspots: result.slice(-64),
     };
   }
@@ -350,17 +685,18 @@
     // Retained dirty ink from a failed request must never expand the next capture beyond what the user can currently see.
     return visible;
   }
-  function buildViewportImage(hotspotPoints, latestBox, captureCurrentViewport = false) {
-    const visible = viewportRect();
+  function planViewportImage(latestBox, captureCurrentViewport = false, captureRegion = null, captureWholeInput = false) {
+    const visible = captureWholeInput ? { x:0, y:0, w:SIZE, h:SIZE } : viewportRect();
     if (!visible) return null;
-    const captureRect = captureRectFor(latestBox, visible),
-      ink = unionLocalBounds(unionLocalBounds(visibleInkBounds(captureRect), imageBounds(captureRect)), animationBounds(captureRect));
-    if (!captureCurrentViewport && !ink) return null;
+    const captureRect = captureRegion ? intersection(captureRegion, captureWholeInput ? { x:0, y:0, w:SIZE, h:SIZE } : visible) || visible : captureRectFor(latestBox, visible),
+      ink = unionLocalBounds(widgetBounds(captureRect), unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds(captureRect), imageBounds(captureRect)), textBoxBounds(captureRect)), animationBounds(captureRect))),
+      useFullViewport = captureCurrentViewport || Boolean(latestBox && !intersection(latestBox, captureRect));
+    if (!useFullViewport && !ink) return null;
     const margin = Math.max(120, Math.min(640, 160 / state.scale)),
-      left = captureCurrentViewport ? captureRect.x : Math.max(captureRect.x, ink.x - margin),
-      top = captureCurrentViewport ? captureRect.y : Math.max(captureRect.y, ink.y - margin),
-      right = captureCurrentViewport ? captureRect.x + captureRect.w : Math.min(captureRect.x + captureRect.w, ink.x + ink.w + margin),
-      bottom = captureCurrentViewport ? captureRect.y + captureRect.h : Math.min(captureRect.y + captureRect.h, ink.y + ink.h + margin),
+      left = useFullViewport ? captureRect.x : Math.max(captureRect.x, ink.x - margin),
+      top = useFullViewport ? captureRect.y : Math.max(captureRect.y, ink.y - margin),
+      right = useFullViewport ? captureRect.x + captureRect.w : Math.min(captureRect.x + captureRect.w, ink.x + ink.w + margin),
+      bottom = useFullViewport ? captureRect.y + captureRect.h : Math.min(captureRect.y + captureRect.h, ink.y + ink.h + margin),
       sourceRect = { x: left, y: top, w: right - left, h: bottom - top },
       // Keep ceil(source * scale) inside the server limits despite floating-point drift.
       imageScale = Math.min(1, MAX_ATLAS_WIDTH / sourceRect.w, MAX_ATLAS_HEIGHT / sourceRect.h) * (1 - Number.EPSILON * 4),
@@ -368,33 +704,43 @@
         w: Math.max(1, Math.min(MAX_ATLAS_WIDTH, Math.ceil(sourceRect.w * imageScale))),
         h: Math.max(1, Math.min(MAX_ATLAS_HEIGHT, Math.ceil(sourceRect.h * imageScale))),
       },
-      out = offscreen(imageSize.w, imageSize.h),
-      q = out.getContext("2d");
-    const latestVisible = captureCurrentViewport ? { ...sourceRect } : intersection(latestBox, sourceRect),
-      captureTime = performance.now();
+      latestVisible = latestBox ? intersection(latestBox, sourceRect) || { ...sourceRect } : captureCurrentViewport ? { ...sourceRect } : null;
     if (!latestVisible) return null;
+    return { visible, captureRect, sourceRect, imageScale, imageSize, latestVisible };
+  }
+  function buildViewportImage(hotspotPoints, latestBox, captureCurrentViewport = false, capturePlan = null, captureRegion = null, captureWholeInput = false) {
+    const plan = capturePlan || planViewportImage(latestBox, captureCurrentViewport, captureRegion, captureWholeInput);
+    if (!plan) return null;
+    const { visible, captureRect, sourceRect, imageScale, imageSize, latestVisible } = plan,
+      out = offscreen(imageSize.w, imageSize.h),
+      q = out.getContext("2d"),
+      captureTime = performance.now();
     q.fillStyle = "#fff";
     q.fillRect(0, 0, out.width, out.height);
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
     q.globalAlpha = 0.42;
+    drawAnimationsToContext(q, sourceRect, captureTime);
+    drawWidgetsToContext(q, sourceRect);
     drawImagesToContext(q, sourceRect);
+    drawTextBoxesToContext(q, sourceRect);
     forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, sourceRect);
-    drawAnimationsToContext(q, sourceRect, captureTime);
     q.globalAlpha = 1;
     q.save();
     q.beginPath();
     q.rect(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h);
     q.clip();
+    drawAnimationsToContext(q, latestVisible, captureTime);
+    drawWidgetsToContext(q, latestVisible);
     drawImagesToContext(q, latestVisible);
+    drawTextBoxesToContext(q, latestVisible);
     forTiles(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, latestVisible);
-    drawAnimationsToContext(q, latestVisible, captureTime);
     q.restore();
     const focusInset = FOCUS_INSET_ENABLED ? drawFocusInset(out, latestVisible, sourceRect, imageScale, captureTime) : null,
-      hotspotGrid = mapHotspots(sourceRect, imageSize, hotspotPoints);
+      hotspotGrid = mapHotspots(sourceRect, imageSize, hotspotPoints, latestVisible);
     debug("atlas-built", {
-      scope: captureCurrentViewport ? "current-viewport" : "visible-content",
+      scope: captureWholeInput ? "complete-input" : captureCurrentViewport ? "current-viewport" : "visible-content",
       visibleRect: visible,
       captureRect,
       sourceRect,
@@ -416,13 +762,46 @@
       hotspotGrid,
     };
   }
-  function buildSelectionImage(selection) {
-    if (!selection || selection.phase !== "active" || !selection.fragments?.length) return null;
+  function emergencyViewportImage(hotspotPoints, latestBox, captureRegion = null, captureWholeInput = false) {
+    let visible = null;
+    try { visible = captureWholeInput ? { x:0, y:0, w:SIZE, h:SIZE } : viewportRect(); } catch {}
+    if (!visible) visible = { x:0, y:0, w:1, h:1 };
+    const sourceRect = captureRegion ? intersection(captureRegion, captureWholeInput ? { x:0, y:0, w:SIZE, h:SIZE } : visible) || { ...visible } : { ...visible },
+      latestVisible = latestBox ? intersection(latestBox, sourceRect) || { ...sourceRect } : { ...sourceRect },
+      imageScale = Math.min(1, MAX_ATLAS_WIDTH / sourceRect.w, MAX_ATLAS_HEIGHT / sourceRect.h) * (1 - Number.EPSILON * 4),
+      imageSize = {
+        w:Math.max(1, Math.min(MAX_ATLAS_WIDTH, Math.ceil(sourceRect.w * imageScale))),
+        h:Math.max(1, Math.min(MAX_ATLAS_HEIGHT, Math.ceil(sourceRect.h * imageScale))),
+      },
+      plan = { visible, captureRect:{ ...visible }, sourceRect, imageScale, imageSize, latestVisible };
+    try {
+      const packed = buildViewportImage(hotspotPoints, latestBox, true, plan, captureRegion, captureWholeInput);
+      if (packed) return packed;
+    } catch (error) {
+      debug("ai-preparation-degraded", { stage:"viewport-atlas-emergency", error:String(error?.message || error).slice(0, 300) });
+    }
+    // A missing full-input capture cannot supply the user's Refine instructions.
+    if (captureWholeInput) return null;
+    const fallbackScale = Math.min(1, 1 / sourceRect.w, 1 / sourceRect.h);
+    return {
+      atlasImage:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      atlasSize:{ w:1, h:1 },
+      visibleRect:{ ...visible },
+      captureRect:{ ...visible },
+      sourceRect,
+      imageScale:fallbackScale,
+      changedBox:latestVisible,
+      focusInset:null,
+      hotspotGrid:{ columns:8, rows:8, order:"oldest-to-newest", attention:"newest unconsumed pen path; use ordered cells to read and apply every edit inside latestInput.imageRect", hotspots:[] },
+    };
+  }
+  function renderSelectionImage(selection, maxSide = Infinity) {
+    if (!selection || selection.phase !== "active") return null;
     const content = selectionContentBounds(selection);
     if (!content || content.w <= 0 || content.h <= 0) return null;
     // Use the lasso's own minimum bounding rectangle; the polygon exterior stays white.
     const sourceRect = { ...selection.box },
-      imageScale = Math.min(1, MAX_ATLAS_WIDTH / sourceRect.w, MAX_ATLAS_HEIGHT / sourceRect.h) * (1 - Number.EPSILON * 4),
+      imageScale = Math.min(1, Math.min(maxSide, MAX_ATLAS_WIDTH) / sourceRect.w, Math.min(maxSide, MAX_ATLAS_HEIGHT) / sourceRect.h) * (1 - Number.EPSILON * 4),
       imageSize = {
         w: Math.max(1, Math.min(MAX_ATLAS_WIDTH, Math.ceil(sourceRect.w * imageScale))),
         h: Math.max(1, Math.min(MAX_ATLAS_HEIGHT, Math.ceil(sourceRect.h * imageScale))),
@@ -431,12 +810,43 @@
       q = out.getContext("2d");
     q.fillStyle = "#fff";
     q.fillRect(0, 0, out.width, out.height);
-    q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
-    for (const fragment of selection.fragments) {
-      const target = SELECT.mapFragment(fragment, selection.originalBox, selection.box);
-      q.drawImage(fragment.renderImage || fragment.image, target.x, target.y, target.w, target.h);
+    if (!selection.regionOnly) {
+      q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
+      for (const object of selection.objects || []) {
+        const item = object.item;
+        if (object.kind === "animations") drawAnimationInstance(q, item, performance.now());
+        else q.drawImage(item.image, item.x, item.y, item.w, item.h);
+      }
+      for (const fragment of selection.fragments || []) {
+        const target = SELECT.mapFragment(fragment, selection.originalBox, selection.box);
+        q.drawImage(fragment.renderImage || fragment.image, target.x, target.y, target.w, target.h);
+      }
+      q.setTransform(1, 0, 0, 1, 0, 0);
+      return { out, sourceRect, imageSize, imageScale, content };
     }
+    q.save();
+    q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
+    traceSelectionPath(q, selectionPathFor(selection));
+    q.clip("evenodd");
+    drawAnimationsToContext(q, sourceRect, performance.now());
+    if (state.frontCanvasObjectKind === "widget") {
+      drawImagesToContext(q, sourceRect);
+      drawWidgetsToContext(q, sourceRect);
+    } else {
+      drawWidgetsToContext(q, sourceRect);
+      drawImagesToContext(q, sourceRect);
+    }
+    forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (canvas, tx, ty) => q.drawImage(canvas, tx * TILE, ty * TILE), false);
+    drawSharpOverlays(q, sourceRect);
+    drawTextBoxesToContext(q, sourceRect);
+    q.restore();
     q.setTransform(1, 0, 0, 1, 0, 0);
+    return { out, sourceRect, imageSize, imageScale, content };
+  }
+  function buildSelectionImage(selection, maxSide = Infinity) {
+    const rendered = renderSelectionImage(selection, maxSide);
+    if (!rendered) return null;
+    const { out, sourceRect, imageSize, imageScale, content } = rendered;
     const path = selectionPathFor(selection),
       context = {
         box: { ...selection.box },
@@ -460,7 +870,7 @@
       imageScale,
       changedBox: { ...sourceRect },
       focusInset: null,
-      hotspotGrid: { columns: 8, rows: 8, order: "oldest-to-newest", attention: "use only to refine reading order inside latestInput.imageRect", hotspots: [] },
+      hotspotGrid: { columns: 8, rows: 8, order: "oldest-to-newest", attention: "newest unconsumed pen path; use ordered cells to read and apply every edit inside latestInput.imageRect", hotspots: [] },
       selectionContext: context,
     };
   }
@@ -504,6 +914,7 @@
     q.setTransform(focusScale, 0, 0, focusScale, position.x - focusRect.x * focusScale, position.y - focusRect.y * focusScale);
     q.globalAlpha = 0.32;
     drawImagesToContext(q, focusRect);
+    drawTextBoxesToContext(q, focusRect);
     forTiles(focusRect.x, focusRect.y, focusRect.w, focusRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     q.globalAlpha = 1;
     drawSharpOverlays(q, focusRect);
@@ -513,6 +924,7 @@
     q.rect(latestBox.x, latestBox.y, latestBox.w, latestBox.h);
     q.clip();
     drawImagesToContext(q, latestBox);
+    drawTextBoxesToContext(q, latestBox);
     forTiles(latestBox.x, latestBox.y, latestBox.w, latestBox.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     q.restore();
     drawSharpOverlays(q, latestBox);
@@ -565,16 +977,51 @@
     if (next.tool === "write_text") next.maxWidth = Math.max(next.fontSize, Math.min(next.maxWidth, SIZE - next.x));
     return [next];
   }
-  function validate(cmds, aiColor = state.aiColor) {
+  function widgetGeometryForViewport(visibleRect) {
+    const bucket = (value) => Math.ceil(Math.min(SIZE, Math.max(1, Number(value) || 1)) / 1000) * 1000,
+      viewportW = bucket(visibleRect?.w), viewportH = bucket(visibleRect?.h);
+    return {
+      max:{ w:Math.max(300,Math.round(viewportW/2)), h:Math.max(200,Math.round(viewportH/2)) },
+    };
+  }
+  function fitWidgetGeometry(command, visibleRect) {
+    if (!command || ![command.x, command.y, command.w, command.h].every(Number.isFinite)) return null;
+    const target = widgetGeometryForViewport(visibleRect).max;
+    let x = Math.round(command.x), y = Math.round(command.y),
+      w = Math.round(command.w),
+      h = Math.round(command.h);
+    if (w <= 0 || h <= 0) {
+      w = 2400;
+      h = 1400;
+    } else if (w < 300 || h < 200) {
+      const scale = Math.max(300 / w, 200 / h);
+      w = Math.ceil(w * scale);
+      h = Math.ceil(h * scale);
+    }
+    if (w > 10000 || h > 10000 || w * h > 40000000) {
+      const scale = Math.min(1, target.w / w, target.h / h, 10000 / w, 10000 / h, Math.sqrt(40000000 / (w * h)));
+      w = Math.floor(w * scale);
+      h = Math.floor(h * scale);
+    }
+    w = Math.max(300, w);
+    h = Math.max(200, h);
+    w = Math.min(w, SIZE);
+    h = Math.min(h, SIZE);
+    x = Math.max(0, Math.min(SIZE - w, x));
+    y = Math.max(0, Math.min(SIZE - h, y));
+    return w >= 300 && h >= 200 ? { x, y, w, h } : null;
+  }
+  function validWidgetRefreshSeconds(value) {
+    return value === 0 || n(value, 60, 86400);
+  }
+  function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null, visibleRect = null) {
     if (!Array.isArray(cmds)) return [];
     let plotPixels = 0,
-      animationSlots = pluginEnabled("animation") ? Math.max(0, MAX_VISIBLE_ANIMATIONS - state.animations.length) : 0,
-      widgetSlots = Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
+      widgetSlots = widgetEditTarget ? 1 : Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
       widgetPluginIds = new Set(enabledPluginDescriptors().map((plugin) => plugin.id));
-    const acceptedTools = pluginEnabled("animation")
-      ? ["write_text", "draw_formula", "plot_function", "draw", "animate_scene", "erase"]
-      : ["write_text", "draw_formula", "plot_function", "draw", "erase"];
+    const acceptedTools = ["write_text", "draw_formula", "plot_function", "draw", "erase"];
     if (widgetPluginIds.size) acceptedTools.push("html_widget");
+    if (widgetPluginIds.has("flowchart")) acceptedTools.push("diagram_source");
     const validated = cmds
       .slice(0, 16)
       .map((c) => (c && typeof c === "object" ? { ...c, tool: c.tool || c.type || c.name } : c))
@@ -600,7 +1047,7 @@
           c.x = Math.min(c.x, Math.max(0, SIZE - estimatedWidth));
           c.y = Math.min(c.y, Math.max(0, SIZE - c.fontSize * 1.8));
         }
-        if (c.tool === "plot_function" && (!n(c.x) || !n(c.y) || !n(c.w, 240, 6000) || !n(c.h, 180, 6000) || c.w * c.h > 8000000 || Math.max(c.w / c.h, c.h / c.w) > 6 || plotPixels + c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.expression !== "string" || c.expression.length > 180)) return null;
+        if (c.tool === "plot_function" && (!n(c.x) || !n(c.y) || !n(c.w, 240, 6000) || !n(c.h, 180, 6000) || c.w * c.h > 8000000 || Math.max(c.w / c.h, c.h / c.w) > 6 || 12000000 < plotPixels + c.w * c.h || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.expression !== "string" || c.expression.length > 180)) return null;
         if (c.tool === "plot_function") {
           c.expression = normalizePlotExpression(c.expression);
           try {
@@ -614,29 +1061,81 @@
         if (c.tool === "draw") {
           const normalized = DRAW?.normalize(c, SIZE);
           if (!normalized) return null;
-          c = { ...normalized, color: aiColor };
-        }
-        if (c.tool === "animate_scene") {
-          if (animationSlots <= 0) return null;
-          const normalized = ANIMATION?.normalize(c, SIZE);
-          if (!normalized) return null;
-          c = normalized;
-          animationSlots--;
+          c = { ...normalized, color:aiColor };
         }
         if (c.tool === "html_widget") {
-          const allowCopy = c.pluginId !== "image-search";
-          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80)) return null;
+          const allowCopy = c.pluginId !== "image-search",
+            diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "",
+            sourceFormat = typeof c.sourceFormat === "string" ? c.sourceFormat.trim() : "",
+            frameworkVersion = typeof c.frameworkVersion === "string" ? c.frameworkVersion.trim() : "",
+            sceneRuntime = window.PENECHO_SCENE || null,
+            sceneWidget = Boolean(sceneRuntime?.isSceneFormat(sourceFormat)),
+            noteRuntime = typeof window === "object" && window.PENECHO_NOTE_CARD || null,
+            noteWidget = Boolean(noteRuntime?.isNoteFormat(sourceFormat)),
+            // Note cards keep the deck size chosen for them; never refit them.
+            geometry = noteWidget && [c.x,c.y,c.w,c.h].every(Number.isFinite) && c.w > 0 && c.h > 0 ? { x:Math.max(0,Math.min(SIZE-c.w,c.x)), y:Math.max(0,Math.min(SIZE-c.h,c.y)), w:Math.min(SIZE,c.w), h:Math.min(SIZE,c.h) } : fitWidgetGeometry(c, visibleRect),copyTextLimit=sourceFormat===VISUAL_EXPLAINER_SOURCE_FORMAT?MAX_VISUAL_EXPLAINER_SOURCE_LENGTH:sceneWidget?sceneRuntime.MAX_SOURCE_BYTES:noteWidget?noteRuntime.MAX_SOURCE_CHARS:sourceFormat==="penecho-graph"?40000:MAX_WIDGET_COPY_TEXT_LENGTH;
+          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || widgetEditTarget && c.pluginId !== widgetEditTarget.pluginId || !geometry || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !validWidgetRefreshSeconds(c.refreshSeconds) || typeof c.html !== "string" || !c.html.trim() || c.html.length > (noteWidget ? noteRuntime.MAX_DOCUMENT_CHARS : MAX_WIDGET_HTML_LENGTH) || diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120 || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > copyTextLimit) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80) || c.pluginId === "flowchart" && (typeof c.copyText !== "string" || !c.copyText.trim() || !sourceFormat)) return null;
+          // Scenes are host-rendered: rebuild the document from the validated
+          // scene source so the Widget always matches its copyable source.
+          if(sceneWidget||sceneRuntime?.isSceneFormat(widgetEditTarget?.sourceFormat)){
+            if(!sceneWidget||typeof c.copyText!=="string")return null;
+            try{const scene=sceneRuntime.normalize(c.copyText);c={...c,html:sceneRuntime.documentFor(scene,{title:c.title,language:state.language}),copyText:sceneRuntime.formatSource(scene),copyLabel:sceneRuntime.COPY_LABEL,frameworkVersion:sceneRuntime.FRAMEWORK_VERSION};}
+            catch{return null;}
+          }
+          // Note cards are host-rendered from their validated note source.
+          if(noteWidget||noteRuntime?.isNoteFormat(widgetEditTarget?.sourceFormat)){
+            if(!noteWidget||typeof c.copyText!=="string")return null;
+            if(widgetEditTarget&&noteRuntime.isNoteFormat(widgetEditTarget.sourceFormat))c={...c,copyText:noteCardRestoreMedia(c.copyText,widgetEditTarget.copyText)};
+            try{const note=noteRuntime.parseSource(c.copyText,{categories:typeof noteCategories==="function"?noteCategories():undefined,language:state.language});c={...c,html:noteCardDocument(note),copyText:noteRuntime.formatSource(note),copyLabel:noteRuntime.COPY_LABEL,frameworkVersion:noteRuntime.FRAMEWORK_VERSION,title:note.title.slice(0,120)};}
+            catch{return null;}
+          }
+          if(widgetEditTarget?.sourceFormat===VISUAL_EXPLAINER_SOURCE_FORMAT){
+            if(sourceFormat!==VISUAL_EXPLAINER_SOURCE_FORMAT||typeof c.copyText!=="string")return null;
+            try{const generated=visualExplainerWidgetItem(JSON.parse(c.copyText),{title:c.title});c={...c,html:generated.html,copyText:generated.copyText,copyLabel:generated.copyLabel,frameworkVersion:generated.frameworkVersion};}
+            catch{return null;}
+          }
           c = {
             tool:"html_widget",
             pluginId:c.pluginId,
-            x:Math.round(c.x),
-            y:Math.round(c.y),
-            w:Math.round(c.w),
-            h:Math.round(c.h),
+            x:Math.round(widgetEditTarget ? widgetEditTarget.x : geometry.x),
+            y:Math.round(widgetEditTarget ? widgetEditTarget.y : geometry.y),
+            w:Math.round(widgetEditTarget ? widgetEditTarget.w : geometry.w),
+            h:Math.round(widgetEditTarget ? widgetEditTarget.h : geometry.h),
             title:c.title.trim(),
             refreshSeconds:Math.round(c.refreshSeconds),
             html:c.html,
-            ...(allowCopy && typeof c.copyText === "string" ? { copyText:c.copyText.trim(), copyLabel:String(c.copyLabel || "Copy source").trim() } : {}),
+            ...(diagramKind ? { diagramKind } : {}),
+            ...(sourceFormat ? { sourceFormat } : {}),
+            ...(frameworkVersion ? { frameworkVersion } : {}),
+            ...(allowCopy && typeof c.copyText === "string" ? { copyText:c.copyText.trim(), copyLabel:String(c.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() } : {}),
+          };
+          widgetSlots--;
+        }
+        if (c.tool === "diagram_source") {
+          const runtime = diagramRuntime();
+          const geometry = fitWidgetGeometry(c, visibleRect),
+            // A saved Mermaid or Graphviz widget keeps its format when refined.
+            legacyFormat = widgetEditTarget?.widgetType === "diagram_source" && !runtime?.supports(widgetEditTarget.sourceFormat) ? canonicalStoredDiagramFormat(widgetEditTarget.sourceFormat) : "",
+            sourceFormat = runtime?.normalizeFormat(c.sourceFormat) || (legacyFormat && canonicalStoredDiagramFormat(c.sourceFormat) === legacyFormat ? legacyFormat : ""),
+            diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "";
+          if (widgetSlots <= 0 || !widgetPluginIds.has("flowchart") || c.pluginId !== "flowchart"
+            || widgetEditTarget && (widgetEditTarget.pluginId !== "flowchart" || widgetEditTarget.widgetType !== "diagram_source")
+            || !geometry || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120
+            || !sourceFormat || !diagramSourceFits(c.source)
+            || diagramKind.length > 80) return null;
+          c = {
+            tool:"diagram_source",
+            widgetType:"diagram_source",
+            pluginId:"flowchart",
+            x:Math.round(widgetEditTarget ? widgetEditTarget.x : geometry.x),
+            y:Math.round(widgetEditTarget ? widgetEditTarget.y : geometry.y),
+            w:Math.round(widgetEditTarget ? widgetEditTarget.w : geometry.w),
+            h:Math.round(widgetEditTarget ? widgetEditTarget.h : geometry.h),
+            title:c.title.trim(),
+            refreshSeconds:0,
+            sourceFormat,
+            source:c.source,
+            ...(diagramKind ? { diagramKind } : {}),
           };
           widgetSlots--;
         }
@@ -655,8 +1154,9 @@
         return c;
       })
       .filter(Boolean);
-    const widget = validated.find((command) => command.tool === "html_widget");
-    return widget ? [widget] : validated;
+    const widgets = validated.filter((command) => ["html_widget", "diagram_source"].includes(command.tool));
+    if (widgetEditTarget) return widgets.length === 1 ? widgets : [];
+    return widgets.length ? widgets : validated;
   }
   function point(v) {
     return Array.isArray(v) && v.length === 2 && n(v[0]) && n(v[1]);
@@ -669,8 +1169,9 @@
     return c;
   }
   function checkAI(revision, run = null) {
-    if (state.userRevision !== revision) throw Error(AI_CANCELLED);
     if (run && (run.superseded || state.activeAI !== run)) throw Error(AI_SUPERSEDED);
+    if (run ? aiInputInvalid(run) : state.userRevision !== revision) throw Error(AI_CANCELLED);
+    if (aiWidgetEditChanged(run?.widgetEdit)) throw Object.assign(Error(t("aiWidgetChanged")), { code:"SOURCE_CONFLICT" });
   }
   async function animate(c, revision, meta, run) {
     debug("tool-start", {
@@ -683,13 +1184,15 @@
     });
     try {
       checkAI(revision, run);
-      if (c.tool === "animate_scene" && !pluginEnabled("animation")) throw Error(AI_REJECTED);
-      if (c.tool === "html_widget") {
-        if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error(AI_REJECTED);
-        const accepted = await startPendingWidget(c, revision);
+      if (c.tool === "animate_scene" && !pluginEnabled("animation")) throw Error("Animation rendering is unavailable");
+      if (["html_widget", "diagram_source"].includes(c.tool)) {
+        if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error("Widget rendering is unavailable");
+        const target = run?.widgetEdit?.target,
+          accepted = target ? await startPendingWidgetReplacement(c, target, revision, run.widgetEdit) : await startPendingWidget(c, revision);
         if (accepted === AI_CANCELLED) throw Error(AI_CANCELLED);
         if (accepted === AI_SUPERSEDED) throw Error(AI_SUPERSEDED);
-        if (!accepted) throw Error(AI_REJECTED);
+        if (accepted === AI_REJECTED) throw Error(AI_REJECTED);
+        if (!accepted) throw Error("Widget draft could not be prepared");
       } else if (c.tool === "erase") {
         const bounds = eraseBounds(c),
           item={ command: c, erase: true, bounds, image: eraseMask(c, bounds) };
@@ -699,6 +1202,7 @@
         if (!accepted) throw Error(AI_REJECTED);
       } else {
         let image,
+          plotBlob = null,
           x = c.x,
           y = c.y,
           pendingCommand = c;
@@ -707,12 +1211,13 @@
         } else if (c.tool === "draw_formula") {
           image = await formulaImage(c.latex, c.fontSize, c.color);
         } else if (c.tool === "plot_function") {
-          image = plot(c);
+          const preparedPlot = await plotObjectImage(c);
+          image = preparedPlot.image;
+          plotBlob = preparedPlot.blob;
         } else if (c.tool === "animate_scene") {
           pendingCommand = ANIMATION.normalize(c, SIZE);
           image = pendingCommand ? ANIMATION.rasterize(pendingCommand, offscreen, 0, Math.min(2, sharpRenderRatio())) : null;
-        }
-        else if (c.tool === "draw") {
+        } else if (c.tool === "draw") {
           const made = DRAW.render(c, offscreen, c.color);
           image = made.image;
           x = made.x;
@@ -722,11 +1227,11 @@
           checkAI(revision, run);
           x = Math.max(0, Math.min(x, SIZE - Math.min(image.logicalWidth || image.width, SIZE)));
           y = Math.max(0, Math.min(y, SIZE - Math.min(image.logicalHeight || image.height, SIZE)));
-          const accepted = await startPending(image, x, y, revision, meta, pendingCommand);
+          const accepted = await startPending(image, x, y, revision, meta, pendingCommand, plotBlob);
           if (accepted === AI_CANCELLED) throw Error(AI_CANCELLED);
           if (accepted === AI_SUPERSEDED) throw Error(AI_SUPERSEDED);
-          if (!accepted) throw Error(AI_REJECTED);
-        }
+          if (accepted === AI_REJECTED || !accepted) throw Error(AI_REJECTED);
+        } else throw Error(`Unable to prepare ${c.tool}`);
       }
       debug("tool-complete", { ...meta, tool: c.tool, x: c.x, y: c.y });
     } catch (error) {
@@ -743,17 +1248,21 @@
       return { command: c, erase: true, bounds, image: eraseMask(c, bounds) };
     }
     let image,
+      plotBlob = null,
       x = c.x,
       y = c.y,
       pendingCommand = c;
     if (c.tool === "write_text") image = textImage(c.text, c.fontSize, c.color, c.maxWidth, c.lineHeight, state.aiFont, AI_TEXT_MAX_LENGTH, sharpRenderRatio());
     else if (c.tool === "draw_formula") image = await formulaImage(c.latex, c.fontSize, c.color);
-    else if (c.tool === "plot_function") image = plot(c);
+    else if (c.tool === "plot_function") {
+      const preparedPlot = await plotObjectImage(c);
+      image = preparedPlot.image;
+      plotBlob = preparedPlot.blob;
+    }
     else if (c.tool === "animate_scene") {
       pendingCommand = ANIMATION.normalize(c, SIZE);
       image = pendingCommand ? ANIMATION.rasterize(pendingCommand, offscreen, 0, Math.min(2, sharpRenderRatio())) : null;
-    }
-    else if (c.tool === "draw") {
+    } else if (c.tool === "draw") {
       const made = DRAW.render(c, offscreen, c.color);
       image = made.image;
       x = made.x;
@@ -768,6 +1277,7 @@
       image,
       textCommand: c.tool === "write_text" ? { ...c } : null,
       copyText: copyTextForCommand(c),
+      plotBlob,
       animationScene: c.tool === "animate_scene" ? pendingCommand : null,
       animationPlayback: c.tool === "animate_scene" ? createAnimationPlayback() : null,
       x: Math.max(0, Math.min(x, SIZE - Math.min(logicalWidth, SIZE))),
@@ -813,7 +1323,7 @@
 
   function textRasterMetrics(text, f, maxWidth = 900, lineHeight = 1.35, family = state.aiFont, maxLength = AI_TEXT_MAX_LENGTH, pixelRatio = 1) {
     const content = text.slice(0, maxLength),
-      fontFamily = family || "ui-rounded, system-ui, sans-serif";
+      fontFamily = family || AI_FONT_DEFAULT;
     maxWidth = Math.max(f, Math.min(SIZE, maxWidth));
     const probe = offscreen(1, 1).getContext("2d");
     probe.font = `${f}px ${fontFamily}`;
@@ -842,6 +1352,8 @@
     image.naturalWidth = naturalWidth;
     image.logicalWidth = naturalWidth;
     image.logicalHeight = naturalHeight;
+    image.contentInsetX = 2;
+    image.contentInsetY = 2 - (rowHeight - f) / 2;
     return image;
   }
   function layoutText(content, context, maxWidth) {
@@ -900,7 +1412,7 @@
   async function mixedTextImage(text, fontSize, color, maxWidth = 900, lineHeight = 1.35, family = state.aiFont, pixelRatio = sharpRenderRatio()) {
     if (!MIXED_TEXT?.parse) return textImage(text, fontSize, color, maxWidth, lineHeight, family, TEXT_INPUT_MAX_LENGTH, pixelRatio);
     const parsed = MIXED_TEXT.parse(text.slice(0, TEXT_INPUT_MAX_LENGTH)),
-      resolvedFamily = family || "ui-rounded, system-ui, sans-serif",
+      resolvedFamily = family || AI_FONT_DEFAULT,
       widthLimit = Math.max(fontSize * 3, Math.min(SIZE, maxWidth)),
       probe = offscreen(1, 1).getContext("2d"),
       formulaCache = new Map(),
@@ -980,6 +1492,8 @@
     }
     image.logicalWidth = naturalWidth;
     image.logicalHeight = naturalHeight;
+    image.contentInsetX = padding;
+    image.contentInsetY = padding;
     image.revealRows = rows.map((row) => Math.max(1, row.width));
     image.revealRowHeight = naturalHeight / Math.max(1, rows.length);
     return image;
@@ -1107,6 +1621,7 @@
   function copyTextForCommand(command) {
     if (command?.tool === "write_text" && typeof command.text === "string") return command.text;
     if (command?.tool === "draw_formula" && typeof command.latex === "string") return command.latex;
+    if (command?.tool === "plot_function" && typeof command.expression === "string") return command.expression;
     return null;
   }
   function pendingCopyValue(target) {
@@ -1145,8 +1660,8 @@
     context.fillRect(box.x, box.y, box.w, box.h);
     context.restore();
   }
-  function drawPending(p, context = ctx) {
-    if (p.items) return drawPendingBatch(p, context);
+  function drawPending(p, context = ctx, options = null) {
+    if (p.items) return drawPendingBatch(p, context, options);
     const ctx = context,
       b = draftBounds(p),
       progress = p.revealProgress ?? 1,
@@ -1178,6 +1693,7 @@
     if (p.animationScene) drawPendingAnimation(ctx, p.animationScene, p.animationPlayback ||= createAnimationPlayback(), b);
     else ctx.drawImage(p.image, b.x, b.y, imageWidth, imageHeight);
     ctx.restore();
+    if (options?.chrome === false) return;
     if (progress < 1) {
       const tipX = b.x + currentWidth * p.scaleX,
         tipY = b.y + Math.min(current, rows.length - 1) * rowHeight * p.scaleY + rowHeight * p.scaleY * 0.72,
@@ -1199,15 +1715,7 @@
     if (!chromeVisible) return;
     const s = 14 / state.scale;
     ctx.save();
-    ctx.strokeStyle = "#72b7e599";
-    ctx.lineWidth = 1.5 / state.scale;
-    ctx.setLineDash([7 / state.scale, 7 / state.scale]);
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-    ctx.setLineDash([]);
-    ctx.restore();
-    drawDraftActions(ctx, b, s, pendingCopyable(p), true);
-    ctx.save();
-    ctx.strokeStyle = "#2679b8";
+    ctx.strokeStyle = state.paint?.muted || "#6b7280";
     ctx.lineWidth = 1.8 / state.scale;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -1220,9 +1728,8 @@
     ctx.lineTo(b.x + b.w / 2 + s * 0.48, b.y + b.h + s * 0.08);
     ctx.stroke();
     ctx.restore();
-    drawCopyFeedback(ctx, b, s, p);
   }
-  function drawPendingBatch(p, context = ctx) {
+  function drawPendingBatch(p, context = ctx, options = null) {
     const ctx = context,
       batch = batchBounds(p),
       unit = 1 / state.scale,
@@ -1247,28 +1754,9 @@
       } else ctx.drawImage(item.image, box.x, box.y, box.w, box.h);
       ctx.restore();
     }
-    if (p.items.length > 1 && batchChromeVisible) {
-      ctx.save();
-      ctx.strokeStyle = "#2679b866";
-      ctx.lineWidth = 1.4 * unit;
-      ctx.setLineDash([8 * unit, 7 * unit]);
-      ctx.strokeRect(batch.x, batch.y, batch.w, batch.h);
-      ctx.restore();
-    }
-    const controlEntries = [...entries.filter(({ index }) => index !== p.selectedIndex), ...entries.filter(({ index }) => index === p.selectedIndex)];
-    for (const { item, index, box, chromeVisible } of controlEntries) {
-      if (!chromeVisible) continue;
-      ctx.save();
-      ctx.strokeStyle = index === p.selectedIndex ? "#2679b8" : "#72b7e577";
-      ctx.lineWidth = (index === p.selectedIndex ? 2 : 1.2) * unit;
-      ctx.setLineDash(index === p.selectedIndex ? [] : [6 * unit, 6 * unit]);
-      ctx.strokeRect(box.x, box.y, box.w, box.h);
-      ctx.restore();
-      drawDraftActions(ctx, box, s, pendingCopyable(item));
-      drawCopyFeedback(ctx, box, s, item);
-    }
+    if (options?.chrome === false) return;
     ctx.save();
-    ctx.strokeStyle = "#2679b8";
+    ctx.strokeStyle = state.paint?.muted || "#6b7280";
     ctx.lineWidth = 1.8 * unit;
     ctx.lineCap = "round";
     if (selectedEntry?.chromeVisible) {
@@ -1284,7 +1772,7 @@
     ctx.restore();
     if (p.items.length > 1 && batchChromeVisible) {
       ctx.save();
-      ctx.strokeStyle = "#2679b8";
+      ctx.strokeStyle = state.paint?.muted || "#6b7280";
       ctx.lineWidth = 1.8 * unit;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -1356,28 +1844,6 @@
       }
       context.stroke();
     }
-    context.restore();
-  }
-  function drawCopyFeedback(context, box, s, target) {
-    if (target?.copyFeedbackGeneration !== state.copyGeneration || !Number.isFinite(target.copyFeedbackUntil) || target.copyFeedbackUntil <= performance.now()) return;
-    const unit = 1 / state.scale,
-      label = t("textCopied"),
-      fontSize = 11 * unit,
-      paddingX = 6 * unit,
-      paddingY = 4 * unit;
-    context.save();
-    context.font = `700 ${fontSize}px system-ui, sans-serif`;
-    const width = context.measureText(label).width + paddingX * 2,
-      height = fontSize + paddingY * 2,
-      x = Math.max(0, Math.min(SIZE - width, box.x + box.w / 2 - width / 2)),
-      above = box.y - s * 1.15 - height,
-      y = above >= 0 ? above : Math.min(SIZE - height, box.y + s * 0.95);
-    context.fillStyle = "#111827e8";
-    context.fillRect(x, y, width, height);
-    context.fillStyle = "#fff";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText(label, x + width / 2, y + height / 2);
     context.restore();
   }
   function drawResizeHandle(context, b, s) {
@@ -1543,7 +2009,6 @@
     const generation = ++state.copyGeneration,
       stillPending = () => state.copyGeneration === generation && state.pending === pending && (pending?.items ? pending.items.includes(target) : target === pending);
     setStatusKey("copyText");
-    requestRender();
     const copied = await writeClipboardText(text);
     if (!stillPending()) return copied;
     if (!copied) {
@@ -1551,24 +2016,20 @@
       return false;
     }
     setStatusKey("textCopied");
-    target.copyFeedbackGeneration = generation;
-    target.copyFeedbackUntil = performance.now() + COPY_FEEDBACK_MS;
-    requestRender();
     setTimeout(() => {
-      if (!stillPending() || target.copyFeedbackGeneration !== generation) return;
-      if (target.copyFeedbackUntil <= performance.now()) {
-        target.copyFeedbackUntil = 0;
-        requestRender();
-      }
+      if (!stillPending()) return;
       if (state.statusKey === "textCopied") setStatusKey(state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
-    }, COPY_FEEDBACK_MS + 30);
+    }, COPY_STATUS_MS + 30);
     return true;
   }
-  function acceptPending() {
+  function acceptPending(options) {
+    options ||= {};
+    const restoreMode = options?.restoreMode !== false;
     const p = state.pending;
     if (!p) return;
-    blockCanvasInput();
-    if (p.revision !== state.userRevision && state.userRevision !== p.latestUserRevision) {
+    const pendingBefore = capturePendingHistoryState();
+    resetCanvasCursor();
+    if (p.recognitionGeneration !== undefined && p.recognitionGeneration !== state.recognitionGeneration) {
       rejectPending();
       setStatusKey("canvasChanged");
       return;
@@ -1576,32 +2037,38 @@
     const acceptedCount = p.items ? (p.acceptedItems || 0) + p.items.length : 1;
     if (p.items) {
       commitPendingBatch(p);
-      consumePendingInput(p);
     }
     else if (p.animationScene) {
       const box = draftBounds(p);
       addAnimation(p.animationScene, box, p.animationPlayback);
     }
+    else if (p.command?.tool === "plot_function") addPendingPlotImage(p, draftBounds(p));
     else if (p.textCommand) {
       const box = draftBounds(p);
       blitClipped(p.image, p.x, p.y, (p.image.logicalWidth || p.image.width) * p.scaleX, (p.image.logicalHeight || p.image.height) * p.scaleY, box.w, box.h);
     }
     else blitSized(p.image, p.x, p.y, (p.image.logicalWidth || p.image.width) * p.scaleX, (p.image.logicalHeight || p.image.height) * p.scaleY);
+    consumePendingInput(p);
+    if (!p.items) state.activeAI?.onResultCommitted?.(draftBounds(p));
     state.pending = null;
     state.pendingGesture = null;
     hideAnimationControls();
     updateBatchActions();
-    save();
+    const historyEntry = save();
+    recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
     render();
     setStatusKey("merged");
     resolvePending(p, p.items ? { acceptedCount } : true);
+    if (restoreMode) finishAIDraftHandMode();
+    if (options.showHint) showHandStatusHint("ai-draft-confirmed", ["handDraftConfirmedHint", "handAutoAIManual"]);
   }
   function acceptPendingItem(index) {
     const p = state.pending,
       item = p?.items?.[index];
     if (!item) return;
-    blockCanvasInput();
-    if (p.revision !== state.userRevision && state.userRevision !== p.latestUserRevision) {
+    const pendingBefore = capturePendingHistoryState();
+    resetCanvasCursor();
+    if (p.recognitionGeneration !== undefined && p.recognitionGeneration !== state.recognitionGeneration) {
       rejectPending();
       setStatusKey("canvasChanged");
       return;
@@ -1610,13 +2077,14 @@
     p.acceptedItems = (p.acceptedItems || 0) + 1;
     consumePendingInput(p);
     removePendingItem(p, index);
-    save();
+    const historyEntry = save();
     finishPendingItemAction(p, "itemAccepted");
+    recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
   }
   function rejectPendingItem(index) {
     const p = state.pending;
     if (!p?.items?.[index]) return;
-    blockCanvasInput();
+    resetCanvasCursor();
     removePendingItem(p, index);
     finishPendingItemAction(p, "itemDiscarded");
   }
@@ -1635,17 +2103,11 @@
       state.activeAI.dirtyRestored = true;
       state.activeAI.inputConsumed = true;
     }
-    // Selection-scoped drafts are independent of the normal handwriting stream. They
-    // must not consume its last box, hotspots, or typed input when the draft is accepted.
     if (p.isolatedSelection) {
       if (p.selection) p.selection.acceptedDraft = true;
-      return;
     }
     state.lastUserBox = p.latestBox;
-    if (p.hotspotEnd) {
-      const end = state.hotspotTrail.indexOf(p.hotspotEnd);
-      if (end >= 0) state.hotspotTrail.splice(0, end + 1);
-    }
+    consumeAllDirtyInput();
   }
   function finishPendingItemAction(p, statusKey) {
     if (p.items.length) {
@@ -1664,10 +2126,13 @@
     const accepted = Boolean(p.acceptedItems);
     setStatusKey(accepted ? "merged" : "draftRejected");
     resolvePending(p, p.acceptedItems ? { acceptedCount: p.acceptedItems } : false);
+    finishAIDraftHandMode();
   }
-  function rejectPending() {
+  function rejectPending(options) {
+    options ||= {};
+    const restoreMode = options?.restoreMode !== false;
     if (!state.pending) return;
-    blockCanvasInput();
+    resetCanvasCursor();
     const p = state.pending;
     state.pending = null;
     state.pendingGesture = null;
@@ -1677,6 +2142,7 @@
     const accepted = Boolean(p.acceptedItems);
     setStatusKey(accepted ? "merged" : "draftRejected");
     resolvePending(p, p.items && p.acceptedItems ? { acceptedCount: p.acceptedItems } : false);
+    if (restoreMode) finishAIDraftHandMode();
   }
   function notePendingContinuedInput(drawing) {
     const p = state.pending;
@@ -1694,12 +2160,14 @@
     updateBatchActions();
     render();
     resolvePending(p, AI_CANCELLED);
+    finishAIDraftHandMode();
   }
   function resolvePending(p, result) {
     if (!p) return;
     const callbacks = Array.isArray(p.resolves) ? p.resolves.splice(0) : p.resolve ? [p.resolve] : [];
     p.resolve = null;
     callbacks.forEach((callback) => callback(result));
+    if (typeof resumeSmartSuggest === "function") resumeSmartSuggest();
   }
   function queuePendingResolve(p, resolve) {
     if (typeof resolve !== "function") return;
@@ -1718,6 +2186,7 @@
       animationScene: p.animationScene || null,
       animationPlayback: p.animationPlayback || null,
       copyText: pendingCopyValue(p),
+      plotBlob:p.plotBlob || null,
       x: p.x,
       y: p.y,
       scaleX: p.scaleX || 1,
@@ -1754,15 +2223,16 @@
     if (pendingAnimationControlTarget()) showAnimationControls();
     releaseSelectionAITransformLock();
   }
-  function startPending(image, x, y, revision, meta, command) {
+  function startPending(image, x, y, revision, meta, command, plotBlob = null) {
     return new Promise((resolve) => {
+      enterAIDraftHandMode();
       const textCommand = command.tool === "write_text" ? { ...command } : null,
         animationScene = command.tool === "animate_scene" ? command : null,
         copyText = copyTextForCommand(command),
         layoutWidth = textCommand ? command.maxWidth : image.logicalWidth || image.width,
         layoutHeight = image.logicalHeight || image.height;
       if (state.pending) {
-        appendPendingItems(state.pending, [{ command: { ...command }, image, textCommand, animationScene, copyText, x, y, layoutWidth, layoutHeight }], revision, meta, resolve);
+        appendPendingItems(state.pending, [{ command: { ...command }, image, textCommand, animationScene, copyText, plotBlob, x, y, layoutWidth, layoutHeight }], revision, meta, resolve);
         return;
       }
       const rows = image.revealRows || [image.logicalWidth || image.width],
@@ -1777,6 +2247,7 @@
         scaleY: 1,
         textCommand,
         copyText,
+        plotBlob,
         animationScene,
         animationPlayback: animationScene ? createAnimationPlayback() : null,
         layoutWidth,
@@ -1784,6 +2255,7 @@
         heightLocked: false,
         revealProgress: animationScene ? 1 : 0,
         revision,
+        recognitionGeneration:state.recognitionGeneration,
         meta,
         isolatedSelection: Boolean(state.activeAI?.isolatedSelection),
         selection: state.activeAI?.isolatedSelection ? state.activeAI.selection || null : null,
@@ -1812,6 +2284,7 @@
   }
   function startPendingBatch(items, revision, meta) {
     return new Promise((resolve) => {
+      enterAIDraftHandMode();
       if (state.pending) {
         appendPendingItems(state.pending, items, revision, meta, resolve);
         return;
@@ -1821,6 +2294,7 @@
         selectedIndex: Math.max(0, items.findIndex((item) => item.animationScene)),
         revealProgress: 1,
         revision,
+        recognitionGeneration:state.recognitionGeneration,
         meta,
         isolatedSelection: Boolean(state.activeAI?.isolatedSelection),
         selection: state.activeAI?.isolatedSelection ? state.activeAI.selection || null : null,
@@ -1839,12 +2313,34 @@
   function commitPendingBatch(p) {
     for (const item of p.items) commitPendingItem(item);
   }
+  function addPendingPlotImage(item, box = pendingItemBounds(item)) {
+    const expression = typeof item?.command?.expression === "string" ? item.command.expression.trim() : "";
+    if (!expression || !(item.plotBlob instanceof Blob) || state.images.length >= MAX_VISIBLE_IMAGES) throw Error("Plot object could not be committed");
+    recordImagesBefore();
+    const record = imageRecord({
+      image:item.image,
+      blob:item.plotBlob,
+      x:box.x,
+      y:box.y,
+      w:box.w,
+      h:box.h,
+      naturalW:item.image.width,
+      naturalH:item.image.height,
+      sourceName:"",
+      plotExpression:expression,
+    });
+    if (!record) throw Error("Plot object could not be committed");
+    state.images.push(record);
+    return record;
+  }
   function commitPendingItem(item) {
     const box = pendingItemBounds(item);
     if (item.erase) eraseWithMask(item.image, box.x, box.y, box.w, box.h);
     else if (item.textCommand) blitClipped(item.image, item.x, item.y, (item.image.logicalWidth || item.image.width) * item.scaleX, (item.image.logicalHeight || item.image.height) * item.scaleY, box.w, box.h);
     else if (item.animationScene) addAnimation(item.animationScene, box, item.animationPlayback);
+    else if (item.command?.tool === "plot_function") addPendingPlotImage(item, box);
     else blitSized(item.image, box.x, box.y, (item.image.logicalWidth || item.image.width) * item.scaleX, (item.image.logicalHeight || item.image.height) * item.scaleY);
+    state.activeAI?.onResultCommitted?.(box);
   }
   function armPendingCopy(e, hit, itemIndex = null) {
     const pending = state.pending;
@@ -1872,7 +2368,7 @@
     if (!gesture?.copy || gesture.id !== event.pointerId) return false;
     const shouldCopy = event.type !== "pointercancel" && gesture.armed && pendingCopyMatches(gesture, event);
     state.pendingGesture = null;
-    setCanvasCursor(state.mode === "hand" ? "grab" : "crosshair");
+    resetCanvasCursor();
     if (shouldCopy) void copyPendingText(gesture.itemIndex);
     return true;
   }
@@ -2106,7 +2602,7 @@
       .replace(/^y\s*=\s*/i, "");
     if (!text || text.length > 180 || !/^[\d\sA-Za-z_+\-*/^().]+$/.test(text)) throw Error("Unsupported expression");
     const tokens = [],
-      re = /\s*(\d*\.?\d+(?:e[+\-]?\d+)?|[A-Za-z_]+|[()+\-*/^])/gy;
+      re = /\s*(\d*\.?\d+(?:e[+\-]?\d+)?|[A-Za-z_][A-Za-z_0-9]*|[()+\-*/^])/gy;
     let at = 0,
       m;
     while ((m = re.exec(text))) {
@@ -2124,6 +2620,7 @@
       abs: Math.abs,
       exp: Math.exp,
       log: Math.log,
+      log10: Math.log10,
       ln: Math.log,
     };
     function take(v) {
@@ -2194,7 +2691,9 @@
     return result;
   }
   function normalizePlotExpression(source) {
-    return String(source || "")
+    const expression = typeof SMART_SUGGEST === "object" && SMART_SUGGEST?.createGraphMath
+      ? SMART_SUGGEST.createGraphMath().fromJavaScript(source) : String(source || "");
+    return expression
       .trim()
       .replace(/[−–—]/g, "-")
       .replace(/[×·]/g, "*")
@@ -2202,7 +2701,22 @@
       .replace(/π/gi, "pi")
       .replace(/√\s*\(([^()]*)\)/g, "sqrt($1)")
       .replace(/√\s*([A-Za-z0-9_.]+)/g, "sqrt($1)")
-      .replace(/(\d|\)|x(?![A-Za-z_])|pi(?![A-Za-z_])|e(?![A-Za-z_]))\s*(?=x|pi|e(?![+\-]?\d)|sin|cos|tan|sqrt|abs|exp|log|ln|\()/gi, "$1*");
+      .replace(/((?<![A-Za-z_0-9])\d+(?:\.\d+)?|\)|x(?![A-Za-z_])|pi(?![A-Za-z_])|e(?![A-Za-z_]))\s*(?=x|pi|e(?![+\-]?\d)|sin|cos|tan|sqrt|abs|exp|log|ln|\()/gi, "$1*");
+  }
+  async function plotObjectImage(command) {
+    const rendered = plot(command),
+      logicalWidth = rendered.logicalWidth || rendered.width,
+      logicalHeight = rendered.logicalHeight || rendered.height,
+      scale = Math.min(1, MAX_IMAGE_DIMENSION / logicalWidth, MAX_IMAGE_DIMENSION / logicalHeight, Math.sqrt(MAX_IMAGE_PIXELS / (logicalWidth * logicalHeight)));
+    let image = rendered;
+    if (scale < 1) {
+      image = offscreen(Math.max(1, Math.round(logicalWidth * scale)), Math.max(1, Math.round(logicalHeight * scale)));
+      image.getContext("2d").drawImage(rendered, 0, 0, image.width, image.height);
+      rendered.width = rendered.height = 1;
+    }
+    image.logicalWidth = logicalWidth;
+    image.logicalHeight = logicalHeight;
+    return { image, blob:await canvasBlob(image), logicalWidth, logicalHeight };
   }
   function plot(c) {
     const o = offscreen(c.w, c.h),
@@ -2233,7 +2747,7 @@
     } catch {
       return o;
     }
-    const view = plotView(evaluate),
+    const view = c._mcpView || plotView(evaluate),
       { xMin, xMax, yMin, yMax } = view,
       xPixel = (x) => area.left + ((x - xMin) / (xMax - xMin)) * plotWidth,
       yPixel = (y) => area.bottom - ((y - yMin) / (yMax - yMin)) * plotHeight,
@@ -2459,7 +2973,7 @@
       start: animationBox(result.animation),
       changed: false,
     };
-    showAnimationControls();
+    if (!refreshHandObjectToolbar()) showAnimationControls();
     setCanvasCursor(result.hit === "resize" ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
     setStatusKey("animationSelected");
     requestAnimationLayerRender();
@@ -2499,37 +3013,9 @@
     state.animationGesture = null;
     resetCanvasCursor();
     if (gesture.changed && state.animationEdit) state.animationEdit.changed = true;
-    showAnimationControls();
+    if (!refreshHandObjectToolbar()) showAnimationControls();
     requestAnimationLayerRender();
     requestInteractionLayerRender();
-    return true;
-  }
-  function cancelAnimationTouchHold(pointerId = null) {
-    const hold = state.animationTouchHold;
-    if (!hold || pointerId !== null && hold.id !== pointerId) return false;
-    clearTimeout(hold.timer);
-    state.animationTouchHold = null;
-    return true;
-  }
-  function beginAnimationTouchHold(event, point, result) {
-    cancelAnimationTouchHold();
-    const hold = {
-      id: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      point,
-      result,
-      timer: 0,
-    };
-    hold.timer = setTimeout(() => {
-      if (state.animationTouchHold !== hold) return;
-      state.animationTouchHold = null;
-      if (state.touches.size !== 1 || !state.touches.has(hold.id) || !state.animations.includes(result.animation)) return;
-      state.panGesture = null;
-      setNavigating(false);
-      beginAnimationGesture({ pointerId: hold.id }, hold.point, hold.result);
-    }, ANIMATION_TOUCH_HOLD_MS);
-    state.animationTouchHold = hold;
     return true;
   }
   function deselectAnimation() {
@@ -2539,21 +3025,34 @@
   function isMousePan(e) {
     return e.pointerType === "mouse" && (e.button === 1 || e.altKey);
   }
-  function isAnimationActivationPointer(event) {
-    return (event.pointerType === "mouse" || event.pointerType === "pen") && event.button === 0;
-  }
   function finishDrawing(pointerType) {
     if (!state.drawing) return;
     const d = state.drawing;
+    commitLiveInkDrawing(d);
+    const feedbackPadding=Math.max(2,d.size||1);
+    mcpRecordFeedback("stroke",{x:d.bbox.x-feedbackPadding,y:d.bbox.y-feedbackPadding,w:d.bbox.w+feedbackPadding*2,h:d.bbox.h+feedbackPadding*2});
     state.drawing = null;
+    noteCanvasChromeInteraction();
+    requestAnimationFrame(() => {
+      if (!state.drawing) view.classList.remove("is-drawing");
+    });
+    scheduleLiveInkLayerWarmup();
     const shouldRequest = !d.erase;
+    let refineCandidate = null;
     if (shouldRequest) {
       for (const point of d.trail) state.hotspotTrail.push(point);
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
+      refineCandidate = latchWidgetRefineCandidate(d);
+    } else {
+      recomputeDirtyBounds();
+      filterErasedDirtyHotspots(d.dirtyMaskTouched);
+      refineCandidate = relatchWidgetRefineCandidateFromDirty();
     }
     notePendingContinuedInput(d);
     state.autoEligible ||= shouldRequest;
-    if (shouldRequest && state.autoEligible) schedule();
-    save();
-    if (shouldRequest) setStatusKey(state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
+    saveUserCanvasChange();
+    if (state.dirty && state.autoEligible && !refineCandidate) schedule();
+    if (typeof smartSuggestDrawingFinished === "function") smartSuggestDrawingFinished(d);
+    requestInteractionLayerRender();
+    if (shouldRequest || d.erase) setStatusKey(refineCandidate ? "widgetRefinePending" : state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
   }

@@ -1,0 +1,90 @@
+.remote-canvas-back {
+  align-items: center;
+  border: 1px solid rgb(148 163 184 / .42);
+  border-radius: 8px;
+  color: #d7dee8;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: 500 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  min-height: 36px;
+  padding: 0 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.remote-canvas-back:hover { background: rgb(148 163 184 / .14); color: #fff; }
+.remote-canvas-back:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.remote-canvas-gate {
+  align-items: center;
+  background: rgb(15 23 42 / .46);
+  backdrop-filter: blur(12px);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 100000;
+}
+.remote-canvas-gate[hidden] { display: none; }
+.remote-canvas-card {
+  background: #fff;
+  border: 1px solid #dbe2ea;
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgb(15 23 42 / .18);
+  color: #172033;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  max-width: 480px;
+  padding: 26px 28px;
+  width: 100%;
+}
+.remote-canvas-head { align-items: center; display: flex; gap: 8px; }
+.remote-canvas-dot { background: #98a2b3; border-radius: 50%; flex: 0 0 8px; height: 8px; width: 8px; }
+.remote-canvas-gate[data-state="checking"] .remote-canvas-dot,
+.remote-canvas-gate[data-state="opening"] .remote-canvas-dot { animation: remote-canvas-pulse 1.6s ease-in-out infinite; background: #2563eb; }
+.remote-canvas-gate[data-state="unlinked"] .remote-canvas-dot { background: #d97706; }
+.remote-canvas-gate[data-state="error"] .remote-canvas-dot { background: #dc2626; }
+@keyframes remote-canvas-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(37 99 235 / .32); }
+  50% { box-shadow: 0 0 0 5px rgb(37 99 235 / 0); }
+}
+.remote-canvas-card .eyebrow { color: #667085; font-size: 10.5px; font-weight: 600; letter-spacing: .035em; line-height: 1.3; margin: 0; text-transform: uppercase; }
+.remote-canvas-card h2 { font-size: 17px; font-weight: 600; letter-spacing: normal; line-height: 1.3; margin: 12px 0 0; word-break: keep-all; }
+.remote-canvas-detail { color: #667085; font-size: 13px; font-weight: 400; line-height: 1.45; margin: 10px 0 0; overflow-wrap: anywhere; }
+/* The gate offers a single Link Device action, revealed only while no
+   device is linked. Checking, offline, opening and error show no actions. */
+.remote-canvas-actions { display: none; margin-top: 20px; }
+.remote-canvas-gate[data-state="unlinked"] .remote-canvas-actions { display: flex; }
+.remote-canvas-actions a {
+  align-items: center;
+  border: 1px solid #2563eb;
+  border-radius: 10px;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: none;
+  font: 500 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 11px;
+  text-decoration: none;
+}
+.remote-canvas-gate[data-state="unlinked"] .remote-canvas-actions [data-action="link"] { display: inline-flex; }
+.remote-canvas-actions .primary { background: #2563eb; color: #fff; }
+.remote-canvas-actions .primary:hover { background: #1d4ed8; }
+.remote-canvas-actions a:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+@media (max-width: 720px) {
+  .remote-canvas-gate { padding: 12px; }
+  .remote-canvas-card { border-radius: 14px; padding: 22px; }
+  .remote-canvas-actions a { width: 100%; }
+  .remote-canvas-back { min-height: 36px; padding: 0 9px; }
+}
+
+@media (pointer: coarse) {
+  .remote-canvas-actions a { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .remote-canvas-gate { backdrop-filter: none; }
+  .remote-canvas-gate .remote-canvas-dot { animation: none; }
+}
+
+/* The brand acts as the way back to the console. */
+.brand[data-home-link] { cursor: pointer; border-radius: 8px; }
+.brand[data-home-link]:hover { outline: 1px solid rgb(148 163 184 / .35); outline-offset: 4px; }

@@ -65,7 +65,7 @@ function sanitizeCodexEnv(env = process.env, isolated = null) {
   return clean;
 }
 
-function buildCodexArgs({ workDir, imageFile, outputFile, model, effort }) {
+function buildCodexArgs({ workDir, imageFile, imageFiles, outputFile, model, effort }) {
   const disabledFeatures = [
       "apps", "auth_elicitation", "browser_use", "browser_use_external", "browser_use_full_cdp_access", "code_mode", "code_mode_host", "computer_use",
       "goals", "hooks", "image_generation", "in_app_browser", "memories", "multi_agent", "network_proxy", "plugins", "remote_plugin",
@@ -96,10 +96,11 @@ function buildCodexArgs({ workDir, imageFile, outputFile, model, effort }) {
     "-c", 'history.persistence="none"',
     "-C", workDir,
   );
-  if (imageFile) args.push("-i", imageFile);
+  const attachedImages = Array.isArray(imageFiles) ? imageFiles.filter(Boolean).slice(0, 5) : imageFile ? [imageFile] : [];
+  for (const attachedImage of attachedImages) args.push("-i", attachedImage);
   args.push("-o", outputFile);
   if (model) args.push("--model", model);
-  if (effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(effort)}`);
+  if (effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(String(effort).trim())}`);
   args.push("-");
   return args;
 }
@@ -185,7 +186,7 @@ function codexEventError(event) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function runJsonProcess(launch, args, prompt, cwd, env, signal) {
+function runJsonProcess(launch, args, prompt, cwd, env, signal, onProgress = null, onText = null, onActivity = null, onUsage = null) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
     let child;
@@ -194,10 +195,15 @@ function runJsonProcess(launch, args, prompt, cwd, env, signal) {
     } catch (error) {
       return reject(error);
     }
-    let termination = null, settled = false, lineBuffer = "", stderr = "", finalContent = "";
+    let termination = null, settled = false, lineBuffer = "", stderr = "", finalContent = "", responseStarted = false;
     const events = [];
     const terminate = () => termination ||= stopProcessTree(child);
     const traceDiagnostic = () => JSON.stringify({ events, stderr:stderr.slice(-4000) });
+    const reportResponseStarted = () => {
+      if (responseStarted) return;
+      responseStarted = true;
+      try { onProgress?.("receiving"); } catch {}
+    };
     const remember = (event, invalid = false) => {
       const summary = invalid
         ? { type:"invalid-json", preview:String(event).slice(0, 200) }
@@ -229,14 +235,17 @@ function runJsonProcess(launch, args, prompt, cwd, env, signal) {
       try { event = JSON.parse(line); }
       catch { remember(line, true); return; }
       remember(event);
+      if (event?.type === "turn.started" || String(event?.type || "").startsWith("item.")) reportResponseStarted();
       const content = codexAgentMessage(event);
       if (content) {
         if (Buffer.byteLength(content, "utf8") > MAX_CAPTURE_BYTES) return failEarly(new Error("Codex CLI final response is too large."));
+        try { onText?.(content, { mode:"complete" }); } catch {}
         finalContent = content;
       }
       if (event?.type === "turn.completed") {
         if (signal?.aborted) return failEarly(abortError(traceDiagnostic()));
         if (!finalContent) return failEarly(new Error("Codex CLI completed the turn without a final agent message."));
+        try { if (event.usage && typeof event.usage === "object") onUsage?.(event.usage); } catch {}
         finishEarly(finalContent);
       } else if (event?.type === "turn.failed" || event?.type === "error") {
         const detail = codexEventError(event), error = new Error(`Codex CLI turn failed${detail ? `: ${detail}` : "."}`);
@@ -247,6 +256,7 @@ function runJsonProcess(launch, args, prompt, cwd, env, signal) {
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", chunk => {
       if (settled) return;
+      try { onActivity?.(); } catch {}
       lineBuffer += chunk;
       let newline;
       while ((newline = lineBuffer.indexOf("\n")) >= 0 && !settled) {
@@ -294,19 +304,20 @@ function decodeAtlasImage(dataUrl) {
   return { buffer:Buffer.from(match[2], "base64"), extension:format, mimeType:`image/${format}` };
 }
 
-async function callCodexCli({ executable, model, effort, prompt, atlasImage, signal, env = process.env }) {
+async function callCodexCli({ executable, model, effort, prompt, atlasImage, signal, env = process.env, onProgress = null, onText = null, onActivity = null, onUsage = null }) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-codex-"));
-  const image = atlasImage ? decodeAtlasImage(atlasImage) : null,
-    imageFile = image ? path.join(workDir, `atlas.${image.extension}`) : null,
+  const imageInputs = (Array.isArray(atlasImage) ? atlasImage : atlasImage ? [atlasImage] : []).filter(Boolean).slice(0, 5),
+    images = imageInputs.map(decodeAtlasImage),
+    imageFiles = images.map((image, index) => path.join(workDir, `atlas-${index + 1}.${image.extension}`)),
     outputFile = path.join(workDir, "last-message.txt");
   let caughtError = null, cleanupReady = Promise.resolve(), deferCleanup = false;
   try {
     await fs.promises.chmod(workDir, 0o700).catch(() => {});
-    if (image) await fs.promises.writeFile(imageFile, image.buffer, { mode: 0o600 });
+    await Promise.all(images.map((image, index) => fs.promises.writeFile(imageFiles[index], image.buffer, { mode:0o600 })));
     const launch = resolveCodexLaunch(executable, env),
-      args = buildCodexArgs({ workDir, imageFile, outputFile, model, effort }),
+      args = buildCodexArgs({ workDir, imageFiles, outputFile, model, effort }),
       childEnv = await prepareIsolatedRuntime(workDir, env),
-      result = await runJsonProcess(launch, args, prompt, workDir, childEnv, signal);
+      result = await runJsonProcess(launch, args, prompt, workDir, childEnv, signal, onProgress, onText, onActivity, onUsage);
     cleanupReady = result.cleanupReady || cleanupReady;
     deferCleanup = Boolean(result.deferCleanup);
     if (signal?.aborted) throw abortError();

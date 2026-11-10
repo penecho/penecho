@@ -1,85 +1,71 @@
-.desktop-update-banner {
+/* Injected by the native desktop preload only; web and CLI clients have no entry. */
+#desktopUpdatePrompt.desktop-update-prompt {
   position: relative;
-  z-index: 100000;
-  width: 100%;
-  color: #172033;
-  border-bottom: 1px solid #c9d8ef;
-  background: #edf5ff;
-  font: 13px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
-  box-shadow: 0 1px 4px #18324f1f;
-}
-.desktop-update-banner[hidden] { display: none; }
-.desktop-update-row {
-  display: flex;
-  min-height: 38px;
+  z-index: 72;
+  display: inline-flex;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
   align-items: center;
-  gap: 12px;
-  padding: 5px 10px 5px 14px;
+  order: -2;
+  margin-inline: 2px 4px;
 }
-.desktop-update-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
+#desktopUpdatePrompt[hidden] { display: none; }
+#desktopUpdatePrompt .desktop-update-button {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-}
-.desktop-update-title { flex: 0 0 auto; font-size: 13px; }
-.desktop-update-detail {
-  min-width: 0;
-  overflow: hidden;
-  color: #53637a;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.desktop-update-progress { width: min(220px, 26vw); height: 8px; accent-color: #315efb; }
-.desktop-update-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
-.desktop-update-actions button {
-  min-height: 28px;
-  padding: 4px 10px;
-  color: #26344b;
-  border: 1px solid #afc2dc;
-  border-radius: 6px;
-  background: #fff;
-  font: 600 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
-  letter-spacing: 0;
+  justify-content: center;
+  flex: 0 0 26px;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  margin: 0;
+  padding: 5px;
+  border: 0;
+  border-radius: 50%;
+  color: #397bea;
+  background: #e8f0ff;
+  box-shadow: none;
   cursor: pointer;
 }
-.desktop-update-actions button:hover, .desktop-update-actions button:focus-visible { border-color: #315efb; outline: none; }
-.desktop-update-actions .desktop-update-primary { color: #fff; border-color: #315efb; background: #315efb; }
-.desktop-update-actions .desktop-update-close {
-  width: 28px;
-  padding: 0;
-  color: #53637a;
-  border-color: transparent;
-  background: transparent;
-  font-size: 20px;
-  font-weight: 400;
+#desktopUpdatePrompt .desktop-update-button:hover { background: #dbe8ff; }
+#desktopUpdatePrompt .desktop-update-button:focus-visible { outline: 2px solid #759ff0; outline-offset: 3px; }
+#desktopUpdatePrompt .desktop-update-button:disabled { cursor: default; }
+#desktopUpdatePrompt svg { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+#desktopUpdatePrompt .desktop-update-icon { width: 15px; height: 15px; }
+#desktopUpdatePrompt .desktop-update-ring { display: none; position: absolute; inset: -1px; width: 28px; height: 28px; transform: rotate(-90deg); }
+#desktopUpdatePrompt .desktop-update-ring circle { stroke-dasharray: 75.4; }
+#desktopUpdatePrompt[data-state="downloading"] .desktop-update-ring { display: block; }
+#desktopUpdatePrompt[data-state="downloading"] .desktop-update-icon { width: 12px; height: 12px; }
+#desktopUpdatePrompt[data-state="downloading"][data-progress="unknown"] .desktop-update-ring { animation: desktop-update-spin 1.5s linear infinite; }
+#desktopUpdatePrompt[data-state="downloading"][data-progress="unknown"] .desktop-update-ring circle { stroke-dasharray: 22 54; }
+#desktopUpdatePrompt[data-state="ready"] .desktop-update-button { color: #238452; background: #e4f3e9; }
+#desktopUpdatePrompt[data-state="ready"] .desktop-update-button:hover { background: #d7ecdf; }
+#desktopUpdatePrompt[data-state="ready"] .desktop-update-button::after { content: ""; position: absolute; top: -1px; right: -1px; width: 5px; height: 5px; border: 1.5px solid var(--studio-titlebar, #f8f8f9); border-radius: 50%; background: #2d985b; }
+#desktopUpdatePrompt[data-state="error"] .desktop-update-button { color: #9a5b16; background: #fff0d9; }
+#desktopUpdatePrompt .desktop-update-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  visibility: hidden;
+  width: max-content;
+  max-width: 240px;
+  padding: 5px 9px;
+  color: #fff;
+  background: #303644;
+  border-radius: 5px;
+  font: 400 11px/1.5 system-ui, sans-serif;
+  white-space: nowrap;
 }
-.desktop-update-notes {
-  max-height: 132px;
-  padding: 8px 14px 10px;
-  overflow: auto;
-  color: #34445d;
-  border-top: 1px solid #d8e4f3;
-  white-space: pre-wrap;
-}
-.desktop-update-notes[hidden] { display: none; }
-body.penecho-desktop-update-visible main { min-height: calc(100vh - 38px); min-height: calc(100dvh - 38px); }
-body[data-theme="arcane"] .desktop-update-banner,
-body[data-theme="scifi"] .desktop-update-banner {
-  color: #edf3ff;
-  border-bottom-color: #435678;
-  background: #172238;
-}
-body[data-theme="arcane"] .desktop-update-detail,
-body[data-theme="scifi"] .desktop-update-detail,
-body[data-theme="arcane"] .desktop-update-notes,
-body[data-theme="scifi"] .desktop-update-notes { color: #c1cee2; }
-body[data-theme="arcane"] .desktop-update-notes,
-body[data-theme="scifi"] .desktop-update-notes { border-top-color: #435678; }
-@media (max-width: 720px) {
-  .desktop-update-row { align-items: flex-start; gap: 6px; }
-  .desktop-update-copy { display: grid; gap: 1px; }
-  .desktop-update-progress { width: min(260px, 55vw); }
-  .desktop-update-secondary { display: none; }
+#desktopUpdatePrompt:not(.tooltip-dismissed):hover .desktop-update-tooltip,
+#desktopUpdatePrompt:not(.tooltip-dismissed):focus-within .desktop-update-tooltip { visibility: visible; }
+#desktopUpdatePrompt .desktop-update-announcement { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@keyframes desktop-update-spin { to { transform: rotate(270deg); } }
+@media (prefers-reduced-motion: reduce) { #desktopUpdatePrompt .desktop-update-ring { animation: none !important; } }
+@media (forced-colors: active) {
+  #desktopUpdatePrompt .desktop-update-button { border: 1px solid ButtonText; }
+  #desktopUpdatePrompt .desktop-update-tooltip { border: 1px solid CanvasText; color: CanvasText; background: Canvas; }
 }

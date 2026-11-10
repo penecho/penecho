@@ -1,0 +1,7510 @@
+{
+  "architecture": [
+    {
+      "description": "Single-file HTML game. No backend; all state lives in the browser.",
+      "details": [
+        {
+          "domain": "fe",
+          "items": [
+            "No server and no network requests",
+            "Runs by opening the local file"
+          ],
+          "title": "Runtime shape"
+        },
+        {
+          "domain": "core",
+          "items": [
+            "Board state kept in memory",
+            "Only the high score is persisted"
+          ],
+          "title": "State handling"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "ux",
+          "label": "Player Input"
+        },
+        {
+          "color": "teal",
+          "id": "fe",
+          "label": "Page & Rendering"
+        },
+        {
+          "color": "orange",
+          "id": "core",
+          "label": "Game Core"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Local Storage"
+        }
+      ],
+      "edges": [
+        {
+          "from": "player",
+          "kind": "call",
+          "label": "keys / touch",
+          "to": "input"
+        },
+        {
+          "from": "input",
+          "kind": "call",
+          "label": "move & rotate",
+          "to": "loop"
+        },
+        {
+          "from": "page",
+          "kind": "config",
+          "label": "mounts canvas",
+          "to": "render"
+        },
+        {
+          "from": "loop",
+          "kind": "data",
+          "label": "frame draw",
+          "to": "render"
+        },
+        {
+          "from": "render",
+          "kind": "return",
+          "label": "screen output",
+          "to": "player"
+        },
+        {
+          "bidirectional": true,
+          "from": "loop",
+          "kind": "data",
+          "label": "read / write high score",
+          "to": "store"
+        }
+      ],
+      "nodes": [
+        {
+          "details": [
+            "Keyboard plus on-screen touch controls"
+          ],
+          "domain": "ux",
+          "id": "player",
+          "label": "Player",
+          "type": "external"
+        },
+        {
+          "domain": "fe",
+          "id": "page",
+          "label": "index.html",
+          "subtitle": "single-file page",
+          "type": "frontend"
+        },
+        {
+          "domain": "fe",
+          "id": "render",
+          "label": "Canvas Renderer",
+          "subtitle": "blocks and grid",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Gravity, line clearing, scoring",
+            "Fall speed grows with level"
+          ],
+          "domain": "core",
+          "id": "loop",
+          "label": "Game Loop",
+          "subtitle": "requestAnimationFrame",
+          "type": "backend"
+        },
+        {
+          "domain": "core",
+          "id": "input",
+          "label": "Keyboard Handler",
+          "subtitle": "keydown listener",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "store",
+          "label": "localStorage",
+          "subtitle": "high-score persistence",
+          "type": "database"
+        }
+      ],
+      "notes": [
+        "Schematic view; audio and pause handling are omitted."
+      ],
+      "title": "Tetris Single-Page Game · Frontend Architecture",
+      "version": 1
+    },
+    {
+      "description": "Edge-routed short-link service with asynchronous click analytics.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Cache hit serves in a few ms",
+            "Cache miss falls back to KV store"
+          ],
+          "title": "Read path"
+        },
+        {
+          "domain": "async",
+          "items": [
+            "Click events never block redirects",
+            "Worker batches every 30 s"
+          ],
+          "title": "Write path"
+        },
+        {
+          "domain": "ext",
+          "items": [
+            "New targets scanned before activation",
+            "Blocklist refreshed hourly"
+          ],
+          "title": "Abuse control"
+        }
+      ],
+      "direction": "RIGHT",
+      "domains": [
+        {
+          "color": "blue",
+          "id": "edge",
+          "label": "Edge & API"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Core Services"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Storage"
+        },
+        {
+          "color": "orange",
+          "id": "async",
+          "label": "Async Pipeline"
+        },
+        {
+          "color": "slate",
+          "id": "ext",
+          "label": "Third Parties"
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "kind": "call",
+          "label": "HTTPS",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "kind": "call",
+          "label": "/s/{slug}",
+          "to": "short"
+        },
+        {
+          "from": "short",
+          "kind": "data",
+          "label": "read hot slug",
+          "to": "cache"
+        },
+        {
+          "bidirectional": true,
+          "from": "short",
+          "kind": "data",
+          "label": "read / write",
+          "to": "kv"
+        },
+        {
+          "from": "short",
+          "kind": "call",
+          "label": "scan target URL",
+          "to": "abuse"
+        },
+        {
+          "from": "short",
+          "kind": "data",
+          "label": "click event",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "kind": "data",
+          "label": "consume",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "kind": "data",
+          "label": "batch upsert",
+          "to": "dw"
+        },
+        {
+          "from": "gw",
+          "kind": "return",
+          "label": "302 redirect",
+          "to": "client"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "svc",
+          "id": "g_svc",
+          "label": "Shortener service process"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "edge",
+          "id": "client",
+          "label": "Web & Mobile Clients",
+          "type": "frontend"
+        },
+        {
+          "domain": "edge",
+          "id": "gw",
+          "label": "API Gateway",
+          "subtitle": "Rate limit · Auth · Routing",
+          "type": "backend"
+        },
+        {
+          "details": [
+            "Base62 slug, 7 characters",
+            "Optional custom alias validation"
+          ],
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "short",
+          "label": "Shortener Service",
+          "subtitle": "slug generation + redirect",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "kv",
+          "label": "KV Store",
+          "subtitle": "slug → target URL",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "id": "cache",
+          "label": "Redirect Cache",
+          "subtitle": "hot slugs, TTL 5 min",
+          "type": "database"
+        },
+        {
+          "domain": "async",
+          "id": "queue",
+          "label": "Click Event Topic",
+          "type": "messagebus"
+        },
+        {
+          "domain": "async",
+          "id": "worker",
+          "label": "Analytics Worker",
+          "subtitle": "aggregate clicks per slug",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "dw",
+          "label": "Analytics Warehouse",
+          "type": "database"
+        },
+        {
+          "domain": "ext",
+          "id": "abuse",
+          "label": "Abuse / Phishing Check",
+          "type": "external"
+        }
+      ],
+      "notes": [
+        "Return traffic for write paths is omitted for clarity."
+      ],
+      "title": "URL Shortener & Click Analytics · Service Architecture",
+      "version": 1
+    },
+    {
+      "description": "One-click delivery chain from ISO verification to a factory-clean Hyper-V test machine.",
+      "details": [
+        {
+          "domain": "guest",
+          "items": [
+            "The Clean checkpoint includes memory state",
+            "Files, registry and the 90-day evaluation clock roll back together"
+          ],
+          "title": "Why no re-activation"
+        },
+        {
+          "domain": "host",
+          "items": [
+            "Dynamic memory 4-16 GB",
+            "80 GB dynamically expanding disk"
+          ],
+          "title": "Sizing"
+        },
+        {
+          "domain": "sec",
+          "items": [
+            "Large Microsoft CDN downloads can arrive corrupted",
+            "Always verify the ISO hash after download"
+          ],
+          "title": "Known limitation"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "human",
+          "label": "Operator"
+        },
+        {
+          "color": "teal",
+          "id": "host",
+          "label": "Host Automation"
+        },
+        {
+          "color": "orange",
+          "id": "guest",
+          "label": "Test VM"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Images & State"
+        },
+        {
+          "color": "slate",
+          "id": "sec",
+          "label": "Verification & Recovery"
+        }
+      ],
+      "edges": [
+        {
+          "from": "operator",
+          "kind": "call",
+          "label": "double-click",
+          "to": "bat"
+        },
+        {
+          "from": "bat",
+          "kind": "call",
+          "label": "run elevated",
+          "to": "setup"
+        },
+        {
+          "from": "setup",
+          "kind": "call",
+          "label": "verify first",
+          "to": "verify"
+        },
+        {
+          "from": "verify",
+          "kind": "data",
+          "label": "Get-FileHash",
+          "to": "iso"
+        },
+        {
+          "from": "verify",
+          "kind": "return",
+          "label": "mismatch, abort",
+          "to": "setup"
+        },
+        {
+          "from": "setup",
+          "kind": "call",
+          "label": "hash OK",
+          "to": "dism"
+        },
+        {
+          "from": "iso",
+          "kind": "data",
+          "label": "read install.wim",
+          "to": "dism"
+        },
+        {
+          "from": "dism",
+          "kind": "config",
+          "label": "inject answer file",
+          "to": "unattend"
+        },
+        {
+          "from": "dism",
+          "kind": "call",
+          "label": "create / configure VM",
+          "to": "hv"
+        },
+        {
+          "bidirectional": true,
+          "from": "hv",
+          "kind": "call",
+          "label": "boot & auto-configure",
+          "to": "vm"
+        },
+        {
+          "from": "vm",
+          "kind": "return",
+          "label": "desktop output",
+          "to": "console"
+        },
+        {
+          "from": "hv",
+          "kind": "data",
+          "label": "take Clean checkpoint",
+          "to": "clean"
+        },
+        {
+          "from": "setup",
+          "kind": "data",
+          "label": "write full log",
+          "to": "log"
+        },
+        {
+          "from": "reset",
+          "kind": "call",
+          "label": "restore factory state",
+          "to": "vm"
+        },
+        {
+          "from": "reset",
+          "kind": "data",
+          "label": "restore snapshot",
+          "to": "clean"
+        },
+        {
+          "from": "start",
+          "kind": "optional",
+          "label": "open console",
+          "to": "console"
+        },
+        {
+          "from": "operator",
+          "kind": "optional",
+          "label": "daily start",
+          "to": "start"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "human",
+          "id": "g_entry",
+          "label": "One-click entry"
+        },
+        {
+          "domain": "host",
+          "id": "g_host",
+          "label": "Hyper-V host process"
+        },
+        {
+          "domain": "guest",
+          "id": "g_guest",
+          "label": "Win11-Test guest"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "human",
+          "id": "operator",
+          "label": "Operator",
+          "subtitle": "double-click the .bat, accept one UAC prompt",
+          "type": "external"
+        },
+        {
+          "domain": "human",
+          "group": "g_entry",
+          "id": "bat",
+          "label": "One-click Install.bat",
+          "subtitle": "single entry point",
+          "type": "backend"
+        },
+        {
+          "details": [
+            "Verify ISO > apply image > auto-configure > Clean checkpoint > open window",
+            "Full log written to setup-log6.txt"
+          ],
+          "domain": "host",
+          "group": "g_host",
+          "id": "setup",
+          "label": "setup-elevated6.ps1",
+          "subtitle": "deployment orchestrator",
+          "type": "backend"
+        },
+        {
+          "domain": "sec",
+          "group": "g_host",
+          "id": "verify",
+          "label": "verify-iso.ps1",
+          "subtitle": "SHA-256 hash check",
+          "type": "security"
+        },
+        {
+          "domain": "data",
+          "id": "iso",
+          "label": "ISO library H:\\HyperV\\iso",
+          "subtitle": "LTSC 2024 image",
+          "type": "database"
+        },
+        {
+          "domain": "host",
+          "group": "g_host",
+          "id": "dism",
+          "label": "DISM Image Apply",
+          "subtitle": "WIM to 80 GB expanding disk",
+          "type": "backend"
+        },
+        {
+          "domain": "host",
+          "group": "g_host",
+          "id": "unattend",
+          "label": "autounattend.xml",
+          "subtitle": "accounts, auto-logon, locale",
+          "type": "backend"
+        },
+        {
+          "domain": "host",
+          "id": "hv",
+          "label": "Hyper-V Host Service",
+          "subtitle": "Default Switch networking",
+          "type": "cloud"
+        },
+        {
+          "details": [
+            "Gen-2 VM, 6 vCPU, 4-16 GB dynamic memory",
+            "Windows 11 LTSC 2024, tester auto-logon"
+          ],
+          "domain": "guest",
+          "group": "g_guest",
+          "id": "vm",
+          "label": "Win11-Test VM",
+          "subtitle": "disposable test machine",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "group": "g_guest",
+          "id": "clean",
+          "label": "Clean Checkpoint",
+          "subtitle": "factory snapshot with memory",
+          "type": "database"
+        },
+        {
+          "domain": "sec",
+          "id": "reset",
+          "label": "reset-vm.ps1",
+          "subtitle": "restore in seconds",
+          "type": "backend"
+        },
+        {
+          "domain": "host",
+          "id": "start",
+          "label": "start-vm.ps1",
+          "subtitle": "keep current state",
+          "type": "backend"
+        },
+        {
+          "domain": "guest",
+          "id": "console",
+          "label": "VMConnect Console",
+          "subtitle": "interactive desktop",
+          "type": "frontend"
+        },
+        {
+          "domain": "data",
+          "id": "log",
+          "label": "setup-log6.txt",
+          "subtitle": "'=== DONE ===' means success",
+          "type": "database"
+        }
+      ],
+      "notes": [
+        "Humans touch the system twice: the UAC prompt and the daily start."
+      ],
+      "title": "Win11-Test VM · Automated Deployment Platform",
+      "version": 1
+    },
+    {
+      "description": "Upload once, get responsive variants delivered from the edge.",
+      "details": [
+        {
+          "domain": "aws",
+          "items": [
+            "Pay per request and per GB-second",
+            "No idle server cost"
+          ],
+          "title": "Cost profile"
+        },
+        {
+          "domain": "store",
+          "items": [
+            "Failed resizes go to a dead-letter queue",
+            "Originals are never modified"
+          ],
+          "title": "Failure handling"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "Clients"
+        },
+        {
+          "color": "orange",
+          "id": "aws",
+          "label": "Managed Services"
+        },
+        {
+          "color": "purple",
+          "id": "store",
+          "label": "Object Storage"
+        }
+      ],
+      "edges": [
+        {
+          "from": "uploader",
+          "kind": "data",
+          "label": "PUT original",
+          "to": "raw"
+        },
+        {
+          "from": "raw",
+          "kind": "call",
+          "label": "object-created event",
+          "to": "fn"
+        },
+        {
+          "from": "fn",
+          "kind": "data",
+          "label": "write variants",
+          "to": "thumbs"
+        },
+        {
+          "from": "viewer",
+          "kind": "call",
+          "label": "GET /img/{key}",
+          "to": "cdn"
+        },
+        {
+          "from": "cdn",
+          "kind": "optional",
+          "label": "cache miss",
+          "to": "thumbs"
+        },
+        {
+          "from": "cdn",
+          "kind": "return",
+          "label": "image bytes",
+          "to": "viewer"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "client",
+          "id": "uploader",
+          "label": "Uploader App",
+          "subtitle": "web or mobile client",
+          "type": "frontend"
+        },
+        {
+          "domain": "store",
+          "id": "raw",
+          "label": "Raw Bucket",
+          "subtitle": "original uploads",
+          "type": "database"
+        },
+        {
+          "details": [
+            "Runs once per object",
+            "Generates 320 / 768 / 1280 px widths"
+          ],
+          "domain": "aws",
+          "id": "fn",
+          "label": "Resize Function",
+          "subtitle": "triggered on PUT",
+          "type": "cloud"
+        },
+        {
+          "domain": "store",
+          "id": "thumbs",
+          "label": "Variants Bucket",
+          "subtitle": "WebP + JPEG variants",
+          "type": "database"
+        },
+        {
+          "domain": "aws",
+          "id": "cdn",
+          "label": "Content Delivery Network",
+          "subtitle": "edge cache, 30-day TTL",
+          "type": "cloud"
+        },
+        {
+          "domain": "client",
+          "id": "viewer",
+          "label": "End User",
+          "type": "external"
+        }
+      ],
+      "notes": [
+        "Variant generation is idempotent; re-running overwrites the same keys."
+      ],
+      "title": "Serverless Image Thumbnail Pipeline",
+      "version": 1
+    },
+    {
+      "description": "Full-volume settlement data from every designated hospital and pharmacy feeds a governed analytics core.",
+      "details": [
+        {
+          "domain": "src",
+          "items": [
+            "All designated hospitals and pharmacies nationwide",
+            "Coverage from 2021 onward, continuously updated"
+          ],
+          "title": "Data coverage"
+        },
+        {
+          "domain": "core",
+          "items": [
+            "Patients are tracked across hospitals and pharmacies",
+            "Supports patient-flow and competitive analysis"
+          ],
+          "title": "Cross-provider tracking"
+        },
+        {
+          "domain": "sec",
+          "items": [
+            "Every query is attributed to an analyst account",
+            "Retention and masking follow insurance regulation"
+          ],
+          "title": "Governance"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "src",
+          "label": "Data Sources"
+        },
+        {
+          "color": "teal",
+          "id": "gov",
+          "label": "Ingestion & Governance"
+        },
+        {
+          "color": "orange",
+          "id": "core",
+          "label": "Analytics Core"
+        },
+        {
+          "color": "green",
+          "id": "app",
+          "label": "Applications"
+        },
+        {
+          "color": "slate",
+          "id": "sec",
+          "label": "Compliance"
+        }
+      ],
+      "edges": [
+        {
+          "from": "hosp",
+          "kind": "data",
+          "label": "nightly batch + realtime stream",
+          "to": "ingest"
+        },
+        {
+          "from": "ingest",
+          "kind": "call",
+          "label": "validate before load",
+          "to": "quality"
+        },
+        {
+          "from": "quality",
+          "kind": "return",
+          "label": "rejects with reason codes",
+          "to": "ingest"
+        },
+        {
+          "from": "quality",
+          "kind": "data",
+          "label": "clean claim rows",
+          "to": "ledger"
+        },
+        {
+          "bidirectional": true,
+          "from": "ledger",
+          "kind": "data",
+          "label": "identity resolution",
+          "to": "patient"
+        },
+        {
+          "from": "ledger",
+          "kind": "data",
+          "label": "settlement history",
+          "to": "tracker"
+        },
+        {
+          "from": "patient",
+          "kind": "data",
+          "label": "visit sequence",
+          "to": "tracker"
+        },
+        {
+          "from": "ledger",
+          "kind": "data",
+          "label": "aggregated volumes",
+          "to": "market"
+        },
+        {
+          "from": "portal",
+          "kind": "call",
+          "label": "analyst query",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "kind": "return",
+          "label": "result set",
+          "to": "portal"
+        },
+        {
+          "from": "api",
+          "kind": "call",
+          "label": "cross-provider lookup",
+          "to": "tracker"
+        },
+        {
+          "from": "api",
+          "kind": "call",
+          "label": "market metrics",
+          "to": "market"
+        },
+        {
+          "from": "risk",
+          "kind": "call",
+          "label": "exposure query",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "kind": "data",
+          "label": "log every query",
+          "to": "audit"
+        },
+        {
+          "from": "audit",
+          "kind": "config",
+          "label": "retention policy",
+          "to": "api"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "gov",
+          "id": "g_data",
+          "label": "Governed data layer"
+        },
+        {
+          "domain": "core",
+          "id": "g_serv",
+          "label": "Serving layer"
+        },
+        {
+          "domain": "app",
+          "id": "g_apps",
+          "label": "Application layer"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "src",
+          "id": "hosp",
+          "label": "Hospitals & Pharmacies",
+          "subtitle": "all designated providers",
+          "type": "external"
+        },
+        {
+          "domain": "gov",
+          "group": "g_data",
+          "id": "ingest",
+          "label": "Ingestion Service",
+          "subtitle": "no sampling, no scaling",
+          "type": "backend"
+        },
+        {
+          "domain": "gov",
+          "group": "g_data",
+          "id": "quality",
+          "label": "Data Quality Rules",
+          "subtitle": "schema and anomaly checks",
+          "type": "backend"
+        },
+        {
+          "domain": "core",
+          "group": "g_data",
+          "id": "ledger",
+          "label": "Settlement Fact Store",
+          "subtitle": "every claim line",
+          "type": "database"
+        },
+        {
+          "domain": "core",
+          "group": "g_data",
+          "id": "patient",
+          "label": "Patient Journey Index",
+          "subtitle": "cross-provider visit graph",
+          "type": "database"
+        },
+        {
+          "domain": "core",
+          "group": "g_serv",
+          "id": "tracker",
+          "label": "Cross-Provider Tracker",
+          "subtitle": "patient flow between institutions",
+          "type": "backend"
+        },
+        {
+          "domain": "core",
+          "group": "g_serv",
+          "id": "market",
+          "label": "Competitive Landscape",
+          "subtitle": "share and catchment analysis",
+          "type": "backend"
+        },
+        {
+          "domain": "core",
+          "group": "g_serv",
+          "id": "api",
+          "label": "Data Service API",
+          "subtitle": "governed query endpoints",
+          "type": "backend"
+        },
+        {
+          "domain": "app",
+          "group": "g_apps",
+          "id": "portal",
+          "label": "Analyst Portal",
+          "subtitle": "dashboards and exports",
+          "type": "frontend"
+        },
+        {
+          "domain": "app",
+          "group": "g_apps",
+          "id": "risk",
+          "label": "Risk & Fraud Console",
+          "subtitle": "anomalous provider patterns",
+          "type": "frontend"
+        },
+        {
+          "domain": "sec",
+          "id": "audit",
+          "label": "Access Audit Log",
+          "subtitle": "who queried what, when",
+          "type": "security"
+        }
+      ],
+      "notes": [
+        "Application screens read through the API only; no direct database access."
+      ],
+      "title": "National Health-Insurance Data Platform",
+      "version": 1
+    },
+    {
+      "description": "Domain-oriented services with per-service data stores and an event backbone for cross-domain reactions.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Each service owns its schema; no shared tables",
+            "Synchronous calls only for read-your-writes paths"
+          ],
+          "title": "Service boundaries"
+        },
+        {
+          "domain": "async",
+          "items": [
+            "Topic per domain event (order, stock, payment)",
+            "Consumers are idempotent and replay-safe"
+          ],
+          "title": "Event backbone"
+        },
+        {
+          "domain": "ext",
+          "items": [
+            "Card data never reaches our services",
+            "PSP returns a token plus 3-D Secure result"
+          ],
+          "title": "PCI scope"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "edge",
+          "label": "Client & Edge"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Domain Services"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Data Stores"
+        },
+        {
+          "color": "orange",
+          "id": "async",
+          "label": "Event Backbone"
+        },
+        {
+          "color": "slate",
+          "id": "ext",
+          "label": "External Providers"
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "kind": "call",
+          "label": "HTTPS",
+          "to": "cdn"
+        },
+        {
+          "from": "mobile",
+          "kind": "call",
+          "label": "HTTPS",
+          "to": "cdn"
+        },
+        {
+          "from": "cdn",
+          "kind": "call",
+          "label": "origin pull",
+          "to": "gateway"
+        },
+        {
+          "from": "gateway",
+          "kind": "call",
+          "label": "verify JWT",
+          "to": "auth"
+        },
+        {
+          "from": "auth",
+          "kind": "return",
+          "label": "claims",
+          "to": "gateway"
+        },
+        {
+          "from": "gateway",
+          "kind": "call",
+          "label": "product pages",
+          "to": "catalog"
+        },
+        {
+          "from": "gateway",
+          "kind": "call",
+          "label": "cart ops",
+          "to": "cart"
+        },
+        {
+          "from": "gateway",
+          "kind": "call",
+          "label": "checkout",
+          "to": "order"
+        },
+        {
+          "from": "gateway",
+          "kind": "call",
+          "label": "search",
+          "to": "search"
+        },
+        {
+          "from": "catalog",
+          "kind": "data",
+          "label": "read / write",
+          "to": "catalogdb"
+        },
+        {
+          "bidirectional": true,
+          "from": "cart",
+          "kind": "data",
+          "label": "session cart",
+          "to": "cartcache"
+        },
+        {
+          "from": "search",
+          "kind": "data",
+          "label": "index docs",
+          "to": "searchidx"
+        },
+        {
+          "from": "order",
+          "kind": "data",
+          "label": "orders",
+          "to": "orderdb"
+        },
+        {
+          "from": "order",
+          "kind": "call",
+          "label": "reserve stock",
+          "to": "inventory"
+        },
+        {
+          "from": "inventory",
+          "kind": "data",
+          "label": "stock levels",
+          "to": "invdb"
+        },
+        {
+          "from": "inventory",
+          "kind": "return",
+          "label": "reservation id",
+          "to": "order"
+        },
+        {
+          "from": "order",
+          "kind": "call",
+          "label": "authorize",
+          "to": "payment"
+        },
+        {
+          "from": "payment",
+          "kind": "call",
+          "label": "3-D Secure",
+          "to": "psp"
+        },
+        {
+          "from": "payment",
+          "kind": "return",
+          "label": "authorization",
+          "to": "order"
+        },
+        {
+          "from": "order",
+          "kind": "data",
+          "label": "order.created",
+          "to": "bus"
+        },
+        {
+          "from": "inventory",
+          "kind": "data",
+          "label": "stock.reserved",
+          "to": "bus"
+        },
+        {
+          "from": "bus",
+          "kind": "data",
+          "label": "consume events",
+          "to": "notify"
+        },
+        {
+          "from": "gateway",
+          "kind": "return",
+          "label": "JSON response",
+          "to": "web"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "edge",
+          "id": "g_edge",
+          "label": "Edge tier"
+        },
+        {
+          "domain": "svc",
+          "id": "g_svc",
+          "label": "Domain services"
+        },
+        {
+          "domain": "data",
+          "id": "g_data",
+          "label": "Per-service stores"
+        },
+        {
+          "domain": "async",
+          "id": "g_async",
+          "label": "Event backbone"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "edge",
+          "group": "g_edge",
+          "id": "web",
+          "label": "Web Storefront",
+          "subtitle": "server-rendered pages",
+          "type": "frontend"
+        },
+        {
+          "domain": "edge",
+          "group": "g_edge",
+          "id": "mobile",
+          "label": "Mobile App",
+          "subtitle": "iOS + Android",
+          "type": "frontend"
+        },
+        {
+          "domain": "edge",
+          "group": "g_edge",
+          "id": "cdn",
+          "label": "CDN & WAF",
+          "subtitle": "TLS termination, bot filtering",
+          "type": "cloud"
+        },
+        {
+          "details": [
+            "Single entry point for all clients",
+            "Per-client rate limits and quotas"
+          ],
+          "domain": "edge",
+          "group": "g_edge",
+          "id": "gateway",
+          "label": "API Gateway",
+          "subtitle": "routing + rate limits",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "auth",
+          "label": "Identity Service",
+          "subtitle": "OIDC + JWT signing",
+          "type": "security"
+        },
+        {
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "catalog",
+          "label": "Catalog Service",
+          "subtitle": "products, pricing, media",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "cart",
+          "label": "Cart Service",
+          "subtitle": "anonymous + user carts",
+          "type": "backend"
+        },
+        {
+          "details": [
+            "Saga orchestrator for checkout",
+            "Compensates on payment failure"
+          ],
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "order",
+          "label": "Order Service",
+          "subtitle": "checkout saga",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "payment",
+          "label": "Payment Service",
+          "subtitle": "tokenized card charges",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "inventory",
+          "label": "Inventory Service",
+          "subtitle": "stock and reservations",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "search",
+          "label": "Search Service",
+          "subtitle": "query and ranking",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_svc",
+          "id": "notify",
+          "label": "Notification Service",
+          "subtitle": "email, push, SMS",
+          "type": "backend"
+        },
+        {
+          "domain": "async",
+          "group": "g_async",
+          "id": "bus",
+          "label": "Event Bus",
+          "subtitle": "Kafka, 3-day retention",
+          "type": "messagebus"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "catalogdb",
+          "label": "Catalog DB",
+          "subtitle": "PostgreSQL",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "cartcache",
+          "label": "Cart Cache",
+          "subtitle": "Redis, 14-day TTL",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "orderdb",
+          "label": "Order DB",
+          "subtitle": "PostgreSQL, append-only events",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "searchidx",
+          "label": "Search Index",
+          "subtitle": "Elasticsearch",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "invdb",
+          "label": "Inventory DB",
+          "subtitle": "PostgreSQL",
+          "type": "database"
+        },
+        {
+          "domain": "ext",
+          "id": "psp",
+          "label": "Payment Provider",
+          "subtitle": "tokenization + 3-D Secure",
+          "type": "external"
+        }
+      ],
+      "notes": [
+        "Return traffic is shown only where it affects the checkout path."
+      ],
+      "title": "E-Commerce Platform · Microservices Architecture",
+      "version": 1
+    },
+    {
+      "description": "Scripted takeover, verification and rollback of Windows media file associations.",
+      "details": [
+        {
+          "domain": "safe",
+          "items": [
+            "Registry keys exported before any write",
+            "revert-vlc.ps1 restores the exported .reg"
+          ],
+          "title": "Rollback safety"
+        },
+        {
+          "domain": "os",
+          "items": [
+            "Association changes are per-user (HKCU)",
+            "A logoff or restart is required for Explorer to re-read them"
+          ],
+          "title": "Scope"
+        },
+        {
+          "domain": "app",
+          "items": [
+            "Probe reads back the effective handler after the write",
+            "Mismatch triggers automatic restore"
+          ],
+          "title": "Verification"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "ux",
+          "label": "User Actions"
+        },
+        {
+          "color": "teal",
+          "id": "os",
+          "label": "Windows Shell"
+        },
+        {
+          "color": "orange",
+          "id": "app",
+          "label": "Media Apps"
+        },
+        {
+          "color": "slate",
+          "id": "safe",
+          "label": "Safety Net"
+        }
+      ],
+      "edges": [
+        {
+          "from": "user",
+          "kind": "call",
+          "label": "double-click a media file",
+          "to": "explorer"
+        },
+        {
+          "from": "explorer",
+          "kind": "call",
+          "label": "resolve default ProgID",
+          "to": "assoc"
+        },
+        {
+          "from": "assoc",
+          "kind": "return",
+          "label": "handler ProgID",
+          "to": "explorer"
+        },
+        {
+          "from": "explorer",
+          "kind": "call",
+          "label": "launch handler",
+          "to": "vlc"
+        },
+        {
+          "from": "explorer",
+          "kind": "optional",
+          "label": "fallback handler",
+          "to": "movies"
+        },
+        {
+          "bidirectional": true,
+          "from": "scripts",
+          "kind": "config",
+          "label": "write default + ProgID",
+          "to": "assoc"
+        },
+        {
+          "from": "scripts",
+          "kind": "call",
+          "label": "verify after write",
+          "to": "probe"
+        },
+        {
+          "from": "probe",
+          "kind": "data",
+          "label": "read back effective handler",
+          "to": "assoc"
+        },
+        {
+          "from": "rollback",
+          "kind": "config",
+          "label": "restore exported keys",
+          "to": "assoc"
+        },
+        {
+          "from": "rollback",
+          "kind": "return",
+          "label": "auto-restore on mismatch",
+          "to": "scripts"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "ux",
+          "id": "user",
+          "label": "User",
+          "subtitle": "opens a media file",
+          "type": "external"
+        },
+        {
+          "domain": "os",
+          "id": "explorer",
+          "label": "File Explorer",
+          "subtitle": "resolves the association",
+          "type": "frontend"
+        },
+        {
+          "domain": "os",
+          "id": "assoc",
+          "label": "Association Registry",
+          "subtitle": "per-user ProgID mapping",
+          "type": "database"
+        },
+        {
+          "domain": "app",
+          "id": "vlc",
+          "label": "VLC Media Player",
+          "subtitle": "preferred handler",
+          "type": "frontend"
+        },
+        {
+          "domain": "app",
+          "id": "movies",
+          "label": "Movies & TV",
+          "subtitle": "system player",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "register-vlc.ps1 and set-mp-final.ps1",
+            "Runs without administrator rights"
+          ],
+          "domain": "os",
+          "id": "scripts",
+          "label": "PowerShell Setup Scripts",
+          "subtitle": "apply the desired defaults",
+          "type": "backend"
+        },
+        {
+          "domain": "safe",
+          "id": "probe",
+          "label": "Association Probe",
+          "subtitle": "reads the effective handler",
+          "type": "security"
+        },
+        {
+          "domain": "safe",
+          "id": "rollback",
+          "label": "Backup & Rollback",
+          "subtitle": "revert-vlc.ps1 + exported .reg",
+          "type": "security"
+        }
+      ],
+      "notes": [
+        "Only per-user keys are touched, so the change survives without admin rights."
+      ],
+      "title": "Windows Default Media Player · Association Manager",
+      "version": 1
+    },
+    {
+      "description": "Single-region production topology: ingress, replicated storefront pods and a stateful data namespace.",
+      "details": [
+        {
+          "domain": "app",
+          "items": [
+            "3 replicas spread across availability zones",
+            "Rolling updates with maxUnavailable 1"
+          ],
+          "title": "Availability"
+        },
+        {
+          "domain": "data",
+          "items": [
+            "StatefulSet with a 100 GiB volume",
+            "Nightly logical backups to object storage"
+          ],
+          "title": "State"
+        },
+        {
+          "domain": "plat",
+          "items": [
+            "HPA targets 65% CPU utilisation",
+            "Certificates auto-renew 30 days before expiry"
+          ],
+          "title": "Operations"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "ext",
+          "label": "Outside the cluster"
+        },
+        {
+          "color": "teal",
+          "id": "plat",
+          "label": "Cluster Platform"
+        },
+        {
+          "color": "orange",
+          "id": "app",
+          "label": "Storefront Workload"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Stateful Data"
+        },
+        {
+          "color": "green",
+          "id": "obs",
+          "label": "Observability"
+        }
+      ],
+      "edges": [
+        {
+          "from": "users",
+          "kind": "call",
+          "label": "resolve shop.example.com",
+          "to": "dns"
+        },
+        {
+          "from": "dns",
+          "kind": "call",
+          "label": "A record",
+          "to": "ingress"
+        },
+        {
+          "from": "ingress",
+          "kind": "call",
+          "label": "route /api and /",
+          "to": "svc"
+        },
+        {
+          "from": "svc",
+          "kind": "call",
+          "label": "load balance",
+          "to": "pod1"
+        },
+        {
+          "from": "svc",
+          "kind": "call",
+          "label": "load balance",
+          "to": "pod2"
+        },
+        {
+          "from": "svc",
+          "kind": "call",
+          "label": "load balance",
+          "to": "pod3"
+        },
+        {
+          "from": "hpa",
+          "kind": "config",
+          "label": "scale 3-12 replicas",
+          "to": "svc"
+        },
+        {
+          "from": "cm",
+          "kind": "config",
+          "label": "env + feature flags",
+          "to": "pod1"
+        },
+        {
+          "from": "sec",
+          "kind": "config",
+          "label": "mount TLS + DB credentials",
+          "to": "pod2"
+        },
+        {
+          "from": "registry",
+          "kind": "optional",
+          "label": "image pull",
+          "to": "pod3"
+        },
+        {
+          "from": "pod1",
+          "kind": "data",
+          "label": "SQL over TLS",
+          "to": "pg"
+        },
+        {
+          "from": "pg",
+          "kind": "data",
+          "label": "mounts",
+          "to": "pvc"
+        },
+        {
+          "from": "prom",
+          "kind": "data",
+          "label": "scrape /metrics",
+          "to": "pod1"
+        },
+        {
+          "from": "prom",
+          "kind": "data",
+          "label": "scrape node + pod metrics",
+          "to": "pod2"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "plat",
+          "id": "g_cluster",
+          "label": "prod cluster (eu-west-1)"
+        },
+        {
+          "domain": "app",
+          "id": "g_web",
+          "label": "namespace: storefront",
+          "parent": "g_cluster"
+        },
+        {
+          "domain": "data",
+          "id": "g_data",
+          "label": "namespace: data",
+          "parent": "g_cluster"
+        },
+        {
+          "domain": "ext",
+          "id": "g_ext",
+          "label": "outside the cluster"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "ext",
+          "group": "g_ext",
+          "id": "users",
+          "label": "End Users",
+          "subtitle": "web + mobile",
+          "type": "external"
+        },
+        {
+          "domain": "ext",
+          "group": "g_ext",
+          "id": "dns",
+          "label": "Managed DNS",
+          "subtitle": "shop.example.com",
+          "type": "cloud"
+        },
+        {
+          "domain": "ext",
+          "group": "g_ext",
+          "id": "registry",
+          "label": "Container Registry",
+          "subtitle": "signed images only",
+          "type": "cloud"
+        },
+        {
+          "domain": "plat",
+          "group": "g_cluster",
+          "id": "ingress",
+          "label": "Ingress Controller",
+          "subtitle": "TLS termination + routing",
+          "type": "backend"
+        },
+        {
+          "domain": "app",
+          "group": "g_web",
+          "id": "svc",
+          "label": "storefront Service",
+          "subtitle": "ClusterIP, port 8080",
+          "type": "backend"
+        },
+        {
+          "domain": "app",
+          "group": "g_web",
+          "id": "pod1",
+          "label": "storefront Pod 1",
+          "subtitle": "replica, zone a",
+          "type": "backend"
+        },
+        {
+          "domain": "app",
+          "group": "g_web",
+          "id": "pod2",
+          "label": "storefront Pod 2",
+          "subtitle": "replica, zone b",
+          "type": "backend"
+        },
+        {
+          "domain": "app",
+          "group": "g_web",
+          "id": "pod3",
+          "label": "storefront Pod 3",
+          "subtitle": "replica, zone c",
+          "type": "backend"
+        },
+        {
+          "domain": "plat",
+          "group": "g_web",
+          "id": "hpa",
+          "label": "Horizontal Pod Autoscaler",
+          "subtitle": "CPU 65% target",
+          "type": "backend"
+        },
+        {
+          "domain": "app",
+          "group": "g_web",
+          "id": "cm",
+          "label": "ConfigMap",
+          "subtitle": "non-secret configuration",
+          "type": "database"
+        },
+        {
+          "domain": "plat",
+          "group": "g_web",
+          "id": "sec",
+          "label": "Secret",
+          "subtitle": "TLS cert + DB credentials",
+          "type": "security"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "pg",
+          "label": "PostgreSQL StatefulSet",
+          "subtitle": "single writer",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "pvc",
+          "label": "PersistentVolumeClaim",
+          "subtitle": "100 GiB, encrypted",
+          "type": "database"
+        },
+        {
+          "domain": "obs",
+          "group": "g_cluster",
+          "id": "prom",
+          "label": "Prometheus + Grafana",
+          "subtitle": "metrics and dashboards",
+          "type": "backend"
+        }
+      ],
+      "notes": [
+        "Network policies restrict ingress traffic to the storefront namespace."
+      ],
+      "title": "Kubernetes Deployment · Production Cluster",
+      "version": 1
+    },
+    {
+      "description": "Local, script-driven pipeline that trims idle footage and burns in generated charts.",
+      "details": [
+        {
+          "domain": "proc",
+          "items": [
+            "Idle detection is parameterised by noise floor and minimum gap",
+            "Cut points snap to the nearest keyframe"
+          ],
+          "title": "Detection"
+        },
+        {
+          "domain": "media",
+          "items": [
+            "Single FFmpeg pass for trim, concat and encode",
+            "Intermediate files stay lossless"
+          ],
+          "title": "Encoding"
+        },
+        {
+          "domain": "out",
+          "items": [
+            "Final master is H.264 at 1080p",
+            "Publishing is a separate manual step"
+          ],
+          "title": "Delivery"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "src",
+          "label": "Source Media"
+        },
+        {
+          "color": "teal",
+          "id": "proc",
+          "label": "Processing Logic"
+        },
+        {
+          "color": "orange",
+          "id": "media",
+          "label": "Media Tooling"
+        },
+        {
+          "color": "green",
+          "id": "out",
+          "label": "Delivery"
+        }
+      ],
+      "edges": [
+        {
+          "from": "footage",
+          "kind": "data",
+          "label": "scan segments",
+          "to": "trim"
+        },
+        {
+          "from": "trim",
+          "kind": "data",
+          "label": "idle intervals",
+          "to": "timeline"
+        },
+        {
+          "from": "timeline",
+          "kind": "data",
+          "label": "cut list",
+          "to": "cut"
+        },
+        {
+          "from": "cut",
+          "kind": "call",
+          "label": "trim + concat",
+          "to": "ffmpeg"
+        },
+        {
+          "from": "ffmpeg",
+          "kind": "data",
+          "label": "lossless intermediate",
+          "to": "cache"
+        },
+        {
+          "from": "cache",
+          "kind": "data",
+          "label": "source clip",
+          "to": "overlay"
+        },
+        {
+          "from": "figure",
+          "kind": "data",
+          "label": "PNG figures",
+          "to": "overlay"
+        },
+        {
+          "from": "overlay",
+          "kind": "call",
+          "label": "final encode",
+          "to": "ffmpeg"
+        },
+        {
+          "from": "overlay",
+          "kind": "data",
+          "label": "encoded master",
+          "to": "render"
+        },
+        {
+          "from": "render",
+          "kind": "call",
+          "label": "upload",
+          "to": "publish"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "proc",
+          "id": "g_local",
+          "label": "Local workstation pipeline"
+        },
+        {
+          "domain": "proc",
+          "id": "g_detect",
+          "label": "Detection",
+          "parent": "g_local"
+        },
+        {
+          "domain": "proc",
+          "id": "g_cut",
+          "label": "Cutting & assembly",
+          "parent": "g_local"
+        },
+        {
+          "domain": "proc",
+          "id": "g_over",
+          "label": "Chart overlay",
+          "parent": "g_local"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "src",
+          "id": "footage",
+          "label": "Raw Footage Folder",
+          "subtitle": "camera originals",
+          "type": "database"
+        },
+        {
+          "details": [
+            "Flags silence and low-motion segments",
+            "Outputs timestamps, never re-encodes"
+          ],
+          "domain": "proc",
+          "group": "g_detect",
+          "id": "trim",
+          "label": "trim_idle.py",
+          "subtitle": "idle and silence detection",
+          "type": "backend"
+        },
+        {
+          "domain": "proc",
+          "group": "g_detect",
+          "id": "timeline",
+          "label": "idle_timeline.json",
+          "subtitle": "segment boundaries",
+          "type": "database"
+        },
+        {
+          "domain": "proc",
+          "group": "g_cut",
+          "id": "cut",
+          "label": "make_cut.py",
+          "subtitle": "removes dead time",
+          "type": "backend"
+        },
+        {
+          "domain": "media",
+          "group": "g_cut",
+          "id": "ffmpeg",
+          "label": "FFmpeg",
+          "subtitle": "decode, concat, encode",
+          "type": "external"
+        },
+        {
+          "domain": "proc",
+          "group": "g_over",
+          "id": "figure",
+          "label": "draw_figure.py",
+          "subtitle": "matplotlib chart renderer",
+          "type": "backend"
+        },
+        {
+          "domain": "proc",
+          "group": "g_over",
+          "id": "overlay",
+          "label": "Overlay Composite",
+          "subtitle": "burn-in charts and captions",
+          "type": "backend"
+        },
+        {
+          "domain": "proc",
+          "group": "g_local",
+          "id": "cache",
+          "label": "Intermediate Cache",
+          "subtitle": "lossless working files",
+          "type": "database"
+        },
+        {
+          "domain": "out",
+          "group": "g_local",
+          "id": "render",
+          "label": "Final Render",
+          "subtitle": "H.264 1080p master",
+          "type": "backend"
+        },
+        {
+          "domain": "out",
+          "id": "publish",
+          "label": "Publish / Share",
+          "subtitle": "manual upload step",
+          "type": "external"
+        }
+      ],
+      "notes": [
+        "Everything runs on one workstation; no cloud upload is required."
+      ],
+      "title": "Automated Video Editing Toolchain",
+      "version": 1
+    },
+    {
+      "description": "44 components across channels, regions, commerce services, fulfilment, data and platform. Stress sample for large diagrams.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Checkout runs as a saga with compensating actions",
+            "Payment authorization happens before order persistence"
+          ],
+          "title": "Checkout flow"
+        },
+        {
+          "domain": "data",
+          "items": [
+            "Operational stores stay per-service",
+            "Analytics reads from the lakehouse, never from OLTP"
+          ],
+          "title": "Data separation"
+        },
+        {
+          "domain": "sec",
+          "items": [
+            "Card data stays with the tokenization gateway",
+            "Secrets are rotated every 30 days"
+          ],
+          "title": "Compliance"
+        },
+        {
+          "domain": "plat",
+          "items": [
+            "Two regions, active-active for reads",
+            "Single writer region for order persistence"
+          ],
+          "title": "Multi-region"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "edge",
+          "label": "Channels & Edge"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Commerce Services"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Data Platform"
+        },
+        {
+          "color": "orange",
+          "id": "plat",
+          "label": "Runtime Platform"
+        },
+        {
+          "color": "slate",
+          "id": "sec",
+          "label": "Security"
+        },
+        {
+          "color": "green",
+          "id": "ext",
+          "label": "External Systems"
+        }
+      ],
+      "edges": [
+        {
+          "from": "n01",
+          "kind": "call",
+          "label": "HTTPS",
+          "to": "n08"
+        },
+        {
+          "from": "n02",
+          "kind": "call",
+          "label": "HTTPS",
+          "to": "n08"
+        },
+        {
+          "from": "n03",
+          "kind": "call",
+          "label": "OAuth 2.0",
+          "to": "n08"
+        },
+        {
+          "from": "n04",
+          "kind": "call",
+          "label": "in-store traffic",
+          "to": "n05"
+        },
+        {
+          "from": "n05",
+          "kind": "call",
+          "label": "region failover",
+          "to": "n06"
+        },
+        {
+          "from": "n05",
+          "kind": "call",
+          "label": "latency routing",
+          "to": "n07"
+        },
+        {
+          "from": "n06",
+          "kind": "call",
+          "label": "origin",
+          "to": "n09"
+        },
+        {
+          "from": "n07",
+          "kind": "call",
+          "label": "origin",
+          "to": "n09"
+        },
+        {
+          "from": "n08",
+          "kind": "call",
+          "label": "origin pull",
+          "to": "n09"
+        },
+        {
+          "from": "n09",
+          "kind": "call",
+          "label": "verify token",
+          "to": "n10"
+        },
+        {
+          "from": "n10",
+          "kind": "return",
+          "label": "claims + scopes",
+          "to": "n09"
+        },
+        {
+          "from": "n09",
+          "kind": "call",
+          "label": "catalog",
+          "to": "n11"
+        },
+        {
+          "from": "n09",
+          "kind": "call",
+          "label": "price and promo",
+          "to": "n12"
+        },
+        {
+          "from": "n09",
+          "kind": "call",
+          "label": "cart",
+          "to": "n13"
+        },
+        {
+          "from": "n09",
+          "kind": "call",
+          "label": "checkout",
+          "to": "n14"
+        },
+        {
+          "from": "n09",
+          "kind": "call",
+          "label": "orders",
+          "to": "n17"
+        },
+        {
+          "from": "n09",
+          "kind": "call",
+          "label": "subscriptions",
+          "to": "n18"
+        },
+        {
+          "from": "n09",
+          "kind": "call",
+          "label": "returns",
+          "to": "n19"
+        },
+        {
+          "from": "n11",
+          "kind": "data",
+          "label": "product documents",
+          "to": "n28"
+        },
+        {
+          "from": "n12",
+          "kind": "data",
+          "label": "campaign rules",
+          "to": "n28"
+        },
+        {
+          "from": "n13",
+          "kind": "data",
+          "label": "cart state",
+          "to": "n26"
+        },
+        {
+          "from": "n14",
+          "kind": "optional",
+          "label": "retry on transient error",
+          "to": "n14"
+        },
+        {
+          "from": "n14",
+          "kind": "call",
+          "label": "reserve stock",
+          "to": "n21"
+        },
+        {
+          "from": "n14",
+          "kind": "call",
+          "label": "authorize payment",
+          "to": "n15"
+        },
+        {
+          "from": "n14",
+          "kind": "data",
+          "label": "persist order",
+          "to": "n25"
+        },
+        {
+          "from": "n15",
+          "kind": "call",
+          "label": "risk score",
+          "to": "n16"
+        },
+        {
+          "from": "n16",
+          "kind": "return",
+          "label": "score + decision",
+          "to": "n15"
+        },
+        {
+          "from": "n15",
+          "kind": "call",
+          "label": "tokenize + 3-D Secure",
+          "to": "n42"
+        },
+        {
+          "from": "n42",
+          "kind": "return",
+          "label": "authorization (token \"3DS\" > 2s and < 3s)",
+          "to": "n15"
+        },
+        {
+          "from": "n17",
+          "kind": "data",
+          "label": "order events",
+          "to": "n30"
+        },
+        {
+          "from": "n17",
+          "kind": "call",
+          "label": "tax calculation",
+          "to": "n43"
+        },
+        {
+          "from": "n21",
+          "kind": "data",
+          "label": "stock levels",
+          "to": "n27"
+        },
+        {
+          "from": "n21",
+          "kind": "data",
+          "label": "stock.reserved",
+          "to": "n30"
+        },
+        {
+          "from": "n30",
+          "kind": "data",
+          "label": "consume pick tasks",
+          "to": "n20"
+        },
+        {
+          "from": "n30",
+          "kind": "data",
+          "label": "consume delivery events",
+          "to": "n24"
+        },
+        {
+          "from": "n20",
+          "kind": "call",
+          "label": "book shipment",
+          "to": "n22"
+        },
+        {
+          "from": "n22",
+          "kind": "data",
+          "label": "tracking webhook",
+          "to": "n24"
+        },
+        {
+          "from": "n24",
+          "kind": "data",
+          "label": "delivery sequence",
+          "to": "n23"
+        },
+        {
+          "from": "n23",
+          "kind": "return",
+          "label": "route plan",
+          "to": "n20"
+        },
+        {
+          "from": "n30",
+          "kind": "data",
+          "label": "stream changes",
+          "to": "n31"
+        },
+        {
+          "from": "n31",
+          "kind": "data",
+          "label": "micro-batch load",
+          "to": "n32"
+        },
+        {
+          "from": "n25",
+          "kind": "data",
+          "label": "publish order events with 15-minute micro-batch latency",
+          "to": "n32"
+        },
+        {
+          "from": "n32",
+          "kind": "data",
+          "label": "feature refresh",
+          "to": "n33"
+        },
+        {
+          "from": "n33",
+          "kind": "data",
+          "label": "risk features",
+          "to": "n16"
+        },
+        {
+          "from": "n44",
+          "kind": "data",
+          "label": "nightly sync",
+          "to": "n25"
+        },
+        {
+          "from": "n36",
+          "kind": "call",
+          "label": "push image",
+          "to": "n37"
+        },
+        {
+          "from": "n37",
+          "kind": "optional",
+          "label": "pull image",
+          "to": "n34"
+        },
+        {
+          "from": "n34",
+          "kind": "config",
+          "label": "inject sidecars",
+          "to": "n35"
+        },
+        {
+          "from": "n38",
+          "kind": "config",
+          "label": "payment API credentials",
+          "to": "n15"
+        },
+        {
+          "from": "n39",
+          "kind": "config",
+          "label": "TLS certificates",
+          "to": "n08"
+        },
+        {
+          "from": "n40",
+          "kind": "data",
+          "label": "scrape mesh metrics",
+          "to": "n35"
+        },
+        {
+          "from": "n40",
+          "kind": "data",
+          "label": "alert rules",
+          "to": "n41"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "edge",
+          "id": "g_channels",
+          "label": "Customer channels"
+        },
+        {
+          "domain": "edge",
+          "id": "g_regions",
+          "label": "Regional deployments"
+        },
+        {
+          "domain": "edge",
+          "id": "g_apac",
+          "label": "APAC region",
+          "parent": "g_regions"
+        },
+        {
+          "domain": "edge",
+          "id": "g_emea",
+          "label": "EMEA region",
+          "parent": "g_regions"
+        },
+        {
+          "domain": "svc",
+          "id": "g_core",
+          "label": "Core commerce services"
+        },
+        {
+          "domain": "svc",
+          "id": "g_fulfil",
+          "label": "Fulfilment & logistics"
+        },
+        {
+          "domain": "data",
+          "id": "g_data",
+          "label": "Data platform"
+        },
+        {
+          "domain": "data",
+          "id": "g_oltp",
+          "label": "Operational stores",
+          "parent": "g_data"
+        },
+        {
+          "domain": "data",
+          "id": "g_analytics",
+          "label": "Analytics & machine learning",
+          "parent": "g_data"
+        },
+        {
+          "domain": "plat",
+          "id": "g_k8s",
+          "label": "Container platform"
+        },
+        {
+          "domain": "plat",
+          "id": "g_platform",
+          "label": "Delivery platform"
+        },
+        {
+          "domain": "plat",
+          "id": "g_obs",
+          "label": "Observability"
+        },
+        {
+          "domain": "sec",
+          "id": "g_sec",
+          "label": "Security & compliance"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "edge",
+          "group": "g_channels",
+          "id": "n01",
+          "label": "Web Storefront",
+          "subtitle": "server-rendered + hydration",
+          "type": "frontend"
+        },
+        {
+          "domain": "edge",
+          "group": "g_channels",
+          "id": "n02",
+          "label": "Mobile Apps",
+          "subtitle": "iOS + Android",
+          "type": "frontend"
+        },
+        {
+          "domain": "edge",
+          "group": "g_channels",
+          "id": "n03",
+          "label": "Partner API",
+          "subtitle": "B2B integrations",
+          "type": "backend"
+        },
+        {
+          "domain": "edge",
+          "group": "g_channels",
+          "id": "n04",
+          "label": "Store Associate App",
+          "subtitle": "in-store tablets",
+          "type": "frontend"
+        },
+        {
+          "domain": "edge",
+          "group": "g_regions",
+          "id": "n05",
+          "label": "Global Load Balancer",
+          "subtitle": "anycast entry point",
+          "type": "cloud"
+        },
+        {
+          "domain": "edge",
+          "group": "g_apac",
+          "id": "n06",
+          "label": "APAC Edge Cluster",
+          "subtitle": "Singapore + Sydney",
+          "type": "cloud"
+        },
+        {
+          "domain": "edge",
+          "group": "g_emea",
+          "id": "n07",
+          "label": "EMEA Edge Cluster",
+          "subtitle": "Frankfurt + London",
+          "type": "cloud"
+        },
+        {
+          "domain": "edge",
+          "group": "g_regions",
+          "id": "n08",
+          "label": "CDN & WAF",
+          "subtitle": "bot and DDoS filtering",
+          "type": "cloud"
+        },
+        {
+          "domain": "edge",
+          "group": "g_regions",
+          "id": "n09",
+          "label": "API Gateway",
+          "subtitle": "routing, quotas, schema validation",
+          "type": "backend"
+        },
+        {
+          "domain": "sec",
+          "group": "g_core",
+          "id": "n10",
+          "label": "Identity Service",
+          "subtitle": "OIDC, JWT, device trust",
+          "type": "security"
+        },
+        {
+          "domain": "svc",
+          "group": "g_core",
+          "id": "n11",
+          "label": "Catalog Service",
+          "subtitle": "products, media, taxonomy",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_core",
+          "id": "n12",
+          "label": "Pricing & Promotion Engine",
+          "subtitle": "rule and campaign evaluation",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_core",
+          "id": "n13",
+          "label": "Cart Service",
+          "subtitle": "anonymous + persistent carts",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_core",
+          "id": "n14",
+          "label": "Checkout Orchestrator",
+          "subtitle": "saga with compensation",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_core",
+          "id": "n15",
+          "label": "Payment Service",
+          "subtitle": "tokenized charges",
+          "type": "backend"
+        },
+        {
+          "domain": "sec",
+          "group": "g_core",
+          "id": "n16",
+          "label": "Fraud Scoring Service",
+          "subtitle": "real-time risk score",
+          "type": "security"
+        },
+        {
+          "domain": "svc",
+          "group": "g_core",
+          "id": "n17",
+          "label": "Order Management",
+          "subtitle": "lifecycle and amendments",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_core",
+          "id": "n18",
+          "label": "Subscription Service",
+          "subtitle": "recurring billing plans",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_core",
+          "id": "n19",
+          "label": "Returns Service",
+          "subtitle": "RMAs and refunds",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_fulfil",
+          "id": "n20",
+          "label": "Warehouse Management",
+          "subtitle": "pick, pack, dispatch",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_fulfil",
+          "id": "n21",
+          "label": "Inventory Service",
+          "subtitle": "stock, reservations, ATP",
+          "type": "backend"
+        },
+        {
+          "domain": "ext",
+          "group": "g_fulfil",
+          "id": "n22",
+          "label": "Carrier Integration",
+          "subtitle": "label and tracking APIs",
+          "type": "external"
+        },
+        {
+          "domain": "svc",
+          "group": "g_fulfil",
+          "id": "n23",
+          "label": "Route Optimizer",
+          "subtitle": "delivery sequencing",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "group": "g_fulfil",
+          "id": "n24",
+          "label": "Last-Mile Tracking",
+          "subtitle": "driver and parcel events",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "group": "g_oltp",
+          "id": "n25",
+          "label": "Order DB",
+          "subtitle": "PostgreSQL, append-only",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_oltp",
+          "id": "n26",
+          "label": "Customer DB",
+          "subtitle": "PostgreSQL, PII encrypted",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_oltp",
+          "id": "n27",
+          "label": "Inventory DB",
+          "subtitle": "PostgreSQL",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_oltp",
+          "id": "n28",
+          "label": "Product Catalog DB",
+          "subtitle": "PostgreSQL",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_oltp",
+          "id": "n29",
+          "label": "Document Store",
+          "subtitle": "invoices, labels, PDFs",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "n30",
+          "label": "Event Stream",
+          "subtitle": "Kafka, 7-day retention",
+          "type": "messagebus"
+        },
+        {
+          "domain": "data",
+          "group": "g_data",
+          "id": "n31",
+          "label": "Change Data Capture",
+          "subtitle": "Debezium connectors",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "group": "g_analytics",
+          "id": "n32",
+          "label": "Lakehouse",
+          "subtitle": "Parquet + Iceberg tables",
+          "type": "database"
+        },
+        {
+          "domain": "data",
+          "group": "g_analytics",
+          "id": "n33",
+          "label": "ML Feature Store",
+          "subtitle": "online + offline features",
+          "type": "database"
+        },
+        {
+          "domain": "plat",
+          "group": "g_k8s",
+          "id": "n34",
+          "label": "Kubernetes Control Plane",
+          "subtitle": "multi-region clusters",
+          "type": "cloud"
+        },
+        {
+          "domain": "plat",
+          "group": "g_k8s",
+          "id": "n35",
+          "label": "Service Mesh",
+          "subtitle": "mTLS + traffic policy",
+          "type": "backend"
+        },
+        {
+          "domain": "plat",
+          "group": "g_platform",
+          "id": "n36",
+          "label": "CI/CD Runners",
+          "subtitle": "build, test, deploy",
+          "type": "backend"
+        },
+        {
+          "domain": "plat",
+          "group": "g_platform",
+          "id": "n37",
+          "label": "Container Registry",
+          "subtitle": "signed, scanned images",
+          "type": "cloud"
+        },
+        {
+          "domain": "sec",
+          "group": "g_sec",
+          "id": "n38",
+          "label": "Secrets Manager",
+          "subtitle": "rotation + audit trail",
+          "type": "security"
+        },
+        {
+          "domain": "sec",
+          "group": "g_sec",
+          "id": "n39",
+          "label": "Certificate Authority",
+          "subtitle": "internal PKI",
+          "type": "security"
+        },
+        {
+          "domain": "plat",
+          "group": "g_obs",
+          "id": "n40",
+          "label": "Metrics & Logging",
+          "subtitle": "metrics, logs, traces",
+          "type": "backend"
+        },
+        {
+          "domain": "plat",
+          "group": "g_obs",
+          "id": "n41",
+          "label": "Alerting & On-Call",
+          "subtitle": "pages + escalation",
+          "type": "backend"
+        },
+        {
+          "domain": "ext",
+          "id": "n42",
+          "label": "Card Network Tokenization & 3-D Secure Step-Up Authentication Gateway",
+          "subtitle": "keeps card data out of scope",
+          "type": "external"
+        },
+        {
+          "domain": "ext",
+          "id": "n43",
+          "label": "Tax & Compliance Service",
+          "subtitle": "VAT, GST, duty",
+          "type": "external"
+        },
+        {
+          "domain": "ext",
+          "id": "n44",
+          "label": "Legacy ERP Bridge",
+          "subtitle": "nightly sync with the old ERP",
+          "type": "external"
+        }
+      ],
+      "notes": [
+        "Stress sample: 44 nodes, 13 groups, 52 edges.",
+        "Analytics traffic never touches the operational stores directly."
+      ],
+      "title": "Global Retail Platform · Full Landscape (Stress Sample)",
+      "version": 1
+    }
+  ],
+  "sequence": [
+    {
+      "version": 1,
+      "title": "Password Login",
+      "description": "Credential login against a single authentication service, with a self-call and an async audit write.",
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "Client"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Auth Service"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Persistence"
+        }
+      ],
+      "participants": [
+        {
+          "domain": "client",
+          "id": "browser",
+          "label": "Browser",
+          "subtitle": "SPA login form",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Verifies the bcrypt hash",
+            "Issues an HttpOnly session cookie"
+          ],
+          "domain": "svc",
+          "id": "api",
+          "label": "Auth API",
+          "subtitle": "POST /login",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "db",
+          "label": "User Store",
+          "subtitle": "PostgreSQL",
+          "type": "database"
+        }
+      ],
+      "messages": [
+        {
+          "from": "browser",
+          "id": "m1",
+          "label": "POST /login (email, password)",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m2",
+          "kind": "call",
+          "label": "SELECT user by email",
+          "note": "Indexed lookup on email",
+          "to": "db"
+        },
+        {
+          "from": "db",
+          "id": "m3",
+          "kind": "return",
+          "label": "user row + password hash",
+          "to": "api"
+        },
+        {
+          "details": [
+            "Constant-time comparison"
+          ],
+          "from": "api",
+          "id": "m4",
+          "kind": "call",
+          "label": "Verify bcrypt hash",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m5",
+          "kind": "return",
+          "label": "200 OK + session cookie",
+          "to": "browser"
+        },
+        {
+          "from": "api",
+          "id": "m6",
+          "kind": "async",
+          "label": "INSERT login audit row",
+          "to": "db"
+        }
+      ],
+      "activations": [
+        {
+          "from": "m1",
+          "participant": "api",
+          "to": "m5"
+        }
+      ],
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Unknown email and wrong password return the same error",
+            "Rate limited after 5 attempts per minute"
+          ],
+          "title": "Failure modes"
+        },
+        {
+          "domain": "data",
+          "items": [
+            "HttpOnly, Secure, SameSite=Lax cookie",
+            "12-hour idle timeout"
+          ],
+          "title": "Session"
+        }
+      ],
+      "notes": [
+        "The audit insert is fire-and-forget and never blocks the response."
+      ]
+    },
+    {
+      "activations": [
+        {
+          "from": "m2",
+          "participant": "auth",
+          "to": "m11"
+        },
+        {
+          "from": "m1",
+          "participant": "app",
+          "to": "m15"
+        }
+      ],
+      "description": "Password login with a TOTP second factor, a retry loop and a nested alternative for the verification result.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "3 attempts per 10-minute window",
+            "Lockout triggers an email to the account owner"
+          ],
+          "title": "Retry policy"
+        },
+        {
+          "domain": "ext",
+          "items": [
+            "RFC 6238 time-based codes",
+            "30-second step, +/-1 window drift allowed"
+          ],
+          "title": "TOTP provider"
+        },
+        {
+          "domain": "data",
+          "items": [
+            "Trusted devices skip MFA for 30 days",
+            "Tokens are bound to a device fingerprint"
+          ],
+          "title": "Device trust"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "Client"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Auth Service"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Persistence"
+        },
+        {
+          "color": "slate",
+          "id": "ext",
+          "label": "External Provider"
+        }
+      ],
+      "fragments": [
+        {
+          "from": "m5",
+          "kind": "opt",
+          "label": "MFA is enrolled",
+          "to": "m6"
+        },
+        {
+          "from": "m7",
+          "kind": "loop",
+          "label": "retry up to 3 times",
+          "to": "m13"
+        },
+        {
+          "branches": [
+            {
+              "from": "m12",
+              "label": "code invalid"
+            }
+          ],
+          "from": "m10",
+          "kind": "alt",
+          "label": "code valid",
+          "to": "m13"
+        }
+      ],
+      "messages": [
+        {
+          "from": "user",
+          "id": "m1",
+          "label": "Enter email + password",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "id": "m2",
+          "label": "POST /login",
+          "to": "auth"
+        },
+        {
+          "from": "auth",
+          "id": "m3",
+          "label": "Load user record",
+          "to": "db"
+        },
+        {
+          "from": "db",
+          "id": "m4",
+          "kind": "return",
+          "label": "password hash + MFA enrolment",
+          "to": "auth"
+        },
+        {
+          "from": "auth",
+          "id": "m5",
+          "kind": "return",
+          "label": "MFA challenge required",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "id": "m6",
+          "label": "Prompt for 6-digit code",
+          "to": "user"
+        },
+        {
+          "from": "user",
+          "id": "m7",
+          "label": "Submit TOTP code",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "id": "m8",
+          "label": "POST /login/mfa",
+          "to": "auth"
+        },
+        {
+          "from": "auth",
+          "id": "m9",
+          "label": "Verify TOTP code",
+          "to": "mfa"
+        },
+        {
+          "from": "mfa",
+          "id": "m10",
+          "kind": "return",
+          "label": "verification result",
+          "to": "auth"
+        },
+        {
+          "from": "auth",
+          "id": "m11",
+          "kind": "return",
+          "label": "session issued",
+          "to": "app"
+        },
+        {
+          "from": "auth",
+          "id": "m12",
+          "kind": "async",
+          "label": "increment failed-attempt counter",
+          "to": "db"
+        },
+        {
+          "from": "auth",
+          "id": "m13",
+          "kind": "return",
+          "label": "401 invalid code",
+          "to": "app"
+        },
+        {
+          "from": "auth",
+          "id": "m14",
+          "kind": "async",
+          "label": "store device trust token",
+          "to": "db"
+        },
+        {
+          "from": "app",
+          "id": "m15",
+          "kind": "return",
+          "label": "redirect to dashboard",
+          "to": "user"
+        }
+      ],
+      "notes": [
+        "Session issuance is the only branch that writes a cookie."
+      ],
+      "participants": [
+        {
+          "domain": "client",
+          "id": "user",
+          "label": "User",
+          "subtitle": "mobile or desktop",
+          "type": "frontend"
+        },
+        {
+          "domain": "client",
+          "id": "app",
+          "label": "Client App",
+          "subtitle": "login + MFA screens",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Rate limits by account and by IP",
+            "Never logs the submitted code"
+          ],
+          "domain": "svc",
+          "id": "auth",
+          "label": "Auth Service",
+          "subtitle": "issues sessions",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "db",
+          "label": "User Store",
+          "subtitle": "PostgreSQL",
+          "type": "database"
+        },
+        {
+          "domain": "ext",
+          "id": "mfa",
+          "label": "TOTP Provider",
+          "subtitle": "managed MFA",
+          "type": "external"
+        }
+      ],
+      "title": "Login with MFA",
+      "version": 1
+    },
+    {
+      "activations": [
+        {
+          "from": "m2",
+          "participant": "app",
+          "to": "m11"
+        },
+        {
+          "from": "m9",
+          "participant": "authz",
+          "to": "m10"
+        },
+        {
+          "from": "m12",
+          "participant": "api",
+          "to": "m15"
+        }
+      ],
+      "description": "Single sign-on with PKCE, token introspection and a cached-introspection optimisation.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "BFF keeps tokens server-side; the browser never sees them",
+            "Session is a signed, encrypted cookie"
+          ],
+          "title": "Why a BFF"
+        },
+        {
+          "domain": "ext",
+          "items": [
+            "Introspection results cached for 60 s per token",
+            "Cache miss adds one network hop"
+          ],
+          "title": "Introspection cache"
+        },
+        {
+          "domain": "client",
+          "items": [
+            "No client secret in the browser",
+            "PKCE S256 challenge protects the code exchange"
+          ],
+          "title": "PKCE"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "User & Browser"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Application"
+        },
+        {
+          "color": "slate",
+          "id": "ext",
+          "label": "Authorization Server"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Resource API"
+        }
+      ],
+      "fragments": [
+        {
+          "from": "m5",
+          "kind": "opt",
+          "label": "first-time consent",
+          "to": "m6"
+        },
+        {
+          "branches": [
+            {
+              "from": "m15",
+              "label": "token invalid or expired"
+            }
+          ],
+          "from": "m12",
+          "kind": "alt",
+          "label": "token valid",
+          "to": "m15"
+        }
+      ],
+      "messages": [
+        {
+          "from": "user",
+          "id": "m1",
+          "label": "Click 'Sign in with SSO'",
+          "to": "browser"
+        },
+        {
+          "from": "browser",
+          "id": "m2",
+          "label": "GET /login",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "id": "m3",
+          "kind": "return",
+          "label": "302 /authorize + PKCE challenge",
+          "to": "browser"
+        },
+        {
+          "from": "browser",
+          "id": "m4",
+          "label": "GET /authorize?code_challenge=...",
+          "to": "authz"
+        },
+        {
+          "from": "authz",
+          "id": "m5",
+          "label": "consent screen",
+          "to": "user"
+        },
+        {
+          "from": "user",
+          "id": "m6",
+          "label": "approve requested scopes",
+          "to": "authz"
+        },
+        {
+          "from": "authz",
+          "id": "m7",
+          "kind": "return",
+          "label": "302 /callback?code=...",
+          "to": "browser"
+        },
+        {
+          "from": "browser",
+          "id": "m8",
+          "label": "GET /callback?code=...",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "id": "m9",
+          "label": "POST /token (code + verifier)",
+          "to": "authz"
+        },
+        {
+          "from": "authz",
+          "id": "m10",
+          "kind": "return",
+          "label": "access + refresh token",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "id": "m11",
+          "label": "GET /me (Bearer token)",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m12",
+          "label": "introspect token",
+          "to": "authz"
+        },
+        {
+          "from": "authz",
+          "id": "m13",
+          "kind": "return",
+          "label": "active, scopes=[profile]",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m14",
+          "kind": "return",
+          "label": "200 profile JSON",
+          "to": "app"
+        },
+        {
+          "from": "api",
+          "id": "m15",
+          "kind": "return",
+          "label": "401 token invalid",
+          "to": "app"
+        }
+      ],
+      "notes": [
+        "The refresh-token rotation exchange is omitted for brevity."
+      ],
+      "participants": [
+        {
+          "domain": "client",
+          "id": "user",
+          "label": "End User",
+          "subtitle": "corporate identity",
+          "type": "frontend"
+        },
+        {
+          "domain": "client",
+          "id": "browser",
+          "label": "Browser",
+          "subtitle": "redirects and consent",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Holds tokens server-side",
+            "Sets an encrypted session cookie"
+          ],
+          "domain": "svc",
+          "id": "app",
+          "label": "Web App (BFF)",
+          "subtitle": "backend for frontend",
+          "type": "backend"
+        },
+        {
+          "domain": "ext",
+          "id": "authz",
+          "label": "Authorization Server",
+          "subtitle": "OIDC provider",
+          "type": "security"
+        },
+        {
+          "domain": "data",
+          "id": "api",
+          "label": "Resource API",
+          "subtitle": "GET /me",
+          "type": "backend"
+        }
+      ],
+      "title": "OAuth 2.0 Authorization Code Flow with PKCE",
+      "version": 1
+    },
+    {
+      "activations": [
+        {
+          "from": "m1",
+          "participant": "api",
+          "to": "m6"
+        },
+        {
+          "from": "m8",
+          "participant": "worker",
+          "to": "m11"
+        }
+      ],
+      "description": "The browser uploads bytes straight to object storage with a short-lived signed URL; the API never proxies the payload.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Signed URL expires after 15 minutes",
+            "Content length and checksum are enforced on PUT"
+          ],
+          "title": "Why direct upload"
+        },
+        {
+          "domain": "data",
+          "items": [
+            "Record moves pending -> uploaded -> ready",
+            "Object key is derived from the upload id"
+          ],
+          "title": "State machine"
+        },
+        {
+          "domain": "svc",
+          "items": [
+            "Metadata extraction is a self-call inside the worker",
+            "Failures are retried from the event queue"
+          ],
+          "title": "Processing"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "Client"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Application"
+        },
+        {
+          "color": "orange",
+          "id": "cloud",
+          "label": "Cloud Storage"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Persistence"
+        }
+      ],
+      "fragments": [
+        {
+          "from": "m8",
+          "kind": "opt",
+          "label": "processing enabled for this bucket",
+          "to": "m11"
+        }
+      ],
+      "messages": [
+        {
+          "from": "browser",
+          "id": "m1",
+          "label": "POST /uploads (name, size, checksum)",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m2",
+          "label": "create upload record",
+          "to": "meta"
+        },
+        {
+          "from": "meta",
+          "id": "m3",
+          "kind": "return",
+          "label": "upload id",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m4",
+          "label": "request signed PUT URL",
+          "to": "store"
+        },
+        {
+          "from": "store",
+          "id": "m5",
+          "kind": "return",
+          "label": "signed URL (15 min TTL)",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m6",
+          "kind": "return",
+          "label": "201 + signed URL",
+          "to": "browser"
+        },
+        {
+          "from": "browser",
+          "id": "m7",
+          "kind": "async",
+          "label": "PUT bytes directly",
+          "note": "Payload never touches the API service",
+          "to": "store"
+        },
+        {
+          "from": "store",
+          "id": "m8",
+          "kind": "async",
+          "label": "object-created event",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "id": "m9",
+          "label": "extract metadata (self-call)",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "id": "m10",
+          "label": "mark ready + derived metadata",
+          "to": "meta"
+        },
+        {
+          "from": "meta",
+          "id": "m11",
+          "kind": "return",
+          "label": "ok",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "id": "m12",
+          "kind": "async",
+          "label": "processing complete (push)",
+          "to": "browser"
+        }
+      ],
+      "notes": [
+        "Checksum mismatch makes the signed URL unusable, so a corrupt upload cannot reach the ready state."
+      ],
+      "participants": [
+        {
+          "domain": "client",
+          "id": "browser",
+          "label": "Uploader UI",
+          "subtitle": "web application",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Issues signed URLs and tracks state",
+            "Never receives the file bytes"
+          ],
+          "domain": "svc",
+          "id": "api",
+          "label": "Upload API",
+          "subtitle": "orchestrates the upload",
+          "type": "backend"
+        },
+        {
+          "domain": "cloud",
+          "id": "store",
+          "label": "Object Storage",
+          "subtitle": "S3-compatible bucket",
+          "type": "cloud"
+        },
+        {
+          "domain": "data",
+          "id": "meta",
+          "label": "Metadata DB",
+          "subtitle": "upload + object records",
+          "type": "database"
+        },
+        {
+          "domain": "svc",
+          "id": "worker",
+          "label": "Async Processor",
+          "subtitle": "thumbnails + metadata",
+          "type": "backend"
+        }
+      ],
+      "title": "Direct Upload to Object Storage via Signed URL",
+      "version": 1
+    },
+    {
+      "activations": [
+        {
+          "from": "m2",
+          "participant": "pay",
+          "to": "m10"
+        },
+        {
+          "from": "m3",
+          "participant": "psp",
+          "to": "m6"
+        }
+      ],
+      "description": "Card payment with a 3-D Secure step-up challenge, and the two possible outcomes.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Card data is replaced by a network token before authorization",
+            "The challenge runs in a bank-hosted iframe"
+          ],
+          "title": "Tokenization"
+        },
+        {
+          "domain": "ext",
+          "items": [
+            "Exemption is requested for low-risk transactions",
+            "Challenges add roughly 8-15 seconds"
+          ],
+          "title": "3-D Secure"
+        },
+        {
+          "domain": "ext",
+          "items": [
+            "Failed authentication never reaches capture",
+            "The cart is kept so the buyer can retry"
+          ],
+          "title": "Failure path"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "Buyer"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Merchant Services"
+        },
+        {
+          "color": "slate",
+          "id": "ext",
+          "label": "Card Network"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Order State"
+        }
+      ],
+      "fragments": [
+        {
+          "branches": [
+            {
+              "from": "m10",
+              "label": "authentication failed"
+            }
+          ],
+          "from": "m6",
+          "kind": "alt",
+          "label": "authentication passed",
+          "to": "m10"
+        }
+      ],
+      "messages": [
+        {
+          "from": "user",
+          "id": "m1",
+          "label": "Click Pay",
+          "to": "web"
+        },
+        {
+          "from": "web",
+          "id": "m2",
+          "label": "POST /authorize (token, amount)",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m3",
+          "label": "create 3-D Secure challenge",
+          "to": "psp"
+        },
+        {
+          "from": "psp",
+          "id": "m4",
+          "label": "challenge iframe",
+          "to": "user"
+        },
+        {
+          "from": "user",
+          "id": "m5",
+          "label": "complete authentication",
+          "to": "psp"
+        },
+        {
+          "from": "psp",
+          "id": "m6",
+          "kind": "return",
+          "label": "authentication result",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m7",
+          "label": "mark payment authorized",
+          "to": "order"
+        },
+        {
+          "from": "order",
+          "id": "m8",
+          "kind": "return",
+          "label": "order updated",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m9",
+          "kind": "async",
+          "label": "schedule capture for dispatch",
+          "to": "psp"
+        },
+        {
+          "from": "pay",
+          "id": "m10",
+          "kind": "return",
+          "label": "402 authentication failed",
+          "to": "web"
+        }
+      ],
+      "notes": [
+        "Capture happens at dispatch, not at authorization."
+      ],
+      "participants": [
+        {
+          "domain": "client",
+          "id": "user",
+          "label": "Buyer",
+          "subtitle": "cardholder",
+          "type": "frontend"
+        },
+        {
+          "domain": "client",
+          "id": "web",
+          "label": "Checkout Web",
+          "subtitle": "hosted payment page",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Idempotency key per checkout attempt",
+            "Never stores raw card numbers"
+          ],
+          "domain": "svc",
+          "id": "pay",
+          "label": "Payment Service",
+          "subtitle": "authorization + capture",
+          "type": "backend"
+        },
+        {
+          "domain": "ext",
+          "id": "psp",
+          "label": "PSP / Card Network",
+          "subtitle": "3-D Secure and acquiring",
+          "type": "external"
+        },
+        {
+          "domain": "data",
+          "id": "order",
+          "label": "Order Service",
+          "subtitle": "payment state",
+          "type": "backend"
+        }
+      ],
+      "title": "Payment Authorization with 3-D Secure",
+      "version": 1
+    },
+    {
+      "activations": [
+        {
+          "from": "m1",
+          "participant": "agent",
+          "to": "m12"
+        },
+        {
+          "from": "m4",
+          "participant": "mcp",
+          "to": "m10"
+        },
+        {
+          "from": "m5",
+          "participant": "renderer",
+          "to": "m9"
+        }
+      ],
+      "description": "What happens between a diagram request and pixels on the Canvas, including the optional pixel-evidence step.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "The semantic JSON is validated before anything is drawn",
+            "Unknown fields and bad references are rejected"
+          ],
+          "title": "Validation"
+        },
+        {
+          "domain": "client",
+          "items": [
+            "The local renderer owns layout, routing and wrapping",
+            "Clicking a node reveals its details and related edges"
+          ],
+          "title": "Rendering"
+        },
+        {
+          "domain": "svc",
+          "items": [
+            "Capture needs a visible document; hidden documents return CANVAS_NOT_VISIBLE",
+            "Full-content capture includes scrolled-out regions"
+          ],
+          "title": "Capture"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "human",
+          "label": "User"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Agent & MCP"
+        },
+        {
+          "color": "orange",
+          "id": "client",
+          "label": "Canvas Client"
+        }
+      ],
+      "fragments": [
+        {
+          "from": "m8",
+          "kind": "opt",
+          "label": "visual evidence requested",
+          "to": "m11"
+        }
+      ],
+      "messages": [
+        {
+          "from": "user",
+          "id": "m1",
+          "label": "Ask for an architecture diagram",
+          "to": "agent"
+        },
+        {
+          "from": "agent",
+          "id": "m2",
+          "label": "present_widget(architecture JSON)",
+          "to": "mcp"
+        },
+        {
+          "from": "mcp",
+          "id": "m3",
+          "label": "validate semantic JSON (self-call)",
+          "to": "mcp"
+        },
+        {
+          "from": "mcp",
+          "id": "m4",
+          "label": "apply artifact + place on canvas",
+          "to": "renderer"
+        },
+        {
+          "from": "renderer",
+          "id": "m5",
+          "label": "layout nodes and route edges (self-call)",
+          "to": "renderer"
+        },
+        {
+          "from": "renderer",
+          "id": "m6",
+          "kind": "return",
+          "label": "render applied (revision, viewport)",
+          "to": "mcp"
+        },
+        {
+          "from": "mcp",
+          "id": "m7",
+          "kind": "return",
+          "label": "artifact id, revision, source path",
+          "to": "agent"
+        },
+        {
+          "from": "agent",
+          "id": "m8",
+          "label": "capture_artifact(request)",
+          "to": "mcp"
+        },
+        {
+          "from": "mcp",
+          "id": "m9",
+          "label": "render + screenshot",
+          "to": "renderer"
+        },
+        {
+          "from": "renderer",
+          "id": "m10",
+          "kind": "return",
+          "label": "image + contentSize + overflow flags",
+          "to": "mcp"
+        },
+        {
+          "from": "mcp",
+          "id": "m11",
+          "kind": "return",
+          "label": "capture result",
+          "to": "agent"
+        },
+        {
+          "from": "agent",
+          "id": "m12",
+          "kind": "return",
+          "label": "diagram with explanation",
+          "to": "user"
+        },
+        {
+          "from": "mcp",
+          "id": "m13",
+          "kind": "async",
+          "label": "queue feedback and message events",
+          "to": "agent"
+        }
+      ],
+      "notes": [
+        "A background document can accept content, but pixel capture requires it to be the visible document."
+      ],
+      "participants": [
+        {
+          "domain": "human",
+          "id": "user",
+          "label": "User",
+          "subtitle": "asks for a visual explanation",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Chooses the artifact type from the request",
+            "Keeps one artifactId per artifact"
+          ],
+          "domain": "svc",
+          "id": "agent",
+          "label": "ZCode Agent",
+          "subtitle": "authoring + verification",
+          "type": "backend"
+        },
+        {
+          "details": [
+            "Owns artifacts, revisions and capture",
+            "Returns the virtual source path for later patches"
+          ],
+          "domain": "svc",
+          "id": "mcp",
+          "label": "PenEcho MCP Server",
+          "subtitle": "canvas + artifact host",
+          "type": "backend"
+        },
+        {
+          "domain": "client",
+          "id": "renderer",
+          "label": "Canvas Renderer",
+          "subtitle": "browser-side layout engine",
+          "type": "frontend"
+        }
+      ],
+      "title": "Rendering a PenEcho Diagram End to End",
+      "version": 1
+    },
+    {
+      "activations": [
+        {
+          "from": "m1",
+          "participant": "api",
+          "to": "m17"
+        },
+        {
+          "from": "m9",
+          "participant": "inv",
+          "to": "m14"
+        },
+        {
+          "from": "m4",
+          "participant": "pay",
+          "to": "m12"
+        }
+      ],
+      "description": "Room hold, deposit authorization and compensation when the hold expires before confirmation.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Holds expire after 10 minutes",
+            "Reservation conversion is a compare-and-set operation"
+          ],
+          "title": "Concurrency control"
+        },
+        {
+          "domain": "svc",
+          "items": [
+            "Compensation releases the hold and voids the authorization",
+            "The guest keeps the cart for a retry"
+          ],
+          "title": "Compensation"
+        },
+        {
+          "domain": "data",
+          "items": [
+            "Booking records are written once, after payment capture",
+            "Notification is fire-and-forget and cannot roll back the booking"
+          ],
+          "title": "Durability"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "Guest"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Booking Services"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Reservation State"
+        }
+      ],
+      "fragments": [
+        {
+          "from": "m2",
+          "kind": "loop",
+          "label": "retry up to 3 times on lock conflict",
+          "to": "m7"
+        },
+        {
+          "branches": [
+            {
+              "from": "m13",
+              "label": "hold expired - compensate"
+            }
+          ],
+          "from": "m10",
+          "kind": "alt",
+          "label": "reservation confirmed",
+          "to": "m14"
+        },
+        {
+          "branches": [
+            {
+              "from": "m16",
+              "label": "send confirmation email"
+            }
+          ],
+          "from": "m15",
+          "kind": "par",
+          "label": "persist booking and notify",
+          "to": "m17"
+        }
+      ],
+      "messages": [
+        {
+          "from": "guest",
+          "id": "m1",
+          "label": "Search hotels and pick a room",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m2",
+          "label": "check availability",
+          "to": "inv"
+        },
+        {
+          "from": "inv",
+          "id": "m3",
+          "kind": "return",
+          "label": "2 rooms left at this rate",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m4",
+          "label": "authorize deposit",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m5",
+          "kind": "return",
+          "label": "authorization id",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m6",
+          "label": "hold room (10-minute TTL)",
+          "to": "inv"
+        },
+        {
+          "from": "inv",
+          "id": "m7",
+          "kind": "return",
+          "label": "hold id",
+          "to": "api"
+        },
+        {
+          "from": "guest",
+          "id": "m8",
+          "label": "Confirm booking",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m9",
+          "label": "convert hold to reservation",
+          "to": "inv"
+        },
+        {
+          "from": "inv",
+          "id": "m10",
+          "kind": "return",
+          "label": "reservation confirmed",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m11",
+          "label": "capture deposit",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m12",
+          "kind": "return",
+          "label": "capture receipt",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m13",
+          "label": "release hold (compensation)",
+          "to": "inv"
+        },
+        {
+          "from": "api",
+          "id": "m14",
+          "kind": "return",
+          "label": "409 room no longer available",
+          "to": "guest"
+        },
+        {
+          "from": "api",
+          "id": "m15",
+          "label": "persist booking record",
+          "to": "lock"
+        },
+        {
+          "from": "api",
+          "id": "m16",
+          "kind": "async",
+          "label": "send confirmation email",
+          "to": "notif"
+        },
+        {
+          "from": "api",
+          "id": "m17",
+          "kind": "return",
+          "label": "booking confirmed",
+          "to": "guest"
+        }
+      ],
+      "notes": [
+        "Deposit authorization happens before the hold, so a failed hold is voided rather than charged."
+      ],
+      "participants": [
+        {
+          "domain": "client",
+          "id": "guest",
+          "label": "Guest",
+          "subtitle": "mobile or web",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Single orchestrator for the booking saga",
+            "Idempotency key per booking attempt"
+          ],
+          "domain": "svc",
+          "id": "api",
+          "label": "Booking API",
+          "subtitle": "saga orchestrator",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "inv",
+          "label": "Inventory Service",
+          "subtitle": "rooms, rates, holds",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "id": "pay",
+          "label": "Payment Service",
+          "subtitle": "deposits and captures",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "lock",
+          "label": "Booking Records",
+          "subtitle": "confirmed reservations",
+          "type": "database"
+        },
+        {
+          "domain": "svc",
+          "id": "notif",
+          "label": "Notification Service",
+          "subtitle": "email and push",
+          "type": "backend"
+        }
+      ],
+      "title": "Hotel Booking with Holds and Compensation",
+      "version": 1
+    },
+    {
+      "activations": [
+        {
+          "from": "m6",
+          "participant": "worker",
+          "to": "m13"
+        },
+        {
+          "from": "m2",
+          "participant": "api",
+          "to": "m5"
+        }
+      ],
+      "description": "At-least-once transcoding with backoff retries, an uninterruptible encode step and a cache purge afterwards.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Jobs are idempotent by input hash",
+            "Poison jobs go to a dead-letter queue after 5 attempts"
+          ],
+          "title": "Retries"
+        },
+        {
+          "domain": "data",
+          "items": [
+            "Renditions land on the same key on re-encode",
+            "Partial output is discarded on failure"
+          ],
+          "title": "Artifacts"
+        },
+        {
+          "domain": "cloud",
+          "items": [
+            "Purge only touches the playlist paths",
+            "Segment files are content-hashed and immutable"
+          ],
+          "title": "Cache"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "Creator"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Pipeline"
+        },
+        {
+          "color": "orange",
+          "id": "cloud",
+          "label": "Storage & CDN"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Job State"
+        }
+      ],
+      "fragments": [
+        {
+          "from": "m6",
+          "kind": "loop",
+          "label": "retry up to 5 times with exponential backoff",
+          "to": "m11"
+        },
+        {
+          "from": "m9",
+          "kind": "critical",
+          "label": "encoding must not be interrupted",
+          "to": "m10"
+        },
+        {
+          "from": "m12",
+          "kind": "opt",
+          "label": "purge CDN on re-encode",
+          "to": "m13"
+        }
+      ],
+      "messages": [
+        {
+          "from": "creator",
+          "id": "m1",
+          "label": "Upload master file",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m2",
+          "label": "store original",
+          "to": "store"
+        },
+        {
+          "from": "store",
+          "id": "m3",
+          "kind": "return",
+          "label": "object key",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "id": "m4",
+          "kind": "async",
+          "label": "enqueue transcode job",
+          "to": "queue"
+        },
+        {
+          "from": "api",
+          "id": "m5",
+          "kind": "return",
+          "label": "202 accepted",
+          "to": "creator"
+        },
+        {
+          "from": "queue",
+          "id": "m6",
+          "kind": "async",
+          "label": "deliver job (at-least-once)",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "id": "m7",
+          "label": "download original",
+          "to": "store"
+        },
+        {
+          "from": "store",
+          "id": "m8",
+          "kind": "return",
+          "label": "byte stream",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "id": "m9",
+          "label": "encode ladder 360p to 1080p (self-call)",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "id": "m10",
+          "label": "upload renditions",
+          "to": "store"
+        },
+        {
+          "from": "worker",
+          "id": "m11",
+          "label": "ack job",
+          "to": "queue"
+        },
+        {
+          "from": "worker",
+          "id": "m12",
+          "label": "purge CDN cache for playlist",
+          "to": "cdn"
+        },
+        {
+          "from": "cdn",
+          "id": "m13",
+          "kind": "return",
+          "label": "purged",
+          "to": "worker"
+        }
+      ],
+      "notes": [
+        "Vertical distance is not elapsed time; retries are separated by backoff, not by one step."
+      ],
+      "participants": [
+        {
+          "domain": "client",
+          "id": "creator",
+          "label": "Creator",
+          "subtitle": "uploads the master",
+          "type": "frontend"
+        },
+        {
+          "details": [
+            "Validates container and duration before enqueue",
+            "Returns immediately with a job id"
+          ],
+          "domain": "svc",
+          "id": "api",
+          "label": "Upload API",
+          "subtitle": "ingest and validation",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "queue",
+          "label": "Job Queue",
+          "subtitle": "visibility timeout 15 min",
+          "type": "messagebus"
+        },
+        {
+          "details": [
+            "Idempotent per input hash",
+            "Runs FFmpeg inside a sandboxed worker"
+          ],
+          "domain": "svc",
+          "id": "worker",
+          "label": "Transcode Worker",
+          "subtitle": "rendition ladder",
+          "type": "backend"
+        },
+        {
+          "domain": "cloud",
+          "id": "store",
+          "label": "Object Storage",
+          "subtitle": "originals + renditions",
+          "type": "cloud"
+        },
+        {
+          "domain": "cloud",
+          "id": "cdn",
+          "label": "CDN",
+          "subtitle": "HLS/DASH delivery",
+          "type": "cloud"
+        }
+      ],
+      "title": "Video Transcoding Pipeline with Retries",
+      "version": 1
+    },
+    {
+      "activations": [
+        {
+          "from": "m2",
+          "participant": "scheduler",
+          "to": "m4"
+        }
+      ],
+      "description": "Boundary case: a single participant, self-calls only, with a loop fragment. Tests the minimum viable sequence diagram.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Batch size is capped to keep transactions short",
+            "The loop ends when a batch returns fewer rows than the limit"
+          ],
+          "title": "Batching"
+        }
+      ],
+      "domains": [
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Scheduler"
+        }
+      ],
+      "fragments": [
+        {
+          "from": "m2",
+          "kind": "loop",
+          "label": "until no expired rows remain",
+          "to": "m4"
+        }
+      ],
+      "messages": [
+        {
+          "from": "scheduler",
+          "id": "m1",
+          "label": "wake up every 5 minutes (self-call)",
+          "to": "scheduler"
+        },
+        {
+          "from": "scheduler",
+          "id": "m2",
+          "label": "select expired sessions (self-call)",
+          "to": "scheduler"
+        },
+        {
+          "from": "scheduler",
+          "id": "m3",
+          "label": "delete expired rows in batches (self-call)",
+          "to": "scheduler"
+        },
+        {
+          "from": "scheduler",
+          "id": "m4",
+          "label": "release session locks (self-call)",
+          "to": "scheduler"
+        }
+      ],
+      "notes": [
+        "One participant is the minimum; every message is a self-call."
+      ],
+      "participants": [
+        {
+          "details": [
+            "Runs as a single-leader cron job",
+            "Uses advisory locks to avoid double runs"
+          ],
+          "domain": "svc",
+          "id": "scheduler",
+          "label": "Cron Scheduler",
+          "subtitle": "session cleanup job",
+          "type": "backend"
+        }
+      ],
+      "title": "Session Cleanup Job (Minimum Sequence)",
+      "version": 1
+    },
+    {
+      "activations": [
+        {
+          "from": "m2",
+          "participant": "gw",
+          "to": "m22"
+        },
+        {
+          "from": "m5",
+          "participant": "risk",
+          "to": "m6"
+        },
+        {
+          "from": "m14",
+          "participant": "fraud",
+          "to": "m17"
+        },
+        {
+          "from": "m24",
+          "participant": "wh",
+          "to": "m25"
+        },
+        {
+          "from": "m32",
+          "participant": "ord",
+          "to": "m39"
+        }
+      ],
+      "description": "Stress sample: 12 participants, 40 messages, three levels of nested fragments, self-calls and long labels.",
+      "details": [
+        {
+          "domain": "svc",
+          "items": [
+            "Fraud review is a manual queue with a 15-minute SLA",
+            "Cancellation is accepted before the refund settles"
+          ],
+          "title": "Operational policy"
+        },
+        {
+          "domain": "data",
+          "items": [
+            "Order events fan out to fulfilment, analytics and notification",
+            "Payment settlement reconciles asynchronously each night"
+          ],
+          "title": "Event fan-out"
+        },
+        {
+          "domain": "ext",
+          "items": [
+            "Risk scoring uses an online feature store",
+            "Scores above 0.90 always route to manual review"
+          ],
+          "title": "Risk model"
+        },
+        {
+          "domain": "svc",
+          "items": [
+            "Inventory reservations expire after 20 minutes",
+            "Refunds are queued and settle in the next batch"
+          ],
+          "title": "Compensation"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "client",
+          "label": "Customer"
+        },
+        {
+          "color": "teal",
+          "id": "svc",
+          "label": "Platform Services"
+        },
+        {
+          "color": "purple",
+          "id": "data",
+          "label": "Event & State"
+        },
+        {
+          "color": "slate",
+          "id": "ext",
+          "label": "Risk & Review"
+        }
+      ],
+      "fragments": [
+        {
+          "branches": [
+            {
+              "from": "m14",
+              "label": "score above threshold - manual review"
+            }
+          ],
+          "from": "m6",
+          "kind": "alt",
+          "label": "risk score below threshold",
+          "to": "m22"
+        },
+        {
+          "from": "m7",
+          "kind": "critical",
+          "label": "payment, inventory and order creation must all commit",
+          "to": "m13"
+        },
+        {
+          "from": "m9",
+          "kind": "loop",
+          "label": "retry reservation once on transient error",
+          "to": "m10"
+        },
+        {
+          "from": "m14",
+          "kind": "loop",
+          "label": "retry verification up to 2 times",
+          "to": "m17"
+        },
+        {
+          "branches": [
+            {
+              "from": "m25",
+              "label": "analytics, notification and customer update"
+            }
+          ],
+          "from": "m23",
+          "kind": "par",
+          "label": "fan-out to fulfilment and analytics",
+          "to": "m28"
+        },
+        {
+          "from": "m32",
+          "kind": "opt",
+          "label": "customer requested cancellation",
+          "to": "m39"
+        }
+      ],
+      "messages": [
+        {
+          "from": "user",
+          "id": "m1",
+          "label": "Submit order",
+          "to": "web"
+        },
+        {
+          "from": "web",
+          "id": "m2",
+          "label": "POST /orders",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m3",
+          "label": "Validate access token",
+          "to": "auth"
+        },
+        {
+          "from": "auth",
+          "id": "m4",
+          "kind": "return",
+          "label": "token valid, scope=orders:write",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m5",
+          "label": "Score this order using 240 features from the ML feature store",
+          "to": "risk"
+        },
+        {
+          "from": "risk",
+          "id": "m6",
+          "kind": "return",
+          "label": "risk score 0.82, below the 0.90 threshold",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m7",
+          "label": "Authorize payment",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m8",
+          "kind": "return",
+          "label": "authorization approved",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m9",
+          "label": "Reserve inventory",
+          "to": "inv"
+        },
+        {
+          "from": "inv",
+          "id": "m10",
+          "kind": "return",
+          "label": "reserved 3 items",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m11",
+          "label": "Create order",
+          "to": "ord"
+        },
+        {
+          "from": "ord",
+          "id": "m12",
+          "kind": "return",
+          "label": "order ORD-1042 created",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m13",
+          "kind": "return",
+          "label": "201 Created",
+          "to": "web"
+        },
+        {
+          "from": "risk",
+          "id": "m14",
+          "label": "Escalate order for manual review",
+          "to": "fraud"
+        },
+        {
+          "from": "fraud",
+          "id": "m15",
+          "label": "Request additional verification",
+          "to": "user"
+        },
+        {
+          "from": "user",
+          "id": "m16",
+          "label": "Provide verification documents",
+          "to": "fraud"
+        },
+        {
+          "from": "fraud",
+          "id": "m17",
+          "label": "Manual review approved",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m18",
+          "label": "Authorize payment after review",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m19",
+          "kind": "return",
+          "label": "authorization approved",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m20",
+          "label": "Create order (manual approval path)",
+          "to": "ord"
+        },
+        {
+          "from": "ord",
+          "id": "m21",
+          "kind": "return",
+          "label": "order ORD-1042 created",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m22",
+          "kind": "return",
+          "label": "201 Created",
+          "to": "web"
+        },
+        {
+          "from": "ord",
+          "id": "m23",
+          "kind": "async",
+          "label": "publish order.created",
+          "to": "bus"
+        },
+        {
+          "from": "bus",
+          "id": "m24",
+          "kind": "async",
+          "label": "deliver pick task",
+          "to": "wh"
+        },
+        {
+          "from": "wh",
+          "id": "m25",
+          "kind": "return",
+          "label": "pick task accepted",
+          "to": "ord"
+        },
+        {
+          "from": "bus",
+          "id": "m26",
+          "kind": "async",
+          "label": "deliver notification event",
+          "to": "notify"
+        },
+        {
+          "from": "notify",
+          "id": "m27",
+          "kind": "async",
+          "label": "order confirmation email",
+          "to": "user"
+        },
+        {
+          "from": "ord",
+          "id": "m28",
+          "kind": "async",
+          "label": "order status page updated",
+          "to": "user"
+        },
+        {
+          "from": "pay",
+          "id": "m29",
+          "label": "reconcile settlement batch (self-call)",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m30",
+          "kind": "async",
+          "label": "publish payment.settled",
+          "to": "bus"
+        },
+        {
+          "from": "wh",
+          "id": "m31",
+          "label": "print packing slip (self-call)",
+          "to": "wh"
+        },
+        {
+          "from": "user",
+          "id": "m32",
+          "label": "Request cancellation",
+          "to": "web"
+        },
+        {
+          "from": "web",
+          "id": "m33",
+          "label": "DELETE /orders/ORD-1042",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m34",
+          "label": "Request cancellation",
+          "to": "ord"
+        },
+        {
+          "from": "ord",
+          "id": "m35",
+          "label": "Refund payment",
+          "to": "pay"
+        },
+        {
+          "from": "pay",
+          "id": "m36",
+          "kind": "return",
+          "label": "refund queued",
+          "to": "gw"
+        },
+        {
+          "from": "ord",
+          "id": "m37",
+          "label": "Release reservation",
+          "to": "inv"
+        },
+        {
+          "from": "inv",
+          "id": "m38",
+          "kind": "return",
+          "label": "released",
+          "to": "gw"
+        },
+        {
+          "from": "gw",
+          "id": "m39",
+          "kind": "return",
+          "label": "202 cancellation accepted",
+          "to": "web"
+        },
+        {
+          "from": "web",
+          "id": "m40",
+          "kind": "return",
+          "label": "cancellation confirmed",
+          "to": "user"
+        }
+      ],
+      "notes": [
+        "Fragment ranges nest three levels deep on the happy path (alt > critical > loop).",
+        "Self-calls are used for internal batch work inside payment and warehouse services."
+      ],
+      "participants": [
+        {
+          "domain": "client",
+          "id": "user",
+          "label": "Customer",
+          "subtitle": "web or mobile buyer",
+          "type": "frontend"
+        },
+        {
+          "domain": "client",
+          "id": "web",
+          "label": "Web App",
+          "subtitle": "storefront and order pages",
+          "type": "frontend"
+        },
+        {
+          "domain": "svc",
+          "id": "gw",
+          "label": "API Gateway",
+          "subtitle": "request orchestration",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "id": "auth",
+          "label": "Auth Service",
+          "subtitle": "token introspection, device trust and step-up authentication decisions for every write request",
+          "type": "security"
+        },
+        {
+          "domain": "ext",
+          "id": "risk",
+          "label": "Risk Engine",
+          "subtitle": "online scoring",
+          "type": "backend"
+        },
+        {
+          "domain": "ext",
+          "id": "fraud",
+          "label": "Fraud Review Console",
+          "subtitle": "manual analyst queue",
+          "type": "frontend"
+        },
+        {
+          "domain": "svc",
+          "id": "pay",
+          "label": "Payment Service",
+          "subtitle": "authorization, capture, refunds",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "id": "inv",
+          "label": "Inventory Service",
+          "subtitle": "reservations with TTL",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "id": "ord",
+          "label": "Order Service",
+          "subtitle": "order lifecycle",
+          "type": "backend"
+        },
+        {
+          "domain": "data",
+          "id": "bus",
+          "label": "Event Bus",
+          "subtitle": "order and payment topics",
+          "type": "messagebus"
+        },
+        {
+          "domain": "svc",
+          "id": "wh",
+          "label": "Warehouse System",
+          "subtitle": "pick and pack",
+          "type": "backend"
+        },
+        {
+          "domain": "svc",
+          "id": "notify",
+          "label": "Notification Service",
+          "subtitle": "email and push",
+          "type": "backend"
+        }
+      ],
+      "title": "Order Placement End to End (Stress Sample)",
+      "version": 1
+    }
+  ],
+  "workflow": [
+    {
+      "description": "Employee expenses are auto-approved inside policy limits and escalated to finance outside them.",
+      "details": [
+        {
+          "domain": "policy",
+          "items": [
+            "Under 500 USD: auto-approved",
+            "500 USD and above: finance review"
+          ],
+          "title": "Policy thresholds"
+        },
+        {
+          "domain": "ops",
+          "items": [
+            "Receipts attached in the expense tool",
+            "Payout in the next payroll run"
+          ],
+          "title": "Operational notes"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "user",
+          "label": "Employee"
+        },
+        {
+          "color": "teal",
+          "id": "ops",
+          "label": "Approval Steps"
+        },
+        {
+          "color": "purple",
+          "id": "policy",
+          "label": "Policy Decisions"
+        },
+        {
+          "color": "green",
+          "id": "done",
+          "label": "Outcomes"
+        }
+      ],
+      "edges": [
+        {
+          "from": "submit",
+          "to": "review"
+        },
+        {
+          "from": "review",
+          "to": "policy"
+        },
+        {
+          "from": "policy",
+          "label": "within limit",
+          "to": "auto"
+        },
+        {
+          "from": "policy",
+          "label": "over limit",
+          "to": "finance"
+        },
+        {
+          "from": "auto",
+          "to": "pay"
+        },
+        {
+          "from": "finance",
+          "label": "approved",
+          "to": "pay"
+        },
+        {
+          "from": "finance",
+          "label": "declined",
+          "to": "rejected"
+        },
+        {
+          "from": "finance",
+          "kind": "loop",
+          "label": "need more information",
+          "to": "review"
+        },
+        {
+          "from": "pay",
+          "to": "paid"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "user",
+          "id": "submit",
+          "label": "Submit Expense",
+          "subtitle": "claim + receipts",
+          "type": "start"
+        },
+        {
+          "domain": "ops",
+          "id": "review",
+          "label": "Manager Review",
+          "subtitle": "checks purpose and coding",
+          "type": "process"
+        },
+        {
+          "domain": "policy",
+          "id": "policy",
+          "label": "Within policy limit?",
+          "subtitle": "under 500 USD",
+          "type": "decision"
+        },
+        {
+          "domain": "ops",
+          "id": "auto",
+          "label": "Auto-approve",
+          "subtitle": "no human step",
+          "type": "process"
+        },
+        {
+          "domain": "policy",
+          "id": "finance",
+          "label": "Finance approval?",
+          "subtitle": "budget owner decides",
+          "type": "decision"
+        },
+        {
+          "domain": "ops",
+          "id": "pay",
+          "label": "Schedule Payment",
+          "subtitle": "next payroll run",
+          "type": "process"
+        },
+        {
+          "domain": "done",
+          "id": "paid",
+          "label": "Paid",
+          "subtitle": "employee notified",
+          "type": "end"
+        },
+        {
+          "domain": "done",
+          "id": "rejected",
+          "label": "Rejected",
+          "subtitle": "reason recorded",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "Loops back to manager review when finance requests additional evidence."
+      ],
+      "title": "Expense Approval",
+      "version": 1
+    },
+    {
+      "description": "Standard fulfilment with a restock loop when stock is unavailable at payment time.",
+      "details": [
+        {
+          "domain": "ops",
+          "items": [
+            "Backordered lines do not block in-stock lines",
+            "Restock checks run every 4 hours for 5 days"
+          ],
+          "title": "Backorder policy"
+        },
+        {
+          "domain": "ops",
+          "items": [
+            "Carrier handover closes the fulfilment task",
+            "Tracking is pushed by the carrier webhook"
+          ],
+          "title": "Handover"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "intake",
+          "label": "Intake"
+        },
+        {
+          "color": "teal",
+          "id": "ops",
+          "label": "Warehouse"
+        },
+        {
+          "color": "purple",
+          "id": "policy",
+          "label": "Stock Rules"
+        },
+        {
+          "color": "green",
+          "id": "done",
+          "label": "Outcomes"
+        }
+      ],
+      "edges": [
+        {
+          "from": "n1",
+          "to": "n2"
+        },
+        {
+          "from": "n2",
+          "label": "in stock",
+          "to": "n3"
+        },
+        {
+          "from": "n2",
+          "label": "out of stock",
+          "to": "n4"
+        },
+        {
+          "from": "n4",
+          "to": "n5"
+        },
+        {
+          "from": "n5",
+          "kind": "loop",
+          "label": "restocked, recheck",
+          "to": "n2"
+        },
+        {
+          "from": "n3",
+          "to": "n6"
+        },
+        {
+          "from": "n6",
+          "to": "n7"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "intake",
+          "id": "n1",
+          "label": "Order Placed",
+          "subtitle": "payment authorized",
+          "type": "start"
+        },
+        {
+          "domain": "policy",
+          "id": "n2",
+          "label": "Stock Available?",
+          "subtitle": "checked at the fulfilment warehouse",
+          "type": "decision"
+        },
+        {
+          "domain": "ops",
+          "id": "n3",
+          "label": "Pick & Pack",
+          "subtitle": "wave pick + packing slip",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "n4",
+          "label": "Create Backorder",
+          "subtitle": "notify the customer of the delay",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "n5",
+          "label": "Await Restock",
+          "subtitle": "recheck every 4 hours",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "n6",
+          "label": "Hand to Carrier",
+          "subtitle": "label and tracking number",
+          "type": "process"
+        },
+        {
+          "domain": "done",
+          "id": "n7",
+          "label": "Delivered",
+          "subtitle": "tracking closed",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "The restock loop gives up after 5 days and refunds the line."
+      ],
+      "title": "Order Fulfilment",
+      "version": 1
+    },
+    {
+      "description": "Parallel IT, facilities and manager provisioning that only completes when every track has finished.",
+      "details": [
+        {
+          "domain": "it",
+          "items": [
+            "Accounts are created before the laptop is handed over",
+            "The laptop ships only after disk encryption is verified"
+          ],
+          "title": "IT provisioning"
+        },
+        {
+          "domain": "hr",
+          "items": [
+            "Contracts must be signed before day one",
+            "Missing documents pause the whole flow"
+          ],
+          "title": "People Ops"
+        },
+        {
+          "domain": "mgr",
+          "items": [
+            "Buddy and first-week sessions are booked by the manager",
+            "First-day agenda is sent 24 hours in advance"
+          ],
+          "title": "Manager track"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "hr",
+          "label": "People Ops"
+        },
+        {
+          "color": "teal",
+          "id": "it",
+          "label": "IT Provisioning"
+        },
+        {
+          "color": "orange",
+          "id": "mgr",
+          "label": "Hiring Manager"
+        },
+        {
+          "color": "purple",
+          "id": "fac",
+          "label": "Facilities"
+        }
+      ],
+      "edges": [
+        {
+          "from": "s",
+          "to": "docs"
+        },
+        {
+          "from": "docs",
+          "to": "check"
+        },
+        {
+          "from": "check",
+          "label": "complete",
+          "to": "fork"
+        },
+        {
+          "from": "check",
+          "label": "missing documents",
+          "to": "chase"
+        },
+        {
+          "from": "chase",
+          "kind": "loop",
+          "label": "resubmitted",
+          "to": "docs"
+        },
+        {
+          "from": "fork",
+          "to": "accounts"
+        },
+        {
+          "from": "fork",
+          "to": "laptop"
+        },
+        {
+          "from": "fork",
+          "to": "badge"
+        },
+        {
+          "from": "accounts",
+          "to": "join"
+        },
+        {
+          "from": "laptop",
+          "to": "join"
+        },
+        {
+          "from": "badge",
+          "to": "join"
+        },
+        {
+          "from": "join",
+          "to": "sessions"
+        },
+        {
+          "from": "sessions",
+          "to": "ready"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "hr",
+          "id": "g_hr",
+          "label": "People Ops"
+        },
+        {
+          "domain": "it",
+          "id": "g_it",
+          "label": "IT provisioning"
+        },
+        {
+          "domain": "fac",
+          "id": "g_fac",
+          "label": "Facilities"
+        },
+        {
+          "domain": "mgr",
+          "id": "g_mgr",
+          "label": "Manager track"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "hr",
+          "group": "g_hr",
+          "id": "s",
+          "label": "Offer Accepted",
+          "subtitle": "signed offer letter",
+          "type": "start"
+        },
+        {
+          "domain": "hr",
+          "group": "g_hr",
+          "id": "docs",
+          "label": "Collect Signed Documents",
+          "subtitle": "contract, tax forms, ID",
+          "type": "process"
+        },
+        {
+          "domain": "hr",
+          "group": "g_hr",
+          "id": "check",
+          "label": "Documents Complete?",
+          "subtitle": "blocking gate",
+          "type": "decision"
+        },
+        {
+          "domain": "hr",
+          "group": "g_hr",
+          "id": "chase",
+          "label": "Chase Missing Documents",
+          "subtitle": "reminder after 2 business days",
+          "type": "process"
+        },
+        {
+          "domain": "it",
+          "group": "g_it",
+          "id": "fork",
+          "label": "Start Provisioning",
+          "subtitle": "IT, facilities and manager in parallel",
+          "type": "fork"
+        },
+        {
+          "domain": "it",
+          "group": "g_it",
+          "id": "accounts",
+          "label": "Create Accounts & Email",
+          "subtitle": "SSO, groups, mailbox",
+          "type": "process"
+        },
+        {
+          "domain": "it",
+          "group": "g_it",
+          "id": "laptop",
+          "label": "Prepare Laptop",
+          "subtitle": "image, encryption, MDM",
+          "type": "process"
+        },
+        {
+          "domain": "fac",
+          "group": "g_fac",
+          "id": "badge",
+          "label": "Badge & Desk",
+          "subtitle": "access card and seating",
+          "type": "process"
+        },
+        {
+          "domain": "it",
+          "group": "g_it",
+          "id": "join",
+          "label": "Provisioning Complete",
+          "subtitle": "waits for all three tracks",
+          "type": "join"
+        },
+        {
+          "domain": "mgr",
+          "group": "g_mgr",
+          "id": "sessions",
+          "label": "Schedule Onboarding Sessions",
+          "subtitle": "buddy plus first-week agenda",
+          "type": "process"
+        },
+        {
+          "domain": "mgr",
+          "group": "g_mgr",
+          "id": "ready",
+          "label": "First Day Ready",
+          "subtitle": "welcome email sent",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "Facilities provisioning runs in parallel but is not on the critical path."
+      ],
+      "title": "Employee Onboarding",
+      "version": 1
+    },
+    {
+      "description": "Trunk-based release pipeline with parallel checks, staging verification and automatic rollback.",
+      "details": [
+        {
+          "domain": "build",
+          "items": [
+            "Every commit builds an immutable image",
+            "Scans block on high-severity findings only"
+          ],
+          "title": "Checks"
+        },
+        {
+          "domain": "ops",
+          "items": [
+            "Staging smoke suite runs 12 critical journeys",
+            "Production deploy is a canary at 10% for 10 minutes"
+          ],
+          "title": "Release"
+        },
+        {
+          "domain": "ops",
+          "items": [
+            "Rollback restores the previous image tag",
+            "A failed rollback raises a SEV-1 page"
+          ],
+          "title": "Rollback"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "dev",
+          "label": "Developer"
+        },
+        {
+          "color": "teal",
+          "id": "build",
+          "label": "Build & Test"
+        },
+        {
+          "color": "orange",
+          "id": "ops",
+          "label": "Environments"
+        },
+        {
+          "color": "green",
+          "id": "done",
+          "label": "Outcomes"
+        }
+      ],
+      "edges": [
+        {
+          "from": "push",
+          "to": "build"
+        },
+        {
+          "from": "build",
+          "to": "fork1"
+        },
+        {
+          "from": "fork1",
+          "to": "scan"
+        },
+        {
+          "from": "fork1",
+          "to": "itest"
+        },
+        {
+          "from": "scan",
+          "to": "join1"
+        },
+        {
+          "from": "itest",
+          "to": "join1"
+        },
+        {
+          "from": "join1",
+          "to": "dec1"
+        },
+        {
+          "from": "dec1",
+          "label": "failed",
+          "to": "fix"
+        },
+        {
+          "from": "fix",
+          "kind": "loop",
+          "label": "amended and repushed",
+          "to": "build"
+        },
+        {
+          "from": "dec1",
+          "label": "all green",
+          "to": "stage"
+        },
+        {
+          "from": "stage",
+          "to": "smoke"
+        },
+        {
+          "from": "smoke",
+          "to": "dec2"
+        },
+        {
+          "from": "dec2",
+          "label": "passed",
+          "to": "prod"
+        },
+        {
+          "from": "dec2",
+          "label": "failed",
+          "to": "rollback"
+        },
+        {
+          "from": "prod",
+          "to": "verify"
+        },
+        {
+          "from": "verify",
+          "to": "released"
+        },
+        {
+          "from": "rollback",
+          "to": "rolled"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "dev",
+          "id": "push",
+          "label": "Push to main",
+          "subtitle": "squash-merged pull request",
+          "type": "start"
+        },
+        {
+          "domain": "build",
+          "id": "build",
+          "label": "Build & Unit Test",
+          "subtitle": "container image plus coverage gate",
+          "type": "process"
+        },
+        {
+          "domain": "build",
+          "id": "fork1",
+          "label": "Parallel Checks",
+          "subtitle": "scans and integration tests",
+          "type": "fork"
+        },
+        {
+          "domain": "build",
+          "id": "scan",
+          "label": "Dependency & Secret Scan",
+          "subtitle": "SBOM plus signature check",
+          "type": "process"
+        },
+        {
+          "domain": "build",
+          "id": "itest",
+          "label": "Integration Tests",
+          "subtitle": "ephemeral environment",
+          "type": "process"
+        },
+        {
+          "domain": "build",
+          "id": "join1",
+          "label": "Checks Complete",
+          "subtitle": "both tracks must pass",
+          "type": "join"
+        },
+        {
+          "domain": "build",
+          "id": "dec1",
+          "label": "All Green?",
+          "subtitle": "no blocking findings",
+          "type": "decision"
+        },
+        {
+          "domain": "dev",
+          "id": "fix",
+          "label": "Fix & Amend",
+          "subtitle": "developer addresses findings",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "stage",
+          "label": "Deploy to Staging",
+          "subtitle": "auto-deploy on green",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "smoke",
+          "label": "Smoke Tests",
+          "subtitle": "12 critical journeys",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "dec2",
+          "label": "Smoke Passed?",
+          "subtitle": "error budget respected",
+          "type": "decision"
+        },
+        {
+          "domain": "ops",
+          "id": "prod",
+          "label": "Deploy to Production",
+          "subtitle": "10% canary for 10 minutes",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "verify",
+          "label": "Post-Deploy Verification",
+          "subtitle": "SLO dashboards and alerts",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "rollback",
+          "label": "Automatic Rollback",
+          "subtitle": "restore previous image tag",
+          "type": "process"
+        },
+        {
+          "domain": "done",
+          "id": "released",
+          "label": "Released",
+          "subtitle": "release notes published",
+          "type": "end"
+        },
+        {
+          "domain": "done",
+          "id": "rolled",
+          "label": "Rolled Back",
+          "subtitle": "incident opened",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "The repair loop re-enters the pipeline at build, not at the failing check."
+      ],
+      "title": "CI/CD Release Pipeline",
+      "version": 1
+    },
+    {
+      "description": "On-call escalation from alert to mitigation, with a separate path for non-customer-impacting alerts.",
+      "details": [
+        {
+          "domain": "ops",
+          "items": [
+            "Paging uses a 5-minute acknowledge timer",
+            "Two missed pages escalate to the incident commander"
+          ],
+          "title": "Paging"
+        },
+        {
+          "domain": "ops",
+          "items": [
+            "Mitigation favours rollback over forward fixes",
+            "Postmortems are scheduled within 48 hours"
+          ],
+          "title": "Response"
+        }
+      ],
+      "direction": "RIGHT",
+      "domains": [
+        {
+          "color": "blue",
+          "id": "signal",
+          "label": "Signal"
+        },
+        {
+          "color": "teal",
+          "id": "ops",
+          "label": "Response"
+        },
+        {
+          "color": "purple",
+          "id": "decide",
+          "label": "Assessment"
+        },
+        {
+          "color": "green",
+          "id": "done",
+          "label": "Closeout"
+        }
+      ],
+      "edges": [
+        {
+          "from": "alert",
+          "to": "triage"
+        },
+        {
+          "from": "triage",
+          "label": "customer impacting",
+          "to": "page"
+        },
+        {
+          "from": "triage",
+          "label": "not impacting",
+          "to": "log"
+        },
+        {
+          "from": "page",
+          "to": "ack"
+        },
+        {
+          "from": "ack",
+          "to": "investigate"
+        },
+        {
+          "from": "investigate",
+          "to": "rootcause"
+        },
+        {
+          "from": "rootcause",
+          "label": "identified",
+          "to": "mitigate"
+        },
+        {
+          "from": "rootcause",
+          "label": "unclear",
+          "to": "escalate"
+        },
+        {
+          "from": "escalate",
+          "kind": "loop",
+          "label": "deeper analysis",
+          "to": "investigate"
+        },
+        {
+          "from": "mitigate",
+          "to": "resolve"
+        },
+        {
+          "from": "resolve",
+          "to": "postmortem"
+        },
+        {
+          "from": "log",
+          "to": "postmortem"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "signal",
+          "id": "alert",
+          "label": "Alert Fires",
+          "subtitle": "SLO burn-rate alert",
+          "type": "start"
+        },
+        {
+          "domain": "decide",
+          "id": "triage",
+          "label": "Customer Impacting?",
+          "subtitle": "checked against the impact matrix",
+          "type": "decision"
+        },
+        {
+          "domain": "ops",
+          "id": "page",
+          "label": "Page On-Call",
+          "subtitle": "5-minute acknowledge timer",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "ack",
+          "label": "Acknowledge",
+          "subtitle": "stop escalation timer",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "log",
+          "label": "Log for Business Hours",
+          "subtitle": "ticket created, no page",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "investigate",
+          "label": "Investigate",
+          "subtitle": "dashboards, logs, recent deploys",
+          "type": "process"
+        },
+        {
+          "domain": "decide",
+          "id": "rootcause",
+          "label": "Root Cause Found?",
+          "subtitle": "within the first 30 minutes",
+          "type": "decision"
+        },
+        {
+          "domain": "ops",
+          "id": "escalate",
+          "label": "Escalate to Incident Commander",
+          "subtitle": "war room opened",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "mitigate",
+          "label": "Mitigate or Roll Back",
+          "subtitle": "restore service first",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "id": "resolve",
+          "label": "Resolve & Verify",
+          "subtitle": "error budget recovering",
+          "type": "process"
+        },
+        {
+          "domain": "done",
+          "id": "postmortem",
+          "label": "Postmortem Scheduled",
+          "subtitle": "within 48 hours",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "Direction is forced to RIGHT to exercise the horizontal layout option."
+      ],
+      "title": "Incident Escalation & On-Call Response",
+      "version": 1
+    },
+    {
+      "description": "Refund intake with eligibility gates, a three-way payout decision and a single approval merge point.",
+      "details": [
+        {
+          "domain": "ops",
+          "items": [
+            "Return window is 30 days for most categories",
+            "Condition check is waived for unopened electronics"
+          ],
+          "title": "Eligibility"
+        },
+        {
+          "domain": "fin",
+          "items": [
+            "Card refunds settle in 3-5 business days",
+            "Store credit is available immediately with a 10% bonus"
+          ],
+          "title": "Payouts"
+        },
+        {
+          "domain": "fin",
+          "items": [
+            "Bank transfers over 2000 USD need a second approver",
+            "All refunds are written to the audit trail"
+          ],
+          "title": "Controls"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "intake",
+          "label": "Intake"
+        },
+        {
+          "color": "teal",
+          "id": "ops",
+          "label": "Assessment"
+        },
+        {
+          "color": "purple",
+          "id": "fin",
+          "label": "Finance"
+        },
+        {
+          "color": "green",
+          "id": "done",
+          "label": "Outcomes"
+        }
+      ],
+      "edges": [
+        {
+          "from": "s",
+          "to": "verify"
+        },
+        {
+          "from": "verify",
+          "to": "window"
+        },
+        {
+          "from": "window",
+          "label": "inside 30 days",
+          "to": "condition"
+        },
+        {
+          "from": "window",
+          "label": "outside window",
+          "to": "deny"
+        },
+        {
+          "from": "condition",
+          "label": "acceptable",
+          "to": "method"
+        },
+        {
+          "from": "condition",
+          "label": "damaged or incomplete",
+          "to": "deny"
+        },
+        {
+          "from": "method",
+          "label": "original card",
+          "to": "card"
+        },
+        {
+          "from": "method",
+          "label": "store credit",
+          "to": "credit"
+        },
+        {
+          "from": "method",
+          "label": "bank transfer",
+          "to": "transfer"
+        },
+        {
+          "from": "card",
+          "to": "approve"
+        },
+        {
+          "from": "credit",
+          "to": "approve"
+        },
+        {
+          "from": "transfer",
+          "to": "approve"
+        },
+        {
+          "from": "approve",
+          "to": "notify"
+        },
+        {
+          "from": "notify",
+          "to": "settled"
+        },
+        {
+          "from": "deny",
+          "to": "denied"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "intake",
+          "id": "g_intake",
+          "label": "Intake"
+        },
+        {
+          "domain": "ops",
+          "id": "g_ops",
+          "label": "Assessment"
+        },
+        {
+          "domain": "fin",
+          "id": "g_fin",
+          "label": "Finance"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "intake",
+          "group": "g_intake",
+          "id": "s",
+          "label": "Refund Requested",
+          "subtitle": "customer support or self-service",
+          "type": "start"
+        },
+        {
+          "domain": "intake",
+          "group": "g_intake",
+          "id": "verify",
+          "label": "Verify Order & Payment",
+          "subtitle": "order id, payment method, amount",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "group": "g_ops",
+          "id": "window",
+          "label": "Within Return Window?",
+          "subtitle": "30 days from delivery",
+          "type": "decision"
+        },
+        {
+          "domain": "ops",
+          "group": "g_ops",
+          "id": "condition",
+          "label": "Item Condition Acceptable?",
+          "subtitle": "photos reviewed by an agent",
+          "type": "decision"
+        },
+        {
+          "domain": "fin",
+          "group": "g_fin",
+          "id": "method",
+          "label": "Refund Method?",
+          "subtitle": "card, store credit or transfer",
+          "type": "decision"
+        },
+        {
+          "domain": "fin",
+          "group": "g_fin",
+          "id": "card",
+          "label": "Refund to Original Card",
+          "subtitle": "3-5 business days",
+          "type": "process"
+        },
+        {
+          "domain": "fin",
+          "group": "g_fin",
+          "id": "credit",
+          "label": "Issue Store Credit",
+          "subtitle": "immediate, 10% bonus",
+          "type": "process"
+        },
+        {
+          "domain": "fin",
+          "group": "g_fin",
+          "id": "transfer",
+          "label": "Manual Bank Transfer",
+          "subtitle": "second approver above 2000 USD",
+          "type": "process"
+        },
+        {
+          "domain": "fin",
+          "group": "g_fin",
+          "id": "approve",
+          "label": "Approve Refund",
+          "subtitle": "single merge point for all methods",
+          "type": "process"
+        },
+        {
+          "domain": "intake",
+          "group": "g_intake",
+          "id": "notify",
+          "label": "Notify Customer",
+          "subtitle": "amount and method confirmed",
+          "type": "process"
+        },
+        {
+          "domain": "ops",
+          "group": "g_ops",
+          "id": "deny",
+          "label": "Deny with Explanation",
+          "subtitle": "policy clause referenced",
+          "type": "process"
+        },
+        {
+          "domain": "done",
+          "id": "settled",
+          "label": "Refund Settled",
+          "subtitle": "ledger reconciled",
+          "type": "end"
+        },
+        {
+          "domain": "done",
+          "id": "denied",
+          "label": "Refund Denied",
+          "subtitle": "customer informed",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "The three payout branches merge into one approval step, which is allowed for alternative incoming branches."
+      ],
+      "title": "Customer Refund Processing",
+      "version": 1
+    },
+    {
+      "description": "Upload scanning, automatic enforcement for high-confidence findings and a human queue with an appeal loop.",
+      "details": [
+        {
+          "domain": "detect",
+          "items": [
+            "Classifier threshold for auto-block is 0.95",
+            "Human reviewers target a 30-minute queue time"
+          ],
+          "title": "Thresholds"
+        },
+        {
+          "domain": "review",
+          "items": [
+            "Appeals reopen the same case rather than creating a new one",
+            "Enforcement is reversible within the appeal window"
+          ],
+          "title": "Appeals"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "ingest",
+          "label": "Ingest"
+        },
+        {
+          "color": "teal",
+          "id": "detect",
+          "label": "Detection"
+        },
+        {
+          "color": "purple",
+          "id": "review",
+          "label": "Review"
+        },
+        {
+          "color": "green",
+          "id": "done",
+          "label": "Outcomes"
+        }
+      ],
+      "edges": [
+        {
+          "from": "s",
+          "to": "scan"
+        },
+        {
+          "from": "scan",
+          "to": "fork1"
+        },
+        {
+          "from": "fork1",
+          "to": "classifier"
+        },
+        {
+          "from": "fork1",
+          "to": "hashmatch"
+        },
+        {
+          "from": "classifier",
+          "to": "join1"
+        },
+        {
+          "from": "hashmatch",
+          "to": "join1"
+        },
+        {
+          "from": "join1",
+          "to": "auto"
+        },
+        {
+          "from": "auto",
+          "label": "high confidence",
+          "to": "block"
+        },
+        {
+          "from": "auto",
+          "label": "uncertain",
+          "to": "queue"
+        },
+        {
+          "from": "block",
+          "to": "enforced"
+        },
+        {
+          "from": "queue",
+          "to": "human"
+        },
+        {
+          "from": "human",
+          "to": "violation"
+        },
+        {
+          "from": "violation",
+          "label": "violation confirmed",
+          "to": "remove"
+        },
+        {
+          "from": "violation",
+          "label": "no violation",
+          "to": "restore"
+        },
+        {
+          "from": "remove",
+          "to": "appeal"
+        },
+        {
+          "from": "appeal",
+          "to": "appealcheck"
+        },
+        {
+          "from": "appealcheck",
+          "kind": "loop",
+          "label": "appeal received, re-review",
+          "to": "human"
+        },
+        {
+          "from": "appealcheck",
+          "label": "no appeal within 24h",
+          "to": "enforced"
+        },
+        {
+          "from": "restore",
+          "to": "published"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "ingest",
+          "id": "s",
+          "label": "User Uploads Content",
+          "subtitle": "image, video or document",
+          "type": "start"
+        },
+        {
+          "domain": "ingest",
+          "id": "scan",
+          "label": "Virus Scan",
+          "subtitle": "signature and sandbox checks",
+          "type": "process"
+        },
+        {
+          "domain": "detect",
+          "id": "fork1",
+          "label": "Parallel Analysis",
+          "subtitle": "classifier and hash match",
+          "type": "fork"
+        },
+        {
+          "domain": "detect",
+          "id": "classifier",
+          "label": "Classifier Scoring",
+          "subtitle": "policy categories",
+          "type": "process"
+        },
+        {
+          "domain": "detect",
+          "id": "hashmatch",
+          "label": "Hash Match",
+          "subtitle": "known-bad database",
+          "type": "process"
+        },
+        {
+          "domain": "detect",
+          "id": "join1",
+          "label": "Analysis Complete",
+          "subtitle": "both signals collected",
+          "type": "join"
+        },
+        {
+          "domain": "detect",
+          "id": "auto",
+          "label": "Auto-Action?",
+          "subtitle": "confidence above 0.95",
+          "type": "decision"
+        },
+        {
+          "domain": "detect",
+          "id": "block",
+          "label": "Auto-Block & Notify",
+          "subtitle": "uploader informed",
+          "type": "process"
+        },
+        {
+          "domain": "review",
+          "id": "queue",
+          "label": "Route to Human Queue",
+          "subtitle": "priority by reach",
+          "type": "process"
+        },
+        {
+          "domain": "review",
+          "id": "human",
+          "label": "Human Review",
+          "subtitle": "policy specialist",
+          "type": "process"
+        },
+        {
+          "domain": "review",
+          "id": "violation",
+          "label": "Policy Violation?",
+          "subtitle": "reviewer decision",
+          "type": "decision"
+        },
+        {
+          "domain": "review",
+          "id": "remove",
+          "label": "Remove Content",
+          "subtitle": "strike recorded",
+          "type": "process"
+        },
+        {
+          "domain": "review",
+          "id": "restore",
+          "label": "Restore Content",
+          "subtitle": "flags cleared",
+          "type": "process"
+        },
+        {
+          "domain": "review",
+          "id": "appeal",
+          "label": "Appeal Window (24h)",
+          "subtitle": "creator may appeal",
+          "type": "process"
+        },
+        {
+          "domain": "review",
+          "id": "appealcheck",
+          "label": "Appeal Received?",
+          "subtitle": "checked at window close",
+          "type": "decision"
+        },
+        {
+          "domain": "done",
+          "id": "enforced",
+          "label": "Enforced",
+          "subtitle": "decision final",
+          "type": "end"
+        },
+        {
+          "domain": "done",
+          "id": "published",
+          "label": "Published",
+          "subtitle": "content live",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "Appeals re-enter human review, so the case never duplicates."
+      ],
+      "title": "Content Moderation Pipeline",
+      "version": 1
+    },
+    {
+      "description": "Risk-based approval gate for agent tool calls, with an audit entry for every outcome.",
+      "details": [
+        {
+          "domain": "gov",
+          "items": [
+            "Read-only calls execute without approval",
+            "Destructive calls always require a human"
+          ],
+          "title": "Risk classes"
+        },
+        {
+          "domain": "gov",
+          "items": [
+            "Approval requests expire after 10 minutes",
+            "Every decision is written to the audit log with the actor"
+          ],
+          "title": "Timeouts and audit"
+        },
+        {
+          "domain": "agent",
+          "items": [
+            "Rejected calls return the reason to the model",
+            "The agent may propose a safer alternative"
+          ],
+          "title": "On rejection"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "agent",
+          "label": "Agent Side"
+        },
+        {
+          "color": "teal",
+          "id": "gov",
+          "label": "Governance"
+        },
+        {
+          "color": "orange",
+          "id": "human",
+          "label": "Human Review"
+        },
+        {
+          "color": "green",
+          "id": "done",
+          "label": "Outcomes"
+        }
+      ],
+      "edges": [
+        {
+          "from": "s",
+          "to": "classify"
+        },
+        {
+          "from": "classify",
+          "to": "risk"
+        },
+        {
+          "from": "risk",
+          "label": "read-only, low risk",
+          "to": "auto"
+        },
+        {
+          "from": "risk",
+          "label": "write or destructive",
+          "to": "approve"
+        },
+        {
+          "from": "auto",
+          "to": "audit"
+        },
+        {
+          "from": "approve",
+          "to": "decision"
+        },
+        {
+          "from": "decision",
+          "label": "approved",
+          "to": "execute"
+        },
+        {
+          "from": "decision",
+          "label": "no response in 10 minutes",
+          "kind": "loop",
+          "to": "approve"
+        },
+        {
+          "from": "decision",
+          "label": "denied",
+          "to": "deny"
+        },
+        {
+          "from": "execute",
+          "to": "audit"
+        },
+        {
+          "from": "deny",
+          "to": "rejected"
+        },
+        {
+          "from": "audit",
+          "to": "completed"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "agent",
+          "id": "g_agent",
+          "label": "Agent runtime"
+        },
+        {
+          "domain": "gov",
+          "id": "g_gov",
+          "label": "Governance layer"
+        },
+        {
+          "domain": "human",
+          "id": "g_human",
+          "label": "Human reviewer"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "agent",
+          "group": "g_agent",
+          "id": "s",
+          "label": "Agent Proposes Tool Call",
+          "subtitle": "tool name, arguments, intent",
+          "type": "start"
+        },
+        {
+          "domain": "gov",
+          "group": "g_gov",
+          "id": "classify",
+          "label": "Classify Risk",
+          "subtitle": "read, write or destructive",
+          "type": "process"
+        },
+        {
+          "domain": "gov",
+          "group": "g_gov",
+          "id": "risk",
+          "label": "Risk Level?",
+          "subtitle": "policy table lookup",
+          "type": "decision"
+        },
+        {
+          "domain": "agent",
+          "group": "g_agent",
+          "id": "auto",
+          "label": "Execute Automatically",
+          "subtitle": "read-only tools only",
+          "type": "process"
+        },
+        {
+          "domain": "human",
+          "group": "g_human",
+          "id": "approve",
+          "label": "Request Human Approval",
+          "subtitle": "inbox request with full arguments",
+          "type": "process"
+        },
+        {
+          "domain": "human",
+          "group": "g_human",
+          "id": "decision",
+          "label": "Approved?",
+          "subtitle": "reviewer decides",
+          "type": "decision"
+        },
+        {
+          "domain": "agent",
+          "group": "g_agent",
+          "id": "execute",
+          "label": "Execute With Audit Trail",
+          "subtitle": "arguments hashed and stored",
+          "type": "process"
+        },
+        {
+          "domain": "gov",
+          "group": "g_gov",
+          "id": "deny",
+          "label": "Reject & Explain",
+          "subtitle": "reason returned to the model",
+          "type": "process"
+        },
+        {
+          "domain": "gov",
+          "group": "g_gov",
+          "id": "audit",
+          "label": "Record Decision in Audit Log",
+          "subtitle": "actor, tool, arguments, outcome",
+          "type": "process"
+        },
+        {
+          "domain": "done",
+          "id": "completed",
+          "label": "Action Completed",
+          "subtitle": "result returned to the agent",
+          "type": "end"
+        },
+        {
+          "domain": "done",
+          "id": "rejected",
+          "label": "Action Rejected",
+          "subtitle": "no side effect occurred",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "Timeout re-requests approval rather than silently failing."
+      ],
+      "title": "MCP Tool-Call Approval Gate",
+      "version": 1
+    },
+    {
+      "description": "Boundary case: the smallest structurally valid workflow - one start, one end, one edge. No decisions, no branches.",
+      "details": [
+        {
+          "domain": "meta",
+          "items": [
+            "Minimum node count is 1; a start plus an end is the smallest useful shape",
+            "Edges may be empty for a single-node workflow"
+          ],
+          "title": "Why this sample"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "meta",
+          "label": "Boundary Case"
+        },
+        {
+          "color": "green",
+          "id": "done",
+          "label": "Outcome"
+        }
+      ],
+      "edges": [
+        {
+          "from": "trigger",
+          "label": "nothing to decide",
+          "to": "finished"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "meta",
+          "id": "trigger",
+          "label": "Trigger",
+          "subtitle": "start boundary",
+          "type": "start"
+        },
+        {
+          "domain": "done",
+          "id": "finished",
+          "label": "Finished",
+          "subtitle": "end boundary",
+          "type": "end"
+        }
+      ],
+      "notes": [
+        "Used to verify that the renderer handles the two-node minimum without layout artefacts."
+      ],
+      "title": "Minimal Workflow (Boundary Sample)",
+      "version": 1
+    },
+    {
+      "description": "Stress sample: 40 nodes, 9 groups, 46 edges, three way decisions, two forks and a join.",
+      "details": [
+        {
+          "domain": "appr",
+          "items": [
+            "Manager, finance and compliance approve in parallel",
+            "Overdue approvals escalate after 5 business days"
+          ],
+          "title": "Approvals"
+        },
+        {
+          "domain": "recv",
+          "items": [
+            "Inspection failures return the goods to the vendor",
+            "Quarantined goods can be released into stock"
+          ],
+          "title": "Receiving"
+        },
+        {
+          "domain": "inv",
+          "items": [
+            "Three-way match compares invoice, PO and goods receipt",
+            "Discrepancies become credit notes before payment"
+          ],
+          "title": "Invoice control"
+        },
+        {
+          "domain": "inv",
+          "items": [
+            "Payment instruction and ledger posting run in parallel",
+            "The vendor is paid through the bank payment network"
+          ],
+          "title": "Disbursement"
+        },
+        {
+          "domain": "audit",
+          "items": [
+            "Every payment writes an audit entry",
+            "Period-end review samples the audit trail"
+          ],
+          "title": "Audit"
+        }
+      ],
+      "domains": [
+        {
+          "color": "blue",
+          "id": "req",
+          "label": "Requisition"
+        },
+        {
+          "color": "teal",
+          "id": "appr",
+          "label": "Approval"
+        },
+        {
+          "color": "orange",
+          "id": "src",
+          "label": "Sourcing"
+        },
+        {
+          "color": "purple",
+          "id": "recv",
+          "label": "Receiving"
+        },
+        {
+          "color": "green",
+          "id": "inv",
+          "label": "Invoice & Payment"
+        },
+        {
+          "color": "slate",
+          "id": "audit",
+          "label": "Audit & Master Data"
+        }
+      ],
+      "edges": [
+        {
+          "from": "r1",
+          "to": "r2"
+        },
+        {
+          "from": "r2",
+          "to": "r3"
+        },
+        {
+          "from": "r3",
+          "label": "budget available",
+          "to": "r5"
+        },
+        {
+          "from": "r3",
+          "label": "over budget",
+          "to": "r4"
+        },
+        {
+          "from": "r4",
+          "to": "r5"
+        },
+        {
+          "from": "r5",
+          "to": "a1"
+        },
+        {
+          "from": "a1",
+          "to": "a2"
+        },
+        {
+          "from": "a1",
+          "to": "a3"
+        },
+        {
+          "from": "a1",
+          "to": "a4"
+        },
+        {
+          "from": "a2",
+          "to": "a5"
+        },
+        {
+          "from": "a3",
+          "to": "a5"
+        },
+        {
+          "from": "a4",
+          "to": "a5"
+        },
+        {
+          "from": "a5",
+          "to": "a6"
+        },
+        {
+          "from": "a6",
+          "label": "approved",
+          "to": "s1"
+        },
+        {
+          "from": "a6",
+          "label": "rejected",
+          "to": "c3"
+        },
+        {
+          "from": "a6",
+          "kind": "loop",
+          "label": "no response in 5 business days, escalate and re-run",
+          "to": "a7"
+        },
+        {
+          "from": "a7",
+          "to": "a5"
+        },
+        {
+          "from": "m1",
+          "label": "approved vendor list",
+          "to": "r2"
+        },
+        {
+          "from": "m3",
+          "label": "contract terms",
+          "to": "s2"
+        },
+        {
+          "from": "s1",
+          "to": "s2"
+        },
+        {
+          "from": "s2",
+          "to": "s3"
+        },
+        {
+          "from": "s3",
+          "label": "preferred vendor",
+          "to": "s5"
+        },
+        {
+          "from": "s3",
+          "label": "non-preferred or new vendor",
+          "to": "s4"
+        },
+        {
+          "from": "s4",
+          "to": "s5"
+        },
+        {
+          "from": "s5",
+          "label": "send PO to portal",
+          "to": "x1"
+        },
+        {
+          "from": "x1",
+          "label": "delivery notification",
+          "to": "v1"
+        },
+        {
+          "from": "v1",
+          "to": "v2"
+        },
+        {
+          "from": "v2",
+          "label": "inspection passed",
+          "to": "v4"
+        },
+        {
+          "from": "v2",
+          "label": "inspection failed",
+          "to": "v3"
+        },
+        {
+          "from": "v2",
+          "label": "needs quarantine",
+          "to": "v5"
+        },
+        {
+          "from": "v5",
+          "label": "released after quarantine",
+          "to": "v4"
+        },
+        {
+          "from": "v3",
+          "to": "c4"
+        },
+        {
+          "from": "v4",
+          "to": "i1"
+        },
+        {
+          "from": "m2",
+          "label": "material and price data",
+          "to": "i1"
+        },
+        {
+          "from": "i1",
+          "to": "i2"
+        },
+        {
+          "from": "i2",
+          "label": "matched",
+          "to": "i4"
+        },
+        {
+          "from": "i2",
+          "label": "discrepancy found",
+          "to": "i3"
+        },
+        {
+          "from": "i3",
+          "to": "i7"
+        },
+        {
+          "from": "i7",
+          "to": "i4"
+        },
+        {
+          "from": "i4",
+          "to": "i5"
+        },
+        {
+          "from": "i5",
+          "label": "payment instruction",
+          "to": "x2"
+        },
+        {
+          "from": "i5",
+          "label": "post to ledger",
+          "to": "i6"
+        },
+        {
+          "from": "i5",
+          "label": "write audit entry",
+          "to": "u1"
+        },
+        {
+          "from": "i6",
+          "to": "c1"
+        },
+        {
+          "from": "u2",
+          "label": "sample audit entries",
+          "to": "u1"
+        },
+        {
+          "from": "c1",
+          "to": "c2"
+        }
+      ],
+      "groups": [
+        {
+          "domain": "req",
+          "id": "g_req",
+          "label": "Requisition"
+        },
+        {
+          "domain": "appr",
+          "id": "g_appr",
+          "label": "Approval"
+        },
+        {
+          "domain": "src",
+          "id": "g_src",
+          "label": "Sourcing"
+        },
+        {
+          "domain": "recv",
+          "id": "g_recv",
+          "label": "Receiving"
+        },
+        {
+          "domain": "inv",
+          "id": "g_inv",
+          "label": "Invoice & payment"
+        },
+        {
+          "domain": "req",
+          "id": "g_close",
+          "label": "Closeout"
+        },
+        {
+          "domain": "audit",
+          "id": "g_master",
+          "label": "Master data"
+        },
+        {
+          "domain": "appr",
+          "id": "g_audit",
+          "label": "Audit"
+        }
+      ],
+      "nodes": [
+        {
+          "domain": "req",
+          "group": "g_req",
+          "id": "r1",
+          "label": "Demand Identified",
+          "subtitle": "department requests goods or services",
+          "type": "start"
+        },
+        {
+          "domain": "req",
+          "group": "g_req",
+          "id": "r2",
+          "label": "Create Requisition",
+          "subtitle": "cost centre, material, quantity",
+          "type": "process"
+        },
+        {
+          "domain": "req",
+          "group": "g_req",
+          "id": "r3",
+          "label": "Budget Available?",
+          "subtitle": "checked against the cost centre",
+          "type": "decision"
+        },
+        {
+          "domain": "req",
+          "group": "g_req",
+          "id": "r4",
+          "label": "Request Budget Adjustment",
+          "subtitle": "finance transfers budget",
+          "type": "process"
+        },
+        {
+          "domain": "req",
+          "group": "g_req",
+          "id": "r5",
+          "label": "Submit for Approval",
+          "subtitle": "routing rules applied",
+          "type": "process"
+        },
+        {
+          "domain": "appr",
+          "group": "g_appr",
+          "id": "a1",
+          "label": "Parallel Approvals",
+          "subtitle": "manager, finance and compliance",
+          "type": "fork"
+        },
+        {
+          "domain": "appr",
+          "group": "g_appr",
+          "id": "a2",
+          "label": "Manager Approval",
+          "subtitle": "budget owner",
+          "type": "process"
+        },
+        {
+          "domain": "appr",
+          "group": "g_appr",
+          "id": "a3",
+          "label": "Finance Approval",
+          "subtitle": "three-way match pre-check plus budget owner sign-off",
+          "type": "process"
+        },
+        {
+          "domain": "appr",
+          "group": "g_appr",
+          "id": "a4",
+          "label": "Compliance Check",
+          "subtitle": "sanctions and policy screening",
+          "type": "process"
+        },
+        {
+          "domain": "appr",
+          "group": "g_appr",
+          "id": "a5",
+          "label": "All Approvals Collected",
+          "subtitle": "waits for every approval track",
+          "type": "join"
+        },
+        {
+          "domain": "appr",
+          "group": "g_appr",
+          "id": "a6",
+          "label": "Approved?",
+          "subtitle": "any rejection ends the flow",
+          "type": "decision"
+        },
+        {
+          "domain": "appr",
+          "group": "g_appr",
+          "id": "a7",
+          "label": "Escalate Overdue Approval",
+          "subtitle": "notify the category manager",
+          "type": "process"
+        },
+        {
+          "domain": "src",
+          "group": "g_src",
+          "id": "s1",
+          "label": "Shortlist Vendors",
+          "subtitle": "from the approved vendor list",
+          "type": "process"
+        },
+        {
+          "domain": "src",
+          "group": "g_src",
+          "id": "s2",
+          "label": "Negotiate Terms",
+          "subtitle": "price, lead time, payment terms",
+          "type": "process"
+        },
+        {
+          "domain": "src",
+          "group": "g_src",
+          "id": "s3",
+          "label": "Preferred Vendor?",
+          "subtitle": "contract already in place",
+          "type": "decision"
+        },
+        {
+          "domain": "src",
+          "group": "g_src",
+          "id": "s4",
+          "label": "Sole-Source Justification",
+          "subtitle": "written reason required",
+          "type": "process"
+        },
+        {
+          "domain": "src",
+          "group": "g_src",
+          "id": "s5",
+          "label": "Create Purchase Order",
+          "subtitle": "committed spend",
+          "type": "process"
+        },
+        {
+          "domain": "recv",
+          "group": "g_recv",
+          "id": "v1",
+          "label": "Receive Goods",
+          "subtitle": "dock check against the PO",
+          "type": "process"
+        },
+        {
+          "domain": "recv",
+          "group": "g_recv",
+          "id": "v2",
+          "label": "Inspection Passed?",
+          "subtitle": "quality gate",
+          "type": "decision"
+        },
+        {
+          "domain": "recv",
+          "group": "g_recv",
+          "id": "v3",
+          "label": "Return to Vendor",
+          "subtitle": "RMA raised",
+          "type": "process"
+        },
+        {
+          "domain": "recv",
+          "group": "g_recv",
+          "id": "v4",
+          "label": "Record Goods Receipt",
+          "subtitle": "posted against the PO",
+          "type": "join"
+        },
+        {
+          "domain": "recv",
+          "group": "g_recv",
+          "id": "v5",
+          "label": "Quarantine Goods",
+          "subtitle": "held pending quality decision",
+          "type": "process"
+        },
+        {
+          "domain": "inv",
+          "group": "g_inv",
+          "id": "i1",
+          "label": "Match Invoice, PO and Receipt",
+          "subtitle": "three-way match",
+          "type": "process"
+        },
+        {
+          "domain": "inv",
+          "group": "g_inv",
+          "id": "i2",
+          "label": "Three-Way Match OK?",
+          "subtitle": "quantity and price tolerance 2%",
+          "type": "decision"
+        },
+        {
+          "domain": "inv",
+          "group": "g_inv",
+          "id": "i3",
+          "label": "Resolve Discrepancy",
+          "subtitle": "contact vendor or adjust receipt",
+          "type": "process"
+        },
+        {
+          "domain": "inv",
+          "group": "g_inv",
+          "id": "i4",
+          "label": "Approve Payment Run",
+          "subtitle": "daily payment batch",
+          "type": "process"
+        },
+        {
+          "domain": "inv",
+          "group": "g_inv",
+          "id": "i5",
+          "label": "Disburse Payment",
+          "subtitle": "bank instruction, ledger and audit in parallel",
+          "type": "fork"
+        },
+        {
+          "domain": "inv",
+          "group": "g_inv",
+          "id": "i6",
+          "label": "Reconcile Ledger",
+          "subtitle": "clear the accrual",
+          "type": "process"
+        },
+        {
+          "domain": "inv",
+          "group": "g_inv",
+          "id": "i7",
+          "label": "Request Credit Note",
+          "subtitle": "vendor issues a credit",
+          "type": "process"
+        },
+        {
+          "domain": "inv",
+          "group": "g_close",
+          "id": "c1",
+          "label": "Close Purchase Order",
+          "subtitle": "commitment released",
+          "type": "process"
+        },
+        {
+          "domain": "inv",
+          "group": "g_close",
+          "id": "c2",
+          "label": "Closed",
+          "subtitle": "fully received and paid",
+          "type": "end"
+        },
+        {
+          "domain": "appr",
+          "group": "g_close",
+          "id": "c3",
+          "label": "Rejected",
+          "subtitle": "requisition declined",
+          "type": "end"
+        },
+        {
+          "domain": "recv",
+          "group": "g_close",
+          "id": "c4",
+          "label": "Returned",
+          "subtitle": "goods sent back",
+          "type": "end"
+        },
+        {
+          "domain": "audit",
+          "group": "g_master",
+          "id": "x1",
+          "label": "Vendor Portal",
+          "subtitle": "PO acknowledgement and ASN",
+          "type": "process"
+        },
+        {
+          "domain": "audit",
+          "group": "g_master",
+          "id": "x2",
+          "label": "Bank Payment Network",
+          "subtitle": "SEPA and SWIFT transfers",
+          "type": "process"
+        },
+        {
+          "domain": "audit",
+          "group": "g_master",
+          "id": "m1",
+          "label": "Vendor Master",
+          "subtitle": "bank details and status",
+          "type": "process"
+        },
+        {
+          "domain": "audit",
+          "group": "g_master",
+          "id": "m2",
+          "label": "Material Master",
+          "subtitle": "units, prices, tax codes",
+          "type": "process"
+        },
+        {
+          "domain": "audit",
+          "group": "g_master",
+          "id": "m3",
+          "label": "Contract Repository",
+          "subtitle": "negotiated terms and rebates",
+          "type": "process"
+        },
+        {
+          "domain": "appr",
+          "group": "g_audit",
+          "id": "u1",
+          "label": "Audit Trail",
+          "subtitle": "approvals, payments, escalations",
+          "type": "process"
+        },
+        {
+          "domain": "appr",
+          "group": "g_audit",
+          "id": "u2",
+          "label": "Period-End Review",
+          "subtitle": "samples the audit trail monthly",
+          "type": "process"
+        }
+      ],
+      "notes": [
+        "Escalation re-enters the approval join rather than restarting the request.",
+        "Disbursement is modelled as a fork because the bank instruction, ledger posting and audit entry happen independently."
+      ],
+      "title": "Purchase-to-Pay · Full Process (Stress Sample)",
+      "version": 1
+    }
+  ]
+}

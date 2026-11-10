@@ -1,0 +1,468 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>y = x^2-2*x+8</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:#fff;color:#1f2937;font:500 max(10px,2.15vmin)/1.3 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+.app{display:grid;grid-template-columns:minmax(160px,31%) 1fr;height:100%}
+.side{display:flex;flex-direction:column;gap:.55em;padding:.7em;border-right:1px solid #e5e7eb;background:#f8fafc;overflow:auto}
+.row{display:flex;align-items:center;gap:.45em;padding:.35em .45em;border:1px solid #e2e8f0;border-radius:.55em;background:#fff}
+.row:focus-within{border-color:#93c5fd;box-shadow:0 0 0 2px #dbeafe}
+.dot{flex:0 0 .7em;height:.7em;border-radius:50%}
+.row b{font-weight:600;color:#94a3b8;white-space:nowrap;font-size:.8em}
+.row input{flex:1;min-width:0;border:0;outline:0;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#0f172a;background:transparent}
+.row.bad{border-color:#fca5a5}.row button{display:none;border:0;background:none;color:#94a3b8;cursor:pointer;font:inherit;padding:0 .2em}.multi .row button{display:inline}
+.add{align-self:flex-start;white-space:nowrap;border:1px dashed #cbd5e1;background:#fff;color:#475569;border-radius:.5em;padding:.3em .7em;font:inherit;cursor:pointer}
+.params{display:flex;flex-direction:column;gap:.55em;margin-top:.2em}
+.param{display:grid;grid-template-columns:1fr auto auto;grid-template-areas:"l v p" "r r r";align-items:center;gap:.15em .4em}.param label{grid-area:l;font-family:ui-monospace,Menlo,monospace;font-weight:700;color:#334155}.param output{grid-area:v;text-align:right;font-variant-numeric:tabular-nums;color:#0f172a}.param .play{grid-area:p;width:1.8em;height:1.8em;border:1px solid #cbd5e1;background:#fff;border-radius:50%;padding:0;font:inherit;font-size:.8em;color:#2563eb;cursor:pointer}.param .play.on{background:#2563eb;color:#fff;border-color:#2563eb}.param input[type=range]{grid-area:r;width:100%;accent-color:#2563eb}
+.hint{margin-top:auto;color:#94a3b8;font-size:.78em}@media (max-height:520px){.hint{display:none}}
+.plot{position:relative;min-width:0}canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}canvas.drag{cursor:grabbing}
+.tools{position:absolute;right:.6em;top:.6em;display:flex;gap:.3em;align-items:center}
+.tools button{width:2em;height:2em;border:1px solid #e2e8f0;border-radius:.5em;background:#ffffffe6;color:#334155;font:600 1em/1 system-ui;cursor:pointer}
+.badge{position:absolute;left:.7em;top:.6em;padding:.15em .55em;border-radius:1em;background:#eef2ff;color:#4338ca;font-size:.78em;font-weight:600}
+.readout{position:absolute;left:.7em;bottom:.6em;padding:.2em .55em;border-radius:.45em;background:#0f172ad9;color:#fff;font:500 .85em ui-monospace,Menlo,monospace;pointer-events:none;opacity:0;transition:opacity .15s}
+.readout.on{opacity:1}
+</style></head><body><div class="app"><div class="side"><div id="rows"></div><button class="add" id="add">+</button><div class="params" id="params"></div><div class="hint" id="hint"></div></div>
+<div class="plot"><canvas id="c"></canvas><span class="badge" id="badge"></span><div class="tools"><button id="zin">+</button><button id="zout">−</button><button id="home">⌂</button></div><div class="readout" id="readout"></div></div></div>
+<script>
+(function graphRuntime(D) {
+    "use strict";
+    const T = D.language === "zh"
+      ? { add:"+ 添加", hint2:"拖动平移 · 滚轮缩放 · 字母参数会变成滑块", hint3:"拖动旋转 · 滚轮缩放 · 字母参数会变成滑块", play:"动画", home:"复位", in:"放大", out:"缩小", surface:"曲面", curve:"曲线", bad:"无法识别的表达式" }
+      : { add:"+ Add", hint2:"Drag to pan · scroll to zoom · letters become sliders", hint3:"Drag to rotate · scroll to zoom · letters become sliders", play:"Animate", home:"Reset view", in:"Zoom in", out:"Zoom out", surface:"Surface", curve:"Curve", bad:"Unrecognised expression" };
+    const FN = { sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, arcsin:Math.asin, arccos:Math.acos, arctan:Math.atan,
+      sinh:Math.sinh, cosh:Math.cosh, tanh:Math.tanh, sqrt:Math.sqrt, cbrt:Math.cbrt, abs:Math.abs, exp:Math.exp, ln:Math.log, log:Math.log10, log2:Math.log2, floor:Math.floor, ceil:Math.ceil,
+      round:Math.round, sign:Math.sign, sgn:Math.sign, sec:v => 1 / Math.cos(v), csc:v => 1 / Math.sin(v), cot:v => 1 / Math.tan(v) };
+    const CONST = { pi:Math.PI, e:Math.E, tau:2 * Math.PI };
+    const SUPERSCRIPT = { "⁰":"0", "¹":"1", "²":"2", "³":"3", "⁴":"4", "⁵":"5", "⁶":"6", "⁷":"7", "⁸":"8", "⁹":"9" };
+    const isDigit = c => c >= "0" && c <= "9", isLetter = c => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
+    function normalise(source) {
+      let out = "";
+      for (const c of String(source || "")) {
+        if (SUPERSCRIPT[c]) out += (out.endsWith("^") ? "" : "^") + SUPERSCRIPT[c];
+        else if ("−–—".includes(c)) out += "-";
+        else if ("×·∗".includes(c)) out += "*";
+        else if (c === "÷") out += "/";
+        else if (c === "π") out += "pi";
+        else if (c === "√") out += "sqrt";
+        else if (c === "θ") out += "t";
+        else if (c === "ω") out += "w";
+        else out += c;
+      }
+      return out.replace(/\*\*/g, "^");
+    }
+    function tokenize(source) {
+      const s = normalise(source), tokens = [];
+      let i = 0;
+      while (i < s.length) {
+        const c = s[i];
+        if (c === " " || c === "\t") { i++; continue; }
+        if (isDigit(c) || (c === "." && isDigit(s[i + 1] || ""))) {
+          let j = i;
+          while (j < s.length && (isDigit(s[j]) || s[j] === ".")) j++;
+          if ((s[j] === "e" || s[j] === "E") && (isDigit(s[j + 1] || "") || ((s[j + 1] === "-" || s[j + 1] === "+") && isDigit(s[j + 2] || "")))) {
+            j += 2;
+            while (j < s.length && isDigit(s[j])) j++;
+          }
+          tokens.push(s.slice(i, j));
+          i = j;
+          continue;
+        }
+        if (isLetter(c)) {
+          let j = i;
+          while (j < s.length && (isLetter(s[j]) || isDigit(s[j]))) j++;
+          const word = s.slice(i, j);
+          // Known names stay whole; unknown runs such as "ax" or "xy" are implicit products.
+          if (FN[word] || CONST[word] || word.length === 1 || /^[A-Za-z]_?\d$/.test(word)) tokens.push(word);
+          else {
+            let rest = word;
+            while (rest) {
+              const known = Object.keys(FN).concat(Object.keys(CONST)).filter(name => rest.startsWith(name)).sort((a, b) => b.length - a.length)[0];
+              if (known) { tokens.push(known); rest = rest.slice(known.length); }
+              else { tokens.push(rest[0]); rest = rest.slice(1); }
+            }
+          }
+          i = j;
+          continue;
+        }
+        if ("+-*/^(),|".includes(c)) { tokens.push(c); i++; continue; }
+        throw Error("character " + c);
+      }
+      return tokens;
+    }
+    function compile(source) {
+      const tokens = tokenize(source), names = new Set();
+      let p = 0, usesY = false;
+      const peek = () => tokens[p], take = () => tokens[p++];
+      const startsAtom = t => t !== undefined && (isDigit(t[0]) || t[0] === "." || isLetter(t[0]) || t === "(");
+      function expr() { let n = term(); while (peek() === "+" || peek() === "-") { const o = take(), a = n, b = term(); n = o === "+" ? (x, y, v) => a(x, y, v) + b(x, y, v) : (x, y, v) => a(x, y, v) - b(x, y, v); } return n; }
+      function term() {
+        let n = unary();
+        for (;;) {
+          if (peek() === "*" || peek() === "/") { const o = take(), a = n, b = unary(); n = o === "*" ? (x, y, v) => a(x, y, v) * b(x, y, v) : (x, y, v) => a(x, y, v) / b(x, y, v); }
+          else if (startsAtom(peek())) { const a = n, b = power(); n = (x, y, v) => a(x, y, v) * b(x, y, v); }
+          else return n;
+        }
+      }
+      function unary() { if (peek() === "-") { take(); const a = unary(); return (x, y, v) => -a(x, y, v); } if (peek() === "+") { take(); return unary(); } return power(); }
+      function power() { const base = atom(); if (peek() === "^") { take(); const ex = unary(); return (x, y, v) => Math.pow(base(x, y, v), ex(x, y, v)); } return base; }
+      function atom() {
+        const t = take();
+        if (t === undefined) throw Error("end");
+        if (t === "(") { const n = expr(); if (take() !== ")") throw Error(")"); return n; }
+        if (t === "|") { const n = expr(); if (take() !== "|") throw Error("|"); return (x, y, v) => Math.abs(n(x, y, v)); }
+        if (isDigit(t[0]) || t[0] === ".") { const k = Number(t); if (!Number.isFinite(k)) throw Error("number"); return () => k; }
+        if (FN[t]) {
+          const f = FN[t];
+          let arg;
+          // sin^2(x) means (sin x)^2.
+          const ex = peek() === "^" ? (take(), atom()) : null;
+          if (peek() === "(") { take(); arg = expr(); if (take() !== ")") throw Error(")"); } else arg = power();
+          return ex ? (x, y, v) => Math.pow(f(arg(x, y, v)), ex(x, y, v)) : (x, y, v) => f(arg(x, y, v));
+        }
+        if (t === "x") return x => x;
+        if (t === "y") { usesY = true; return (x, y) => y; }
+        if (CONST[t] !== undefined) { const k = CONST[t]; return () => k; }
+        if (/^[A-Za-z](?:_?\d)?$/.test(t)) { names.add(t); return (x, y, v) => v[t]; }
+        throw Error("name " + t);
+      }
+      const n = expr();
+      if (p !== tokens.length) throw Error("trailing");
+      return { f:n, names:[...names], usesY };
+    }
+
+    const state = { rows:[], params:{}, view2:null, view3:null, anim:null, hover:null, mode:"2d" };
+    const clean = s => String(s || "").replace(/^\s*(?:y|z|f\s*\(\s*x\s*(?:,\s*y\s*)?\))\s*=\s*/i, "").trim();
+    const $ = id => document.getElementById(id);
+    const rowsEl = $("rows"), paramsEl = $("params"), cv = $("c"), ctx = cv.getContext("2d"), readout = $("readout"), hint = $("hint"), badge = $("badge");
+    $("add").textContent = T.add;
+    $("zin").title = T.in; $("zout").title = T.out; $("home").title = T.home;
+    function fmt(v) { const a = Math.abs(v); return a >= 1e4 || (a && a < 1e-3) ? v.toExponential(2) : String(+v.toFixed(a >= 100 ? 1 : a >= 10 ? 2 : 3)); }
+    function parse(row) {
+      try { const c = compile(clean(row.src)); row.fn = c.f; row.names = c.names; row.usesY = c.usesY; }
+      catch { row.fn = null; row.names = []; row.usesY = false; }
+    }
+    function syncMode() {
+      const mode = state.rows.some(row => row.fn && row.usesY) ? "3d" : "2d";
+      if (mode !== state.mode) { state.mode = mode; state.view2 = null; state.view3 = null; }
+      badge.textContent = state.mode === "3d" ? "3D · " + T.surface : "2D · " + T.curve;
+      hint.textContent = state.mode === "3d" ? T.hint3 : T.hint2;
+      for (const row of state.rows) row.label.textContent = row.usesY ? "z=" : "y=";
+    }
+    function addRow(src) {
+      if (state.rows.length >= 4) return;
+      const row = { src:clean(src), fn:null, color:D.colors[state.rows.length % D.colors.length] };
+      state.rows.push(row);
+      const el = document.createElement("div"), dot = document.createElement("span"), label = document.createElement("b"), input = document.createElement("input"), del = document.createElement("button");
+      el.className = "row"; dot.className = "dot"; dot.style.background = row.color;
+      input.value = row.src; input.spellcheck = false; input.setAttribute("aria-label", "f(x)");
+      del.textContent = "×"; del.title = "Remove";
+      del.onclick = () => { const k = state.rows.indexOf(row); if (k >= 0 && state.rows.length > 1) { state.rows.splice(k, 1); el.remove(); rowsEl.classList.toggle("multi", state.rows.length > 1); refresh(); } };
+      input.oninput = () => { row.src = input.value; parse(row); el.classList.toggle("bad", !row.fn && row.src.trim() !== ""); el.title = row.fn ? "" : T.bad; refresh(); };
+      row.label = label;
+      el.append(dot, label, input, del);
+      rowsEl.append(el);
+      rowsEl.classList.toggle("multi", state.rows.length > 1);
+      parse(row);
+      el.classList.toggle("bad", !row.fn);
+    }
+    function refresh() { syncMode(); syncParams(); if (state.mode === "2d" && !state.view2) home2(); if (state.mode === "3d" && !state.view3) home3(); draw(); }
+    function syncParams() {
+      const names = new Set();
+      for (const r of state.rows) for (const n of r.names || []) names.add(n);
+      for (const n of names) if (!(n in state.params)) state.params[n] = Number.isFinite(D.parameters[n]) ? D.parameters[n] : 1;
+      paramsEl.textContent = "";
+      for (const n of [...names].sort()) {
+        const v = state.params[n], span = Math.max(5, Math.abs(v) * 2), min = +(v - span).toFixed(3), max = +(v + span).toFixed(3);
+        const wrap = document.createElement("div"), lab = document.createElement("label"), r = document.createElement("input"), out = document.createElement("output"), play = document.createElement("button");
+        wrap.className = "param"; lab.textContent = n;
+        r.type = "range"; r.min = min; r.max = max; r.step = (max - min) / 400; r.value = v;
+        out.textContent = fmt(v);
+        r.oninput = () => { state.params[n] = Number(r.value); out.textContent = fmt(state.params[n]); draw(); };
+        play.className = "play"; play.title = T.play; play.textContent = state.anim?.name === n ? "■" : "▶"; play.classList.toggle("on", state.anim?.name === n);
+        play.onclick = () => {
+          if (state.anim?.name === n) { state.anim = null; play.textContent = "▶"; play.classList.remove("on"); return; }
+          for (const b of paramsEl.querySelectorAll(".play")) { b.textContent = "▶"; b.classList.remove("on"); }
+          state.anim = { name:n, min, max, r, out, dir:1 }; play.textContent = "■"; play.classList.add("on"); requestAnimationFrame(tick);
+        };
+        wrap.append(lab, r, out, play);
+        paramsEl.append(wrap);
+      }
+    }
+    function tick() {
+      const a = state.anim; if (!a) return;
+      let v = state.params[a.name] + (a.max - a.min) / 240 * a.dir;
+      if (v > a.max) { v = a.max; a.dir = -1; } if (v < a.min) { v = a.min; a.dir = 1; }
+      state.params[a.name] = v; a.r.value = v; a.out.textContent = fmt(v); draw(); requestAnimationFrame(tick);
+    }
+    function nice(span, target) { const raw = span / target, p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; }
+
+    // ---------- 2D ----------
+    function home2() {
+      const w = cv.clientWidth || 1, h = cv.clientHeight || 1, rows = state.rows.filter(r => r.fn && !r.usesY);
+      const first = rows[0], windowX = first ? D.xWindow(x => first.fn(x, 0, state.params)) : { xMin:-10, xMax:10 }, span = windowX.xMax - windowX.xMin, values = [];
+      for (const r of rows) for (let i = 0; i <= 400; i++) { let y; try { y = r.fn(windowX.xMin + span * i / 400, 0, state.params); } catch { y = NaN; } values.push(y); }
+      const { lo, hi } = D.yWindow(values, span), sx = w / span, sy = h / (hi - lo);
+      state.view2 = { cx:(windowX.xMin + windowX.xMax) / 2, cy:(hi + lo) / 2, sx, sy };
+    }
+    function draw2() {
+      const w = cv.clientWidth, h = cv.clientHeight, V = state.view2; if (!V || !w || !h) return;
+      const fs = Math.max(10, Math.round(Math.min(w, h) / 40)), lw = Math.max(1.4, Math.min(w, h) / 230);
+      const X = x => w / 2 + (x - V.cx) * V.sx, Y = y => h / 2 - (y - V.cy) * V.sy, ix = px => V.cx + (px - w / 2) / V.sx;
+      const x0 = ix(0), x1 = ix(w), y0 = V.cy - h / 2 / V.sy, y1 = V.cy + h / 2 / V.sy, sx = nice(x1 - x0, 9), sy = nice(y1 - y0, 7);
+      ctx.lineWidth = 1; ctx.strokeStyle = "#eef2f7"; ctx.beginPath();
+      for (let x = Math.ceil(x0 / sx * 5) * sx / 5; x <= x1; x += sx / 5) { ctx.moveTo(X(x), 0); ctx.lineTo(X(x), h); }
+      for (let y = Math.ceil(y0 / sy * 5) * sy / 5; y <= y1; y += sy / 5) { ctx.moveTo(0, Y(y)); ctx.lineTo(w, Y(y)); }
+      ctx.stroke();
+      ctx.strokeStyle = "#dde3ea"; ctx.beginPath();
+      for (let x = Math.ceil(x0 / sx) * sx; x <= x1; x += sx) { ctx.moveTo(X(x), 0); ctx.lineTo(X(x), h); }
+      for (let y = Math.ceil(y0 / sy) * sy; y <= y1; y += sy) { ctx.moveTo(0, Y(y)); ctx.lineTo(w, Y(y)); }
+      ctx.stroke();
+      // Axes are pinned to the edge when the origin leaves the view, so both stay visible.
+      const ax = Math.min(h - fs * 1.6, Math.max(fs * 0.4, Y(0))), ay = Math.min(w - fs * 0.6, Math.max(fs * 2.6, X(0)));
+      ctx.strokeStyle = "#334155"; ctx.lineWidth = Math.max(1.2, lw * 0.75); ctx.beginPath(); ctx.moveTo(0, ax); ctx.lineTo(w, ax); ctx.moveTo(ay, 0); ctx.lineTo(ay, h); ctx.stroke();
+      ctx.fillStyle = "#334155"; ctx.beginPath(); ctx.moveTo(w - 2, ax); ctx.lineTo(w - 2 - fs * 0.7, ax - fs * 0.35); ctx.lineTo(w - 2 - fs * 0.7, ax + fs * 0.35); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(ay, 2); ctx.lineTo(ay - fs * 0.35, 2 + fs * 0.7); ctx.lineTo(ay + fs * 0.35, 2 + fs * 0.7); ctx.fill();
+      ctx.font = "italic " + fs + "px ui-serif, Georgia, serif"; ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText("x", w - fs * 0.4, ax - fs * 0.35);
+      ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("y", ay + fs * 0.45, fs * 0.2);
+      ctx.fillStyle = "#64748b"; ctx.font = fs + "px ui-sans-serif, system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+      for (let x = Math.ceil(x0 / sx) * sx; x <= x1; x += sx) { if (Math.abs(x) < sx / 2 || X(x) > w - fs * 1.5 || X(x) < fs * 1.5) continue; ctx.fillText(fmt(+x.toPrecision(10)), X(x), ax + fs * 0.35); }
+      ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      for (let y = Math.ceil(y0 / sy) * sy; y <= y1; y += sy) { if (Math.abs(y) < sy / 2 || Y(y) < fs * 1.5 || Y(y) > h - fs) continue; ctx.fillText(fmt(+y.toPrecision(10)), ay - fs * 0.4, Y(y)); }
+      ctx.fillText("0", ay - fs * 0.4, ax + fs * 0.6);
+      for (const r of state.rows) {
+        if (!r.fn || r.usesY) continue;
+        ctx.strokeStyle = r.color; ctx.lineWidth = lw * 1.6; ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.beginPath();
+        let pen = false, prev = null;
+        const n = Math.ceil(w * 1.5);
+        for (let i = 0; i <= n; i++) {
+          const px = i * w / n, x = ix(px);
+          let y; try { y = r.fn(x, 0, state.params); } catch { y = NaN; }
+          const py = Y(y);
+          if (!Number.isFinite(py) || Math.abs(py) > h * 20) { pen = false; prev = null; continue; }
+          if (pen && prev !== null && Math.abs(py - prev) > h * 1.5) pen = false;
+          if (pen) ctx.lineTo(px, py); else { ctx.moveTo(px, py); pen = true; }
+          prev = py;
+        }
+        ctx.stroke();
+        ctx.fillStyle = r.color;
+        let last = null;
+        for (let i = 0; i <= n; i++) {
+          const x = ix(i * w / n), y = r.fn(x, 0, state.params);
+          if (Number.isFinite(y) && last && Number.isFinite(last.y) && (last.y < 0) !== (y < 0) && Math.abs(y - last.y) < (y1 - y0)) {
+            const rx = last.x - last.y * (x - last.x) / (y - last.y); ctx.beginPath(); ctx.arc(X(rx), Y(0), lw * 1.6, 0, 7); ctx.fill();
+          }
+          last = { x, y };
+        }
+      }
+      if (state.hover) {
+        const { row, x, y } = state.hover, hr = Math.max(4, Math.min(w, h) / 70);
+        ctx.fillStyle = row.color; ctx.beginPath(); ctx.arc(X(x), Y(y), hr, 0, 7); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = hr / 2.5; ctx.stroke();
+      }
+    }
+
+    // ---------- 3D ----------
+    const PALETTE = [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]];
+    function colormap(t, alpha) {
+      t = Math.max(0, Math.min(1, t)); const s = t * (PALETTE.length - 1), i = Math.min(PALETTE.length - 2, Math.floor(s)), f = s - i, a = PALETTE[i], b = PALETTE[i + 1];
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    }
+    function home3() { state.view3 = { az:-0.85, el:0.55, R:5, zoom:1 }; }
+    function surfaceRange(R) {
+      const values = [];
+      for (const r of state.rows) {
+        if (!r.fn) continue;
+        for (let i = 0; i <= 24; i++) for (let j = 0; j <= 24; j++) {
+          const x = -R + 2 * R * i / 24, y = -R + 2 * R * j / 24, z = r.usesY ? r.fn(x, y, state.params) : r.fn(x, 0, state.params);
+          if (Number.isFinite(z) && Math.abs(z) < 1e9) values.push(z);
+        }
+      }
+      if (!values.length) return { lo:-1, hi:1 };
+      values.sort((a, b) => a - b);
+      const pick = q => values[Math.min(values.length - 1, Math.max(0, Math.round(q * (values.length - 1))))];
+      // Full range unless a pole or blow-up would flatten everything else.
+      const robust = pick(0.98) - pick(0.02), full = values.at(-1) - values[0];
+      let lo = full > robust * 6 ? pick(0.02) : values[0], hi = full > robust * 6 ? pick(0.98) : values.at(-1);
+      lo = Math.min(lo, 0); hi = Math.max(hi, 0);
+      if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+      return { lo, hi };
+    }
+    function draw3() {
+      const w = cv.clientWidth, h = cv.clientHeight, V = state.view3; if (!V || !w || !h) return;
+      const fs = Math.max(10, Math.round(Math.min(w, h) / 40)), R = V.R, { lo, hi } = surfaceRange(R), zs = hi - lo;
+      const ca = Math.cos(V.az), sa = Math.sin(V.az), ce = Math.cos(V.el), se = Math.sin(V.el), scale = Math.min(w, h) * 0.3 * V.zoom, cx = w / 2, cy = h * 0.54;
+      // World → unit cube: x, y ∈ [-1, 1], z ∈ [-0.75, 0.75].
+      const P = (x, y, z) => {
+        const X = x / R, Y = y / R, Z = ((z - lo) / zs - 0.5) * 1.5;
+        const x1 = X * ca - Y * sa, y1 = X * sa + Y * ca;
+        const depth = y1 * ce + Z * se;
+        const zz = Z * ce - y1 * se;
+        const persp = 1 / (1 + depth * 0.18);
+        return { x:cx + x1 * scale * persp, y:cy - zz * scale * persp, d:depth };
+      };
+      const corners = [];
+      for (const x of [-R, R]) for (const y of [-R, R]) for (const z of [lo, hi]) corners.push({ x, y, z, p:P(x, y, z) });
+      const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+      const farthest = corners.reduce((best, c, i) => c.p.d > corners[best].p.d ? i : best, 0);
+      ctx.lineWidth = 1;
+      // Back panes of the box: light grid on the three faces that meet at the farthest corner.
+      ctx.strokeStyle = "#e5e7eb";
+      for (const [a, b] of edges) if (a === farthest || b === farthest) { const A = corners[a].p, B = corners[b].p; ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); }
+      const floorZ = lo, tick = nice(2 * R, 5);
+      ctx.strokeStyle = "#eef2f7";
+      for (let t = Math.ceil(-R / tick) * tick; t <= R + 1e-9; t += tick) {
+        let A = P(t, -R, floorZ), B = P(t, R, floorZ); ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+        A = P(-R, t, floorZ); B = P(R, t, floorZ); ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+      }
+      // Surface quads, painter's order, height colour with simple shading.
+      const N = 42, quads = [];
+      state.rows.forEach((r, index) => {
+        if (!r.fn) return;
+        const grid = [];
+        for (let i = 0; i <= N; i++) {
+          const row = [];
+          for (let j = 0; j <= N; j++) {
+            const x = -R + 2 * R * i / N, y = -R + 2 * R * j / N;
+            let z; try { z = r.usesY ? r.fn(x, y, state.params) : r.fn(x, 0, state.params); } catch { z = NaN; }
+            row.push(Number.isFinite(z) ? Math.max(lo, Math.min(hi, z)) : NaN);
+          }
+          grid.push(row);
+        }
+        for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+          const z00 = grid[i][j], z10 = grid[i + 1][j], z11 = grid[i + 1][j + 1], z01 = grid[i][j + 1];
+          if (![z00, z10, z11, z01].every(Number.isFinite)) continue;
+          const x0 = -R + 2 * R * i / N, x1 = -R + 2 * R * (i + 1) / N, y0 = -R + 2 * R * j / N, y1 = -R + 2 * R * (j + 1) / N;
+          const pts = [P(x0, y0, z00), P(x1, y0, z10), P(x1, y1, z11), P(x0, y1, z01)];
+          const zAvg = (z00 + z10 + z11 + z01) / 4, depth = (pts[0].d + pts[1].d + pts[2].d + pts[3].d) / 4;
+          // Normal from the height gradient (in unit-cube space) for Lambert shading.
+          const gx = ((z10 - z00) + (z11 - z01)) / 2 / zs * 1.5 * N / 2, gy = ((z01 - z00) + (z11 - z10)) / 2 / zs * 1.5 * N / 2;
+          const len = Math.hypot(gx, gy, 1), shade = 0.55 + 0.45 * Math.max(0, (-gx * 0.3 - gy * 0.4 + 0.87) / len);
+          quads.push({ pts, depth, zAvg, shade, index });
+        }
+      });
+      quads.sort((a, b) => b.depth - a.depth);
+      for (const q of quads) {
+        const t = (q.zAvg - lo) / zs;
+        let [cr, cg, cb] = q.index === 0 ? colormap(t) : hexRgb(state.rows[q.index].color, t);
+        cr *= q.shade; cg *= q.shade; cb *= q.shade;
+        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${q.index === 0 ? 1 : 0.85})`;
+        ctx.strokeStyle = `rgba(255,255,255,0.18)`;
+        ctx.beginPath(); ctx.moveTo(q.pts[0].x, q.pts[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(q.pts[k].x, q.pts[k].y); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+      // Front box edges, axes and labels.
+      ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 1;
+      for (const [a, b] of edges) if (a !== farthest && b !== farthest) { const A = corners[a].p, B = corners[b].p; ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); }
+      ctx.fillStyle = "#475569"; ctx.font = fs + "px ui-sans-serif, system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const nearY = corners[farthest].y > 0 ? -R : R, nearX = corners[farthest].x > 0 ? -R : R;
+      for (let t = Math.ceil(-R / tick) * tick; t <= R + 1e-9; t += tick) {
+        let q = P(t, nearY * 1.12, lo); ctx.fillText(fmt(+t.toPrecision(8)), q.x, q.y);
+        q = P(nearX * 1.12, t, lo); ctx.fillText(fmt(+t.toPrecision(8)), q.x, q.y);
+      }
+      const zt = nice(zs, 4), vertical = [[-R, -R], [-R, R], [R, -R], [R, R]].map(([x, y]) => ({ x, y, p:P(x, y, lo) })).sort((a, b) => a.p.x - b.p.x)[0];
+      ctx.textAlign = "right";
+      for (let t = Math.ceil(lo / zt) * zt; t <= hi + 1e-9; t += zt) { const q = P(vertical.x, vertical.y, t); ctx.fillText(fmt(+t.toPrecision(8)), q.x - fs * 0.6, q.y); }
+      ctx.strokeStyle = "#94a3b8"; const zb = P(vertical.x, vertical.y, lo), zt2 = P(vertical.x, vertical.y, hi); ctx.beginPath(); ctx.moveTo(zb.x, zb.y); ctx.lineTo(zt2.x, zt2.y); ctx.stroke();
+      ctx.textAlign = "center";
+      ctx.font = "italic " + Math.round(fs * 1.15) + "px ui-serif, Georgia, serif"; ctx.fillStyle = "#1f2937";
+      let q = P(0, nearY * 1.3, lo); ctx.fillText("x", q.x, q.y);
+      q = P(nearX * 1.3, 0, lo); ctx.fillText("y", q.x, q.y);
+      q = P(vertical.x, vertical.y, hi + zs * 0.16); ctx.fillText("z", q.x - fs * 0.6, q.y);
+    }
+    function hexRgb(hex, t) {
+      const v = parseInt(hex.slice(1), 16), k = 0.55 + 0.45 * t;
+      return [((v >> 16) & 255) * k, ((v >> 8) & 255) * k, (v & 255) * k];
+    }
+    function draw() {
+      const w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+      ctx.clearRect(0, 0, w, h);
+      if (state.mode === "3d") draw3(); else draw2();
+    }
+    function resize() {
+      const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+      cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d)); ctx.setTransform(d, 0, 0, d, 0, 0);
+      if (state.mode === "2d") home2(); else if (!state.view3) home3();
+      draw();
+    }
+    let drag = null;
+    cv.addEventListener("pointerdown", e => {
+      drag = { x:e.clientX, y:e.clientY, v2:state.view2 && { ...state.view2 }, v3:state.view3 && { ...state.view3 } };
+      cv.setPointerCapture(e.pointerId); cv.classList.add("drag");
+    });
+    cv.addEventListener("pointermove", e => {
+      const r = cv.getBoundingClientRect();
+      if (drag) {
+        if (state.mode === "3d") { const V = state.view3; V.az = drag.v3.az + (e.clientX - drag.x) * 0.01; V.el = Math.max(-0.2, Math.min(1.45, drag.v3.el + (e.clientY - drag.y) * 0.01)); }
+        else { const V = state.view2; V.cx = drag.v2.cx - (e.clientX - drag.x) / V.sx; V.cy = drag.v2.cy + (e.clientY - drag.y) / V.sy; }
+        state.hover = null; readout.classList.remove("on"); draw(); return;
+      }
+      if (state.mode !== "2d") return;
+      const V = state.view2, px = e.clientX - r.left, py = e.clientY - r.top, x = V.cx + (px - r.width / 2) / V.sx;
+      let best = null;
+      for (const row of state.rows) {
+        if (!row.fn || row.usesY) continue;
+        const y = row.fn(x, 0, state.params); if (!Number.isFinite(y)) continue;
+        const d = Math.abs(r.height / 2 - (y - V.cy) * V.sy - py);
+        if (d < 28 && (!best || d < best.d)) best = { d, row, x, y };
+      }
+      state.hover = best; readout.classList.toggle("on", !!best);
+      if (best) readout.textContent = "x = " + fmt(best.x) + "   y = " + fmt(best.y);
+      draw();
+    });
+    const end = () => { drag = null; cv.classList.remove("drag"); };
+    cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+    cv.addEventListener("pointerleave", () => { state.hover = null; readout.classList.remove("on"); draw(); });
+    function zoom(f, px, py) {
+      if (state.mode === "3d") { state.view3.R = Math.max(0.2, Math.min(200, state.view3.R / f)); draw(); return; }
+      const V = state.view2, w = cv.clientWidth, h = cv.clientHeight; px = px ?? w / 2; py = py ?? h / 2;
+      const x = V.cx + (px - w / 2) / V.sx, y = V.cy - (py - h / 2) / V.sy;
+      V.sx *= f; V.sy *= f; V.cx = x - (px - w / 2) / V.sx; V.cy = y + (py - h / 2) / V.sy; draw();
+    }
+    cv.addEventListener("wheel", e => { e.preventDefault(); const r = cv.getBoundingClientRect(); zoom(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive:false });
+    $("zin").onclick = () => zoom(1.25); $("zout").onclick = () => zoom(0.8);
+    $("home").onclick = () => { if (state.mode === "3d") home3(); else home2(); draw(); };
+    $("add").onclick = () => { addRow(""); refresh(); rowsEl.querySelector(".row:last-child input")?.focus(); };
+    for (const s of (D.expressions.length ? D.expressions : ["sin(x)"])) addRow(s);
+    syncMode(); syncParams();
+    new ResizeObserver(resize).observe(cv);
+    resize();
+    window.penechoWidgetReady?.();
+  })(Object.assign({"expressions":["x^2-2*x+8"],"parameters":{},"colors":["#2563eb","#dc2626","#059669","#9333ea"],"language":"en"}, { yWindow:function graphYWindow(values, xSpan = 20) {
+    const finite = (values || []).filter(value => Number.isFinite(value) && Math.abs(value) < 1e9).sort((a, b) => a - b);
+    let lo, hi;
+    if (finite.length < 8) { lo = -6; hi = 6; }
+    else {
+      const pick = q => finite[Math.min(finite.length - 1, Math.max(0, Math.round(q * (finite.length - 1))))];
+      lo = pick(0.04);
+      hi = pick(0.96);
+    }
+    lo = Math.min(lo, 0);
+    hi = Math.max(hi, 0);
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    const pad = Math.max((hi - lo) * 0.12, 0.5);
+    lo -= pad;
+    hi += pad;
+    const maxSpan = xSpan * 12;
+    if (hi - lo > maxSpan) {
+      const share = -lo / (hi - lo);
+      lo = -maxSpan * share;
+      hi = lo + maxSpan;
+    }
+    return { lo, hi };
+  }, xWindow:function graphXWindow(evaluate) {
+    const features = [];
+    let previous = null, previousSlope = null;
+    for (let index = 0; index <= 1600; index++) {
+      const x = -100 + index * 0.125;
+      let y;
+      try { y = evaluate(x); } catch { y = NaN; }
+      if (!Number.isFinite(y)) { previous = null; previousSlope = null; continue; }
+      if (previous) {
+        if ((previous.y < 0) !== (y < 0) || y === 0) features.push(x);
+        const slope = y - previous.y;
+        if (previousSlope !== null && (previousSlope < 0) !== (slope < 0) && Math.abs(slope) > 1e-12) features.push(previous.x);
+        previousSlope = slope;
+      }
+      previous = { x, y };
+    }
+    if (!features.length || features.some(x => Math.abs(x) <= 10)) return { xMin:-10, xMax:10 };
+    const nearest = features.reduce((best, x) => Math.abs(x) < Math.abs(best) ? x : best, features[0]);
+    return { xMin:Math.min(-2, nearest - Math.abs(nearest) * 0.4 - 3), xMax:Math.max(2, nearest + Math.abs(nearest) * 0.4 + 3) };
+  } }));
+</script></body></html>

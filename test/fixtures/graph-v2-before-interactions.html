@@ -1,0 +1,693 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="penecho-widget-layout" content="viewport"><meta name="penecho-graph-version" content="2"><title>y=a*x</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:#fff;color:#1f2937;font:500 max(10px,2.15vmin)/1.3 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+.app{display:grid;grid-template-columns:minmax(160px,31%) minmax(0,1fr);grid-template-rows:minmax(0,1fr);height:100%;min-height:0;font:500 clamp(12px,2.15vmin,20px)/1.3 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.side{display:flex;flex-direction:column;min-width:0;min-height:0;gap:.55em;padding:.7em;border-right:1px solid #e5e7eb;background:#f8fafc;overflow:auto}
+.row{display:flex;align-items:center;gap:.45em;padding:.35em .45em;border:1px solid #e2e8f0;border-radius:.55em;background:#fff}
+.row:focus-within{border-color:#93c5fd;box-shadow:0 0 0 2px #dbeafe}
+.dot{flex:0 0 .7em;height:.7em;border-radius:50%}
+.row b{font-weight:600;color:#94a3b8;white-space:nowrap;font-size:.8em}
+.row input{flex:1;min-width:0;border:0;outline:0;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#0f172a;background:transparent}
+.row.bad{border-color:#fca5a5}.row button{display:none;border:0;background:none;color:#94a3b8;cursor:pointer;font:inherit;padding:0 .2em}.multi .row button{display:inline}
+.add{align-self:flex-start;white-space:nowrap;border:1px dashed #cbd5e1;background:#fff;color:#475569;border-radius:.5em;padding:.3em .7em;font:inherit;cursor:pointer}
+.params{display:flex;flex-direction:column;gap:.55em;margin-top:.2em}
+.param{display:grid;grid-template-columns:1fr auto auto;grid-template-areas:"l v p" "r r r";align-items:center;gap:.15em .4em}.param label{grid-area:l;font-family:ui-monospace,Menlo,monospace;font-weight:700;color:#334155}.param output{grid-area:v;text-align:right;font-variant-numeric:tabular-nums;color:#0f172a}.param .play{grid-area:p;width:1.8em;height:1.8em;border:1px solid #cbd5e1;background:#fff;border-radius:50%;padding:0;font:inherit;font-size:.8em;color:#2563eb;cursor:pointer}.param .play.on{background:#2563eb;color:#fff;border-color:#2563eb}.param input[type=range]{grid-area:r;width:100%;accent-color:#2563eb}
+.hint{margin-top:auto;color:#94a3b8;font-size:.78em}@media (max-height:520px){.hint{display:none}}
+.plot{position:relative;min-width:0;min-height:0;overflow:hidden}canvas{position:absolute;inset:0;display:block;width:100%;height:100%;cursor:grab;touch-action:none}canvas.drag{cursor:grabbing}
+.tools{position:absolute;right:.6em;top:.6em;display:flex;gap:.3em;align-items:center}
+.tools button{width:2em;height:2em;border:1px solid #e2e8f0;border-radius:.5em;background:#ffffffe6;color:#334155;font:600 1em/1 system-ui;cursor:pointer}
+.badge{position:absolute;left:.7em;top:.6em;padding:.15em .55em;border-radius:1em;background:#eef2ff;color:#4338ca;font-size:.78em;font-weight:600}
+.readout{position:absolute;left:.7em;bottom:.6em;padding:.2em .55em;border-radius:.45em;background:#0f172ad9;color:#fff;font:500 .85em ui-monospace,Menlo,monospace;pointer-events:none;opacity:0;transition:opacity .15s}
+.readout.on{opacity:1}
+
+.app{--graph-screen-unit:1px;grid-template-columns:minmax(0,min(46%,max(31%,calc(280 * var(--graph-screen-unit))))) minmax(0,1fr);font-size:max(calc(16 * var(--graph-screen-unit)),clamp(16px,2.15vmin,20px));line-height:1.5;background:#fff}
+.side{padding:.75em;gap:.65em;overflow-x:hidden;overflow-y:auto}
+#rows{display:flex;flex-direction:column;gap:.55em;flex-shrink:0}
+.row{align-items:flex-start;gap:.35em;padding:.5em;min-width:0;flex-shrink:0}
+.row .dot{margin-top:.4em}.row b{font-size:1em;line-height:1.5;color:#64748b}
+.expression{flex:1;min-width:0;min-height:1.5em;outline:none;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#0f172a;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;cursor:text}
+.row button{flex-shrink:0;line-height:1.5;color:#64748b}.add,.params,.hint{flex-shrink:0}
+.formula-body{flex:1;min-width:0}.expression:empty:before{content:attr(data-placeholder);color:#94a3b8;font-family:ui-sans-serif,system-ui;font-size:.85em;pointer-events:none}
+.formula-message{font-size:max(.75em,calc(12 * var(--graph-screen-unit)));margin-top:.35em;color:#64748b}.bad .formula-message{color:#b91c1c}.formula-message[hidden]{display:none}
+.row button{display:inline}.mode{display:flex;align-self:flex-start;gap:.15em;padding:.15em;border:1px solid #e2e8f0;border-radius:.6em;background:#eef2f7;flex-shrink:0}
+.mode button{font:600 .85em/1.5 ui-sans-serif,system-ui;border:0;background:transparent;color:#64748b;border-radius:.4em;padding:.2em .9em;cursor:pointer}.mode button[aria-pressed=true]{background:#fff;color:#2563eb;box-shadow:0 1px 3px #0f172a1a}
+.mode button:focus-visible,.add:focus-visible,.row button:focus-visible{outline:2px solid #2563eb;outline-offset:2px}.add:disabled{opacity:.5;cursor:default}
+.support{font-size:max(.75em,calc(12 * var(--graph-screen-unit)));color:#64748b;flex-shrink:0}.support summary{cursor:pointer}.support p{margin:.4em 0}
+.hint,.badge{font-size:max(.78em,calc(12 * var(--graph-screen-unit)))}.hint{color:#64748b}
+.app.narrow{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,auto) minmax(0,1fr)}
+.app.narrow .side{max-height:40vh;border-right:0;border-bottom:1px solid #e5e7eb}.app.narrow .hint{display:none}
+
+</style></head><body><div class="app"><div class="side"><div class="mode" id="mode" role="group"><button id="2d" type="button">2D</button><button id="3d" type="button">3D</button></div><div id="rows"></div><button class="add" id="add">+</button><div class="params" id="params"></div><details class="support"><summary>Input help</summary><p id="support"></p></details><div class="hint" id="hint"></div></div>
+<div class="plot"><canvas id="c"></canvas><span class="badge" id="badge"></span><div class="tools"><button id="zin">+</button><button id="zout">−</button><button id="home">⌂</button></div><div class="readout" id="readout"></div></div></div>
+<script>
+function createGraphMath() {
+    const FN = { sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, arcsin:Math.asin, arccos:Math.acos, arctan:Math.atan,
+      sinh:Math.sinh, cosh:Math.cosh, tanh:Math.tanh, sqrt:Math.sqrt, cbrt:Math.cbrt, abs:Math.abs, exp:Math.exp, ln:Math.log, log:Math.log10, log2:Math.log2, floor:Math.floor, ceil:Math.ceil,
+      round:Math.round, sign:Math.sign, sgn:Math.sign, sec:v => 1 / Math.cos(v), csc:v => 1 / Math.sin(v), cot:v => 1 / Math.tan(v) };
+    const CONST = { pi:Math.PI, e:Math.E, tau:2 * Math.PI };
+    Object.setPrototypeOf(FN,null);Object.setPrototypeOf(CONST,null);
+    const SUPERSCRIPT = { "⁰":"0", "¹":"1", "²":"2", "³":"3", "⁴":"4", "⁵":"5", "⁶":"6", "⁷":"7", "⁸":"8", "⁹":"9" };
+    const isDigit = c => c >= "0" && c <= "9", isLetter = c => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
+    function normalise(source) {
+      let out = "";
+      for (const c of String(source || "").replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, text => "^(" + [...text].map(c => SUPERSCRIPT[c]).join("") + ")")) {
+        if (SUPERSCRIPT[c]) out += (out.endsWith("^") ? "" : "^") + SUPERSCRIPT[c];
+        else if ("−–—".includes(c)) out += "-";
+        else if ("×·∗".includes(c)) out += "*";
+        else if (c === "÷") out += "/";
+        else if (c === "π") out += "pi";
+        else if (c === "√") out += "sqrt";
+        else if (c === "θ") out += "t";
+        else if (c === "ω") out += "w";
+        else out += c;
+      }
+      return out.replace(/\*\*/g, "^");
+    }
+    function tokenize(source) {
+      const s = normalise(source), tokens = [];
+      let i = 0;
+      while (i < s.length) {
+        const c = s[i];
+        if (/\s/.test(c)) { i++; continue; }
+        if (isDigit(c) || (c === "." && isDigit(s[i + 1] || ""))) {
+          let j = i;
+          while (j < s.length && (isDigit(s[j]) || s[j] === ".")) j++;
+          if ((s[j] === "e" || s[j] === "E") && (isDigit(s[j + 1] || "") || ((s[j + 1] === "-" || s[j + 1] === "+") && isDigit(s[j + 2] || "")))) {
+            j += 2;
+            while (j < s.length && isDigit(s[j])) j++;
+          }
+          tokens.push(s.slice(i, j));
+          i = j;
+          continue;
+        }
+        if (isLetter(c)) {
+          let j = i;
+          while (j < s.length && (isLetter(s[j]) || isDigit(s[j]))) j++;
+          const word = s.slice(i, j);
+          // Known names stay whole; unknown runs such as "ax" or "xy" are implicit products.
+          if (FN[word] || CONST[word] || word.length === 1 || /^[A-Za-z]_?\d$/.test(word)) tokens.push(word);
+          else {
+            let rest = word;
+            while (rest) {
+              const known = Object.keys(FN).concat(Object.keys(CONST)).filter(name => rest.startsWith(name)).sort((a, b) => b.length - a.length)[0];
+              if (known) { tokens.push(known); rest = rest.slice(known.length); }
+              else { tokens.push(rest[0]); rest = rest.slice(1); }
+            }
+          }
+          i = j;
+          continue;
+        }
+        if ("+-*/^(),|".includes(c)) { tokens.push(c); i++; continue; }
+        throw Error("character " + c);
+      }
+      return tokens;
+    }
+    function compile(source) {
+      if (String(source).length > 2000) throw Error("length");
+      const tokens = tokenize(source), names = new Set();
+      if (tokens.length > 1000) throw Error("length");
+      let p = 0; const variables = new Set();
+      const peek = () => tokens[p], take = () => tokens[p++];
+      const startsAtom = t => t !== undefined && (isDigit(t[0]) || t[0] === "." || isLetter(t[0]) || t === "(");
+      function expr() { let n = term(); while (peek() === "+" || peek() === "-") { const o = take(), a = n, b = term(); n = o === "+" ? (x, y, v, z) => a(x, y, v, z) + b(x, y, v, z) : (x, y, v, z) => a(x, y, v, z) - b(x, y, v, z); } return n; }
+      function term() {
+        let n = unary();
+        for (;;) {
+          if (peek() === "*" || peek() === "/") { const o = take(), a = n, b = unary(); n = o === "*" ? (x, y, v, z) => a(x, y, v, z) * b(x, y, v, z) : (x, y, v, z) => a(x, y, v, z) / b(x, y, v, z); }
+          else if (startsAtom(peek())) { const a = n, b = power(); n = (x, y, v, z) => a(x, y, v, z) * b(x, y, v, z); }
+          else return n;
+        }
+      }
+      function unary() { if (peek() === "-") { take(); const a = unary(); return (x, y, v, z) => -a(x, y, v, z); } if (peek() === "+") { take(); return unary(); } return power(); }
+      function power() { const base = atom(); if (peek() === "^") { take(); const ex = unary(); return (x, y, v, z) => Math.pow(base(x, y, v, z), ex(x, y, v, z)); } return base; }
+      function atom() {
+        const t = take();
+        if (t === undefined) throw Error("end");
+        if (t === "(") { const n = expr(); if (take() !== ")") throw Error(")"); return n; }
+        if (t === "|") { const n = expr(); if (take() !== "|") throw Error("|"); return (x, y, v, z) => Math.abs(n(x, y, v, z)); }
+        if (isDigit(t[0]) || t[0] === ".") { const k = Number(t); if (!Number.isFinite(k)) throw Error("number"); return () => k; }
+        if (FN[t]) {
+          const f = FN[t];
+          let arg;
+          // sin^2(x) means (sin x)^2.
+          const ex = peek() === "^" ? (take(), atom()) : null;
+          if (peek() === "(") { take(); arg = expr(); if (take() !== ")") throw Error(")"); } else arg = power();
+          return ex ? (x, y, v, z) => Math.pow(f(arg(x, y, v, z)), ex(x, y, v, z)) : (x, y, v, z) => f(arg(x, y, v, z));
+        }
+        if (t === "x") { variables.add(t); return x => x; }
+        if (t === "y") { variables.add(t); return (x, y) => y; }
+        if (t === "z") { variables.add(t); return (x, y, v, z) => z; }
+        if (CONST[t] !== undefined) { const k = CONST[t]; return () => k; }
+        if (["f","g","h"].includes(t) && peek() === "(") throw Error("unsupported");
+        if (/^[A-Za-z](?:_?\d)?$/.test(t)) { names.add(t); return (x, y, v, z) => v[t]; }
+        throw Error("name " + t);
+      }
+      const n = expr();
+      if (p !== tokens.length) throw Error("trailing");
+      return { f:n, names:[...names], variables:[...variables] };
+    }
+
+    function equation(source, mode) {
+      source = String(source || "").trim();
+      if (!source) return { kind:"empty", names:[] };
+      if (source.length > 2000) throw Error("length");
+      if (/[<>≤≥{}]/.test(source)) throw Error("unsupported");
+      const parts = source.split("=");
+      if (parts.length > 2 || parts.some(part => !part.trim())) throw Error("equation");
+      const left = parts.length === 2 ? parts[0].trim() : "", right = parts.at(-1);
+      // Function notation is accepted as a plotted definition. Named calls are
+      // intentionally not interpreted as multiplication by an undefined slider.
+      const definition = /^([fgh])\s*\(\s*x\s*(,\s*y\s*)?\)$/.exec(left);
+      const a = compile(right), axis = definition ? (definition[2] ? "z" : "y") : /^[xyz]$/.test(left) ? left : !left ? (mode === "3d" ? "z" : "y") : null;
+      if (mode === "2d" && (axis === "z" || a.variables.includes("z"))) throw Error("dimension");
+      if (axis && !a.variables.includes(axis)) return { kind:"explicit", axis, fn:a.f, names:a.names, variables:a.variables, shorthand:!left };
+      if (/^[A-Za-z](?:_?\d)?$/.test(left) && !["x", "y", "z", "e"].includes(left)) {
+        if (a.variables.length) throw Error("parameter");
+        return { kind:"parameter", name:left, fn:a.f, names:a.names, variables:[] };
+      }
+      if (!left || definition) throw Error("equation");
+      const b = compile(left), variables = [...new Set([...a.variables, ...b.variables])];
+      if (mode === "2d" && variables.includes("z")) throw Error("dimension");
+      if (!variables.length) throw Error("equation");
+      return { kind:"implicit", fn:(x,y,v,z) => b.f(x,y,v,z) - a.f(x,y,v,z), names:[...new Set([...a.names,...b.names])], variables };
+    }
+    // Refine a sign-changing edge. Reject poles instead of turning a discontinuity
+    // into a spurious surface. The endpoints and output are world coordinates.
+    function root(fn, a, b, fa, fb, params) {
+      if (!Number.isFinite(fa) || !Number.isFinite(fb)) return null;
+      if (fa === 0) return a;
+      if (fb === 0) return b;
+      if ((fa < 0) === (fb < 0)) return null;
+      const tolerance = Math.max(1e-10, Math.min(Math.abs(fa), Math.abs(fb)) * 1e-5);
+      for (let i=0;i<24;i++) {
+        let t = fa / (fa-fb);
+        if (i % 2 || !Number.isFinite(t) || t < .05 || t > .95) t = .5;
+        const p = a.map((v,k) => v + t*(b[k]-v)), f = fn(p[0],p[1],params,p[2]);
+        if (!Number.isFinite(f)) return null;
+        if (Math.abs(f) <= tolerance) return p;
+        if ((f < 0) === (fa < 0)) { a=p;fa=f; } else { b=p;fb=f; }
+      }
+      return null;
+    }
+    function contour(fn, bounds, params, nx=120, ny=100) {
+      const [x0,x1,y0,y1]=bounds, points=[], values=[], lines=[];
+      for(let j=0;j<=ny;j++) for(let i=0;i<=nx;i++) {
+        const p=[x0+(x1-x0)*i/nx,y0+(y1-y0)*j/ny,0];points.push(p);values.push(fn(p[0],p[1],params,0));
+      }
+      for(let j=0;j<ny;j++) for(let i=0;i<nx;i++) {
+        const a=j*(nx+1)+i,b=a+1,c=b+nx+1,d=a+nx+1;
+        for(const tri of [[a,b,c],[a,c,d]]) {
+          const hits=[];
+          for(let k=0;k<3;k++) {
+            const u=tri[k],v=tri[(k+1)%3];
+            // Half-open classification avoids duplicate vertices at grid zeros.
+            if((values[u]<0)===(values[v]<0))continue;
+            const p=root(fn,points[u],points[v],values[u],values[v],params);if(p)hits.push(p);
+          }
+          if(hits.length===2)lines.push(hits);
+        }
+      }
+      return lines;
+    }
+    function mesh(row, R, params, n=36) {
+      const faces=[];
+      if(row.kind === "explicit") {
+        const axis="xyz".indexOf(row.axis),other=[0,1,2].filter(k=>k!==axis),grid=[];
+        for(let i=0;i<=n;i++)for(let j=0;j<=n;j++) {
+          const p=[0,0,0];p[other[0]]=-R+2*R*i/n;p[other[1]]=-R+2*R*j/n;
+          p[axis]=row.fn(p[0],p[1],params,p[2]);grid.push(p);
+        }
+        // Clip polygons to the box; clamping individual heights creates false
+        // flat caps on functions that continue outside the visible domain.
+        const clip = input => {
+          let out=input;
+          for(const sign of [-1,1]) {
+            const before=out;out=[];
+            for(let i=0;i<before.length;i++) {
+              const a=before[i],b=before[(i+1)%before.length],inside=sign*a[axis]<=R,next=sign*b[axis]<=R;
+              if(inside)out.push(a);
+              if(inside!==next) { const t=(sign*R-a[axis])/(b[axis]-a[axis]);out.push(a.map((v,k)=>v+t*(b[k]-v))); }
+            }
+          }
+          return out;
+        };
+        for(let i=0;i<n;i++)for(let j=0;j<n;j++) {
+          const a=i*(n+1)+j,b=a+n+1,c=b+1,d=a+1;
+          for(const indices of [[a,b,c],[a,c,d]]) {
+            const tri=indices.map(k=>grid[k]);
+            if(tri.some(p=>!Number.isFinite(p[axis])))continue;
+            // Do not connect opposite sides of a pole.
+            const center=tri[0].map((_,k)=>(tri[0][k]+tri[1][k]+tri[2][k])/3),f=row.fn(center[0],center[1],params,center[2]);
+            if(!Number.isFinite(f)||Math.abs(f-center[axis])>R)continue;
+            const face=clip(tri);if(face.length>=3)faces.push(face);
+          }
+        }
+        return faces;
+      }
+      if(row.kind !== "implicit")return faces;
+      const points=[],values=[],size=n+1,index=(i,j,k)=>(i*size+j)*size+k;
+      for(let i=0;i<=n;i++)for(let j=0;j<=n;j++)for(let k=0;k<=n;k++) {
+        const p=[-R+2*R*i/n,-R+2*R*j/n,-R+2*R*k/n];points.push(p);values.push(row.fn(p[0],p[1],params,p[2]));
+      }
+      // Consistent six-tetrahedron decomposition gives matching shared faces.
+      const tetrahedra=[[0,1,3,7],[0,3,2,7],[0,2,6,7],[0,6,4,7],[0,4,5,7],[0,5,1,7]];
+      const crossing=(a,b)=>root(row.fn,points[a],points[b],values[a],values[b],params);
+      for(let i=0;i<n;i++)for(let j=0;j<n;j++)for(let k=0;k<n;k++) {
+        const cube=[index(i,j,k),index(i+1,j,k),index(i,j+1,k),index(i+1,j+1,k),index(i,j,k+1),index(i+1,j,k+1),index(i,j+1,k+1),index(i+1,j+1,k+1)];
+        const vals=cube.map(v=>values[v]);if(vals.some(v=>!Number.isFinite(v))||vals.every(v=>v>=0)||vals.every(v=>v<0))continue;
+        for(const t of tetrahedra) {
+          const ins=t.map(v=>cube[v]).filter(v=>values[v]<0),outs=t.map(v=>cube[v]).filter(v=>values[v]>=0);
+          let face;
+          if(ins.length===1)face=outs.map(v=>crossing(ins[0],v));
+          else if(outs.length===1)face=ins.map(v=>crossing(v,outs[0]));
+          else if(ins.length===2)face=[crossing(ins[0],outs[0]),crossing(ins[0],outs[1]),crossing(ins[1],outs[1]),crossing(ins[1],outs[0])];
+          if(face&&face.every(Boolean))faces.push(face);
+        }
+      }
+      return faces;
+    }
+    return { compile, equation, contour, mesh };
+  }
+function installReadableGraphUi() {
+    const app = document.querySelector(".app");
+    let scale = 1;
+    function layout() {
+      app.style.setProperty("--graph-screen-unit", `${1 / scale}px`);
+      app.classList.toggle("narrow", innerWidth * scale < 600);
+    }
+    addEventListener("message", event => {
+      const data = event.data;
+      if (event.source !== parent || data?.type !== "penecho-widget-state"
+        || !Number.isFinite(data.scaleX) || data.scaleX <= 0 || !Number.isFinite(data.scaleY) || data.scaleY <= 0) return;
+      scale = Math.min(1, data.scaleX, data.scaleY);
+      layout();
+    });
+    addEventListener("resize", layout);
+    layout();
+    // Download includes the whole formula list, even when its live panel scrolls.
+    // Keep the plot's CSS dimensions fixed so its camera and bitmap do not move.
+    window.__penechoPrepareGraphSnapshot = () => {
+      const side = app.querySelector(".side"), plot = app.querySelector(".plot"),
+        elements = [app, side, plot, document.documentElement, document.body], styles = elements.map(el => el.getAttribute("style")),
+        scrollTop = side.scrollTop, plotHeight = plot.clientHeight, narrow = app.classList.contains("narrow"),
+        columns = getComputedStyle(app).gridTemplateColumns;
+      plot.style.height = `${plotHeight}px`; plot.style.alignSelf = "start";
+      app.style.width = `${app.clientWidth}px`;
+      app.style.gridTemplateColumns = columns;
+      side.style.maxHeight = "none"; side.style.overflow = "visible"; side.style.height = "auto";
+      side.scrollTop = 0;
+      const height = Math.max(app.clientHeight, narrow ? side.scrollHeight + plotHeight : side.scrollHeight);
+      app.style.height = `${height}px`;
+      app.style.gridTemplateRows = narrow ? `auto ${plotHeight}px` : `${height}px`;
+      // The screen viewport clips both root elements. Release that clipping for
+      // the complete PNG without changing viewport units or the plot's size.
+      for (const root of [document.documentElement, document.body]) {
+        root.style.setProperty("overflow", "visible", "important");
+        root.style.setProperty("scrollbar-width", "none", "important");
+      }
+      return () => {
+        elements.forEach((el, i) => styles[i] === null ? el.removeAttribute("style") : el.setAttribute("style", styles[i]));
+        side.scrollTop = scrollTop;
+      };
+    };
+  }
+(function graphRuntime(D) {
+    "use strict";
+    const zh = D.language === "zh", T = zh
+      ? { add:"+ 添加", hint2:"拖动平移 · 滚轮缩放", hint3:"拖动旋转 · 滚轮缩放 · 曲面为数值近似", play:"动画", home:"复位", in:"放大", out:"缩小", surface:"曲面", curve:"曲线", bad:"请检查运算符、括号和函数写法。", expression:"表达式", remove:"删除表达式", mode:"绘图维度", equation:"请在等号两边输入有效的表达式。", dimension:"此公式含 z，请切换到 3D。", unsupported:"暂不支持不等式、条件限制或自定义函数调用。", parameter:"参数定义不能包含坐标变量。", duplicate:"此参数已在其他行定义。", dependency:"参数定义存在循环或无效依赖。", length:"表达式过长，请限制在 2000 个字符内。", value:"参数需要有限的数值。", example2:"例如 y = sin(x) 或 x² + y² = 4", example3:"例如 z = sin(x) cos(y)", shorthand:"按以下方程绘制：", support:"支持坐标方程、隐式方程和参数（如 a = 1）。三维中，不含 z 的方程沿 z 方向延伸。" }
+      : { add:"+ Add", hint2:"Drag to pan · scroll to zoom", hint3:"Drag to rotate · scroll to zoom · numerical surfaces", play:"Animate", home:"Reset view", in:"Zoom in", out:"Zoom out", surface:"Surface", curve:"Curve", bad:"Check operators, parentheses and function notation.", expression:"Expression", remove:"Remove expression", mode:"Graph dimension", equation:"Enter a valid expression on each side of the equals sign.", dimension:"This equation uses z. Switch to 3D.", unsupported:"Inequalities, restrictions and custom function calls are not supported yet.", parameter:"A parameter definition cannot contain coordinates.", duplicate:"This parameter is already defined in another row.", dependency:"Circular or invalid parameter dependency.", length:"Keep expressions within 2000 characters.", value:"A parameter must have a finite value.", example2:"e.g. y = sin(x) or x² + y² = 4", example3:"e.g. z = sin(x) cos(y)", shorthand:"Plotted as: ", support:"Coordinate equations, implicit equations and parameters (e.g. a = 1). In 3D, equations without z extend along the z axis." };
+    const math = createGraphMath();
+    const state = { rows:[], params:{ ...D.parameters }, view2:null, view3:D.view3 || null, anim:null, hover:null, mode:D.mode === "3d" ? "3d" : "2d" };
+    const $ = id => document.getElementById(id);
+    const rowsEl = $("rows"), paramsEl = $("params"), cv = $("c"), ctx = cv.getContext("2d"), readout = $("readout"), hint = $("hint"), badge = $("badge");
+    $("add").textContent = T.add;
+    $("zin").title = T.in; $("zout").title = T.out; $("home").title = T.home;
+    $("mode").setAttribute("aria-label", T.mode);$("support").textContent = T.support;
+    for(const id of ["zin","zout","home"])$(id).setAttribute("aria-label",$(id).title);
+    let rowId = 0, revision = 0;
+    const geometry = new Map();
+    function publish() {
+      const V=state.view2,w=cv.clientWidth,h=cv.clientHeight;
+      parent.postMessage({type:"penecho-graph-change",document:{version:2,mode:state.mode,expressions:state.rows.map(r=>r.src),parameters:{...state.params},view3:state.view3,window2:V ? [V.cx-w/2/V.sx,V.cx+w/2/V.sx,V.cy-h/2/V.sy,V.cy+h/2/V.sy] : null}},"*");
+    }
+    function fmt(v) { const a=Math.abs(v);return a>=1e4||(a&&a<1e-3)?v.toExponential(2):String(+v.toFixed(a>=100?1:a>=10?2:3)); }
+    function parse(row) {
+      row.kind="empty";row.fn=null;row.names=[];row.axis=null;row.error="";row.shorthand=false;
+      try {Object.assign(row,math.equation(row.src,state.mode));}catch(error){row.error=T[error.message]||T.bad;}row.parseError=row.error;
+    }
+    function showError(row) {
+      row.el.classList.toggle("bad",!!row.error);row.input.setAttribute("aria-invalid",String(!!row.error));
+      row.message.textContent=row.error||(row.shorthand?T.shorthand+(state.mode==="3d"?"z":"y")+" = …":"");row.message.hidden=!row.message.textContent;
+    }
+    function syncMode() {
+      badge.textContent=state.mode==="3d"?"3D · "+T.surface:"2D · "+T.curve;hint.textContent=state.mode==="3d"?T.hint3:T.hint2;
+      for(const mode of ["2d","3d"])$(mode).setAttribute("aria-pressed",String(state.mode===mode));
+      for(const row of state.rows)row.input.dataset.placeholder=state.mode==="3d"?T.example3:T.example2;
+    }
+    for(const mode of ["2d","3d"])$(mode).onclick=()=>{
+      if(mode===state.mode)return;
+      // Materialize shorthand before changing dimension to preserve its meaning.
+      for(const row of state.rows)if(row.shorthand){row.src=(state.mode==="3d"?"z":"y")+" = "+row.src;row.input.textContent=row.src;}
+      state.mode=mode;state.hover=null;readout.classList.remove("on");refresh();
+    };
+    function addRow(src) {
+      if(state.rows.length>=16)return;
+      const row={src:String(src||""),fn:null,color:D.colors[state.rows.length%D.colors.length]};state.rows.push(row);
+      const el=document.createElement("div"),dot=document.createElement("span"),body=document.createElement("div"),input=document.createElement("div"),del=document.createElement("button"),message=document.createElement("div");
+      el.className="row";dot.className="dot";dot.style.background=row.color;body.className="formula-body";
+      // Real text nodes wrap naturally and are also captured by the PNG renderer.
+      input.className="expression";input.contentEditable = "plaintext-only";input.textContent=row.src;input.spellcheck=false;
+      input.setAttribute("role","textbox");input.setAttribute("aria-multiline","true");input.setAttribute("aria-label",T.expression);
+      message.id="formula-message-"+(++rowId);message.className="formula-message";message.setAttribute("aria-live","polite");input.setAttribute("aria-describedby",message.id);
+      del.textContent="×";del.title=T.remove;del.setAttribute("aria-label",T.remove);
+      del.onclick=()=>{const k=state.rows.indexOf(row);if(k<0)return;state.rows.splice(k,1);el.remove();if(!state.rows.length)addRow("");refresh();};
+      input.oninput=()=>{
+        if(input.innerText.length>2000){input.textContent=row.src;row.error=T.length;showError(row);return;}
+        row.src = input.innerText;refresh();
+      };
+      input.onblur=()=>{if(!row.src.trim()){input.textContent="";row.src="";}};
+      Object.assign(row,{el,input,message});body.append(input,message);el.append(dot,body,del);rowsEl.append(el);
+    }
+    function evaluateParameters() {
+      const definitions=new Map(),visiting=new Set(),done=new Set(),names=new Set();
+      for(const row of state.rows){
+        row.error=row.parseError;for(const n of row.names)names.add(n);
+        const declaration=/^\s*([A-Za-z](?:_?\d)?)\s*=/.exec(row.src),name=declaration?.[1];
+        if(row.kind==="parameter" || name && !["x","y","z","e"].includes(name)){
+          row.name=name || row.name;
+          if(definitions.has(row.name)){row.error=T.duplicate;definitions.get(row.name).error=T.duplicate;}else definitions.set(row.name,row);
+        }
+      }
+      for(const n of definitions.keys())state.params[n]=NaN;
+      for(const n of names)if(!definitions.has(n)&&!Number.isFinite(state.params[n]))state.params[n]=1;
+      function visit(n) {
+        if(done.has(n))return;const row=definitions.get(n);if(!row)return;
+        if(visiting.has(n)||row.error)throw Error(T.dependency);visiting.add(n);
+        try{row.names.forEach(visit);const value=row.fn(0,0,state.params,0);if(!Number.isFinite(value))throw Error(T.value);state.params[n]=value;done.add(n);}
+        catch(error){row.error=row.error||error.message;state.params[n]=NaN;throw error;}finally{visiting.delete(n);}
+      }
+      for(const n of definitions.keys())try{visit(n);}catch{}
+      for(const row of state.rows)if(!row.error&&row.names.some(n=>!Number.isFinite(state.params[n])))row.error=T.dependency;
+      // Keep free slider values while their expressions are temporarily incomplete.
+      // Only active parameters are shown; stored values are bounded on ingestion.
+      for(const n of Object.keys(state.params))if(!names.has(n)&&!definitions.has(n)&&(!Number.isFinite(state.params[n])||Object.keys(state.params).length>64))delete state.params[n];
+      return {names,definitions};
+    }
+    function refresh(save=true) {
+      state.anim=null;state.hover=null;readout.classList.remove("on");state.rows.forEach(parse);
+      const parameters=evaluateParameters();syncMode();syncParams(parameters);state.rows.forEach(showError);
+      $("add").disabled=state.rows.length>=16;geometry.clear();revision++;
+      if(state.mode==="2d"&&!state.view2)home2();if(state.mode==="3d"&&!state.view3)home3();draw();if(save)publish();
+    }
+    function setParameter(name,value,definition) {
+      state.params[name]=value;if(definition){definition.src=name+" = "+String(+value.toPrecision(12));definition.input.textContent=definition.src;parse(definition);}
+      evaluateParameters();state.rows.forEach(showError);geometry.clear();revision++;draw();
+      for(const out of paramsEl.querySelectorAll("output"))out.textContent=fmt(state.params[out.dataset.name]);
+    }
+    function syncParams({names,definitions}) {
+      paramsEl.textContent="";for(const n of definitions.keys())names.add(n);
+      for(const n of [...names].sort()){
+        const definition=definitions.get(n),v=state.params[n];if(!Number.isFinite(v)||definition?.error)continue;
+        const span=Math.max(5,Math.abs(v)*2),min=+(v-span).toFixed(3),max=+(v+span).toFixed(3);
+        const wrap=document.createElement("div"),lab=document.createElement("label"),r=document.createElement("input"),out=document.createElement("output"),play=document.createElement("button");
+        wrap.className="param";lab.textContent=n;r.type="range";r.id="parameter-"+n;lab.htmlFor=r.id;r.min=min;r.max=max;r.step=(max-min)/400;r.value=v;out.dataset.name=n;out.textContent=fmt(v);
+        if(definition?.names.length){wrap.append(lab,out);paramsEl.append(wrap);continue;}
+        r.oninput=()=>{state.anim=null;setParameter(n,Number(r.value),definition);publish();};
+        play.className="play";play.title=T.play;play.textContent="▶";play.setAttribute("aria-label",T.play+" "+n);
+        play.onclick=()=>{
+          if(state.anim?.name===n){state.anim=null;play.textContent="▶";play.classList.remove("on");publish();return;}
+          for(const b of paramsEl.querySelectorAll(".play")){b.textContent="▶";b.classList.remove("on");}
+          state.anim={name:n,min,max,r,out,definition,dir:1};play.textContent="■";play.classList.add("on");requestAnimationFrame(tick);
+        };
+        wrap.append(lab,r,out,play);paramsEl.append(wrap);
+      }
+    }
+    function tick() {
+      const a=state.anim;if(!a)return;let v=state.params[a.name]+(a.max-a.min)/240*a.dir;
+      if(v>a.max){v=a.max;a.dir=-1;}if(v<a.min){v=a.min;a.dir=1;}
+      setParameter(a.name,v,a.definition);a.r.value=v;a.out.textContent=fmt(v);requestAnimationFrame(tick);
+    }
+    function nice(span, target) { const raw = span / target, p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; }
+
+    // ---------- 2D ----------
+    function home2() {
+      const w = cv.clientWidth || 1, h = cv.clientHeight || 1, rows = state.rows.filter(r => r.kind === "explicit" && r.axis === "y" && !r.error);
+      const first = rows[0], windowX = first ? D.xWindow(x => first.fn(x, 0, state.params)) : { xMin:-10, xMax:10 }, span = windowX.xMax - windowX.xMin, values = [];
+      for (const r of rows) for (let i = 0; i <= 400; i++) { let y; try { y = r.fn(windowX.xMin + span * i / 400, 0, state.params); } catch { y = NaN; } values.push(y); }
+      const { lo, hi } = rows.length ? D.yWindow(values, span) : { lo:-h / w * span / 2, hi:h / w * span / 2 }, sx = w / span, sy = h / (hi - lo);
+      state.view2 = { cx:(windowX.xMin + windowX.xMax) / 2, cy:(hi + lo) / 2, sx, sy };
+    }
+    function draw2() {
+      const w = cv.clientWidth, h = cv.clientHeight, V = state.view2; if (!V || !w || !h) return;
+      const fs = Math.max(10, Math.round(Math.min(w, h) / 40)), lw = Math.max(1.4, Math.min(w, h) / 230);
+      const X = x => w / 2 + (x - V.cx) * V.sx, Y = y => h / 2 - (y - V.cy) * V.sy, ix = px => V.cx + (px - w / 2) / V.sx;
+      const x0 = ix(0), x1 = ix(w), y0 = V.cy - h / 2 / V.sy, y1 = V.cy + h / 2 / V.sy, sx = nice(x1 - x0, 9), sy = nice(y1 - y0, 7);
+      ctx.lineWidth = 1; ctx.strokeStyle = "#eef2f7"; ctx.beginPath();
+      for (let x = Math.ceil(x0 / sx * 5) * sx / 5; x <= x1; x += sx / 5) { ctx.moveTo(X(x), 0); ctx.lineTo(X(x), h); }
+      for (let y = Math.ceil(y0 / sy * 5) * sy / 5; y <= y1; y += sy / 5) { ctx.moveTo(0, Y(y)); ctx.lineTo(w, Y(y)); }
+      ctx.stroke();
+      ctx.strokeStyle = "#dde3ea"; ctx.beginPath();
+      for (let x = Math.ceil(x0 / sx) * sx; x <= x1; x += sx) { ctx.moveTo(X(x), 0); ctx.lineTo(X(x), h); }
+      for (let y = Math.ceil(y0 / sy) * sy; y <= y1; y += sy) { ctx.moveTo(0, Y(y)); ctx.lineTo(w, Y(y)); }
+      ctx.stroke();
+      // Axes are pinned to the edge when the origin leaves the view, so both stay visible.
+      const ax = Math.min(h - fs * 1.6, Math.max(fs * 0.4, Y(0))), ay = Math.min(w - fs * 0.6, Math.max(fs * 2.6, X(0)));
+      ctx.strokeStyle = "#334155"; ctx.lineWidth = Math.max(1.2, lw * 0.75); ctx.beginPath(); ctx.moveTo(0, ax); ctx.lineTo(w, ax); ctx.moveTo(ay, 0); ctx.lineTo(ay, h); ctx.stroke();
+      ctx.fillStyle = "#334155"; ctx.beginPath(); ctx.moveTo(w - 2, ax); ctx.lineTo(w - 2 - fs * 0.7, ax - fs * 0.35); ctx.lineTo(w - 2 - fs * 0.7, ax + fs * 0.35); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(ay, 2); ctx.lineTo(ay - fs * 0.35, 2 + fs * 0.7); ctx.lineTo(ay + fs * 0.35, 2 + fs * 0.7); ctx.fill();
+      ctx.font = "italic " + fs + "px ui-serif, Georgia, serif"; ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText("x", w - fs * 0.4, ax - fs * 0.35);
+      ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("y", ay + fs * 0.45, fs * 0.2);
+      ctx.fillStyle = "#64748b"; ctx.font = fs + "px ui-sans-serif, system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+      for (let x = Math.ceil(x0 / sx) * sx; x <= x1; x += sx) { if (Math.abs(x) < sx / 2 || X(x) > w - fs * 1.5 || X(x) < fs * 1.5) continue; ctx.fillText(fmt(+x.toPrecision(10)), X(x), ax + fs * 0.35); }
+      ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      for (let y = Math.ceil(y0 / sy) * sy; y <= y1; y += sy) { if (Math.abs(y) < sy / 2 || Y(y) < fs * 1.5 || Y(y) > h - fs) continue; ctx.fillText(fmt(+y.toPrecision(10)), ay - fs * 0.4, Y(y)); }
+      ctx.fillText("0", ay - fs * 0.4, ax + fs * 0.6);
+      for (const r of state.rows) {
+        if (!r.fn || r.error || r.kind === "parameter") continue;
+        if(r.kind === "implicit") {
+          const key=JSON.stringify([revision,x0,x1,y0,y1]),cached=geometry.get(r);
+          const lines=cached?.key===key ? cached.lines : math.contour(r.fn,[x0,x1,y0,y1],state.params);
+          geometry.set(r,{key,lines});ctx.strokeStyle=r.color;ctx.lineWidth=lw*1.6;ctx.beginPath();
+          for(const [a,b] of lines){ctx.moveTo(X(a[0]),Y(a[1]));ctx.lineTo(X(b[0]),Y(b[1]));}ctx.stroke();continue;
+        }
+        if(r.axis === "x") {
+          ctx.strokeStyle=r.color;ctx.lineWidth=lw*1.6;ctx.beginPath();let previous=null;
+          for(let i=0;i<=h;i++){const y=y1-(y1-y0)*i/h,x=r.fn(0,y,state.params,0),px=X(x);if(!Number.isFinite(px)||Math.abs(px)>20*w){previous=null;continue;}if(previous!==null&&Math.abs(px-previous)<w*1.5)ctx.lineTo(px,i);else ctx.moveTo(px,i);previous=px;}ctx.stroke();continue;
+        }
+        ctx.strokeStyle = r.color; ctx.lineWidth = lw * 1.6; ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.beginPath();
+        let pen = false, prev = null;
+        const n = Math.ceil(w * 1.5);
+        for (let i = 0; i <= n; i++) {
+          const px = i * w / n, x = ix(px);
+          let y; try { y = r.fn(x, 0, state.params); } catch { y = NaN; }
+          const py = Y(y);
+          if (!Number.isFinite(py) || Math.abs(py) > h * 20) { pen = false; prev = null; continue; }
+          if (pen && prev !== null && Math.abs(py - prev) > h * 1.5) pen = false;
+          if (pen) ctx.lineTo(px, py); else { ctx.moveTo(px, py); pen = true; }
+          prev = py;
+        }
+        ctx.stroke();
+        ctx.fillStyle = r.color;
+        let last = null;
+        for (let i = 0; i <= n; i++) {
+          const x = ix(i * w / n), y = r.fn(x, 0, state.params);
+          if (Number.isFinite(y) && last && Number.isFinite(last.y) && (last.y < 0) !== (y < 0) && Math.abs(y - last.y) < (y1 - y0)) {
+            const rx = last.x - last.y * (x - last.x) / (y - last.y); ctx.beginPath(); ctx.arc(X(rx), Y(0), lw * 1.6, 0, 7); ctx.fill();
+          }
+          last = { x, y };
+        }
+      }
+      if (state.hover) {
+        const { row, x, y } = state.hover, hr = Math.max(4, Math.min(w, h) / 70);
+        ctx.fillStyle = row.color; ctx.beginPath(); ctx.arc(X(x), Y(y), hr, 0, 7); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = hr / 2.5; ctx.stroke();
+      }
+    }
+
+    // ---------- 3D ----------
+    function home3() { state.view3 = { az:-0.85, el:0.55, R:5, zoom:1 }; }
+    function draw3() {
+      const w = cv.clientWidth, h = cv.clientHeight, V = state.view3; if (!V || !w || !h) return;
+      const fs = Math.max(10, Math.round(Math.min(w, h) / 40)), R = V.R, lo = -R, hi = R, zs = 2 * R;
+      const ca = Math.cos(V.az), sa = Math.sin(V.az), ce = Math.cos(V.el), se = Math.sin(V.el), scale = Math.min(w, h) * 0.26 * V.zoom, cx = w / 2, cy = h * 0.52;
+      // Equal scale on all three world axes preserves spheres and angles.
+      const P = (x, y, z) => {
+        const X = x / R, Y = y / R, Z = z / R;
+        const x1 = X * ca - Y * sa, y1 = X * sa + Y * ca;
+        const depth = y1 * ce + Z * se;
+        const zz = Z * ce - y1 * se;
+        const persp = 1 / (1 + depth * 0.18);
+        return { x:cx + x1 * scale * persp, y:cy - zz * scale * persp, d:depth };
+      };
+      const corners = [];
+      for (const x of [-R, R]) for (const y of [-R, R]) for (const z of [lo, hi]) corners.push({ x, y, z, p:P(x, y, z) });
+      const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+      const farthest = corners.reduce((best, c, i) => c.p.d > corners[best].p.d ? i : best, 0);
+      ctx.lineWidth = 1;
+      // Back panes of the box: light grid on the three faces that meet at the farthest corner.
+      ctx.strokeStyle = "#e5e7eb";
+      for (const [a, b] of edges) if (a === farthest || b === farthest) { const A = corners[a].p, B = corners[b].p; ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); }
+      const floorZ = lo, tick = nice(2 * R, 5);
+      ctx.strokeStyle = "#eef2f7";
+      for (let t = Math.ceil(-R / tick) * tick; t <= R + 1e-9; t += tick) {
+        let A = P(t, -R, floorZ), B = P(t, R, floorZ); ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+        A = P(-R, t, floorZ); B = P(R, t, floorZ); ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+      }
+      // Cache world geometry so rotating the camera never resamples equations.
+      const quads = [];
+      state.rows.forEach((r,index)=>{
+        if(!r.fn||r.error||r.kind==="parameter")return;
+        const key=revision+":"+R,cached=geometry.get(r),faces=cached?.key===key?cached.faces:math.mesh(r,R,state.params);
+        geometry.set(r,{key,faces});
+        for(const face of faces) {
+          const pts=face.map(p=>P(...p)),a=face[0],b=face[1],c=face[2],u=b.map((v,k)=>v-a[k]),v=c.map((v,k)=>v-a[k]);
+          const normal=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],length=Math.hypot(...normal);
+          if(length<1e-12)continue;
+          const shade=.5+.5*Math.abs((normal[0]*.3+normal[1]*.4+normal[2]*.87)/length);
+          quads.push({pts,depth:pts.reduce((sum,p)=>sum+p.d,0)/pts.length,shade,index});
+        }
+      });
+      quads.sort((a, b) => b.depth - a.depth);
+      for (const q of quads) {
+        const [cr,cg,cb]=hexRgb(state.rows[q.index].color,1).map(c=>Math.round(c*q.shade));
+        ctx.fillStyle=`rgb(${cr},${cg},${cb})`;ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=.5;
+        ctx.beginPath();ctx.moveTo(q.pts[0].x,q.pts[0].y);for(let k=1;k<q.pts.length;k++)ctx.lineTo(q.pts[k].x,q.pts[k].y);ctx.closePath();ctx.fill();ctx.stroke();
+      }
+      // Front box edges, axes and labels.
+      ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 1;
+      for (const [a, b] of edges) if (a !== farthest && b !== farthest) { const A = corners[a].p, B = corners[b].p; ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); }
+      ctx.fillStyle = "#475569"; ctx.font = fs + "px ui-sans-serif, system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const nearY = corners[farthest].y > 0 ? -R : R, nearX = corners[farthest].x > 0 ? -R : R;
+      for (let t = Math.ceil(-R / tick) * tick; t <= R + 1e-9; t += tick) {
+        let q = P(t, nearY * 1.12, lo); ctx.fillText(fmt(+t.toPrecision(8)), q.x, q.y);
+        q = P(nearX * 1.12, t, lo); ctx.fillText(fmt(+t.toPrecision(8)), q.x, q.y);
+      }
+      const zt = nice(zs, 4), vertical = [[-R, -R], [-R, R], [R, -R], [R, R]].map(([x, y]) => ({ x, y, p:P(x, y, lo) })).sort((a, b) => a.p.x - b.p.x)[0];
+      ctx.textAlign = "right";
+      for (let t = Math.ceil(lo / zt) * zt; t <= hi + 1e-9; t += zt) { const q = P(vertical.x, vertical.y, t); ctx.fillText(fmt(+t.toPrecision(8)), q.x - fs * 0.6, q.y); }
+      ctx.strokeStyle = "#94a3b8"; const zb = P(vertical.x, vertical.y, lo), zt2 = P(vertical.x, vertical.y, hi); ctx.beginPath(); ctx.moveTo(zb.x, zb.y); ctx.lineTo(zt2.x, zt2.y); ctx.stroke();
+      ctx.textAlign = "center";
+      ctx.font = "italic " + Math.round(fs * 1.15) + "px ui-serif, Georgia, serif"; ctx.fillStyle = "#1f2937";
+      let q = P(0, nearY * 1.3, lo); ctx.fillText("x", q.x, q.y);
+      q = P(nearX * 1.3, 0, lo); ctx.fillText("y", q.x, q.y);
+      q = P(vertical.x, vertical.y, hi + zs * 0.16); ctx.fillText("z", q.x - fs * 0.6, q.y);
+    }
+    function hexRgb(hex, t) {
+      const v = parseInt(hex.slice(1), 16), k = 0.55 + 0.45 * t;
+      return [((v >> 16) & 255) * k, ((v >> 8) & 255) * k, (v & 255) * k];
+    }
+    function draw() {
+      const w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+      ctx.clearRect(0, 0, w, h);
+      if (state.mode === "3d") draw3(); else draw2();
+    }
+    let plotSize = { w:0, h:0, d:0 };
+    function resize() {
+      // CSS layout owns the viewport. Backing pixels must never feed back into
+      // grid sizing, and presentation zoom must not change drawing coordinates.
+      const w = cv.clientWidth, h = cv.clientHeight, d = window.devicePixelRatio || 1;
+      if (!w || !h || w === plotSize.w && h === plotSize.h && d === plotSize.d) return;
+      cv.width = Math.max(1, Math.round(w * d)); cv.height = Math.max(1, Math.round(h * d));
+      ctx.setTransform(cv.width / w, 0, 0, cv.height / h, 0, 0);
+      if (state.view2 && plotSize.w && plotSize.h) {
+        // Keep the mathematical window, including the user's pan and zoom.
+        state.view2.sx *= w / plotSize.w;
+        state.view2.sy *= h / plotSize.h;
+      } else if (state.mode === "2d" && !state.view2) home2();
+      if (state.mode === "3d" && !state.view3) home3();
+      plotSize = { w, h, d };
+      drag = null; state.hover = null; cv.classList.remove("drag"); readout.classList.remove("on");
+      draw();
+    }
+    function pointerPoint(e) {
+      const r = cv.getBoundingClientRect();
+      return { x:(e.clientX - r.left) * cv.clientWidth / r.width, y:(e.clientY - r.top) * cv.clientHeight / r.height };
+    }
+    let drag = null;
+    cv.addEventListener("pointerdown", e => {
+      drag = { ...pointerPoint(e), v2:state.view2 && { ...state.view2 }, v3:state.view3 && { ...state.view3 } };
+      cv.setPointerCapture(e.pointerId); cv.classList.add("drag");
+    });
+    cv.addEventListener("pointermove", e => {
+      const point = pointerPoint(e);
+      if (drag) {
+        if (state.mode === "3d") { const V = state.view3; V.az = drag.v3.az + (point.x - drag.x) * 0.01; V.el = Math.max(-0.2, Math.min(1.45, drag.v3.el + (point.y - drag.y) * 0.01)); }
+        else { const V = state.view2; V.cx = drag.v2.cx - (point.x - drag.x) / V.sx; V.cy = drag.v2.cy + (point.y - drag.y) / V.sy; }
+        state.hover = null; readout.classList.remove("on"); draw(); return;
+      }
+      if (state.mode !== "2d") return;
+      const V = state.view2, px = point.x, py = point.y, x = V.cx + (px - cv.clientWidth / 2) / V.sx;
+      let best = null;
+      for (const row of state.rows) {
+        if (!row.fn || row.error || row.kind !== "explicit" || row.axis !== "y") continue;
+        const y = row.fn(x, 0, state.params); if (!Number.isFinite(y)) continue;
+        const d = Math.abs(cv.clientHeight / 2 - (y - V.cy) * V.sy - py);
+        if (d < 28 && (!best || d < best.d)) best = { d, row, x, y };
+      }
+      state.hover = best; readout.classList.toggle("on", !!best);
+      if (best) readout.textContent = "x = " + fmt(best.x) + "   y = " + fmt(best.y);
+      draw();
+    });
+    const end = () => { if(drag)publish();drag = null; cv.classList.remove("drag"); };
+    cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+    cv.addEventListener("pointerleave", () => { state.hover = null; readout.classList.remove("on"); draw(); });
+    function zoom(f, px, py) {
+      if (state.mode === "3d") { state.view3.R = Math.max(0.2, Math.min(200, state.view3.R / f)); draw(); return; }
+      const V = state.view2, w = cv.clientWidth, h = cv.clientHeight; px = px ?? w / 2; py = py ?? h / 2;
+      const x = V.cx + (px - w / 2) / V.sx, y = V.cy - (py - h / 2) / V.sy;
+      V.sx *= f; V.sy *= f; V.cx = x - (px - w / 2) / V.sx; V.cy = y + (py - h / 2) / V.sy; draw();
+    }
+    cv.addEventListener("wheel", e => { e.preventDefault(); const point = pointerPoint(e); zoom(Math.exp(-e.deltaY * 0.0015), point.x, point.y);publish(); }, { passive:false });
+    $("zin").onclick = () => {zoom(1.25);publish();}; $("zout").onclick = () => {zoom(0.8);publish();};
+    $("home").onclick = () => { if (state.mode === "3d") home3(); else home2(); draw();publish(); };
+    $("add").onclick = () => { addRow(""); refresh(); rowsEl.querySelector(".row:last-child .expression")?.focus(); };
+    for (const s of (D.expressions.length ? D.expressions : [""])) addRow(s);
+    refresh(false);
+    if(D.window2){const [a,b,c,d]=D.window2;state.view2={cx:(a+b)/2,cy:(c+d)/2,sx:cv.clientWidth/(b-a),sy:cv.clientHeight/(d-c)};}
+    new ResizeObserver(resize).observe(cv.parentElement);
+    window.addEventListener("resize", resize);
+    resize();
+    installReadableGraphUi();
+    window.penechoWidgetReady?.();
+  })(Object.assign({"version":2,"expressions":["y=a*x","a=2"],"parameters":{"a":2},"mode":"2d","colors":["#2563eb","#dc2626","#059669","#9333ea"],"language":"en","view3":null,"window2":[-5,5,-4,4]}, { yWindow:function graphYWindow(values, xSpan = 20) {
+    const finite = (values || []).filter(value => Number.isFinite(value) && Math.abs(value) < 1e9).sort((a, b) => a - b);
+    let lo, hi;
+    if (finite.length < 8) { lo = -6; hi = 6; }
+    else {
+      const pick = q => finite[Math.min(finite.length - 1, Math.max(0, Math.round(q * (finite.length - 1))))];
+      lo = pick(0.04);
+      hi = pick(0.96);
+    }
+    lo = Math.min(lo, 0);
+    hi = Math.max(hi, 0);
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    const pad = Math.max((hi - lo) * 0.12, 0.5);
+    lo -= pad;
+    hi += pad;
+    const maxSpan = xSpan * 12;
+    if (hi - lo > maxSpan) {
+      const share = -lo / (hi - lo);
+      lo = -maxSpan * share;
+      hi = lo + maxSpan;
+    }
+    return { lo, hi };
+  }, xWindow:function graphXWindow(evaluate) {
+    const features = [];
+    let previous = null, previousSlope = null;
+    for (let index = 0; index <= 1600; index++) {
+      const x = -100 + index * 0.125;
+      let y;
+      try { y = evaluate(x); } catch { y = NaN; }
+      if (!Number.isFinite(y)) { previous = null; previousSlope = null; continue; }
+      if (previous) {
+        if ((previous.y < 0) !== (y < 0) || y === 0) features.push(x);
+        const slope = y - previous.y;
+        if (previousSlope !== null && (previousSlope < 0) !== (slope < 0) && Math.abs(slope) > 1e-12) features.push(previous.x);
+        previousSlope = slope;
+      }
+      previous = { x, y };
+    }
+    if (!features.length || features.some(x => Math.abs(x) <= 10)) return { xMin:-10, xMax:10 };
+    const nearest = features.reduce((best, x) => Math.abs(x) < Math.abs(best) ? x : best, features[0]);
+    return { xMin:Math.min(-2, nearest - Math.abs(nearest) * 0.4 - 3), xMax:Math.max(2, nearest + Math.abs(nearest) * 0.4 + 3) };
+  } }));
+</script></body></html>

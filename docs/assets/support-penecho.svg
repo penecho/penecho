@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="210" viewBox="0 0 820 210" role="img" aria-labelledby="title desc">
+  <title id="title">Support PenEcho open source</title>
+  <desc id="desc">Help build a better canvas for thinking with AI. Your support funds development, testing, and documentation. Buy us a coffee.</desc>
+  <rect x="1" y="1" width="818" height="208" rx="20" fill="#f0f9f8" stroke="#beddd9" stroke-width="2"/>
+  <rect x="30" y="30" width="5" height="150" rx="2.5" fill="#087f83"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="55" y="52" fill="#087f83" font-size="12" font-weight="700" letter-spacing="2">BUILT IN THE OPEN. SUPPORTED BY YOU.</text>
+    <text x="55" y="94" fill="#142e30" font-size="31" font-weight="700">A better canvas, together.</text>
+    <text x="55" y="126" fill="#38595b" font-size="16">Support PenEcho's open-source development.</text>
+    <text x="55" y="152" fill="#38595b" font-size="15">Code, bug fixes, testing, accessibility, and docs.</text>
+    <text x="55" y="180" fill="#587375" font-size="13">Every contribution helps us keep improving.</text>
+    <rect x="558" y="65" width="232" height="70" rx="13" fill="#ffdd00"/>
+    <path d="M578 86h23v20c0 7-5 12-11.5 12S578 113 578 106V86zm23 4h4a7 7 0 0 1 0 14h-4" fill="none" stroke="#262410" stroke-width="2.5" stroke-linejoin="round"/>
+    <text x="620" y="105" fill="#262410" font-size="19" font-weight="700">Buy us a coffee</text>
+    <text x="674" y="158" text-anchor="middle" fill="#38595b" font-size="13">buymeacoffee.com/penecho</text>
+  </g>
+</svg>

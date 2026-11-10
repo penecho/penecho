@@ -3,24 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#f1f3f6">
+  <meta name="theme-color" content="#f8f8f9">
+  <link rel="icon" type="image/png" href="penecho-favicon.png">
   <title>Local access | PenEcho</title>
   <link rel="stylesheet" href="access.css">
 </head>
-<body>
+<body data-theme="studio" data-studio-palette="teal">
   <header class="access-topbar">
     <a class="access-brand" href="/" aria-label="PenEcho local Canvas">
-      <img src="penecho-mark.png" alt="">
+      <span class="access-brand-mark" aria-hidden="true"><img src="penecho-favicon.png" alt=""></span>
       <span><strong>PenEcho</strong><small data-copy="localCanvas">Local Canvas</small></span>
     </a>
-    <div class="access-language" role="group" aria-label="Language">
+    <div class="access-language" role="group" data-copy-aria="language" aria-label="Language">
       <button type="button" data-language="en" aria-pressed="true">EN</button>
       <button type="button" data-language="zh" aria-pressed="false">中</button>
     </div>
   </header>
 
   <main class="access-shell">
-    <section class="access-panel" aria-live="polite">
+    <section class="access-panel" aria-live="polite" aria-labelledby="accessTitle" aria-describedby="accessDescription">
       <div class="access-heading">
         <span class="access-kicker" data-copy="kicker">LOCAL ACCESS</span>
         <h1 id="accessTitle" data-copy="checkingTitle">Checking this PenEcho server</h1>
@@ -33,32 +34,38 @@
 
       <section id="accessSetup" class="access-view" hidden>
         <div class="access-scope-note">
-          <strong data-copy="scopeTitle">Instance-wide protection</strong>
-          <p data-copy="scopeBody">This is not a code for only this browser. Once set, the same code is required by every browser and device that opens this running PenEcho instance.</p>
+          <span class="access-note-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3 5.5 5.6v5.8c0 4.2 2.6 7.9 6.5 9.6 3.9-1.7 6.5-5.4 6.5-9.6V5.6L12 3Z"/><path d="M9.2 12.1 11 14l3.9-4.1"/></svg>
+          </span>
+          <div><strong data-copy="scopeTitle">Instance-wide protection</strong><p data-copy="scopeBody">This is not a code for only this browser. Once set, the same code is required by every browser and device that opens this running PenEcho instance.</p></div>
         </div>
         <div class="access-choice-list">
           <button id="accessChoosePin" class="access-choice access-choice-primary" type="button">
-            <span class="access-choice-icon" aria-hidden="true">#</span>
+            <span class="access-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10M12 14v2"/></svg></span>
             <span><strong data-copy="setCode">Set a 6-digit security code</strong><small data-copy="setCodeHelp">Recommended when other people or devices share this network.</small></span>
+            <svg class="access-choice-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
           </button>
           <button id="accessChooseOpen" class="access-choice" type="button">
-            <span class="access-choice-icon" aria-hidden="true">&#8594;</span>
+            <span class="access-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h13M13 7l5 5-5 5"/><path d="M6 7V5h13v14H6v-2"/></svg></span>
             <span><strong data-copy="continueOpen">Continue without a code</strong><small data-copy="continueOpenHelp">Anyone on this local network may be able to open this Canvas.</small></span>
+            <svg class="access-choice-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
           </button>
         </div>
         <p class="access-restart-note"><b data-copy="forgotLead">A forgotten code is not a problem.</b> <span data-copy="restartHelp">Restart PenEcho to clear it. Your Canvas files and settings are not affected.</span></p>
       </section>
 
       <section id="accessPin" class="access-view access-pin" hidden>
-        <div id="accessPinDots" class="access-pin-dots" aria-label="Security code" aria-live="off">
-          <i></i><i></i><i></i><i></i><i></i><i></i>
+        <div class="access-pin-entry">
+          <div id="accessPinDots" class="access-pin-dots" aria-label="Security code" aria-live="off">
+            <i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <p id="accessPinStep" class="access-pin-step"></p>
         </div>
-        <p id="accessPinStep" class="access-pin-step"></p>
         <div id="accessKeypad" class="access-keypad" aria-label="Numeric keypad">
           <button type="button" data-digit="1">1</button><button type="button" data-digit="2">2</button><button type="button" data-digit="3">3</button>
           <button type="button" data-digit="4">4</button><button type="button" data-digit="5">5</button><button type="button" data-digit="6">6</button>
           <button type="button" data-digit="7">7</button><button type="button" data-digit="8">8</button><button type="button" data-digit="9">9</button>
-          <button type="button" data-action="backspace" class="access-key-action" aria-label="Backspace" title="Backspace">&#9003;</button>
+          <button type="button" data-action="backspace" class="access-key-action" aria-label="Backspace" title="Backspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9L3.5 12 9 6.5Z"/><path d="m11 9.5 5 5m0-5-5 5"/></svg></button>
           <button type="button" data-digit="0">0</button>
           <button type="button" data-action="clear" class="access-key-action" data-copy-aria="clear" data-copy-title="clear" aria-label="Clear" title="Clear">C</button>
         </div>

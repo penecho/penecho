@@ -3,14 +3,14 @@
 (() => {
   const COPY = {
     en: {
-      localCanvas:"Local Canvas", kicker:"LOCAL ACCESS", checkingTitle:"Checking this PenEcho server", checkingBody:"Confirming how this Canvas is protected.", checking:"Checking access...",
+      localCanvas:"Local Canvas", language:"Language", kicker:"LOCAL ACCESS", checkingTitle:"Checking this PenEcho server", checkingBody:"Confirming how this Canvas is protected.", checking:"Checking access...",
       setupTitle:"Protect this PenEcho server", setupBody:"Choose how every browser and device may access this running PenEcho instance.", scopeTitle:"Instance-wide protection", scopeBody:"This is not a code for only this browser. Once set, the same code is required by every browser and device that opens this running PenEcho instance. It helps prevent unauthorized people on your local network from accessing the Canvas.", setCode:"Set a 6-digit security code", setCodeHelp:"One shared code will protect this server from every new local-network visitor.", continueOpen:"Continue without a code", continueOpenHelp:"Anyone on this local network may be able to open this Canvas.",
       forgotLead:"A forgotten code is not a problem.", forgotCode:"Forgot the code?", restartHelp:"Restart PenEcho to clear it. Your Canvas files and settings are not affected.", enterTitle:"Enter your security code", enterBody:"Use the shared code for this running PenEcho server.", createTitle:"Create a security code", createBody:"Choose six digits for every device that opens this PenEcho server. The code is submitted as soon as the sixth digit is entered.", unlockStep:"6-digit code",
       back:"Back", clear:"Clear", openRiskTitle:"This Canvas will be open on your local network", openRiskBody:"Other people on the same network may be able to open the Canvas, use its configured AI provider, and manage local plugins.", confirmOpen:"Keep open on this LAN",
       wrong:"That security code is not correct.", tooMany:"Too many attempts. Try again in {seconds} seconds.", failed:"PenEcho could not update local access. Try again.", unavailableTitle:"This PenEcho server is unavailable", unavailableBody:"Check the local connection, then try again.", retry:"Retry",
     },
     zh: {
-      localCanvas:"本地画布", kicker:"本地访问", checkingTitle:"正在检查这台 PenEcho", checkingBody:"正在确认这张画布采用的访问保护方式。", checking:"正在检查访问状态…",
+      localCanvas:"本地画布", language:"语言", kicker:"本地访问", checkingTitle:"正在检查这台 PenEcho", checkingBody:"正在确认这张画布采用的访问保护方式。", checking:"正在检查访问状态…",
       setupTitle:"保护这台 PenEcho 服务器", setupBody:"请选择所有浏览器和设备访问当前运行中 PenEcho 实例的方式。", scopeTitle:"实例级保护", scopeBody:"这不是仅针对当前浏览器的安全码。设置后，所有访问当前运行中 PenEcho 实例的浏览器和设备都必须使用同一个安全码，用于防止局域网内未经许可的人访问画布。", setCode:"设置 6 位安全码", setCodeHelp:"这是当前实例共用的安全码，所有新的局域网访问者都需要输入。", continueOpen:"不设置安全码", continueOpenHelp:"同一局域网中的任何设备都可能直接打开这张画布。",
       forgotLead:"忘记安全码也没关系。", forgotCode:"忘记安全码？", restartHelp:"重新启动 PenEcho 即可清除。画布文件和设置不会受到影响。", enterTitle:"输入安全码", enterBody:"请输入当前运行中 PenEcho 实例共用的安全码。", createTitle:"创建安全码", createBody:"请为所有访问这台 PenEcho 的设备设置 6 位数字。输入第六位后会立即提交。", unlockStep:"6 位安全码",
       back:"返回", clear:"清除", openRiskTitle:"这张画布将向局域网开放", openRiskBody:"同一网络中的其他人可能可以打开画布、使用已配置的 AI 服务，并管理本地插件。", confirmOpen:"本次在局域网保持开放",
@@ -18,9 +18,27 @@
     },
   };
 
+  const DEFAULT_STUDIO_PALETTE = "teal",
+    REMOVED_THEMES = new Set(["arcane", "scifi", "research"]),
+    STUDIO_PALETTES = new Set(["indigo", "graphite", "cobalt", "azure", "teal", "forest", "amber", "burgundy"]),
+    THEME_COLORS = { indigo:"#f8f8f9", graphite:"#f8f8f8", cobalt:"#f7f9fc", azure:"#f6fafc", teal:"#f6faf9", forest:"#f7faf7", amber:"#faf8f5", burgundy:"#faf7f8" };
+
   const $ = (selector) => document.querySelector(selector),
     title=$("#accessTitle"),description=$("#accessDescription"),loading=$("#accessLoading"),setup=$("#accessSetup"),pinView=$("#accessPin"),risk=$("#accessRisk"),errorBox=$("#accessError"),retryButton=$("#accessRetry"),dots=[...document.querySelectorAll("#accessPinDots i")],pinStep=$("#accessPinStep"),backButton=$("#accessPinBack");
   let language=localStorage.getItem("penecho-language")==="zh"?"zh":"en",flow="unlock",entry="",busy=false,cooldownTimer=0,cooldownUntil=0;
+
+  function applyAppearance() {
+    const storedTheme=localStorage.getItem("penecho-theme")||localStorage.getItem("ghostboard-theme"),
+      storedPalette=localStorage.getItem("penecho-studio-palette"),
+      removedTheme=REMOVED_THEMES.has(storedTheme),
+      palette=removedTheme?DEFAULT_STUDIO_PALETTE:STUDIO_PALETTES.has(storedPalette)?storedPalette:DEFAULT_STUDIO_PALETTE;
+    if(removedTheme){localStorage.setItem("penecho-theme","studio");localStorage.setItem("penecho-studio-palette",palette);}
+    document.documentElement.dataset.theme="studio";
+    document.documentElement.dataset.studioPalette=palette;
+    document.body.dataset.theme="studio";
+    document.body.dataset.studioPalette=palette;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content",THEME_COLORS[palette]);
+  }
 
   function text(key, values={}) {
     let value=COPY[language][key]||COPY.en[key]||key;
@@ -53,7 +71,6 @@
   }
   function beginPin(nextFlow) {
     flow=nextFlow;entry="";backButton.hidden=nextFlow==="unlock";show(pinView);renderPinCopy();renderEntry();
-    document.querySelector("#accessKeypad button[data-digit]")?.focus();
   }
   function addDigit(digit) {
     if(busy||Date.now()<cooldownUntil||entry.length>=6)return;
@@ -112,5 +129,6 @@
   retryButton.addEventListener("click",loadStatus);
   $("#accessKeypad").addEventListener("click",event=>{const button=event.target.closest("button");if(!button)return;if(button.dataset.digit)addDigit(button.dataset.digit);if(button.dataset.action==="backspace")removeDigit();if(button.dataset.action==="clear")clearEntry();});
   document.addEventListener("keydown",event=>{if(pinView.hidden)return;if(/^\d$/.test(event.key)){event.preventDefault();addDigit(event.key);}else if(event.key==="Backspace"){event.preventDefault();removeDigit();}else if(event.key==="Delete"){event.preventDefault();clearEntry();}else if(event.key==="Enter"){event.preventDefault();submitPin();}});
-  applyLanguage();loadStatus();
+  window.addEventListener?.("storage",event=>{if(event.key==="penecho-theme"||event.key==="penecho-studio-palette")applyAppearance();});
+  applyAppearance();applyLanguage();loadStatus();
 })();

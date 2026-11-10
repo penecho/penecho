@@ -9,14 +9,29 @@ const root = path.join(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 const functionSource = (source, name) => source.match(new RegExp(`function ${name}\\([^]*?\\n  \\}`))?.[0] || "";
 
-test("selection toolbar is an accessible viewport overlay with stable action hooks", () => {
+function viewportSource(html) {
+  const start = html.indexOf('<section id="viewport"');
+  assert.ok(start >= 0, "Canvas viewport exists");
+  let depth = 0;
+  for (const match of html.slice(start).matchAll(/<\/?section\b[^>]*>/g)) {
+    depth += match[0].startsWith("</") ? -1 : 1;
+    if (depth === 0) return html.slice(start, start + match.index + match[0].length);
+  }
+  assert.fail("Canvas viewport closes after its nested sections");
+}
+
+test("legacy selection action hooks remain hidden while Assist owns the visible controls", () => {
   const html = read("public/index.html"),
-    viewport = html.match(/<section id="viewport"[\s\S]*?<\/section>/)?.[0] || "",
+    viewport = viewportSource(html),
     layer = viewport.match(/<div id="selectionOverlayLayer"[\s\S]*?<\/div>\s*<\/div>/)?.[0] || "";
 
   assert.match(layer, /class="selection-overlay-layer"[^>]*hidden/);
   assert.match(layer, /id="selectionToolbar"[^>]*role="toolbar"[^>]*data-i18n-aria="selectionTools"/);
   assert.match(layer, /id="selectionScopeNotice"[^>]*data-i18n="selectionScopeNotice"/);
+  const update = functionSource(read("src/client/app/persistence.js"), "updateSelectionToolbar");
+  assert.match(update, /selectionOverlayLayer\.hidden = true/);
+  assert.match(update, /selectionToolbar\.hidden = true/);
+  assert.match(update, /syncSelectionSuggestions\(\)/);
   for (const [id, key] of [
     ["selectionTypesetBtn", "selectionTypeset"],
     ["selectionDeleteBtn", "selectionDelete"],
@@ -39,6 +54,8 @@ test("selection overlay only intercepts its compact toolbar controls", () => {
   assert.match(css, /\.selection-overlay-layer\[hidden\]\s*\{\s*display:\s*none/);
   assert.match(css, /\.selection-context-toolbar\s*\{[^}]*position:\s*absolute;[^}]*max-width:\s*min\(580px,\s*calc\(100% - 16px\)\)[^}]*pointer-events:\s*auto/);
   assert.match(css, /transform:\s*translate3d\(var\(--selection-toolbar-x,\s*8px\),\s*var\(--selection-toolbar-y,\s*8px\),\s*0\)/);
+  assert.match(css, /\.selection-scope-notice\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*gap:\s*5px/);
+  assert.match(css, /\.selection-scope-notice::before\s*\{[^}]*flex:\s*0\s+0\s+15px/);
   assert.match(css, /\.selection-toolbar-actions\s*\{[^}]*display:\s*inline-flex/);
   assert.match(css, /@media \(max-width:\s*620px\)[\s\S]*?\.selection-context-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
   assert.match(css, /@media \(pointer:\s*coarse\)[\s\S]*?\.selection-toolbar-button\s*\{[^}]*min-height:\s*36px/);

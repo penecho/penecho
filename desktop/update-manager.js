@@ -217,10 +217,11 @@ function createUpdateManager(options) {
     onStateChange = typeof options.onStateChange === "function" ? options.onStateChange : () => {},
     platform = options.platform || process.platform,
     arch = options.arch || process.arch,
-    currentVersion = String(app.getVersion()),
+    currentVersion = String(options.currentVersion || app.getVersion()),
     supported = Boolean(expectedAssetName(platform, arch, currentVersion)),
     updateDirectory = options.updateDirectory || path.join(app.getPath?.("temp") || os.tmpdir(), "penecho-updates");
   let checkingMetadata = false,
+    updateAvailable = false,
     downloadActive = false,
     downloadReady = false,
     dismissed = false,
@@ -235,7 +236,7 @@ function createUpdateManager(options) {
     });
 
   function getState() {
-    return { ...state };
+    return { ...state, updateAvailable };
   }
 
   function publish(status, updates = {}) {
@@ -298,7 +299,13 @@ function createUpdateManager(options) {
       publish("ready", { visible:true, progress:100 });
       return true;
     }
-    if (checkingMetadata || downloadActive || dismissed && !manual) return false;
+    if (downloadActive) {
+      if (!manual) return false;
+      dismissed = false;
+      publish("downloading", { visible:true, progress:state.progress });
+      return true;
+    }
+    if (checkingMetadata || dismissed && !manual) return false;
     if (!supported || process.env.PENECHO_DISABLE_AUTO_UPDATE === "1") {
       if (manual) publish("error", {
         visible:true,
@@ -312,14 +319,16 @@ function createUpdateManager(options) {
     try {
       const latest = await fetchLatestRelease();
       release = latest;
-      if (compareVersions(latest.version, currentVersion) <= 0) {
+      const newer = compareVersions(latest.version, currentVersion) > 0,
+        asset = newer ? releaseAsset(latest, platform, arch) : null;
+      updateAvailable = Boolean(asset);
+      if (!newer) {
         publish("up-to-date", {
           visible:Boolean(manual), version:latest.version, title:latest.title, notes:latest.notes,
           publishedAt:latest.publishedAt, releaseUrl:latest.releaseUrl,
         });
         return true;
       }
-      const asset = releaseAsset(latest, platform, arch);
       if (!asset) throw new Error(`PenEcho v${latest.version} does not include ${expectedAssetName(platform, arch, latest.version) || "a compatible installer"}.`);
       publish("available", {
         visible:true, version:latest.version, title:latest.title, notes:latest.notes,
@@ -368,20 +377,20 @@ function createUpdateManager(options) {
           const rounded = progress === null ? null : Math.floor(progress);
           if (rounded === lastProgress) return;
           lastProgress = rounded;
-          publish("downloading", { visible:true, progress });
+          publish("downloading", { visible:!dismissed, progress });
         },
       });
       downloadActive = false;
       downloadController = null;
       downloadReady = true;
-      publish("ready", { visible:true, progress:100 });
+      publish("ready", { visible:!dismissed, progress:100 });
       return true;
     } catch (error) {
       downloadActive = false;
       downloadController = null;
       logger.warn?.(`PenEcho update download failed: ${error.message || error}`);
       publish("error", {
-        visible:true,
+        visible:!dismissed,
         error:`The update could not be downloaded. ${String(error?.message || error || "").trim()}`.trim().slice(0, 500),
       });
       return false;
@@ -389,8 +398,12 @@ function createUpdateManager(options) {
   }
 
   function dismiss() {
-    if (state.status === "downloading" || state.status === "installing") return false;
+    if (state.status === "installing") return false;
     dismissed = true;
+    if (downloadActive) {
+      publish("downloading", { visible:false, progress:state.progress });
+      return true;
+    }
     publish("dismissed", { visible:false });
     return true;
   }

@@ -1,0 +1,265 @@
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+const { parseHTML } = require("linkedom");
+const activity = require("../public/canvas-agent-activity.js");
+
+const ROOT = path.resolve(__dirname,"..");
+const read = file => fs.readFileSync(path.join(ROOT,file),"utf8");
+
+test("PenEcho Agent activity derives bounded public labels without exposing paths",()=>{
+  assert.equal(activity.activityPhaseFromIntent("Inspect canvas"),"inspect");
+  assert.equal(activity.activityPhaseFromIntent("搜索互联网"),"search");
+  assert.equal(activity.activityPhaseFromIntent("Update widget · private summary"),"edit");
+  assert.equal(activity.activityPhaseFromIntent("截取画布"),"capture");
+  assert.equal(activity.activityPhaseFromIntent("调整画布视图"),"view");
+  assert.equal(activity.activityDialogPhase("capture",false),"understand");
+  assert.equal(activity.activityDialogPhase("capture",true),"verify");
+  assert.equal(activity.activitySafeLabel("Read /Users/example/private.txt"),"Read");
+  assert.equal(activity.extractActivityCue("Progress: Grouping the key milestones"),"Grouping the key milestones");
+  assert.equal(activity.extractActivityCue("进展：正在提炼三个关键节点"),"正在提炼三个关键节点");
+  assert.equal(activity.extractActivityCue("普通回复，不是定向提示"),"");
+  assert.equal(activity.extractActivityCue("普通开场\nProgress: 句中提示不应抓取"),"");
+  assert.equal(activity.extractActivityCue("```text\nProgress: code block\n```"),"");
+  assert.equal(activity.extractActivityCue("进展：读取 /Users/example/private.txt"),"读取");
+  assert.equal(activity.activityCueOnly("进展：正在查看画布"),true);
+  assert.equal(activity.activityCueOnly("进展：正在查看画布\n\n## 总结"),false);
+  assert.ok(`Progress: ${activity.extractActivityCue(`Progress: ${"long ".repeat(30)}`)}`.length<=48);
+});
+
+test("PenEcho Agent activity keeps cancellation visible until the authoritative stop",()=>{
+  assert.equal(activity.activityShouldBeVisible("ready",true,true),true,"a submitted request is visible before turn_start");
+  assert.equal(activity.activityShouldBeVisible("running",true),true);
+  assert.equal(activity.activityShouldBeVisible("error",false),true,"an active Stop control means the turn has not ended");
+  assert.equal(activity.activityShouldBeVisible("ready",true),false);
+  assert.equal(activity.activityShouldBeVisible("idle",true),false);
+  assert.equal(activity.activityPresentationVisible(true,false,true),true);
+  assert.equal(activity.activityPresentationVisible(true,true,true),true,"activity stays visible with the Agent minimized");
+  assert.equal(activity.activityPresentationVisible(true,false,false),true,"activity stays visible while working on the Canvas");
+  assert.equal(activity.activityPresentationVisible(false),false,"a finished request hides the overlay");
+});
+
+test("PenEcho Agent activity appears on submit and fades only after the running state ends",async()=>{
+  const {document,window}=parseHTML(`<!doctype html><html lang="zh"><body><div id="viewport"><div id="canvasAgentWidgetPickerLayer"></div><aside id="canvasAgentPanel" data-status="ready"><div id="canvasAgentTranscript"></div><form id="canvasAgentForm"><textarea id="canvasAgentInput"></textarea><button id="canvasAgentSend" type="submit">Send</button></form><button id="canvasAgentStop" hidden>Stop</button></aside></div></body></html>`);
+  const form=document.querySelector("#canvasAgentForm"),input=document.querySelector("#canvasAgentInput"),send=document.querySelector("#canvasAgentSend"),stop=document.querySelector("#canvasAgentStop"),panel=document.querySelector("#canvasAgentPanel"),transcript=document.querySelector("#canvasAgentTranscript"),viewport=document.querySelector("#viewport");
+  const stage=document.createElement("section");stage.className="canvas-frame";viewport.replaceWith(stage);stage.append(viewport,panel);
+  form.addEventListener("submit",event=>{event.preventDefault();input.disabled=true;send.disabled=true;});
+  window.PENECHO_CONFIG={};
+  let frame=0;
+  class TestResizeObserver { observe(){} }
+  const context=vm.createContext({window,document,module:{exports:{}},Intl,Element:window.Element,MutationObserver:window.MutationObserver,ResizeObserver:TestResizeObserver,requestAnimationFrame(callback){const id=++frame;queueMicrotask(callback);return id;},queueMicrotask});
+  vm.runInContext(read("public/canvas-agent-activity.js"),context,{filename:"canvas-agent-activity.js"});
+  const root=document.querySelector("#canvasAgentActivityOverlay");
+  assert.equal(root.parentElement,stage,"activity shares the docked Agent stage outside the clipped viewport");
+  assert.equal(root.classList.contains("is-visible"),false);
+
+  input.value="整理这张画布的发布计划";
+  form.dispatchEvent(new window.Event("submit",{bubbles:true,cancelable:true}));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(root.classList.contains("is-visible"),true);
+  assert.equal(root.querySelector(".canvas-agent-activity-term"),null,"the activity card does not surround itself with guessed prompt keywords");
+  const assistant=document.createElement("article"),body=document.createElement("div");
+  assistant.className="canvas-agent-message assistant";body.className="canvas-agent-message-body";body.textContent="进展：正在提炼发布计划的关键节点";assistant.append(body);transcript.append(assistant);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(root.querySelector(".canvas-agent-activity-detail").textContent,"正在提炼发布计划的关键节点");
+  const cueRows=[];
+  for(const cue of ["进展：正在核对时间线层级","进展：第三条提示不应覆盖"]){
+    const row=document.createElement("article"),cueBody=document.createElement("div");
+    row.className="canvas-agent-message assistant";cueBody.className="canvas-agent-message-body";cueBody.textContent=cue;row.append(cueBody);transcript.append(row);
+    cueRows.push(row);
+    await new Promise(resolve=>setImmediate(resolve));
+  }
+  assert.equal(root.querySelector(".canvas-agent-activity-detail").textContent,"正在核对时间线层级","only two model cues are consumed per turn");
+  assert.equal(cueRows[1].classList.contains("canvas-agent-public-progress"),false,"a third cue is neither consumed nor styled as another progress note");
+
+  panel.dataset.status="running";
+  stop.hidden=false;
+  await new Promise(resolve=>setImmediate(resolve));
+  viewport.dispatchEvent(new window.Event("pointerdown",{bubbles:true}));
+  assert.equal(root.classList.contains("is-visible"),true,"clicking the canvas keeps the running activity visible");
+  input.dispatchEvent(new window.Event("focusin",{bubbles:true}));
+  assert.equal(root.classList.contains("is-visible"),true,"refocusing the Agent restores a still-running activity");
+  panel.hidden=true;
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(root.classList.contains("is-visible"),true,"minimizing the Agent keeps the running activity visible");
+  panel.hidden=false;
+  input.dispatchEvent(new window.Event("focusin",{bubbles:true}));
+  assert.equal(root.classList.contains("is-visible"),true);
+  stop.dispatchEvent(new window.Event("click",{bubbles:true}));
+  assert.equal(root.dataset.phase,"stop");
+
+  stop.hidden=true;
+  panel.dataset.status="ready";
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(root.classList.contains("is-visible"),false,"the node stays mounted while CSS performs the fade");
+  assert.equal(root.parentElement,stage);
+});
+
+test("PenEcho Agent dialog adds one bounded local explanation per observable tool phase",async()=>{
+  const {document,window}=parseHTML(`<!doctype html><html lang="zh"><body><div id="viewport"><div id="canvasAgentWidgetPickerLayer"></div><aside id="canvasAgentPanel" data-status="ready"><div id="canvasAgentTranscript"></div><form id="canvasAgentForm"><textarea id="canvasAgentInput"></textarea><button id="canvasAgentSend" type="submit">Send</button></form><button id="canvasAgentStop" hidden>Stop</button></aside></div></body></html>`);
+  const panel=document.querySelector("#canvasAgentPanel"),transcript=document.querySelector("#canvasAgentTranscript"),form=document.querySelector("#canvasAgentForm"),input=document.querySelector("#canvasAgentInput"),send=document.querySelector("#canvasAgentSend"),stop=document.querySelector("#canvasAgentStop");
+  form.addEventListener("submit",event=>{event.preventDefault();input.disabled=true;send.disabled=true;});
+  window.PENECHO_CONFIG={};
+  let frame=0;
+  class TestResizeObserver { observe(){} }
+  const context=vm.createContext({window,document,module:{exports:{}},Intl,Element:window.Element,MutationObserver:window.MutationObserver,ResizeObserver:TestResizeObserver,requestAnimationFrame(callback){const id=++frame;queueMicrotask(callback);return id;},queueMicrotask});
+  vm.runInContext(read("public/canvas-agent-activity.js"),context,{filename:"canvas-agent-activity.js"});
+  input.value="整理并核对这张画布";
+  form.dispatchEvent(new window.Event("submit",{bubbles:true,cancelable:true}));
+  panel.dataset.status="running";stop.hidden=false;
+  await new Promise(resolve=>setImmediate(resolve));
+  const addTool=label=>{
+    const row=document.createElement("details"),intent=document.createElement("span");
+    row.className="canvas-agent-tool running";intent.className="canvas-agent-tool-intent";intent.textContent=label;row.append(intent);transcript.append(row);return row;
+  };
+  const inspect=addTool("查看画布"),capture=addTool("截取画布");
+  await new Promise(resolve=>setImmediate(resolve));
+  let notes=[...transcript.querySelectorAll(".canvas-agent-dialog-progress")];
+  assert.equal(notes.length,1,"repeated understanding tools share one explanation");
+  assert.equal(notes[0].dataset.phase,"understand");
+  assert.match(notes[0].querySelector(".canvas-agent-dialog-progress-meta").textContent,/2 项操作/);
+  assert.equal(inspect.parentElement,transcript,"tool rows remain in their canonical DOM positions");
+  assert.equal(notes[0].dataset.penechoModelHidden,"true");
+  assert.equal(notes[0].dataset.html2canvasIgnore,"true");
+  inspect.classList.remove("running");capture.classList.remove("running");
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(notes[0].querySelector(".canvas-agent-dialog-progress-meta").textContent,/已完成/);
+  addTool("创建画布内容");addTool("修改画布内容");
+  await new Promise(resolve=>setImmediate(resolve));
+  addTool("截取画布");
+  await new Promise(resolve=>setImmediate(resolve));
+  notes=[...transcript.querySelectorAll(".canvas-agent-dialog-progress")];
+  assert.deepEqual(notes.map(note=>note.dataset.phase),["understand","build","verify"]);
+  addTool("搜索互联网");addTool("撤回 Agent 修改");addTool("使用画布工具");
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(transcript.querySelectorAll(".canvas-agent-dialog-progress").length,4,"local explanations stay bounded per turn");
+  panel.dataset.historyViewing="true";addTool("查看画布");
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(transcript.querySelectorAll(".canvas-agent-dialog-progress").length,4,"history-view tool rows never pollute the live activity timeline");
+});
+
+test("PenEcho Agent dialog reuses a fresh public Progress cue instead of duplicating it",async()=>{
+  const {document,window}=parseHTML(`<!doctype html><html lang="zh"><body><div id="viewport"><div id="canvasAgentWidgetPickerLayer"></div><aside id="canvasAgentPanel" data-status="ready"><div id="canvasAgentTranscript"></div><form id="canvasAgentForm"><textarea id="canvasAgentInput"></textarea><button id="canvasAgentSend" type="submit">Send</button></form><button id="canvasAgentStop" hidden>Stop</button></aside></div></body></html>`);
+  const panel=document.querySelector("#canvasAgentPanel"),transcript=document.querySelector("#canvasAgentTranscript"),form=document.querySelector("#canvasAgentForm"),input=document.querySelector("#canvasAgentInput"),send=document.querySelector("#canvasAgentSend"),stop=document.querySelector("#canvasAgentStop");
+  form.addEventListener("submit",event=>{event.preventDefault();input.disabled=true;send.disabled=true;});window.PENECHO_CONFIG={};
+  let frame=0;class TestResizeObserver { observe(){} }
+  vm.runInContext(read("public/canvas-agent-activity.js"),vm.createContext({window,document,module:{exports:{}},Intl,Element:window.Element,MutationObserver:window.MutationObserver,ResizeObserver:TestResizeObserver,requestAnimationFrame(callback){const id=++frame;queueMicrotask(callback);return id;},queueMicrotask}),{filename:"canvas-agent-activity.js"});
+  form.dispatchEvent(new window.Event("submit",{bubbles:true,cancelable:true}));panel.dataset.status="running";stop.hidden=false;
+  const cue=document.createElement("article"),body=document.createElement("div"),tool=document.createElement("details"),intent=document.createElement("span");
+  cue.className="canvas-agent-message assistant";body.className="canvas-agent-message-body";body.textContent="进展：先确认画布的结构与范围";cue.append(body);
+  tool.className="canvas-agent-tool running";intent.className="canvas-agent-tool-intent";intent.textContent="查看画布";tool.append(intent);
+  transcript.append(cue,tool);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(cue.classList.contains("canvas-agent-public-progress"),true);
+  assert.equal(transcript.querySelector(".canvas-agent-dialog-progress"),null,"the local fallback is suppressed when the model already supplied a bounded public cue");
+  const ordinary=document.createElement("article"),ordinaryBody=document.createElement("div"),search=document.createElement("details"),searchIntent=document.createElement("span");
+  ordinary.className="canvas-agent-message assistant";ordinaryBody.className="canvas-agent-message-body";ordinaryBody.textContent="我会继续处理。";ordinary.append(ordinaryBody);
+  search.className="canvas-agent-tool running";searchIntent.className="canvas-agent-tool-intent";searchIntent.textContent="搜索互联网";search.append(searchIntent);transcript.append(ordinary,search);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(transcript.querySelectorAll(".canvas-agent-dialog-progress").length,1,"an ordinary assistant message expires the previous cue before the next phase");
+  const steer=document.createElement("article"),steerBody=document.createElement("div");
+  steer.className="canvas-agent-message user";steerBody.className="canvas-agent-message-body";steerBody.textContent="继续重点核对布局";steer.append(steerBody);transcript.append(steer);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(cue.classList.contains("canvas-agent-public-progress"),false,"a new steer expires the prior turn cue");
+  assert.equal(document.querySelector("#canvasAgentActivityOverlay").dataset.phase,"start","a steered user turn no longer inherits the previous tool phase");
+  search.classList.remove("running");
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(transcript.querySelector(".canvas-agent-dialog-progress-meta").textContent,/已完成/,"a pre-steer running tool can still finish its original dialog group");
+  body.textContent="进展：旧提示后续更新不应覆盖";
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.notEqual(document.querySelector("#canvasAgentActivityOverlay .canvas-agent-activity-detail").textContent,"旧提示后续更新不应覆盖");
+  const freshCue=document.createElement("article"),freshBody=document.createElement("div");
+  freshCue.className="canvas-agent-message assistant";freshBody.className="canvas-agent-message-body";freshBody.textContent="进展：正在核对新一轮布局";freshCue.append(freshBody);transcript.append(freshCue);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(freshCue.classList.contains("canvas-agent-public-progress"),true,"the model cue budget resets for the steered user turn");
+  assert.equal(document.querySelector("#canvasAgentActivityOverlay .canvas-agent-activity-detail").textContent,"正在核对新一轮布局");
+  const oldUser=document.createElement("article"),oldCue=document.createElement("article"),oldCueBody=document.createElement("div"),latestUser=document.createElement("article");
+  oldUser.className=latestUser.className="canvas-agent-message user";oldUser.textContent="较早的一轮";latestUser.textContent="当前一轮";
+  oldCue.className="canvas-agent-message assistant";oldCueBody.className="canvas-agent-message-body";oldCueBody.textContent="进展：旧会话中的提示";oldCue.append(oldCueBody);
+  panel.dataset.historyViewing="false";transcript.replaceChildren(oldUser,oldCue,latestUser);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.notEqual(document.querySelector("#canvasAgentActivityOverlay .canvas-agent-activity-detail").textContent,"旧会话中的提示","re-rendered cues before the latest user turn never overwrite the live activity");
+  assert.equal(oldCue.classList.contains("canvas-agent-public-progress"),false);
+});
+
+test("PenEcho Agent activity chooses free Canvas space and compacts around a large panel",()=>{
+  const desktop=activity.activityPosition({left:0,top:0,width:1200,height:800},{left:900,top:160,right:1180,bottom:780},true);
+  assert.equal(desktop.compact,false);
+  assert.ok(desktop.x<700,"desktop activity should sit left of the Agent panel");
+  assert.equal(activity.activityPlacement({left:0,top:0,width:1200,height:800},desktop,{left:900,top:160,right:1180,bottom:780},true).x,40);
+  const mobile=activity.activityPosition({left:0,top:0,width:390,height:844},{left:8,top:235,right:382,bottom:836},true);
+  assert.equal(mobile.compact,true);
+  assert.ok(mobile.y<180,"mobile activity should use the compact space above the panel");
+  assert.equal(activity.activityPlacement({left:0,top:0,width:390,height:844},mobile,{left:8,top:235,right:382,bottom:836},true).y,16);
+  const narrow=activity.activityPosition({left:0,top:0,width:390,height:844},{left:86,top:0,right:390,bottom:844},true);
+  assert.equal(narrow.x,195,"a narrow Canvas strip cannot squeeze the activity beside a docked panel");
+  assert.equal(narrow.compact,true);
+  const narrowPlacement=activity.activityPlacement({left:0,top:0,width:390,height:844},narrow,{left:86,top:0,right:390,bottom:844},true);
+  assert.ok(narrowPlacement.box.left>=0&&narrowPlacement.box.right<=390,"staying on screen takes priority over avoiding a wide Agent panel");
+  const centerPanel={left:408,top:248,right:768,bottom:568},centerPosition=activity.activityPosition({left:0,top:0,width:1200,height:800},centerPanel,true),centerPlacement=activity.activityPlacement({left:0,top:0,width:1200,height:800},centerPosition,centerPanel,true),box=centerPlacement.box;
+  assert.equal(Math.max(0,Math.min(box.right,centerPanel.right)-Math.max(box.left,centerPanel.left))*Math.max(0,Math.min(box.bottom,centerPanel.bottom)-Math.max(box.top,centerPanel.top)),0,"CSP-safe candidates still avoid a centrally dragged Agent panel");
+  for(const [view,panel] of [[{left:0,top:0,width:1200,height:800},{left:264,top:72,right:864,bottom:572}],[{left:0,top:0,width:800,height:600},{left:72,top:72,right:432,bottom:392}]]){
+    const position=activity.activityPosition(view,panel,true),placement=activity.activityPlacement(view,position,panel,true),candidate=placement.box,overlap=Math.max(0,Math.min(candidate.right,panel.right)-Math.max(candidate.left,panel.left))*Math.max(0,Math.min(candidate.bottom,panel.bottom)-Math.max(candidate.top,panel.top));
+    assert.equal(overlap,0,"a clear candidate wins over a closer panel-overlapping candidate");
+    assert.ok(candidate.left>=0&&candidate.top>=0&&candidate.right<=view.width&&candidate.bottom<=view.height,"a clear candidate remains inside the viewport");
+  }
+});
+
+test("PenEcho Agent activity is a removable user-only sibling outside capture and object state",()=>{
+  const html=read("public/index.html"),css=read("public/canvas-agent-activity.css"),source=read("public/canvas-agent-activity.js"),runtime=read("src/client/app/canvas-agent-runtime.js"),serverRuntime=read("src/server/canvas-agent/runtime.mjs"),pkg=require("../package.json");
+  assert.match(html,/<link rel="stylesheet" href="canvas-agent-activity\.css">/);
+  assert.match(html,/<script src="app\.js"><\/script>[\s\S]*?<script src="canvas-agent-activity\.js"><\/script>/);
+  assert.match(source,/stage=viewport\.closest\("\.canvas-frame"\)\|\|viewport/);
+  assert.match(source,/stage\.append\(root\)/);
+  assert.match(source,/dataset\.penechoModelHidden="true"/);
+  assert.match(source,/dataset\.html2canvasIgnore="true"/);
+  const baseRule=css.match(/\.canvas-agent-activity\s*\{[\s\S]*?\n\}/)?.[0]||"";
+  assert.match(baseRule,/z-index:\s*70;/);
+  assert.match(baseRule,/pointer-events:\s*none;/);
+  assert.match(baseRule,/visibility:\s*hidden/);
+  assert.match(baseRule,/contain:\s*layout style/);
+  assert.doesNotMatch(baseRule,/contain:[^;]*\bpaint\b/,"the activity surface must sample the Canvas outside its own paint boundary for real backdrop blur");
+  assert.doesNotMatch(css,/\.canvas-agent-activity\.is-visible\s*\{[^}]*will-change/,"the visible wrapper must not create a backdrop root above the frosted card");
+  assert.match(css,/radial-gradient\(ellipse 48% 46%[\s\S]*?transparent 82%\)/,"the activity wash fades before its paint boundary");
+  assert.doesNotMatch(source,/canvas-agent-activity-ring/,"the activity card has no rotating ellipse that can be paint-clipped");
+  assert.doesNotMatch(css,/canvas-agent-activity-ring|canvas-agent-activity-orbit-reverse|@keyframes canvas-agent-activity-orbit\b/);
+  assert.match(css,/\.canvas-agent-activity\s*\{[\s\S]*?--canvas-agent-activity-accent:\s*var\(--studio-accent,[^)]+\)[\s\S]*?--canvas-agent-activity-surface:\s*var\(--studio-agent-overlay, rgba\(255,255,255,\.88\)\)[\s\S]*?--canvas-agent-activity-surface-raised:\s*color-mix\(in srgb, var\(--studio-agent-overlay,[\s\S]*?25%, var\(--studio-panel-raised, #f8fafc\) 75%\)/,"the activity card uses the denser Studio Agent overlay surface over Canvas content");
+  assert.match(css,/\.canvas-agent-activity-core\s*\{[\s\S]*?background:\s*rgba\(255,255,255,\.88\)[\s\S]*?background:\s*var\(--canvas-agent-activity-surface\)[\s\S]*?box-shadow:\s*0 8px 14px[\s\S]*?-webkit-backdrop-filter:\s*saturate\(1\.08\) blur\(30px\)[\s\S]*?backdrop-filter:\s*saturate\(1\.08\) blur\(30px\)/,"the activity card matches the Studio Agent frost coefficients with a denser overlay surface");
+  assert.match(read("public/style.css"),/--studio-glass:\s*color-mix\(in srgb, var\(--studio-titlebar\) 62%, transparent\)[\s\S]*?--studio-agent-glass:\s*linear-gradient\(var\(--penecho-workbench-content-surface\), var\(--penecho-workbench-content-surface\)\), var\(--penecho-large-dialog-surface\)[\s\S]*?body\[data-theme="studio"\]\.studio-agent-docked \.canvas-agent-panel\s*\{[\s\S]*?background:\s*var\(--studio-agent-glass\)[\s\S]*?-webkit-backdrop-filter:\s*var\(--penecho-large-dialog-surface-filter\)[\s\S]*?backdrop-filter:\s*var\(--penecho-large-dialog-surface-filter\)/,"the activity contract keeps the Studio Agent sidebar on the shared layered workbench material");
+  assert.match(css,/\[data-phase="search"\],[\s\S]*?\[data-phase="create"\],[\s\S]*?\[data-phase="edit"\][\s\S]*?--canvas-agent-activity-accent:\s*var\(--studio-accent,[^)]+\)/,"live request phases inherit the selected Studio accent");
+  assert.match(css,/\.canvas-agent-dialog-progress strong\s*\{[^}]*color:\s*var\(--studio-text, #1f2937\)/,"ordinary dialog steps use the theme text color");
+  assert.match(css,/\.canvas-agent-dialog-progress\s*\{[^}]*align-items:\s*center/ ,"dialog progress restores the compact scale-90 row alignment");
+  assert.match(css,/\.canvas-agent-dialog-progress > i\s*\{[^}]*background:\s*var\(--studio-muted, #64748b\);[^}]*box-shadow:\s*0 0 0 4px color-mix\(in srgb, var\(--studio-muted, #64748b\) 12%, transparent\);/ ,"dialog progress restores the scale-90 marker treatment");
+  assert.match(css,/\.canvas-agent-dialog-progress small\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/ ,"progress explanations restore the compact scale-90 single line");
+  assert.match(css,/:is\(#pe-type-contract, \.canvas-agent-dialog-progress\) strong\s*\{[^}]*font:\s*400 11\.5px\/1\.3/ ,"generated activity titles keep scale-90 density without bold type");
+  assert.match(css,/:is\(#pe-type-contract, \.canvas-agent-dialog-progress\) small\s*\{[^}]*font:\s*400 10px\/1\.35/ ,"generated activity descriptions keep scale-90 density without bold type");
+  assert.match(css,/:is\(#pe-type-contract, \.canvas-agent-dialog-progress\) \.canvas-agent-dialog-progress-meta\s*\{[^}]*font:\s*400 9\.5px\/1\.25/ ,"generated activity metadata keeps scale-90 density without bold type");
+  assert.match(css,/\.canvas-agent-message\.assistant\.canvas-agent-public-progress \.canvas-agent-message-body\s*\{[^}]*color:\s*var\(--studio-text, #1f2937\)[^}]*border-color:\s*var\(--studio-line, #d8dbe2\)[^}]*background:\s*var\(--studio-panel-raised, #f8fafc\)/,"public progress copy uses neutral theme colors");
+  assert.doesNotMatch(css,/\.canvas-agent-dialog-progress\[data-phase=/,"dialog step colors do not vary by phase");
+  assert.match(read("public/style.css"),/\.canvas-agent-tool\.running \.canvas-agent-tool-head\s*\{\s*color:\s*var\(--studio-text, #1f2937\);\s*\}[\s\S]*?\.canvas-agent-tool\.error \.canvas-agent-tool-head\s*\{\s*color:\s*#b91c1c;/,"running actions stay neutral while failed actions remain red");
+  assert.match(read("public/style.css"),/\.canvas-agent-tool-intent\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/ ,"tool-call cards keep their existing compact presentation");
+  assert.match(read("public/style.css"),/Activity and tool-call copy is ordinary transcript chrome[\s\S]*?\.canvas-agent-tool-intent, \.canvas-agent-tool-status, \.canvas-agent-tool-detail-label[\s\S]*?font-weight:\s*var\(--pe-type-regular\)/,"tool-call labels and states do not add automatic emphasis");
+  assert.match(css,/visibility 0s linear \.18s/);
+  assert.match(css,/\.canvas-agent-activity:not\(\.is-visible\) \.canvas-agent-activity-kicker > i \{ animation-play-state:\s*paused/);
+  const visibleRule=css.match(/\.canvas-agent-activity\.is-visible\s*\{[\s\S]*?\n\}/)?.[0]||"";
+  assert.match(visibleRule,/opacity:\s*1;[\s\S]*?visibility:\s*visible/);
+  assert.match(visibleRule,/transition:\s*transform \.18s/);
+  assert.doesNotMatch(visibleRule,/transition:[^}]*opacity/,"the bounded frosted surface is fully composited on the first visible frame");
+  assert.match(css,/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.canvas-agent-activity\.is-visible \{ transition:\s*none;/);
+  assert.equal(pkg.files.includes("public/canvas-agent-activity.js"),true);
+  assert.equal(pkg.files.includes("public/canvas-agent-activity.css"),true);
+  assert.doesNotMatch(source,/extractActivityTerms|phaseTerms|promptTerms/,"the activity layer does not guess or decorate prompt keywords");
+  assert.doesNotMatch(source,/\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\b|sendFollowUpMessage|canvasAgentSendEnvelope/,"the activity layer must not call a model or network service");
+  assert.doesNotMatch(source,/root\.style|setAttribute\(["']style/,"strict CSP positioning stays class/data driven");
+  assert.match(serverRuntime,/Public progress: use at most one short task-specific sentence before substantial work[\s\S]*?Add another only for a blocker or material change of approach[\s\S]*?Never expose hidden reasoning, paths, IDs, arguments, or unverified results/);
+  assert.doesNotMatch(runtime,/canvasAgentActivityOverlay|penechoModelHidden|canvas-agent-activity/);
+  for(const name of ["canvasAgentCapture","canvasAgentAllObjects","canvasAgentDigest","canvasAgentRead"]){
+    const start=runtime.indexOf(`function ${name}(`);
+    assert.notEqual(start,-1,name);
+    assert.doesNotMatch(runtime.slice(start,start+9000),/canvasAgentActivityOverlay|canvas-agent-activity/);
+  }
+});

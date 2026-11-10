@@ -1,6 +1,7 @@
 "use strict";
 (() => {
-  const MAX_DOCUMENT_BYTES = 3000,
+  const MAX_DOCUMENT_BYTES = 12000,
+    MAX_STYLES_BYTES = 32000,
     MAX_CONNECT_ORIGINS = 8,
     PLUGIN_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -66,8 +67,14 @@
     return value.trim();
   }
 
-  function parse(markdown) {
-    if (typeof markdown !== "string" || !markdown.trim() || utf8Bytes(markdown) > MAX_DOCUMENT_BYTES) throw Error("Plugin document is empty or exceeds the roughly 1000-token budget");
+  function validateStyles(value = "") {
+    if (value === undefined || value === null || value === "") return "";
+    if (typeof value !== "string" || utf8Bytes(value) > MAX_STYLES_BYTES) throw Error("Plugin CSS exceeds 32000 UTF-8 bytes");
+    return value.trim();
+  }
+
+  function parse(markdown, styles = "") {
+    if (typeof markdown !== "string" || !markdown.trim() || utf8Bytes(markdown) > MAX_DOCUMENT_BYTES) throw Error("Plugin document is empty or exceeds 12000 UTF-8 bytes");
     const match = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n([\s\S]*)$/.exec(markdown);
     if (!match) throw Error("Plugin document needs YAML frontmatter");
     const metadata = frontmatter(match[1]), body = match[2].trim();
@@ -91,7 +98,7 @@
     if (!Number.isFinite(refreshSeconds) || refreshSeconds < 60 || refreshSeconds > 86400) throw Error("Plugin refresh interval must be between 60 seconds and one day");
     const oneShot = /^##[ \t]+One-shot example[ \t]*\r?\n([\s\S]*?)(?=^##[ \t]+|(?![\s\S]))/im.exec(body);
     if (!oneShot) throw Error("Plugin needs a one-shot example");
-    if (!/\bhtml_widget\b/.test(oneShot[1])) throw Error("Plugin one-shot example must identify the expected output command");
+    if (!/\b(?:html_widget|diagram_source)\b/.test(oneShot[1])) throw Error("Plugin one-shot example must identify the expected output command");
     return Object.freeze({
       id: metadata.id,
       name: metadata.name.trim(),
@@ -105,10 +112,11 @@
       connect: Object.freeze(connect),
       recommendedRefreshSeconds: Math.round(refreshSeconds),
       document: markdown.trim(),
+      styles: validateStyles(styles),
     });
   }
 
-  const api = Object.freeze({ exactHttpsOrigin, parse });
+  const api = Object.freeze({ exactHttpsOrigin, parse, validateStyles });
   if (typeof module === "object" && module.exports) module.exports = api;
   else window.PENECHO_PLUGINS = api;
 })();

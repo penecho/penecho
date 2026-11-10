@@ -1,8 +1,357 @@
 // Pointer and control bindings, portable snapshots, and application startup.
+  // Observe the panels themselves: they can close by Escape, outside click,
+  // timeout, or a tool change, and may be reparented for toolbar positioning.
+  const toolbarHintObserver = new MutationObserver(() => syncCanvasHintVisibility());
+  for (const panel of document.querySelectorAll("#eraserToolMenu, #inkColorPopover, #aiColorPopover, #autoDelayPopover, #effortPopover")) {
+    toolbarHintObserver.observe(panel, { attributes:true, attributeFilter:["hidden"] });
+  }
+  for (const type of ["beforetoggle", "toggle"]) document.querySelector("#penSizePopover")?.addEventListener(type, event => {
+    canvasHintNativePopoverOpen = event.newState === "open";
+    syncCanvasHintVisibility();
+  });
+  const toolbarAssistLayer = document.querySelector("#smartSuggestLayer");
+  if (toolbarAssistLayer) toolbarHintObserver.observe(toolbarAssistLayer, { childList:true, subtree:true, attributes:true, attributeFilter:["data-mode"] });
+  document.addEventListener("pointerdown", unselectTextEditorsOutside, true);
+  document.addEventListener("focusin", unselectTextEditorsOutside, true);
+  window.addEventListener("blur", unselectTextEditorsOutside);
+  const ERASER_TOOL_MENU_MS = 5000;
+  const lassoHintButton = document.querySelector("#lassoToolBtn");
+  let lassoToolHintTimer = null;
+  let lassoToolPointer = null, lassoPreviewCancelledPointer = null;
+  function matchesLassoPointer(point, event) {
+    return point && point.x === event.clientX && point.y === event.clientY;
+  }
+  function stopLassoButtonAnimation() {
+    clearTimeout(lassoToolHintTimer);
+    lassoHintButton?.classList.remove("lasso-preview", "lasso-shimmer");
+  }
+  function previewLassoButton(event) {
+    if (event.pointerType === "touch") return;
+    lassoToolPointer = { x:event.clientX, y:event.clientY };
+    // Tool layout changes can re-enter the button without moving the pointer.
+    if (matchesLassoPointer(lassoPreviewCancelledPointer, event)) return;
+    lassoPreviewCancelledPointer = null;
+    lassoHintButton.classList.add("lasso-preview");
+    clearTimeout(lassoToolHintTimer);
+    lassoToolHintTimer = setTimeout(() => showLassoGuidance("canvasHintLassoDiscover"), 400);
+  }
+  lassoHintButton?.addEventListener("pointerenter", previewLassoButton);
+  lassoHintButton?.addEventListener("pointermove", event => {
+    if (event.pointerType === "touch") return;
+    lassoToolPointer = { x:event.clientX, y:event.clientY };
+    if (lassoPreviewCancelledPointer) previewLassoButton(event);
+  });
+  lassoHintButton?.addEventListener("pointerleave", event => {
+    stopLassoButtonAnimation();
+    if (!matchesLassoPointer(lassoPreviewCancelledPointer, event)) lassoPreviewCancelledPointer = null;
+  });
+  for (const type of ["pointerdown", "click", "blur"]) lassoHintButton?.addEventListener(type, stopLassoButtonAnimation);
+  lassoHintButton?.addEventListener("focus", () => {
+    if (lassoHintButton.matches(":focus-visible")) {
+      lassoHintButton.classList.add("lasso-preview");
+      showLassoGuidance("canvasHintLassoDiscover");
+    }
+  });
+  // Lasso discovery. The button keeps a "new" dot until the first real lasso,
+  // shimmers once per session (at most LASSO_NUDGE_MAX times) after enough
+  // writing to be worth circling, and the pen's side button lassos from any
+  // tool, returning to that tool when the selection closes.
+  const LASSO_DISCOVERY_KEY = "penecho-lasso-discovery-v1", LASSO_NUDGE_STROKES = 10, LASSO_NUDGE_MAX = 3;
+  const lassoDiscovery = (() => {
+    try { return { uses:0, nudges:0, ...JSON.parse(localStorage.getItem(LASSO_DISCOVERY_KEY) || "{}") }; }
+    catch { return { uses:0, nudges:0 }; }
+  })();
+  let lassoNudgeStrokes = 0, lassoNudgedThisSession = false, lassoPenButtonReturn = null, lassoPenButtonContextUntil = 0;
+  function saveLassoDiscovery() {
+    try { localStorage.setItem(LASSO_DISCOVERY_KEY, JSON.stringify(lassoDiscovery)); }
+    catch {}
+  }
+  function syncLassoDiscoveryBadge() {
+    if (!lassoHintButton) return;
+    if (lassoDiscovery.uses > 0) delete lassoHintButton.dataset.lassoDiscovery;
+    else lassoHintButton.dataset.lassoDiscovery = "new";
+  }
+  function playLassoShimmer() {
+    if (!lassoHintButton || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    lassoHintButton.classList.remove("lasso-shimmer");
+    void lassoHintButton.offsetWidth;
+    lassoHintButton.classList.add("lasso-shimmer");
+  }
+  lassoHintButton?.addEventListener("animationend", event => {
+    if (event.animationName === "lasso-shimmer") lassoHintButton.classList.remove("lasso-shimmer");
+  });
+  function showLassoHintWithFallback(key, values = null) {
+    showCanvasHint({ key, values });
+    if (canvasHint && !canvasHint.hidden && canvasHint.scrollWidth > canvasHint.clientWidth) showCanvasHint({ key:`${key}Compact`, values });
+  }
+  function noteLassoCaptured() {
+    const first = !lassoDiscovery.uses;
+    lassoDiscovery.uses = (lassoDiscovery.uses || 0) + 1;
+    saveLassoDiscovery();
+    syncLassoDiscoveryBadge();
+    if (first || lassoPenButtonReturn && lassoDiscovery.uses <= 3) showLassoHintWithFallback("canvasHintLassoCaptured");
+  }
+  function noteInkForLassoNudge() {
+    if (lassoDiscovery.uses || lassoNudgedThisSession || lassoDiscovery.nudges >= LASSO_NUDGE_MAX || state.viewMode || state.mode !== "pen") return;
+    if (++lassoNudgeStrokes < LASSO_NUDGE_STROKES) return;
+    lassoNudgedThisSession = true;
+    lassoDiscovery.nudges = (lassoDiscovery.nudges || 0) + 1;
+    saveLassoDiscovery();
+    // Wait for a pause in writing so the cue never lands mid-stroke, and let
+    // the Suggest Bar settle first.
+    let idleSince = 0;
+    const show = () => {
+      if (state.viewMode || state.mode !== "pen" || state.selection || lassoDiscovery.uses) return;
+      if (state.drawing) idleSince = 0;
+      else idleSince ||= performance.now();
+      if (!idleSince || performance.now() - idleSince < 1600) { setTimeout(show, 200); return; }
+      playLassoShimmer();
+      showLassoHintWithFallback("canvasHintLassoNudge", { shortcut:"V" });
+    };
+    setTimeout(show, 200);
+  }
+  syncLassoDiscoveryBadge();
+  function canvasPenButtonLasso(event) {
+    return event?.pointerType === "pen" && (Number(event.button) === 2 || (Number(event.buttons) & 2) === 2);
+  }
+  function beginPenButtonLasso(event) {
+    const returnMode = canvasToolMode(state.mode);
+    if (state.viewMode || !["pen", "eraser", "area-eraser", "text"].includes(returnMode) || state.pending || state.pendingWidget || state.selection) return false;
+    const input = captureDrawingInput(event);
+    if (!valid(input.point)) return false;
+    if (!selectCanvasToolMode("select")) return false;
+    lassoPenButtonReturn = returnMode;
+    lassoPenButtonContextUntil = performance.now() + 1500;
+    deselectAnimation();
+    handleSelectionPointerDown(event, input.point);
+    watchPenButtonLasso();
+    return true;
+  }
+  // After a side-button lasso, writing outside the selection closes it and
+  // goes straight back to the previous tool instead of starting a new lasso.
+  function finishPenButtonLassoOutside(event) {
+    const selection = state.selection, returnMode = lassoPenButtonReturn;
+    if (!returnMode || event.pointerType === "touch" || canvasPenButtonLasso(event) || state.mode !== "select") return false;
+    if (selection?.phase !== "active" || selectionAIBusy(selection) || selectionHit(selection, event)) return false;
+    commitSelection();
+    lassoPenButtonReturn = null;
+    return selectCanvasToolMode(returnMode);
+  }
+  function watchPenButtonLasso() {
+    setTimeout(() => {
+      const returnMode = lassoPenButtonReturn;
+      if (!returnMode) return;
+      // Another tool was chosen meanwhile: keep it.
+      if (state.mode !== "select") { lassoPenButtonReturn = null; return; }
+      if (state.selection || state.selectionGesture || state.pending || state.pendingWidget || state.drawing) { watchPenButtonLasso(); return; }
+      lassoPenButtonReturn = null;
+      selectCanvasToolMode(returnMode);
+    }, 250);
+  }
+  // A side-button press can also raise a context menu on release.
+  window.addEventListener("contextmenu", event => {
+    if (performance.now() < lassoPenButtonContextUntil) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
+  const WIDGET_TOUCH_DOUBLE_TAP_MS = 400;
+  const WIDGET_TOUCH_DOUBLE_TAP_PX = 24;
+  let eraserToolMenuTimer = 0;
+  const CANVAS_PALM_RELEASE_MS = 700;
+  const CANVAS_TOUCH_PAN_START_PX = 8;
+  const canvasPalmRejectedTouches = new Set();
+  let canvasPalmLastPenAt = -Infinity;
+  // Keep pen ownership through hover and short gaps between strokes. A rejected
+  // contact cannot become navigation until it lifts and starts a new gesture.
+  function canvasPencilWritingActive() {
+    return state.drawing?.pointerType === "pen" || canvasAgent.inkStroke?.pointerType === "pen";
+  }
+  function canvasExplicitTouchNavigation() {
+    return state.mode === "hand" || state.viewMode || state.spacePan;
+  }
+  function canvasTouchLooksLikePalm(event) {
+    const width = Number(event.width) || 1, height = Number(event.height) || 1;
+    // Contact geometry is in CSS pixels; unsupported hardware reports 1.
+    return Math.max(width, height) >= 40 || Math.min(width, height) >= 28;
+  }
+  function cancelCanvasPalmTouch(pointerId) {
+    canvasPalmRejectedTouches.add(pointerId);
+    state.pointers.delete(pointerId);
+    canvasAgentNavigationPointerDidEnd(pointerId);
+    state.touches.delete(pointerId);
+    state.widgetTouchLastTap = null;
+    if (state.handToolbarTap?.id === pointerId) state.handToolbarTap = null;
+    if (state.widgetActivationTap?.id === pointerId) state.widgetActivationTap = null;
+    if (state.textTap?.id === pointerId) state.textTap = null;
+    if (state.areaEraseGesture?.id === pointerId) cancelAreaEraseGesture();
+    finishHandObjectFocus({ pointerId });
+    finishWidgetRefineTouch(`canvas-touch:${pointerId}`);
+    if (state.panGesture?.id === pointerId || state.touchGesture?.ids.includes(pointerId)) {
+      state.panGesture = null;
+      state.touchGesture = null;
+      finishCanvasNavigationPreview();
+      resetCanvasCursor();
+      setNavigating(false);
+    }
+  }
+  function observeCanvasPenForPalmRejection(event) {
+    if (event.pointerType !== "pen" || !canvasNavigationSurface(event.target)) return;
+    canvasPalmLastPenAt = performance.now();
+    if (event.type === "pointerdown" || !canvasExplicitTouchNavigation()) {
+      for (const pointerId of state.touches.keys()) cancelCanvasPalmTouch(pointerId);
+    }
+  }
+  function rejectTouchDuringPencilWriting(event) {
+    if (event.pointerType !== "touch") return;
+    const ending = ["pointerup", "pointercancel", "lostpointercapture"].includes(event.type),
+      rejected = canvasPalmRejectedTouches.has(event.pointerId),
+      canvasTouch = canvasNavigationSurface(event.target),
+      penNearby = performance.now() - canvasPalmLastPenAt < CANVAS_PALM_RELEASE_MS;
+    if (!rejected && (ending || !canvasPencilWritingActive()
+        && (!canvasTouch || !canvasTouchLooksLikePalm(event) && (!penNearby || canvasExplicitTouchNavigation())))) return;
+    cancelCanvasPalmTouch(event.pointerId);
+    if (ending && event.type !== "lostpointercapture") canvasPalmRejectedTouches.delete(event.pointerId);
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+  function resetCanvasPalmRejection(event) {
+    if (event.type === "visibilitychange" && !document.hidden) return;
+    for (const pointerId of state.touches.keys()) cancelCanvasPalmTouch(pointerId);
+    canvasPalmRejectedTouches.clear();
+    canvasPalmLastPenAt = -Infinity;
+  }
+  function canvasPanMovementReady(event) {
+    if (event.pointerType !== "touch") return true;
+    const gesture = state.panGesture;
+    if (!gesture || gesture.started) return Boolean(gesture);
+    if (Math.hypot(event.clientX - gesture.last.x, event.clientY - gesture.last.y) < CANVAS_TOUCH_PAN_START_PX) return false;
+    gesture.started = true;
+    return true;
+  }
+  function finishInterruptedPencilWriting(event) {
+    if (event.type === "visibilitychange" && !document.hidden) return;
+    if (event.type === "pointerdown" && event.pointerType === "touch") return;
+    const all = ["blur", "pagehide", "visibilitychange", "pointerdown"].includes(event.type),
+      released = event.type !== "pointermove" || event.pointerType === "pen" && Number(event.buttons) === 0;
+    if (!released) return;
+    const drawing = state.drawing;
+    if (drawing?.pointerType === "pen" && (all || drawing.id === event.pointerId)) {
+      state.pointers.delete(drawing.id);
+      canvasAgentNavigationPointerDidEnd(drawing.id);
+      finishDrawing("pen");
+      if (drawing.erase) {
+        state.pointerPreview = null;
+        requestInteractionLayerRender();
+      }
+    }
+    const ink = canvasAgent.inkStroke;
+    if (ink?.pointerType === "pen" && (all || ink.pointerId === event.pointerId)) canvasAgentFinishInkStroke();
+  }
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
+    window.addEventListener(type, observeCanvasPenForPalmRejection, true);
+  }
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel", "lostpointercapture"]) {
+    window.addEventListener(type, rejectTouchDuringPencilWriting, { capture:true, passive:false });
+  }
+  for (const type of ["blur", "pagehide"]) window.addEventListener(type, resetCanvasPalmRejection);
+  document.addEventListener("visibilitychange", resetCanvasPalmRejection);
+  for (const type of ["pointerdown", "pointerup", "pointercancel", "lostpointercapture", "pointermove", "blur", "pagehide"]) {
+    window.addEventListener(type, finishInterruptedPencilWriting, true);
+  }
+  document.addEventListener("visibilitychange", finishInterruptedPencilWriting);
+  function canvasPenEraserActive(event) {
+    return event?.pointerType === "pen"
+      && (Number(event.button) === 5 || (Number(event.buttons) & 32) === 32);
+  }
+  function updateCanvasPointerPreview(event, point = null) {
+    const drawing = state.drawing,
+      eraserPointer = drawing ? drawing.erase && drawing.id === event.pointerId : state.mode === "eraser",
+      next = eraserPointer && event.pointerType !== "touch"
+        ? point || clientPoint(event)
+        : null,
+      preview = next && valid(next) ? next : null,
+      changed = Boolean(preview) !== Boolean(state.pointerPreview)
+        || preview && (!state.pointerPreview || Math.abs(preview.x - state.pointerPreview.x) > 0.01 || Math.abs(preview.y - state.pointerPreview.y) > 0.01);
+    if (!changed) return;
+    state.pointerPreview = preview;
+    requestInteractionLayerRender();
+  }
+  function setCanvasViewMode(enabled) {
+    enabled = Boolean(enabled);
+    if (state.viewMode === enabled) return;
+    finishDrawing("pen");
+    setWidgetInteraction(null);
+    setSpacePan(false);
+    state.viewTool = "hand";
+    state.widgetActivationTap = null;
+    state.widgetTouchLastTap = null;
+    state.viewMode = enabled;
+    state.pointers.clear();
+    state.canvasAgentNavigationPointerIds.clear();
+    state.touches.clear();
+    state.touchGesture = null;
+    state.panGesture = null;
+    state.textTap = null;
+    state.pointerPreview = null;
+    cancelAreaEraseGesture();
+    hideEraserToolMenu();
+    document.body.classList.toggle("canvas-view-mode", enabled);
+    view.classList.toggle("view-mode", enabled);
+    window.PenEchoStudioNavigator?.syncCanvasView?.(enabled);
+    canvasViewButton.setAttribute("aria-pressed", String(enabled));
+    canvasViewActions.hidden = !enabled;
+    const inactiveSurfaces = view.querySelectorAll([
+      ".canvas-navigation-lock",
+      ".object-chrome-layer",
+      ".animation-controls",
+      ".selection-overlay-layer",
+      ".text-editor-layer",
+      ".ai-embodiment",
+      ".canvas-agent-panel",
+    ].join(","));
+    if (enabled) {
+      for (const element of inactiveSurfaces) {
+        if (element.inert) continue;
+        element.inert = true;
+        element.dataset.canvasViewInert = "true";
+      }
+    } else {
+      for (const element of view.querySelectorAll('[data-canvas-view-inert="true"]')) {
+        element.inert = false;
+        delete element.dataset.canvasViewInert;
+      }
+    }
+    if (enabled) {
+      state.viewModeNavigationLocked = state.navigationLocked;
+      if (state.navigationLocked) setCanvasNavigationLocked(false);
+      if (!document.querySelector("#canvasAgentPanel")?.hidden) closeCanvasAgent();
+      document.activeElement?.blur?.();
+      setCanvasCursor("grab");
+      requestAnimationFrame(() => canvasViewCloseButton.focus({ preventScroll:true }));
+    } else {
+      if (state.viewModeNavigationLocked) setCanvasNavigationLocked(true);
+      state.viewModeNavigationLocked = false;
+      resetCanvasCursor();
+      requestAnimationFrame(() => canvasViewButton.focus({ preventScroll:true }));
+    }
+    syncCanvasNavigation();
+    requestInteractionLayerRender();
+    requestAnimationFrame(fit);
+  }
+  window.addEventListener("keydown", (event) => {
+    if (!state.viewMode || document.querySelector(".penecho-cloud-overlay") || canvasNavigationTextTarget(event.target)) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (state.interactingWidgetId) setWidgetInteraction(null);
+      else setCanvasViewMode(false);
+    }
+  }, true);
   function beginCanvasPointerAction(e, point) {
+    const options = arguments[2] || {};
+    const forceEraser = options.forceEraser === true;
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (state.mode === "hand") {
+    if (!forceEraser && typeof assistShapePointerDown === "function" && assistShapePointerDown(e, point)) return;
+    if (!forceEraser && state.mode === "hand") {
       state.panGesture = {
         id: e.pointerId,
         last: { x: e.clientX, y: e.clientY },
@@ -11,7 +360,7 @@
       setNavigating(true);
       return;
     }
-    if (state.mode === "text" && e.pointerType === "touch") {
+    if (!forceEraser && state.mode === "text" && e.pointerType === "touch") {
       if (!valid(point)) {
         setStatusKey("outsideCanvas");
         return;
@@ -19,7 +368,7 @@
       state.textTap = { id: e.pointerId, startX: e.clientX, startY: e.clientY, point };
       return;
     }
-    if (state.mode === "text") {
+    if (!forceEraser && state.mode === "text") {
       if (!valid(point)) {
         setStatusKey("outsideCanvas");
         return;
@@ -27,7 +376,15 @@
       createTextEditor(point);
       return;
     }
-    if (state.mode === "select" && e.pointerType !== "touch") {
+    if (!forceEraser && state.mode === "area-eraser") {
+      if (!valid(point)) {
+        setStatusKey("outsideCanvas");
+        return;
+      }
+      beginAreaEraseGesture(e, point);
+      return;
+    }
+    if (!forceEraser && state.mode === "select" && e.pointerType !== "touch") {
       if (state.pending) {
         setStatusKey("pendingConfirm");
         return;
@@ -56,16 +413,24 @@
     supersedeActiveAI("user-input-started");
     clearTimeout(state.timer);
     state.timer = 0;
-    state.latestTypedInput = null;
-    const erasing = state.mode === "eraser";
-    if (erasing) invalidateRecognition();
+    hideWidgetRefineHint();
+    if (state.imageEdit || state.selectedImageId) acceptImageEdit({ restoreMode:false });
+    releaseWidgetsForDrawing();
+    const erasing = forceEraser || state.mode === "eraser";
+    if (erasing) clearWidgetRefineCandidate();
+    else state.latestTypedInput = null;
     const cssSize = erasing ? state.eraser : pressureWidth(e),
       size = logicalWidth(cssSize);
     state.userRevision++;
     state.drawing = {
       id: e.pointerId,
+      pointerType: e.pointerType,
       last: p,
       size,
+      color: state.inkColor,
+      inputTransform: options.inputTransform || captureDrawingTransform(),
+      samples: [],
+      committedSamples: 0,
       start: p,
       points: 1,
       screenDistance: 0,
@@ -74,29 +439,145 @@
       bbox: { x: p.x, y: p.y, w: 0, h: 0 },
       trail: [p],
       erase: erasing,
+      dirtyMaskTouched:erasing ? new Set() : null,
     };
-    dot(p, erasing, size, !erasing);
-    requestRender();
+    if (typeof smartSuggestDrawingStarted === "function") smartSuggestDrawingStarted(state.drawing);
+    if (!erasing) noteInkForLassoNudge();
+    noteCanvasChromeInteraction();
+    view.classList.add("is-drawing");
+    updateCanvasPointerPreview(e, p);
+    appendLiveInkSample(state.drawing, p, size);
   }
-  screen.addEventListener("pointerdown", (e) => {
+  function beginHandObjectResize(event, point) {
+    if (!["hand", "select"].includes(state.mode) || state.viewMode || state.spacePan || event.pointerType === "touch" || Number(event.button) !== 0 || !point || !valid(point)) return false;
+    if (state.mode === "select" && state.pending) {
+      const result = pendingHit(state.pending, event, state.pending.revealProgress < 1),
+        hit = typeof result === "string" ? result : result?.hit,
+        itemIndex = result && typeof result === "object" ? result.itemIndex : null;
+      if (["resize", "width", "height", "batch-resize"].includes(hit)) {
+        beginPendingGesture(event, hit, itemIndex);
+        return true;
+      }
+    }
+    const widgetResult = widgetRuntimeEnabled() ? widgetPointerHit(point, event.pointerType, false) : null;
+    if (widgetResult && ["resize", "width", "height"].includes(widgetResult.hit)) {
+      refreshHandObjectToolbar();
+      return beginWidgetGesture(event, point, widgetResult);
+    }
+    const imageResult = imagePointerHit(point, event.pointerType, false);
+    if (imageResult && ["resize", "width", "height"].includes(imageResult.hit)) {
+      if (state.selectedAnimationId) acceptAnimationEdit();
+      refreshHandObjectToolbar();
+      return beginImageGesture(event, point, imageResult);
+    }
+    const animationResult = state.mode === "select" ? animationPointerHit(point, event.pointerType) : null;
+    if (animationResult && ["resize", "width", "height"].includes(animationResult.hit)) {
+      refreshHandObjectToolbar();
+      return beginAnimationGesture(event, point, animationResult);
+    }
+    return false;
+  }
+  function handleCanvasPointerDown(e) {
+    if (e.pointerType !== "touch" || state.mode !== "pen" && !canvasLassoToolActive() || state.viewMode || state.spacePan || e.altKey) state.widgetTouchLastTap = null;
+    if (e.target?.closest?.(".canvas-widget")?.dataset.widgetId === state.interactingWidgetId) return;
+    view.classList.remove("is-wheel-navigating");
+    state.handToolbarTap = null;
+    if (!state.viewMode && state.mode === "hand" && !state.spacePan && !e.altKey && e.button === 0 && !state.touches.size) {
+      const point = clientPoint(e),
+        resizeTarget = widgetPointerHit(point, e.pointerType, false),
+        target = resizeTarget && ["resize", "width", "height"].includes(resizeTarget.hit)
+          ? { kind:"widget", object:resizeTarget.widget }
+          : handObjectToolbarTargetAtPoint(point);
+      if (target) state.handToolbarTap = { id:e.pointerId, target, x:e.clientX, y:e.clientY };
+      else {
+        selectViewerWidget(null);
+        hideHandObjectToolbar({ all:true, animate:false });
+      }
+    }
+    if (e.pointerType === "touch" && canvasPencilWritingActive()) return;
+    if (e.pointerType === "mouse" && ![0, 1].includes(e.button)) return;
     e.preventDefault();
+    if (state.viewMode) {
+      const target = state.viewTool === "select" && !state.spacePan && e.button === 0
+        ? canvasWidgetAtEvent(e) : null;
+      setWidgetInteraction(null);
+      if (target) state.widgetActivationTap = { id:e.pointerId, widget:target, x:e.clientX, y:e.clientY };
+      if (e.pointerType === "mouse" && ![0, 1].includes(e.button)) return;
+      state.canvasAgentNavigationPointerIds.add(e.pointerId);
+      try { screen.setPointerCapture(e.pointerId); } catch {}
+      calibrateScreenClientRatio(e, false);
+      state.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+      if (e.pointerType === "touch") {
+        state.touches.set(e.pointerId, { x:e.clientX, y:e.clientY });
+        if (state.touches.size >= 2) {
+          state.widgetActivationTap = null;
+          beginTouchGesture();
+          return;
+        }
+      }
+      state.panGesture = { id:e.pointerId, last:{ x:e.clientX, y:e.clientY } };
+      setCanvasCursor("grabbing");
+      setNavigating(true);
+      return;
+    }
+    if (state.interactingWidgetId && !state.spacePan) {
+      state.widgetTouchLastTap = null;
+      // The first press outside a live in-place Widget only ends interaction,
+      // so leaving a Widget never leaves a stray stroke behind.
+      const inPlace = state.widgetInteractionInPlace === true;
+      setWidgetInteraction(null);
+      if (inPlace) return;
+    }
+    finishStaleWidgetHostGesture(e);
+    if (e.pointerType === "pen") {
+      state.touches.clear();
+      state.touchGesture = null;
+      state.panGesture = null;
+    }
     if (Date.now() < state.textInputBlockedUntil) return;
+    // Pointer input deliberately returns keyboard ownership to the Canvas.
+    // preventDefault above suppresses the browser's normal focus transfer.
+    if (e.target === screen) screen.focus({ preventScroll:true });
+    state.canvasAgentNavigationPointerIds.add(e.pointerId);
     try {
       screen.setPointerCapture(e.pointerId);
     } catch {}
     calibrateScreenClientRatio(e, false);
+    const penEraser = canvasPenEraserActive(e),
+      handPoint = !penEraser && !state.spacePan && !canvasLassoToolActive() && ["hand", "select"].includes(state.mode) ? clientPoint(e) : null;
+    beginCanvasWidgetGestureResetTap(e, handPoint);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (handPoint && e.pointerType !== "touch" && beginHandObjectResize(e, handPoint)) {
+      state.handToolbarTap = null;
+      return;
+    }
+
+    if (handPoint) beginHandObjectFocus(e, handPoint);
+    if (penEraser) {
+      const input = captureDrawingInput(e);
+      beginCanvasPointerAction(e, input.point, { forceEraser:true, inputTransform:input.inputTransform });
+      return;
+    }
+    if (canvasPenButtonLasso(e) && beginPenButtonLasso(e)) return;
+    finishPenButtonLassoOutside(e);
     if (e.pointerType === "touch") {
+      const touchPoint = clientPoint(e),
+        touchTarget = valid(touchPoint) ? handObjectToolbarTargetAtPoint(touchPoint) : null;
+      if (touchTarget?.kind === "widget" && state.mode !== "select") showCanvasHint("canvasHintWidgetTouchHand");
+      if (touchTarget && (state.mode === "pen" || canvasLassoToolActive() && touchTarget.kind === "widget")
+          && !state.touches.size && !e.altKey && widgetHeaderHoverAllowed()) {
+        state.handToolbarTap = { id:e.pointerId, target:touchTarget, x:e.clientX, y:e.clientY, headerOnly:true, startedAt:Date.now() };
+        if (touchTarget.kind !== "widget") state.widgetTouchLastTap = null;
+      } else state.widgetTouchLastTap = null;
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
       if (state.touches.size >= 2) {
-        cancelAnimationTouchHold();
-        cancelImageTouchHold();
         state.textTap = null;
+        cancelAreaEraseGesture();
         if (state.pendingGesture) state.pendingGesture = null;
         if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
         if (state.selectedWidgetId) acceptWidgetEdit();
         if (state.imageGesture) finishImageGesture({ pointerId:state.imageGesture.id });
-        if (state.selectedImageId) acceptImageEdit();
         if (state.animationGesture) finishAnimationGesture({ pointerId: state.animationGesture.id });
         if (state.selectedAnimationId) acceptAnimationEdit();
         finishDrawing("pen");
@@ -104,8 +585,7 @@
         return;
       }
     }
-    if (isMousePan(e)) {
-      if (state.selectedImageId) acceptImageEdit();
+    if (isMousePan(e) || state.spacePan) {
       if (state.selectedWidgetId) acceptWidgetEdit();
       if (state.selectedAnimationId) acceptAnimationEdit();
       state.panGesture = {
@@ -116,87 +596,90 @@
       setNavigating(true);
       return;
     }
-    if (state.pending) {
-      const result = pendingHit(state.pending, e, state.pending.revealProgress < 1),
-        hit = typeof result === "string" ? result : result?.hit,
-        itemIndex = result && typeof result === "object" ? result.itemIndex : null;
-      if (hit) {
-        if (hit === "copy" || hit === "item-copy") {
-          armPendingCopy(e, hit, itemIndex);
-          return;
-        }
-        if (hit === "accept") return acceptPending();
-        if (hit === "cancel") return rejectPending();
-        if (hit === "item-accept") return acceptPendingItem(itemIndex);
-        if (hit === "item-cancel") return rejectPendingItem(itemIndex);
-        beginPendingGesture(e, hit, itemIndex);
-        return;
-      }
-    }
-    const point = clientPoint(e);
-    const handMode = state.mode === "hand",
-      widgetResult = widgetRuntimeEnabled() && valid(point) ? widgetPointerHit(point, e.pointerType, handMode) : null;
-    if (widgetResult) {
-      beginWidgetGesture(e, point, widgetResult);
-      return;
-    }
-    if (state.selectedWidgetId) acceptWidgetEdit();
-    const selectedImageResult = valid(point) ? imagePointerHit(point, e.pointerType, handMode) : null;
-    if (selectedImageResult) {
-      if (state.selectedAnimationId) acceptAnimationEdit();
-      if (!handMode && e.pointerType === "touch" && selectedImageResult.hit === "move") {
-        beginImageTouchHold(e, point, selectedImageResult.image);
-        return;
-      }
-      beginImageGesture(e, point, selectedImageResult);
-      return;
-    }
-    if (state.selectedImageId) acceptImageEdit();
-    if (handMode && valid(point)) {
-      const animationResult = animationPointerHit(point, e.pointerType);
-      if (animationResult) {
-        beginAnimationGesture(e, point, animationResult);
-        return;
-      }
-    }
-    if (e.pointerType === "touch" && valid(point)) {
-      const animationResult = animationPointerHit(point, e.pointerType);
-      if (animationResult) {
-        beginAnimationTouchHold(e, point, animationResult);
-        return;
-      }
-    }
-    if (isAnimationActivationPointer(e) && valid(point)) {
-      const animationResult = animationPointerHit(point, e.pointerType);
-      if (animationResult) {
-        beginAnimationGesture(e, point, animationResult);
-        return;
-      }
-    }
-    if (e.pointerType === "touch" && valid(point)) {
-      const item = imageAtPoint(point);
-      if (item) {
-        if (state.selectedAnimationId) acceptAnimationEdit();
-        beginImageTouchHold(e, point, item);
-        return;
-      }
-    }
-    if (isAnimationActivationPointer(e) && valid(point)) {
-      const item = imageAtPoint(point);
-      if (item) {
-        if (state.selectedAnimationId) acceptAnimationEdit();
-        beginImageTouchHold(e, point, item);
-        return;
-      }
-    }
-    beginCanvasPointerAction(e, point);
-  });
+    if (state.mode === "select" && beginCanvasObjectSelection(e, handPoint || clientPoint(e))) return;
+    const input = captureDrawingInput(e);
+    beginCanvasPointerAction(e, input.point, { inputTransform:input.inputTransform });
+  }
+  screen.addEventListener("pointerdown", handleCanvasPointerDown);
+  function updateActiveCanvasDrawing(e) {
+    const d = state.drawing;
+    if (!d || d.id !== e.pointerId) return false;
+    const old = state.pointers.get(e.pointerId),
+      p = drawingClientPoint(d, e),
+      cssSize = d.erase ? state.eraser : pressureWidth(e),
+      size = logicalWidth(cssSize);
+    state.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    state.userRevision++;
+    appendLiveInkSample(d, p, size);
+    commitLiveInkDrawingProgress(d);
+    if (d.erase) updateCanvasPointerPreview(e, p);
+    d.last = p;
+    d.size = size;
+    d.points++;
+    d.screenDistance += old ? Math.hypot(e.clientX - old.x, e.clientY - old.y) : 0;
+    if (d.points % 8 === 0) d.trail.push(p);
+    d.widthMin = Math.min(d.widthMin, cssSize);
+    d.widthMax = Math.max(d.widthMax, cssSize);
+    const x1 = Math.min(d.bbox.x, p.x),
+      y1 = Math.min(d.bbox.y, p.y),
+      x2 = Math.max(d.bbox.x + d.bbox.w, p.x),
+      y2 = Math.max(d.bbox.y + d.bbox.h, p.y);
+    d.bbox = { x:x1, y:y1, w:x2 - x1, h:y2 - y1 };
+    if (typeof smartSuggestDrawingMoved === "function") smartSuggestDrawingMoved(d);
+    return true;
+  }
   screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    if (typeof assistShapePointerMove === "function" && assistShapePointerMove(e)) return;
+    const handTap = state.handToolbarTap;
+    if (handTap && Math.hypot(e.clientX - handTap.x, e.clientY - handTap.y) > 6) {
+      state.handToolbarTap = null;
+      state.widgetTouchLastTap = null;
+    }
+    if (e.pointerType === "touch" && !state.touches.has(e.pointerId)) return;
+    if (state.viewMode) {
+      if (!state.pointers.has(e.pointerId)) return;
+      const tap = state.widgetActivationTap;
+      if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 6) state.widgetActivationTap = null;
+      const old = state.pointers.get(e.pointerId);
+      calibrateScreenClientRatio(e, true);
+      state.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+      if (e.pointerType === "touch") state.touches.set(e.pointerId, { x:e.clientX, y:e.clientY });
+      if (state.touches.size >= 2) {
+        if (!state.touchGesture) beginTouchGesture();
+        updateTouchGesture();
+        return;
+      }
+      if (state.panGesture?.id === e.pointerId && old && canvasPanMovementReady(e)) {
+        moveCanvas(e.clientX - old.x, e.clientY - old.y);
+        state.panGesture.last = { x:e.clientX, y:e.clientY };
+        setNavigating(true);
+      }
+      return;
+    }
+    if (updateActiveCanvasDrawing(e)) return;
+    updateCanvasWidgetGestureResetTap(e);
+    if (finishReleasedWidgetGesture(e)) return;
     const old = state.pointers.get(e.pointerId);
     calibrateScreenClientRatio(e, true);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (state.panGesture?.id === e.pointerId && (e.pointerType !== "touch" || state.touches.size < 2)) {
+      if (old && canvasPanMovementReady(e)) {
+        moveCanvas(e.clientX - old.x, e.clientY - old.y);
+        state.panGesture.last = { x:e.clientX, y:e.clientY };
+        setNavigating(true);
+      }
+      return;
+    }
+    updateHandObjectFocus(e);
+    if (["hand", "select"].includes(state.mode) && e.pointerType !== "touch" && Number(e.buttons) === 0) {
+      const point = clientPoint(e);
+      updateHandObjectHover(point);
+      syncWidgetResizeCursor(point, e.pointerType);
+    }
+    updateCanvasPointerPreview(e);
+    if (e.pointerType !== "touch") updateWidgetRefinePointer(clientPoint(e));
     if (state.pendingGesture?.id === e.pointerId) {
       updatePendingGesture(e);
       return;
@@ -213,10 +696,16 @@
       updateAnimationGesture(e);
       return;
     }
+    if (state.areaEraseGesture?.id === e.pointerId) {
+      updateAreaEraseGesture(e);
+      const point = clientPoint(e);
+      requestCoordinatesUpdate(point);
+      return;
+    }
     if (state.selectionGesture?.id === e.pointerId) {
       updateSelectionGesture(e);
       const point = clientPoint(e);
-      coords.textContent = `x ${Math.round(point.x)} · y ${Math.round(point.y)} · ${Math.round(state.scale * 100)}%`;
+      requestCoordinatesUpdate(point);
       return;
     }
     if (state.textTap?.id === e.pointerId) {
@@ -224,77 +713,95 @@
         distance = Math.hypot(e.clientX - tap.startX, e.clientY - tap.startY);
       if (distance > 8) {
         state.textTap = null;
-        state.panGesture = { id: e.pointerId, last: { x: e.clientX, y: e.clientY } };
+        state.panGesture = { id: e.pointerId, last: { x: e.clientX, y: e.clientY }, started:true };
         setNavigating(true);
       } else return;
     }
-    if (state.imageTouchHold?.id === e.pointerId) {
-      const hold = state.imageTouchHold,
-        distance = Math.hypot(e.clientX - hold.startX, e.clientY - hold.startY);
-      if (distance <= IMAGE_TOUCH_HOLD_MOVE_PX) return;
-      cancelImageTouchHold(e.pointerId);
-      if (hold.pointerType === "touch") {
-        state.panGesture = { id:e.pointerId, last:old || { x:hold.startX, y:hold.startY } };
-        setNavigating(true);
-      } else beginCanvasPointerAction(hold.downEvent, hold.point);
-    }
-    if (state.animationTouchHold?.id === e.pointerId) {
-      const hold = state.animationTouchHold,
-        distance = Math.hypot(e.clientX - hold.startX, e.clientY - hold.startY);
-      if (distance <= ANIMATION_TOUCH_HOLD_MOVE_PX) return;
-      cancelAnimationTouchHold(e.pointerId);
-      state.panGesture = { id: e.pointerId, last: old || { x: hold.startX, y: hold.startY } };
-      setNavigating(true);
-    }
     if (e.pointerType === "touch") {
+
       if (state.touches.size >= 2) {
         updateTouchGesture();
         return;
       }
-      if (state.panGesture?.id === e.pointerId && old) {
-        moveCanvas(e.clientX - old.x, e.clientY - old.y);
-        state.panGesture.last = { x: e.clientX, y: e.clientY };
-        setNavigating(true);
-      }
       return;
     }
-    if (state.panGesture?.id === e.pointerId) {
-      if (old) {
-        moveCanvas(e.clientX - old.x, e.clientY - old.y);
-        setNavigating(true);
-      }
-      return;
-    }
-    if (!state.drawing || state.drawing.id !== e.pointerId) return;
-    const p = clientPoint(e),
-      a = state.drawing.last,
-      d = state.drawing,
-      cssSize = d.erase ? state.eraser : pressureWidth(e),
-      size = logicalWidth(cssSize);
-    state.userRevision++;
-    stroke(a, p, d.erase, size, !d.erase);
-    d.last = p;
-    d.size = size;
-    d.points++;
-    d.screenDistance += old ? Math.hypot(e.clientX - old.x, e.clientY - old.y) : 0;
-    if (d.points % 8 === 0) d.trail.push(p);
-    d.widthMin = Math.min(d.widthMin, cssSize);
-    d.widthMax = Math.max(d.widthMax, cssSize);
-    const x1 = Math.min(d.bbox.x, p.x),
-      y1 = Math.min(d.bbox.y, p.y),
-      x2 = Math.max(d.bbox.x + d.bbox.w, p.x),
-      y2 = Math.max(d.bbox.y + d.bbox.h, p.y);
-    d.bbox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-    requestRender();
-    coords.textContent = `x ${Math.round(p.x)} · y ${Math.round(p.y)} · ${Math.round(state.scale * 100)}%`;
   });
+  function finishHandCanvasTap(e) {
+    const handTap = state.handToolbarTap;
+    if (handTap?.id === e.pointerId) {
+      state.handToolbarTap = null;
+      if (e.type !== "pointerup" || state.viewMode || state.spacePan || state.touches.size > 1
+          || Math.hypot(e.clientX - handTap.x, e.clientY - handTap.y) > 6) {
+        state.widgetTouchLastTap = null;
+        return;
+      }
+      if (handTap.headerOnly) {
+        // Finger taps reveal the existing controls of every editable object.
+        // Hosted Widgets keep the passive header used by mouse hover.
+        const previous = state.widgetTouchLastTap;
+        state.widgetTouchLastTap = null;
+        if ((state.mode === "pen" || canvasLassoToolActive() && handTap.target.kind === "widget") && widgetHeaderHoverAllowed()) {
+          if (handTap.target.kind === "widget") {
+            const widget = handTap.target.object, now = Date.now();
+            if (e.pointerType === "touch" && !widget.pending && now - handTap.startedAt <= WIDGET_TOUCH_DOUBLE_TAP_MS) {
+              if (previous?.widget === widget && now - previous.time <= WIDGET_TOUCH_DOUBLE_TAP_MS
+                  && Math.hypot(e.clientX - previous.x, e.clientY - previous.y) <= WIDGET_TOUCH_DOUBLE_TAP_PX
+                  && enterWidgetInteraction(widget)) return;
+              state.widgetTouchLastTap = { widget, time:now, x:e.clientX, y:e.clientY };
+            }
+            showWidgetHeader(widget, null);
+          }
+          else showHandObjectToolbar(handTap.target.kind, handTap.target.object);
+        }
+      } else if (state.mode === "hand") {
+        if (!selectViewerWidget(handTap.target.kind === "widget" ? handTap.target.object : null)) {
+          showHandObjectToolbar(handTap.target.kind, handTap.target.object);
+        }
+      }
+    }
+  }
   function end(e) {
+    if (typeof assistShapePointerUp === "function" && assistShapePointerUp(e)) return;
+    finishHandCanvasTap(e);
+    const activation = state.widgetActivationTap;
+    if (activation?.id === e.pointerId) {
+      state.widgetActivationTap = null;
+      if (e.type === "pointerup" && Math.hypot(e.clientX - activation.x, e.clientY - activation.y) <= 6 && state.touches.size <= 1) {
+        enterWidgetInteraction(activation.widget);
+      }
+    }
+    finishCanvasNavigationPreview();
+    if (coordinatesUpdatePending) flushCoordinatesUpdate();
+    if (state.viewMode) {
+      state.pointers.delete(e.pointerId);
+      canvasAgentNavigationPointerDidEnd(e.pointerId);
+      if (e.pointerType === "touch") state.touches.delete(e.pointerId);
+      state.touchGesture = null;
+      if (e.pointerType === "touch" && state.touches.size === 1) {
+        const [id, point] = state.touches.entries().next().value;
+        state.panGesture = { id, last:point };
+      } else if (state.panGesture?.id === e.pointerId || !state.touches.size) state.panGesture = null;
+      if (!state.panGesture) {
+        setCanvasCursor("grab");
+        setNavigating(false);
+      }
+      return;
+    }
     state.pointers.delete(e.pointerId);
-    if (e.pointerType === "touch") state.touches.delete(e.pointerId);
-    cancelAnimationTouchHold(e.pointerId);
-    const imageTapHold = state.imageTouchHold?.id === e.pointerId ? state.imageTouchHold : null;
-    cancelImageTouchHold(e.pointerId);
-    if (imageTapHold && imageTapHold.pointerType !== "touch" && e.type !== "pointercancel") beginCanvasPointerAction(imageTapHold.downEvent, imageTapHold.point);
+    canvasAgentNavigationPointerDidEnd(e.pointerId);
+    finishHandObjectFocus(e);
+    if (e.pointerType === "touch") {
+      state.touches.delete(e.pointerId);
+      finishWidgetRefineTouch(`canvas-touch:${e.pointerId}`);
+    }
+    finishCanvasWidgetGestureResetTap(e);
+    if (e.pointerType === "touch" && state.handGestureIncludesWidget) {
+      if (!state.touches.size && !state.handWidgetPointerIds.size) state.handGestureIncludesWidget = false;
+      state.touchGesture = null;
+      state.panGesture = null;
+      if (!state.touches.size) setNavigating(false);
+      return;
+    }
     if (state.widgetGesture?.id === e.pointerId) {
       finishWidgetGesture(e);
       return;
@@ -322,8 +829,20 @@
       finishAnimationGesture(e);
       return;
     }
+    if (state.areaEraseGesture?.id === e.pointerId) {
+      finishAreaEraseGesture(e);
+      if (e.pointerType === "touch") {
+        state.touchGesture = null;
+        state.panGesture = null;
+        if (!state.touches.size) setNavigating(false);
+      }
+      return;
+    }
     if (state.selectionGesture?.id === e.pointerId) {
+      const lassoing = state.selectionGesture.hit === "lasso";
       finishSelectionGesture(e);
+      if (lassoing && state.selection?.phase === "active") noteLassoCaptured();
+      if (lassoPenButtonReturn) lassoPenButtonContextUntil = performance.now() + 600;
       return;
     }
     if (state.textTap?.id === e.pointerId) {
@@ -350,74 +869,366 @@
       setNavigating(false);
       return;
     }
-    if (state.drawing?.id === e.pointerId) finishDrawing(e.pointerType);
+    if (state.drawing?.id === e.pointerId) {
+      const wasErasing = state.drawing.erase;
+      finishDrawing(e.pointerType);
+      if (wasErasing && state.pointerPreview) {
+        state.pointerPreview = null;
+        requestInteractionLayerRender();
+      }
+    }
   }
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
-  screen.addEventListener("contextmenu", (e) => e.preventDefault());
-  view.addEventListener(
-    "wheel",
-    (e) => {
-      e.preventDefault();
-      const r = view.getBoundingClientRect(),
-        factor = e.deltaY < 0 ? 1.12 : 0.89,
-        n = Math.max(0.03, Math.min(2, state.scale * factor)),
-        px = e.clientX - r.left,
-        py = e.clientY - r.top;
-      state.panX = px - ((px - state.panX) * n) / state.scale;
-      state.panY = py - ((py - state.panY) * n) / state.scale;
-      state.scale = n;
-      updateCoordinates();
-      requestRender();
-      wheelNavigating();
-    },
-    { passive: false },
-  );
-  function setCanvasMode(mode) {
-    const button = document.querySelector(`[data-mode="${mode}"]`);
-    if (!button) return;
-    if (state.mode === "select" && mode !== "select" && state.selection) {
-      if (selectionAIBusy(state.selection)) {
-        setStatusKey(selectionAIStatusKey(state.selection));
-        return;
-      }
-      commitSelection();
+  screen.addEventListener("lostpointercapture", (event) => {
+    if (state.handToolbarTap?.id === event.pointerId) {
+      state.handToolbarTap = null;
+      state.widgetTouchLastTap = null;
     }
-    if (state.mode === "hand" && mode !== "hand") {
-      if (state.widgetEdit) acceptWidgetEdit();
-      if (state.imageEdit) acceptImageEdit();
-      if (state.animationEdit) acceptAnimationEdit();
+  });
+  window.addEventListener("blur", () => { state.widgetTouchLastTap = null; state.handToolbarTap = null; });
+  // Capture releases even when an overlay consumes the event or capture is lost.
+  window.addEventListener("pointermove", finishReleasedWidgetGesture, true);
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture", "blur"]) {
+    window.addEventListener(type, finishInterruptedWidgetGesture, type !== "blur");
+  }
+  document.addEventListener("visibilitychange", finishInterruptedWidgetGesture);
+  const finishCanvasAgentNavigationPointer = (event) => canvasAgentNavigationPointerDidEnd(event.pointerId);
+  window.addEventListener("pointerup", finishCanvasAgentNavigationPointer, true);
+  window.addEventListener("pointercancel", finishCanvasAgentNavigationPointer, true);
+  screen.addEventListener("lostpointercapture", finishCanvasAgentNavigationPointer);
+  screen.addEventListener("pointerleave", () => {
+    cancelCanvasWidgetGestureResetTap();
+    updateHandObjectHover(null);
+    if (!state.widgetGesture) resetCanvasCursor();
+    if (!state.pointerPreview) return;
+    state.pointerPreview = null;
+    requestInteractionLayerRender();
+  });
+  view.addEventListener("pointerleave", () => {
+    updateHandObjectHover(null);
+    updateWidgetRefinePointer(null);
+  });
+  // The viewport context menu is owned by canvas-navigation.js: it suppresses
+  // the native menu and opens the Widget toolbar when one is under the pointer.
+  view.addEventListener("wheel", handleCanvasWheel, { passive:false });
+  view.addEventListener("gesturestart", beginCanvasTrackpadGesture, { passive:false });
+  view.addEventListener("gesturechange", updateCanvasTrackpadGesture, { passive:false });
+  view.addEventListener("gestureend", endCanvasTrackpadGesture, { passive:false });
+  canvasNavigationLock.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  canvasNavigationLock.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setCanvasNavigationLocked(!state.navigationLocked);
+    void window.PenEchoStudioNavigator?.flushMcpFollow?.();
+  });
+  function enterAIDraftHandMode() {
+    if (state.mode !== "select" && state.aiDraftReturnMode === null) state.aiDraftReturnMode = state.mode;
+    state.pendingHistoryRestored = false;
+    if (state.mode !== "select") setCanvasMode("select", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+  }
+  function finishAIDraftHandMode() {
+    if (state.pending || state.pendingWidget || state.imageEdit) return;
+    const returnMode = state.aiDraftReturnMode;
+    state.aiDraftReturnMode = null;
+    state.pendingHistoryRestored = false;
+    if (returnMode && state.mode === "select") setCanvasMode(returnMode, {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+  }
+  function updateEraserToolUI() {
+    if (!eraserToolButton) return;
+    const area = state.eraserMode === "area-eraser",
+      key = area ? "areaEraser" : "eraser";
+    eraserToolButton.dataset.i18nAria = key;
+    eraserToolButton.dataset.i18nTitle = key;
+    eraserToolButton.dataset.activeEraser = state.eraserMode;
+    eraserToolButton.setAttribute("aria-label", t(key));
+    eraserToolButton.setAttribute("title", t(key));
+    eraserFreehandButton?.setAttribute("aria-checked", String(!area));
+    eraserAreaButton?.setAttribute("aria-checked", String(area));
+  }
+  function showEraserToolMenu(focus = false) {
+    if (!eraserToolMenu || !eraserToolButton) return;
+    clearTimeout(eraserToolMenuTimer);
+    eraserToolMenu.hidden = false;
+    eraserToolButton.setAttribute("aria-expanded", "true");
+    updateEraserToolUI();
+    positionToolbarPopover("#eraserToolControl", "#eraserToolMenu", { align:"center", gap:6 });
+    requestAnimationFrame(positionOpenToolbarPopovers);
+    if (focus) (state.eraserMode === "area-eraser" ? eraserAreaButton : eraserFreehandButton)?.focus({ preventScroll:true });
+    eraserToolMenuTimer = setTimeout(() => hideEraserToolMenu(), ERASER_TOOL_MENU_MS);
+  }
+  function hideEraserToolMenu(options) {
+    options ||= {};
+    clearTimeout(eraserToolMenuTimer);
+    eraserToolMenuTimer = 0;
+    if (!eraserToolMenu || eraserToolMenu.hidden) return;
+    const restoreFocus = options.restoreFocus || eraserToolMenu.contains(document.activeElement);
+    eraserToolMenu.hidden = true;
+    eraserToolButton?.setAttribute("aria-expanded", "false");
+    if (restoreFocus) eraserToolButton?.focus({ preventScroll:true });
+  }
+  function selectEraserMode(mode, options) {
+    options ||= {};
+    if (!["eraser", "area-eraser"].includes(mode)) return;
+    state.eraserMode = mode;
+    updateEraserToolUI();
+    selectCanvasToolMode(mode, { showHint:true });
+    if (options.keepMenuOpen) showEraserToolMenu();
+  }
+  function syncCanvasModePresentation() {
+    const mode = state.mode,
+      eraserMode = ["eraser", "area-eraser"].includes(mode),
+      button = eraserMode ? eraserToolButton : document.querySelector(`[data-mode="${mode}"]`);
+    if (!button) return false;
+    // A retained hover or keyboard focus must not restart the old tool's cue.
+    if (document.body?.getAttribute("data-canvas-mode") !== mode) {
+      lassoPreviewCancelledPointer = lassoToolPointer;
+      stopLassoButtonAnimation();
     }
-    state.mode = mode;
-    if (mode !== "select") deselectAnimation();
+    document.body?.setAttribute("data-canvas-mode", mode);
+    if (typeof canvasAgentScheduleToolbarLayout === "function") canvasAgentScheduleToolbarLayout();
     view.classList.toggle("hand-mode", mode === "hand");
+    syncCanvasNavigation();
     document.querySelectorAll("[data-mode]").forEach((item) => {
       item.classList.toggle("active", item === button);
       item.setAttribute("aria-pressed", String(item === button));
     });
+    updateEraserToolUI();
     resetCanvasCursor();
+    return true;
+  }
+  function setCanvasMode(mode, options) {
+    options ||= {};
+    state.widgetTouchLastTap = null;
+    if (mode !== state.mode || state.interactingWidgetId) setWidgetInteraction(null, { restoreTool:false });
+    const eraserMode = ["eraser", "area-eraser"].includes(mode),
+      button = eraserMode ? eraserToolButton : document.querySelector(`[data-mode="${mode}"]`);
+    if (!button) return;
+    if (mode !== state.mode && state.drawing) finishDrawing(state.drawing.pointerType);
+    if (state.widgetGesture) finishInterruptedWidgetGesture({ type:"tool-change" });
+    if (eraserMode) {
+      state.eraserMode = mode;
+      localStorage.setItem(ERASER_MODE_STORAGE_KEY, mode);
+    }
+    if (state.areaEraseGesture) cancelAreaEraseGesture();
+    hideEraserToolMenu();
+    const finalizingPendingWidgetForEraser = eraserMode && ["hand", "select", "pen"].includes(state.mode)
+      && !options.skipDraftFinalize && Boolean(state.pendingWidget);
+    if (finalizingPendingWidgetForEraser) {
+      state.aiDraftReturnMode = null;
+      state.pendingHistoryRestored = false;
+      acceptPendingWidget({ restoreMode:false, allowRevisionMismatch:true });
+    }
+    const staysInWidgetRefineModes = ["pen", "hand"].includes(state.mode) && ["pen", "hand"].includes(mode);
+    if (mode !== state.mode && !staysInWidgetRefineModes && !options.preserveWidgetRefinement && (activeWidgetRefinement() || state.pendingWidgetReplacement)) {
+      state.aiDraftReturnMode = null;
+      state.pendingHistoryRestored = false;
+      if (state.pendingWidgetReplacement) acceptPendingWidget({ restoreMode:false });
+      else cancelWidgetRefinement("widget-refine-tool-change", { restoreMode:false });
+    }
+    const leavingDraftHand = state.mode === "select" && mode !== "select" && !options.skipDraftFinalize && (state.pending || state.pendingWidget);
+    let deferredSelectionCommit = false;
+    if (leavingDraftHand) {
+      state.aiDraftReturnMode = null;
+      state.pendingHistoryRestored = false;
+      if (state.pending) acceptPending({ restoreMode:false });
+      if (state.pendingWidgetReplacement) acceptPendingWidget({ restoreMode:false });
+      else if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+    }
+    if (!options.preserveSelection && mode !== "select" && state.selection && (state.mode === "select" || leavingDraftHand)) {
+      if (selectionAIBusy(state.selection)) {
+        if (leavingDraftHand) deferredSelectionCommit = true;
+        else {
+          setStatusKey(selectionAIStatusKey(state.selection));
+          return;
+        }
+      } else commitSelection();
+    }
+    if (state.mode === "select" && mode !== "select") {
+      hideHandObjectToolbar({ animate:false, all:true });
+      state.handHoverKey = null;
+      state.handPointerFocusKeys.clear();
+      state.handToolbarOperationPointers.clear();
+      state.handWidgetPointerIds.clear();
+      state.handGestureIncludesWidget = false;
+      for (const editor of [...state.textEditors.values()]) void confirmTextEditor(editor);
+      if (state.widgetEdit) acceptWidgetEdit();
+      if (state.imageEdit) {
+        state.aiDraftReturnMode = null;
+        state.imageHandReturnMode = null;
+        acceptImageEdit();
+      }
+      if (state.animationEdit) acceptAnimationEdit();
+    }
+    if (mode === "hand") {
+      clearTimeout(state.timer);
+      state.timer = 0;
+      hideAutoDelayControl();
+    }
+    if (state.mode !== "select") state.widgetReturnMode = state.mode;
+    state.mode = mode;
+    if (mode !== "select") state.widgetReturnMode = mode;
+    updateAutoControl();
+    if (mode !== "pen") updateWidgetRefinePointer(null);
+    else refreshWidgetRefineHoverCandidate();
+    if (mode !== "eraser") state.pointerPreview = null;
+    if (mode !== "select") deselectAnimation();
+    syncCanvasModePresentation();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
+    if (mode === "hand" && options.showHint && !state.busy) {
+      showHandStatusHint("hand-mode", ["handAutoAIManual", "handAutoAIResume"]);
+    }
+    if (options.showHint && mode === "pen" && canvasGuestAiRestricted()) {
+      showCanvasGuestAiHint();
+    } else if (options.showHint) {
+      const shortcutHints = {
+        agent:keyboardShortcutCanvasHint("focus-agent", "canvasHintShortcutAgent"),
+        save:keyboardShortcutCanvasHint("save-canvas", "canvasHintShortcutSave"),
+        undoRedo:keyboardShortcutUndoRedoHint(),
+        library:keyboardShortcutCanvasHint("canvas-library", "canvasHintShortcutLibrary"),
+        fullscreen:keyboardShortcutCanvasHint("toggle-fullscreen", "canvasHintShortcutFullscreen"),
+        settings:keyboardShortcutCanvasHint("open-settings", "canvasHintShortcutSettings"),
+      };
+      const hintKey = {
+        pen:[shortcutHints.agent, shortcutHints.save, shortcutHints.undoRedo, "canvasHintMcp"],
+        hand:["canvasHintHand", "canvasHintHandAlt", shortcutHints.agent, shortcutHints.library, shortcutHints.fullscreen],
+        select:["canvasHintLasso", "canvasHintLassoAlt", shortcutHints.undoRedo],
+        text:["canvasHintText", "canvasHintTextAlt", shortcutHints.save],
+        eraser:["canvasHintEraser", "canvasHintEraserAlt"],
+        "area-eraser":["canvasHintAreaEraser", "canvasHintAreaEraserAlt", shortcutHints.undoRedo, shortcutHints.settings],
+      }[mode];
+      if (mode === "select") showLassoCanvasHint(shortcutHints.undoRedo);
+      else if (hintKey) showCanvasHint(hintKey);
+    }
+    if (deferredSelectionCommit) queueMicrotask(() => {
+      if (state.mode === mode && state.selection && !selectionAIBusy(state.selection)) commitSelection();
+    });
   }
-  document.querySelectorAll("[data-mode]").forEach((button) => {
-    button.onclick = () => setCanvasMode(button.dataset.mode);
+  function canvasToolMode(mode) {
+    return ["hand", "pen", "select", "text", "eraser", "area-eraser"].includes(mode) ? mode : "";
+  }
+  function selectCanvasToolMode(mode, options) {
+    mode = canvasToolMode(mode);
+    if (!mode) return false;
+    const previous = canvasToolMode(state.mode);
+    if (mode === "select") {
+      // An explicit Lasso choice ends object placement before accepting ink
+      // input. Internal setCanvasMode calls keep the placement lifecycle intact.
+      if (state.pending) acceptPending({ restoreMode:false });
+      if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+      if (state.pending || state.pendingWidget) return false;
+      state.aiDraftReturnMode = null;
+      state.imageHandReturnMode = null;
+      if (state.widgetEdit) acceptWidgetEdit();
+      if (state.imageEdit) acceptImageEdit({ restoreMode:false });
+      if (state.animationEdit) acceptAnimationEdit();
+      hideHandObjectToolbar({ all:true, animate:false });
+    }
+    setCanvasMode(mode, options);
+    if (state.mode !== mode) return false;
+    if (previous && previous !== mode) state.previousToolMode = previous;
+    return true;
+  }
+  function performCanvasPencilAction(action) {
+    if (state.viewMode || state.drawing || state.areaEraseGesture || state.selectionGesture) return false;
+    const current = canvasToolMode(state.mode) || "pen",
+      previous = canvasToolMode(state.previousToolMode);
+    if (action === "switch-previous") {
+      if (!previous || previous === current) return false;
+      return selectCanvasToolMode(previous, { showHint:true });
+    }
+    if (action !== "switch-eraser") return false;
+    const currentIsEraser = ["eraser", "area-eraser"].includes(current),
+      previousNonEraser = previous && !["eraser", "area-eraser"].includes(previous) ? previous : "pen",
+      target = currentIsEraser
+        ? previousNonEraser
+        : ["eraser", "area-eraser"].includes(state.eraserMode) ? state.eraserMode : "eraser";
+    return selectCanvasToolMode(target, { showHint:true });
+  }
+  window.addEventListener("penecho:pencil-action", (event) => {
+    performCanvasPencilAction(event.detail?.action);
   });
+  document.querySelectorAll("[data-mode]").forEach((button) => {
+    if (button === eraserToolButton) return;
+    button.onclick = () => selectCanvasToolMode(button.dataset.mode, { showHint:true });
+  });
+  eraserToolButton?.addEventListener("contextmenu", (event) => event.preventDefault());
+  eraserToolButton?.addEventListener("click", () => selectEraserMode(state.eraserMode, { keepMenuOpen:true }));
+  eraserToolButton?.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+    event.preventDefault();
+    showEraserToolMenu(true);
+  });
+  for (const button of [eraserFreehandButton, eraserAreaButton].filter(Boolean)) {
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectEraserMode(button.dataset.eraserMode, { keepMenuOpen:true });
+    });
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        hideEraserToolMenu({ restoreFocus:true });
+        return;
+      }
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      (button === eraserFreehandButton ? eraserAreaButton : eraserFreehandButton)?.focus({ preventScroll:true });
+    });
+  }
+  document.addEventListener("pointerdown", (event) => {
+    if (eraserToolMenu && !eraserToolMenu.hidden && !eraserToolControl?.contains(event.target) && !eraserToolMenu.contains(event.target)) hideEraserToolMenu();
+  });
+  updateEraserToolUI();
+  canvasViewButton.onclick = () => setCanvasViewMode(true);
+  canvasViewCloseButton.onclick = () => setCanvasViewMode(false);
+  canvasViewShareButton.onclick = () => document.querySelector("#shareCanvasBtn")?.click();
+  canvasViewDownloadButton.onclick = exportCanvasPng;
   [selectionTypesetButton, selectionDeleteButton, selectionCancelButton].filter(Boolean).forEach((button) => {
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
     button.addEventListener("click", (event) => event.stopPropagation());
   });
-  imagePlaceButton.onclick = () => acceptImageEdit();
-  imageMergeButton.onclick = () => {
-    const item = selectedImage();
-    if (item) mergeImage(item);
-  };
-  imageDeleteButton.onclick = () => {
-    const item = selectedImage();
-    if (item) deleteImage(item);
-  };
-  for (const button of [imagePlaceButton, imageMergeButton, imageDeleteButton]) {
-    button.addEventListener("pointerdown", (event) => event.stopPropagation());
-    button.addEventListener("click", (event) => event.stopPropagation());
+  function bindHandToolbarSurface(element, kind, currentObject) {
+    const currentKey = () => {
+      const object = currentObject();
+      return object ? handToolbarKey(kind, object.id) : "";
+    };
+    element.addEventListener("pointerenter", (event) => {
+      if (event.pointerType === "touch") return;
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-hover:${event.pointerId}`, true);
+    });
+    element.addEventListener("pointerleave", (event) => {
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-hover:${event.pointerId}`, false);
+    });
+    element.addEventListener("pointerdown", (event) => {
+      const key = currentKey();
+      if (key) beginHandToolbarOperation(event.pointerId, key);
+    });
+    element.addEventListener("pointerup", (event) => finishHandToolbarOperation(event.pointerId));
+    element.addEventListener("pointercancel", (event) => finishHandToolbarOperation(event.pointerId));
+    element.addEventListener("focusin", () => {
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-focus`, true);
+    });
+    element.addEventListener("focusout", (event) => {
+      if (event.relatedTarget && element.contains(event.relatedTarget)) return;
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-focus`, false);
+    });
   }
   imagePickerButton.addEventListener("click", () => {
     if (state.imageImporting) return;
@@ -437,32 +1248,148 @@
     if (file) void addImageFile(file);
     else imagePickerInput.value = "";
   });
+  function clipboardTextEditorPoint() {
+    const metrics = canvasViewportMetrics(),
+      scale = Math.max(0.03, state.scale),
+      width = Math.min(TEXT_EDITOR_DEFAULT_WIDTH, Math.max(TEXT_EDITOR_MIN_WIDTH, metrics.width - 24)),
+      height = Math.min(TEXT_EDITOR_DEFAULT_HEIGHT, Math.max(TEXT_EDITOR_MIN_HEIGHT, metrics.height - 24)),
+      center = { x:(metrics.width / 2 - state.panX) / scale, y:(metrics.height / 2 - state.panY) / scale };
+    return {
+      x:Math.max(0, Math.min(SIZE - width / scale, center.x - width / scale / 2)),
+      y:Math.max(0, Math.min(SIZE - height / scale, center.y - height / scale / 2)),
+    };
+  }
+  function addClipboardText(text) {
+    const value = typeof text === "string" ? text.slice(0, TEXT_INPUT_MAX_LENGTH) : "";
+    if (!value.trim()) {
+      setStatusKey("clipboardUnsupported");
+      return false;
+    }
+    if (selectionAIBusy()) {
+      setStatusKey(selectionAIStatusKey());
+      return false;
+    }
+    if (state.pending) acceptPending();
+    if (state.pendingWidgetReplacement) rejectPendingWidget(AI_CANCELLED);
+    else if (state.pendingWidget) acceptPendingWidget();
+    if (state.selection) commitSelection();
+    if (state.selection) {
+      setStatusKey(selectionAIStatusKey());
+      return false;
+    }
+    if (state.widgetEdit) acceptWidgetEdit();
+    if (state.animationEdit) acceptAnimationEdit();
+    if (state.imageEdit) acceptImageEdit();
+    const returnMode = state.mode;
+    if (state.mode !== "select") setCanvasMode("select", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+    createTextEditor(clipboardTextEditorPoint(), { text:value, returnMode });
+    setStatusKey("clipboardTextAdded");
+    return true;
+  }
+  async function importClipboardPayload(payload) {
+    if (payload?.image instanceof Blob) {
+      await addImageFile(payload.image);
+      return true;
+    }
+    if (typeof payload?.text === "string" && payload.text.trim()) return addClipboardText(payload.text);
+    setStatusKey("clipboardUnsupported");
+    return false;
+  }
+  function clipboardPayloadFromDataTransfer(data) {
+    if (!data) return null;
+    const files = [...(data.files || [])],
+      itemImage = [...(data.items || [])].find((item) => String(item.type || "").toLowerCase().startsWith("image/")),
+      image = files.find((file) => String(file.type || "").toLowerCase().startsWith("image/")) || itemImage?.getAsFile?.() || null;
+    if (image) return { image };
+    const text = data.getData?.("text/plain") || "";
+    return text ? { text } : null;
+  }
+  async function navigatorClipboardPayload() {
+    if (navigator.clipboard?.read) {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = [...item.types].find((type) => String(type).toLowerCase().startsWith("image/"));
+        if (imageType) return { image:await item.getType(imageType) };
+      }
+      for (const item of items) {
+        if (item.types.includes("text/plain")) return { text:await (await item.getType("text/plain")).text() };
+      }
+      return null;
+    }
+    if (navigator.clipboard?.readText) return { text:await navigator.clipboard.readText() };
+    throw Error("Clipboard reading is unavailable");
+  }
+  async function copyFromSystemClipboard() {
+    if (state.clipboardImporting || state.imageImporting) return false;
+    state.clipboardImporting = true;
+    clipboardCopyButton.disabled = true;
+    setStatusKey("clipboardReading");
+    try {
+      return await importClipboardPayload(await navigatorClipboardPayload());
+    } catch {
+      setStatusKey("clipboardReadFailed");
+      return false;
+    } finally {
+      state.clipboardImporting = false;
+      clipboardCopyButton.disabled = false;
+    }
+  }
+  function editableClipboardTarget(target) {
+    return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])"));
+  }
+  clipboardCopyButton.addEventListener("click", () => void copyFromSystemClipboard());
+  document.addEventListener("paste", (event) => {
+    if (editableClipboardTarget(event.target)) return;
+    event.preventDefault();
+    void importClipboardPayload(clipboardPayloadFromDataTransfer(event.clipboardData));
+  });
   if (selectionTypesetButton) selectionTypesetButton.onclick = normalizeSelectionForAI;
   if (selectionDeleteButton) selectionDeleteButton.onclick = deleteSelection;
   if (selectionCancelButton) selectionCancelButton.onclick = () => cancelSelection();
-  [animationPlayPause, animationRestart, animationDelete].forEach((button) => button.addEventListener("pointerdown", (event) => event.stopPropagation()));
+  [animationPlayPause, animationRestart, animationDelete].forEach((button) => button.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    refreshHandObjectToolbar();
+  }));
   animationPlayPause.onclick = toggleSelectedAnimationPlayback;
   animationRestart.onclick = restartSelectedAnimation;
   animationDelete.onclick = deleteSelectedAnimation;
   animationControls.addEventListener("click", (event) => event.stopPropagation());
   animationControls.addEventListener("pointerdown", (event) => event.stopPropagation());
+  bindHandToolbarSurface(animationControls, "animation", selectedAnimation);
 
   document.querySelector("#penSize").oninput = (e) => {
-    state.pen = +e.target.value;
+    state.pen = clampPenWidth(Math.round(Number(e.target.value)));
+    e.target.value = String(state.pen);
     document.querySelector("#penSizeValue").textContent = `${state.pen} px`;
   };
   document.querySelector("#aiFont").onchange = (e) => {
-    state.aiFont = e.target.value;
+    setAiFont(e.target.value);
   };
+  document.querySelector("#illustrationStyle")?.addEventListener("change", event => setIllustrationStyle(event.target.value));
+  document.querySelector("#illustrationBackground")?.addEventListener("change", event => setIllustrationBackground(event.target.value));
+  function colorOrbitFor(control) {
+    const id = control?.querySelector(".color-orb-trigger")?.getAttribute("aria-controls");
+    return id ? document.getElementById(id) : null;
+  }
   function closeColorOrbs(except = null) {
     document.querySelectorAll("[data-color-control]").forEach((control) => {
       if (control === except) return;
       const trigger = control.querySelector(".color-orb-trigger"),
-        focusedInside = control.contains(document.activeElement) && document.activeElement !== trigger;
+        orbit = colorOrbitFor(control),
+        focusedInside = (control.contains(document.activeElement) || orbit?.contains(document.activeElement)) && document.activeElement !== trigger;
       control.classList.remove("open");
       trigger.setAttribute("aria-expanded", "false");
-      control.querySelector(".color-orbit").setAttribute("aria-hidden", "true");
-      control.querySelectorAll(".orbit-swatch").forEach((button) => button.setAttribute("tabindex", "-1"));
+      if (orbit) {
+        orbit.hidden = true;
+        orbit.querySelector(".custom-color-editor").hidden = true;
+        orbit.querySelector("[data-custom-color-open]").setAttribute("aria-expanded", "false");
+        orbit.setAttribute("aria-hidden", "true");
+        orbit.querySelectorAll(".orbit-swatch, [data-custom-color-open]").forEach((button) => button.setAttribute("tabindex", "-1"));
+      }
       if (focusedInside) trigger.focus();
     });
   }
@@ -476,40 +1403,172 @@
       closeColorOrbs(control);
       control.classList.toggle("open", open);
       trigger.setAttribute("aria-expanded", String(open));
+      orbit.hidden = !open;
+      if (!open) {
+        orbit.querySelector(".custom-color-editor").hidden = true;
+        orbit.querySelector("[data-custom-color-open]").setAttribute("aria-expanded", "false");
+      }
       orbit.setAttribute("aria-hidden", String(!open));
-      control.querySelectorAll(".orbit-swatch").forEach((button) => button.setAttribute("tabindex", open ? "0" : "-1"));
+      orbit.querySelectorAll(".orbit-swatch, [data-custom-color-open]").forEach((button) => button.setAttribute("tabindex", open ? "0" : "-1"));
+      if (open) {
+        syncColorHeading(type === "ink" ? state.inkColor : state.aiColor);
+        positionToolbarPopover(`[data-color-control="${type}"]`, `#${orbit.id}`, { align:"center", gap:6 });
+        requestAnimationFrame(positionOpenToolbarPopovers);
+      }
     };
-    control.querySelectorAll(".orbit-swatch").forEach((button) => {
+    const customInput = orbit.querySelector("[data-custom-color]");
+    function selectColor(color) {
+      if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+      color = color.toLowerCase();
+      if (type === "ink") {
+        state.inkColor = color;
+        applySelectionColor(color);
+        positionTextEditors();
+        for (const editor of state.textEditors.values()) if (editor.mixedMode) scheduleTextEditorPreview(editor, 0);
+      } else state.aiColor = color;
+      trigger.classList.remove(...Object.values(COLOR_CLASS));
+      if (COLOR_CLASS[color]) trigger.classList.add(COLOR_CLASS[color]);
+      runtimeElementStyle(trigger, `color-trigger-${type}`)?.setProperty("--selected-color", color);
+      if (customInput) customInput.value = color;
+      orbit.querySelectorAll(".orbit-swatch").forEach((item) => {
+        const active = (type === "ink" ? item.dataset.inkColor : item.dataset.aiColor) === color;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", String(active));
+      });
+    }
+    orbit.onclick = (event) => event.stopPropagation();
+    orbit.onkeydown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeColorOrbs();
+    };
+    const customEditor = orbit.querySelector(".custom-color-editor"),
+      customOpen = orbit.querySelector("[data-custom-color-open]"),
+      channels = [...customEditor.querySelectorAll("[data-color-channel]")],
+      spectrum = customEditor.querySelector("[data-color-spectrum]"),
+      hueInput = customEditor.querySelector("[data-color-hue]"),
+      saturationInput = customEditor.querySelector("[data-color-saturation]"),
+      brightnessInput = customEditor.querySelector("[data-color-brightness]");
+    let draftHsv = { h:0, s:0, v:0 };
+    function syncColorHeading(color) {
+      orbit.querySelector("[data-color-value]").textContent = color.toUpperCase();
+      runtimeElementStyle(orbit, `color-heading-${type}`)?.setProperty("--current-color", color);
+    }
+    function colorHexToHsv(color, previousHue = 0) {
+      const [r, g, b] = [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16) / 255),
+        max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+      let h = previousHue;
+      if (delta) h = (((max === r ? (g - b) / delta : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4) * 60) + 360) % 360;
+      return { h, s:max ? delta / max : 0, v:max };
+    }
+    function colorHsvToHex(hsv) {
+      const { h, s, v } = hsv;
+      const channel = n => {
+        const k = (n + h / 60) % 6;
+        return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1)))).toString(16).padStart(2, "0");
+      };
+      return `#${channel(5)}${channel(3)}${channel(1)}`;
+    }
+    function previewCustomColor(color, preserveHsv = false) {
+      if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+      customInput.value = color.toLowerCase();
+      runtimeElementStyle(customEditor.querySelector(".custom-color-preview"), `color-preview-${type}`)?.setProperty("background-color", color);
+      channels.forEach((input, index) => {
+        input.value = String(parseInt(color.slice(1 + index * 2, 3 + index * 2), 16));
+      });
+      if (!preserveHsv) draftHsv = colorHexToHsv(color, draftHsv.h);
+      hueInput.value = String(Math.round(draftHsv.h));
+      saturationInput.value = String(Math.round(draftHsv.s * 100));
+      brightnessInput.value = String(Math.round(draftHsv.v * 100));
+      const editorStyle = runtimeElementStyle(customEditor, `color-spectrum-${type}`);
+      editorStyle?.setProperty("--spectrum-hue", `hsl(${draftHsv.h} 100% 50%)`);
+      editorStyle?.setProperty("--spectrum-x", `${draftHsv.s * 100}%`);
+      editorStyle?.setProperty("--spectrum-y", `${(1 - draftHsv.v) * 100}%`);
+      syncColorHeading(color);
+    }
+    function previewHsv() { previewCustomColor(colorHsvToHex(draftHsv), true); }
+    function closeCustomColor() {
+      customEditor.hidden = true;
+      customOpen.setAttribute("aria-expanded", "false");
+      syncColorHeading(type === "ink" ? state.inkColor : state.aiColor);
+      customOpen.focus({ preventScroll:true });
+      positionOpenToolbarPopovers();
+    }
+    customOpen.onclick = () => {
+      if (!customEditor.hidden) { closeCustomColor(); return; }
+      previewCustomColor(type === "ink" ? state.inkColor : state.aiColor);
+      customEditor.hidden = false;
+      customOpen.setAttribute("aria-expanded", "true");
+      positionOpenToolbarPopovers();
+      hueInput.focus({ preventScroll:true });
+    };
+    customInput.oninput = () => previewCustomColor(customInput.value);
+    channels.forEach(input => {
+      input.oninput = () => {
+        if (channels.some(channel => !channel.validity.valid || channel.value === "")) return;
+        previewCustomColor("#" + channels.map(channel => Number(channel.value).toString(16).padStart(2, "0")).join(""));
+      };
+    });
+    hueInput.oninput = () => { draftHsv.h = Number(hueInput.value); previewHsv(); };
+    saturationInput.oninput = () => { draftHsv.s = Number(saturationInput.value) / 100; previewHsv(); };
+    brightnessInput.oninput = () => { draftHsv.v = Number(brightnessInput.value) / 100; previewHsv(); };
+    customEditor.addEventListener("focusin", () => requestAnimationFrame(positionOpenToolbarPopovers));
+    customEditor.addEventListener("focusout", () => requestAnimationFrame(positionOpenToolbarPopovers));
+    let colorPointerId = null;
+    function updateSpectrumPointer(event) {
+      const rect = spectrum.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      draftHsv.s = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      draftHsv.v = 1 - Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+      previewHsv();
+    }
+    spectrum.onpointerdown = event => {
+      if (event.button !== 0 || colorPointerId !== null) return;
+      event.preventDefault();
+      colorPointerId = event.pointerId;
+      spectrum.setPointerCapture(event.pointerId);
+      updateSpectrumPointer(event);
+    };
+    spectrum.onpointermove = event => {
+      if (event.pointerId === colorPointerId) updateSpectrumPointer(event);
+    };
+    spectrum.onpointerup = event => {
+      if (event.pointerId !== colorPointerId) return;
+      updateSpectrumPointer(event);
+      colorPointerId = null;
+      spectrum.releasePointerCapture(event.pointerId);
+    };
+    spectrum.onlostpointercapture = spectrum.onpointercancel = () => { colorPointerId = null; };
+    customEditor.querySelector("[data-custom-color-cancel]").onclick = closeCustomColor;
+    customEditor.onkeydown = event => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeCustomColor();
+    };
+    customEditor.onsubmit = event => {
+      event.preventDefault();
+      if (!customEditor.reportValidity()) return;
+      selectColor(customInput.value);
+      closeColorOrbs();
+    };
+    orbit.querySelectorAll(".orbit-swatch").forEach((button) => {
+      button.setAttribute("tabindex", "-1");
+      button.setAttribute("aria-pressed", String(button.classList.contains("active")));
       button.onclick = (event) => {
         event.stopPropagation();
-        const color = type === "ink" ? button.dataset.inkColor : button.dataset.aiColor;
-        if (type === "ink") {
-          state.inkColor = color;
-          applySelectionColor(color);
-          positionTextEditors();
-          for (const editor of state.textEditors.values()) if (editor.mixedMode) scheduleTextEditorPreview(editor, 0);
-        }
-        else state.aiColor = color;
-        trigger.classList.remove(...Object.values(COLOR_CLASS));
-        trigger.classList.add(COLOR_CLASS[color]);
-        control.querySelectorAll(".orbit-swatch").forEach((item) => {
-          const active = item === button;
-          item.classList.toggle("active", active);
-          item.setAttribute("aria-checked", String(active));
-        });
+        selectColor(type === "ink" ? button.dataset.inkColor : button.dataset.aiColor);
         closeColorOrbs();
       };
     });
-  });
-  document.querySelectorAll(".orbit-swatch").forEach((button) => {
-    button.setAttribute("role", "menuitemradio");
-    button.setAttribute("tabindex", "-1");
-    button.setAttribute("aria-checked", String(button.classList.contains("active")));
   });
   document.addEventListener("click", () => closeColorOrbs());
   document.querySelector("#rejectBatch").onclick = rejectPending;
   document.querySelector("#acceptBatch").onclick = acceptPending;
   document.querySelector("#auto").onclick = () => {
+    // Guests cannot run PenEcho AI; never store a preference they cannot see.
+    if (canvasGuestAiRestricted()) return;
     if (state.auto) setAutoEnabled(false);
     else setAutoEnabled(true, true);
   };
@@ -524,8 +1583,38 @@
     if (document.querySelector("#effortPopover").hidden) showEffortControl();
     else hideEffortControl();
   };
+  document.querySelector("#effortCustomForm").onsubmit = (event) => {
+    event.preventDefault();
+    const input = document.querySelector("#aiEffortCustomInput");
+    if (setEffort(input.value)) document.querySelector("#aiEffortButton").focus({ preventScroll:true });
+  };
+  document.querySelector("#aiEffortCustomInput").addEventListener("input", (event) => {
+    const input = event.currentTarget, start = input.selectionStart, end = input.selectionEnd,
+      normalized = input.value.toLowerCase();
+    if (normalized !== input.value) {
+      input.value = normalized;
+      if (start !== null && end !== null) input.setSelectionRange(start, end);
+    }
+    keepEffortControlOpen();
+  });
+  document.querySelector("#aiEffortCustomInput").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      hideEffortControl();
+      document.querySelector("#aiEffortButton").focus({ preventScroll:true });
+      return;
+    }
+    if (event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const options = [...document.querySelectorAll("#effortOptions .effort-option")], selected = options.find(option => option.getAttribute("aria-selected") === "true");
+    (selected || options[0])?.focus({ preventScroll:true });
+  });
   pluginButton.onclick = () => {
-    if (pluginPopover.hidden) showPluginControl();
+    if (pluginPopover.hidden) {
+      closeSettings(false);
+      showPluginControl();
+    }
     else hidePluginControl();
   };
   pluginClose.onclick = hidePluginControl;
@@ -545,6 +1634,20 @@
     state.pluginAuthoringStatus = null;
     updatePluginAuthoringUi();
   });
+  pluginStylesEditor.addEventListener("input", () => {
+    state.pluginAuthoringStatus = null;
+    updatePluginAuthoringUi();
+  });
+  pluginStylesUploadButton.onclick = () => {
+    if (state.pluginAuthoringBusy) return;
+    pluginStylesUpload.value = "";
+    pluginStylesUpload.click();
+  };
+  pluginStylesUpload.addEventListener("change", () => {
+    const file = pluginStylesUpload.files?.[0];
+    if (file) void importPluginStylesFile(file);
+    else pluginStylesUpload.value = "";
+  });
   pluginImprove.onclick = () => void improvePluginDraft();
   pluginCreateForm.addEventListener("submit", (event) => void savePluginDraft(event));
   pluginOptions.addEventListener("click", (event) => {
@@ -562,6 +1665,13 @@
       void copyPluginMarkdown(copyButton.dataset.pluginCopy, copyButton);
       return;
     }
+    const duplicateButton = event.target.closest("button[data-plugin-duplicate]");
+    if (duplicateButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      createPluginCopy(duplicateButton.dataset.pluginDuplicate);
+      return;
+    }
     const deleteButton = event.target.closest("button[data-plugin-delete]");
     if (!deleteButton) return;
     event.preventDefault();
@@ -571,7 +1681,9 @@
   pluginOptions.addEventListener("change", (event) => {
     const input = event.target.closest("input[data-plugin-id]");
     if (!input) return;
-    setPluginEnabled(input.dataset.pluginId, input.checked);
+    void setPluginEnabled(input.dataset.pluginId, input.checked).then((enabled) => {
+      if (!enabled && input.isConnected) input.checked = pluginEnabled(input.dataset.pluginId);
+    });
   });
   pluginPopover.addEventListener("pointerdown", (event) => {
     if (event.target === pluginPopover) hidePluginControl();
@@ -590,13 +1702,23 @@
     focusable[next].focus();
   });
   document.querySelectorAll("#effortOptions .effort-option").forEach((option) => {
-    option.onclick = () => setEffort(option.dataset.effort);
+    option.onclick = () => {
+      setEffort(option.dataset.effort);
+      document.querySelector("#aiEffortButton").focus({ preventScroll:true });
+    };
   });
   document.querySelector("#effortPopover").addEventListener("pointerdown", keepEffortControlOpen);
+  document.querySelector("#effortPopover").addEventListener("focusin", () => {
+    clearTimeout(state.effortPopoverTimer);
+    state.effortPopoverTimer = 0;
+  });
+  document.querySelector("#effortPopover").addEventListener("focusout", keepEffortControlOpen);
   document.querySelector("#autoDelayPopover").addEventListener("pointerdown", keepAutoDelayControlOpen);
+  document.querySelector(".toolbar").addEventListener("scroll", positionOpenToolbarPopovers, { passive:true });
+  window.addEventListener("resize", positionOpenToolbarPopovers);
   document.addEventListener("pointerdown", (event) => {
-    if (!document.querySelector("#autoControl").contains(event.target)) hideAutoDelayControl();
-    if (!document.querySelector("#effortControl").contains(event.target)) hideEffortControl();
+    if (!document.querySelector("#autoControl").contains(event.target) && !document.querySelector("#autoDelayPopover").contains(event.target)) hideAutoDelayControl();
+    if (!document.querySelector("#effortControl").contains(event.target) && !document.querySelector("#effortPopover").contains(event.target)) hideEffortControl();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") hideEffortControl();
@@ -609,43 +1731,157 @@
       applyLanguage();
     };
   });
-  document.querySelector("#theme").onchange = (e) => applyTheme(e.target.value);
+  document.querySelectorAll(".studio-palette-option[data-studio-palette]").forEach((button) => {
+    button.addEventListener("click", () => applyStudioPalette(button.dataset.studioPalette));
+  });
+  document.querySelectorAll("[data-page-scale]").forEach((button) => {
+    button.addEventListener("click", () => applyPageScale(button.dataset.pageScale));
+  });
+  document.querySelector("#settingsGridStyle").addEventListener("click", event => {
+    const choice = event.target.closest("[data-grid-style]");
+    if (!choice) return;
+    state.gridVisible = choice.dataset.gridStyle !== "none";
+    if (state.gridVisible) state.gridStyle = choice.dataset.gridStyle;
+    localStorage.setItem("penecho-grid", String(state.gridVisible));
+    localStorage.setItem("penecho-grid-style", state.gridStyle);
+    updateGridButton(); render();
+  });
+  document.querySelector("#settingsCanvasAutoDelay").addEventListener("change", event => {
+    const autoDelayRange = document.querySelector("#autoDelayRange");
+    autoDelayRange.value = event.target.value;
+    autoDelayRange.dispatchEvent(new Event("input", {bubbles:true}));
+  });
+  document.querySelector("#canvasAgentSignIn").addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("penecho:show-settings", {detail:{page:"cloud"}}));
+  });
   document.querySelector("#gridToggle").onclick = () => {
     state.gridVisible = !state.gridVisible;
-    localStorage.setItem(state.theme === "research" ? "penecho-research-grid" : "penecho-grid", String(state.gridVisible));
+    localStorage.setItem("penecho-grid", String(state.gridVisible));
     updateGridButton();
     requestRender();
   };
-  document.querySelector("#fullscreenBtn").onclick = async () => {
+  const fullscreenButton = document.querySelector("#fullscreenBtn");
+  fullscreenButton.onclick = async (event) => {
+    const pointerActivated = (event?.detail || 0) > 0;
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen();
     } catch (error) {
       setStatus(`${t("aiError")}${error.message}`);
+    } finally {
+      if (pointerActivated) requestAnimationFrame(() => fullscreenButton.blur());
     }
   };
-  document.querySelector("#newCanvasBtn").onclick = openNewCanvasDialog;
-  document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvas;
+  document.querySelector("#newCanvasBtn").onclick = () => window.PenEchoCompanionCanvases ? void window.PenEchoCompanionCanvases.create() : canvasDocumentsUiAction(openNewCanvasDialog);
+  document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvasFromUser;
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
+  document.querySelector("#historyRecentNav").onclick = openHistoryRecent;
+  document.querySelector("#historyCanvasNav").onclick = openHistoryCanvas;
   document.querySelector("#historyClose").onclick = closeHistoryPanel;
   document.querySelector("#historyBackdrop").onclick = closeHistoryPanel;
-  document.querySelector("#historySaveCurrent").onclick = saveCurrentCanvas;
-  document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
-  document.querySelector("#historyNew").onclick = openNewCanvasDialog;
-  document.querySelector("#newCanvasClose").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
-  document.querySelector("#newCanvasCancel").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
+  document.querySelector("#historySaveCurrent").onclick = () => {
+    closeHistorySavePanel();
+    void saveCurrentCanvasFromUser();
+  };
+  document.querySelector("#historySave").onclick = () => {
+    closeHistorySavePanel();
+    void saveSnapshotFromHistory();
+  };
+  document.querySelector("#historySearch").addEventListener("input", () => historyFiltersChanged());
+  window.addEventListener("penecho:cloud-account-changed", reconcileHistoryIdentity);
+  window.addEventListener("penecho:remote-cloud-status", reconcileHistoryIdentity);
+  document.querySelector("#historySort").addEventListener("change", () => historyFiltersChanged({immediate:true}));
+  document.querySelectorAll("[data-history-view]").forEach((button) => {
+    button.addEventListener("click", () => setHistoryView(button.dataset.historyView));
+  });
+  const historySavePanel = document.querySelector("#historySavePanel");
+  historySavePanel.addEventListener("focusout", () => {
+    requestAnimationFrame(() => {
+      if (historySavePanel.open && !historySavePanel.contains(document.activeElement)) closeHistorySavePanel();
+    });
+  });
+  document.querySelector("#historyPanel").addEventListener("pointerdown", (event) => {
+    if (historySavePanel.open && event.target instanceof Node && !historySavePanel.contains(event.target)) closeHistorySavePanel();
+    if (event.target instanceof Element && event.target.closest(".history-more, .history-row-actions")) return;
+    closeHistoryRowActions();
+  });
+  document.querySelector("#historyList").addEventListener("scroll", () => closeHistoryRowActions(), { passive:true });
+  window.addEventListener("resize", () => closeHistoryRowActions());
+  document.querySelector("#historyNewCanvas").onclick = () => {
+    closeHistoryPanel();
+    requestAnimationFrame(() => document.querySelector("#newCanvasBtn")?.click());
+  };
+  document.querySelector("#historyDeleteConfirm").onclick = () => void confirmSnapshotDelete();
+  document.querySelector("#historyDeleteDialog").addEventListener("close", () => {
+    historyDeletePending = null;
+    document.querySelector("#historyDeleteConfirm").disabled = false;
+  });
+  document.querySelector("#historyProjectSelect").onchange = (event) => {
+    if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
+    else rememberSelectedServerProject(event.target.value);
+    historyFiltersChanged({immediate:true});
+  };
+  document.querySelector("#newCanvasProjectSelect").onchange = (event) => {
+    if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
+    else rememberSelectedServerProject(event.target.value);
+    renderSnapshotList();
+  };
+  document.querySelector("#historyProjectCreate").onclick = openServerProjectDialog;
+  document.querySelector("#historyProjectDelete").onclick = requestSelectedProjectDelete;
+  const projectDialog = document.querySelector("#projectDialog"),
+    projectForm = document.querySelector("#projectForm"),
+    closeProjectDialog = () => {
+      if (projectDialog.dataset.busy !== "true" && projectDialog.open) projectDialog.close("cancel");
+    };
+  document.querySelector("#projectDialogClose").onclick = closeProjectDialog;
+  document.querySelector("#projectName").addEventListener("input", (event) => event.currentTarget.setCustomValidity(""));
+  projectDialog.addEventListener("cancel", (event) => {
+    if (projectDialog.dataset.busy === "true") event.preventDefault();
+  });
+  projectForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (projectDialog.dataset.busy === "true") return;
+    projectDialog.dataset.busy = "true";
+    const buttons = [...projectForm.querySelectorAll("button")];
+    buttons.forEach((button) => (button.disabled = true));
+    try {
+      await runSnapshotAction(createServerProject);
+    } finally {
+      projectDialog.dataset.busy = "false";
+      buttons.forEach((button) => (button.disabled = false));
+    }
+  });
+  document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) setSnapshotLocation(input.value);
+    });
+  });
+  document.querySelector("#newCanvasClose").onclick = () => {
+    pendingCanvasTransition?.onCancel?.();
+    pendingCanvasTransition = null;
+    window.PenEchoStudioNavigator?.cancelPendingConversation?.();
+    document.querySelector("#newCanvasDialog").close("cancel");
+  };
   document.querySelector("#textHelpClose").onclick = closeTextHelp;
-  document.querySelector("#textHelpDone").onclick = closeTextHelp;
   document.querySelector("#textHelpDialog").addEventListener("close", restoreTextEditorAfterHelp);
-  document.querySelector("#newDiscard").onclick = startBlankCanvas;
+  document.querySelector("#newDiscard").onclick = discardCanvasTransition;
   document.querySelector("#newSaveCopy").onclick = () => completeNewCanvas("new");
   document.querySelector("#newOverwrite").onclick = () => completeNewCanvas("overwrite");
   document.querySelector("#newCanvasDialog").addEventListener("cancel", (event) => {
     if (event.currentTarget.dataset.busy === "true") event.preventDefault();
+    else {
+      pendingCanvasTransition?.onCancel?.();
+      pendingCanvasTransition = null;
+      window.PenEchoStudioNavigator?.cancelPendingConversation?.();
+    }
   });
   document.querySelector("#historyName").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") saveCurrentCanvas();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      closeHistorySavePanel();
+      void saveCurrentCanvasFromUser();
+    }
   });
   document.querySelector("#newSnapshotName").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -657,7 +1893,8 @@
     updateFullscreenButton();
     requestAnimationFrame(fit);
   });
-  document.querySelector("#debugBtn").onclick = (e) => {
+  const debugButton = document.querySelector("#debugBtn");
+  if (debugButton) debugButton.onclick = (e) => {
     const panel = document.querySelector("#debugPanel");
     panel.hidden = !panel.hidden;
     e.currentTarget.setAttribute("aria-expanded", String(!panel.hidden));
@@ -671,7 +1908,7 @@
           setStatusKey(selectionAIStatusKey());
           return;
         }
-        if ((state.pending || state.pendingWidget) && a !== "clear") {
+        if ((state.pending || state.pendingWidget) && a !== "clear" && !(state.pendingHistoryRestored && (a === "undo" || a === "redo"))) {
           setStatusKey("pendingConfirm");
           return;
         }
@@ -689,6 +1926,7 @@
             clearTextEditors();
             state.userRevision++;
             state.snapshotLoadGeneration++;
+            const dirtyBefore = captureDirtyHistoryState();
             invalidateRecognition();
             state.historyBefore.clear();
             clearSharpOverlays();
@@ -696,6 +1934,8 @@
             recordAnimationsBefore();
             recordWidgetsBefore();
             recordImagesBefore();
+            recordTextBoxesBefore();
+            state.dirtyHistoryBefore = dirtyBefore;
             state.animations = [];
             state.selectedAnimationId = null;
             state.animationGesture = null;
@@ -704,153 +1944,251 @@
             requestAnimationLayerRender();
             restoreWidgets([]);
             restoreImages([]);
+            void restoreTextBoxes([]);
             tiles.clear();
             state.inkBounds.clear();
             cancelPendingForRevision();
-            save();
+            saveUserCanvasChange();
             render();
           }
         } else invokeAIAction(a);
       }),
   );
-  embodiment.addEventListener("pointerenter", (e) => {
-    if (e.pointerType === "mouse" || e.pointerType === "pen") openRadialMenu();
-  });
-  embodiment.addEventListener("pointerleave", (e) => {
-    if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
-    if (!state.radialGesture) {
-      state.radialCloseTimer = setTimeout(closeRadialMenu, 2000);
-    }
-  });
-  aiOrb.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openRadialMenu();
-    state.radialGesture = { id: e.pointerId, moved: false, selected: null };
-    try {
-      aiOrb.setPointerCapture(e.pointerId);
-    } catch {}
-  });
-  aiOrb.addEventListener("pointermove", (e) => {
-    const gesture = state.radialGesture;
-    if (!gesture || gesture.id !== e.pointerId) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const r = aiOrb.getBoundingClientRect(),
-      distance = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
-    if (distance > 12) gesture.moved = true;
-    gesture.selected = gesture.moved ? chooseRadialAction(e.clientX, e.clientY) : null;
-  });
-  function finishRadialGesture(e) {
-    const gesture = state.radialGesture;
-    if (!gesture || gesture.id !== e.pointerId) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const selected = gesture.selected;
-    state.radialGesture = null;
-    state.radialSuppressClickUntil = performance.now() + 450;
-    if (selected) {
-      invokeAIAction(selected.dataset.aiAction);
-      closeRadialMenu();
-      return;
-    }
-    if (gesture.moved) {
-      closeRadialMenu();
-    }
-  }
-  aiOrb.addEventListener("pointerup", finishRadialGesture);
-  aiOrb.addEventListener("pointercancel", (e) => {
-    if (state.radialGesture?.id !== e.pointerId) return;
-    state.radialGesture = null;
-    state.radialSuppressClickUntil = performance.now() + 450;
-    closeRadialMenu();
-  });
+  embodiment.addEventListener("pointerenter", revealAIOrb);
+  embodiment.addEventListener("pointerleave", scheduleAIOrbIdle);
   aiOrb.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (performance.now() < state.radialSuppressClickUntil) return;
-    if (embodiment.classList.contains("menu-open")) closeRadialMenu();
-    else openRadialMenu();
+    revealAIOrb();
+    if (state.busy) {
+      stopActiveAIRequests();
+      return;
+    }
+    invokeAIAction("auto");
   });
-  document.querySelectorAll(".radial-action").forEach((button) => {
-    button.addEventListener("pointerenter", (e) => {
-      if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
-      clearTimeout(state.radialCloseTimer);
-      openRadialMenu();
-    });
-    button.addEventListener("pointerleave", (e) => {
-      if ((e.pointerType !== "mouse" && e.pointerType !== "pen") || state.radialGesture) return;
-      state.radialCloseTimer = setTimeout(closeRadialMenu, 2000);
-    });
-    button.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
-    });
-    button.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      invokeAIAction(button.dataset.aiAction);
-      closeRadialMenu();
-    });
-  });
-  tourReplayButton.addEventListener("click", replayFeatureTour);
   tourBackButton.addEventListener("click", previousFeatureTourStep);
   tourNextButton.addEventListener("click", nextFeatureTourStep);
   tourSkipButton.addEventListener("click", skipFeatureTour);
   changelogCloseButton.addEventListener("click", closeChangelog);
-  changelogDoneButton.addEventListener("click", closeChangelog);
   changelogLayer.addEventListener("pointerdown", (event) => {
     if (event.target === changelogLayer) closeChangelog();
   });
   changelogLayer.addEventListener("keydown", handleChangelogKeydown);
+  settingsButton.addEventListener("click", () => {
+    if (settings.open) closeSettings();
+    else openSettings();
+  });
+  // Other surfaces (Cloud, Library) open a specific Settings page through this event.
+  window.addEventListener("penecho:show-settings", (event) => {
+    openSettings();
+    selectSettingsPage(String(event.detail?.page || "appearance"));
+  });
+  settingsCloseButton.addEventListener("click", () => closeSettings());
+  settingsBackdrop.addEventListener("pointerdown", () => closeSettings());
+  settingsPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
+  settingsPanel.addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-settings-page-target]");
+    if (tab) selectSettingsPage(tab.dataset.settingsPageTarget);
+  });
+  settingsPanel.addEventListener("keydown", handleSettingsNavigationKeydown);
+  settingsOpenApi?.addEventListener("click", () => openConfiguration("api"));
+  settingsOpenSearch?.addEventListener("click", () => openConfiguration("search"));
+  settingsOpenSystem?.addEventListener("click", () => openConfiguration("system"));
+  configurationClose?.addEventListener("click", () => closeConfiguration());
+  configurationBackdrop?.addEventListener("pointerdown", () => closeConfiguration());
+  configurationPanel?.addEventListener("pointerdown", event => event.stopPropagation());
+  canvasSettingsForm?.addEventListener("submit", saveCanvasSettings);
+  settingsTestConnection?.addEventListener("click", () => void testCanvasConnection());
+  settingsTestSearch?.addEventListener("click", () => void testCanvasSearch());
+  settingsFetchModels?.addEventListener("click", () => void fetchConnectionModels());
+  settingsInstallCli?.addEventListener("click", () => void installCanvasCli());
+  settingsCliCopyCommand?.addEventListener("click", () => void copyCanvasCliCommand());
+  settingsAddConnection?.addEventListener("click", () => fillConnectionEditor());
+  settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
+  settingsConnectionList?.addEventListener("click", handleConnectionAction);
+  settingsConnectionQuickList?.addEventListener("click", handleConnectionAction);
+  document.getElementById("settingsHostedList")?.addEventListener("click", handleConnectionAction);
+  document.getElementById("settingsHostedRefresh")?.addEventListener("click", () => { void loadHostedModels({ force:true }); void loadCanvasSettings(); });
+  window.addEventListener("penecho:cloud-account-changed", event => { if (event.detail?.changed !== false) void loadHostedModels({ accountChanged:true }); });
+  void loadHostedModels();
+  settingsEffortToggle?.addEventListener("click", () => settingsEffortOptions.hidden ? showSettingsEffortOptions() : hideSettingsEffortOptions());
+  settingsEffort?.addEventListener("pointerdown", showSettingsEffortOptions);
+  settingsEffort?.addEventListener("input", () => {
+    updateSettingsEffortOptions();
+    showSettingsEffortOptions();
+  });
+  settingsEffort?.addEventListener("keydown", handleSettingsEffortKeydown);
+  settingsEffortOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-effort-value]");
+    if (option) chooseSettingsEffort(option.dataset.effortValue);
+  });
+  settingsEffortOptions?.addEventListener("keydown", handleSettingsEffortOptionKeydown);
+  document.addEventListener("pointerdown", (event) => {
+    if (!settingsEffortCombobox?.contains(event.target)) hideSettingsEffortOptions();
+    if (!document.querySelector("#settingsApiModelCombobox")?.contains(event.target)) hideApiModelOptions();
+  });
+  if (window.penechoDesktop) document.querySelector(".settings-links")?.remove();
+  settingsProvider?.addEventListener("change", () => {
+    updateSettingsProviderFields();
+    selectDefaultConnectionEffort();
+  });
+  settingsDeepSeekSearchProvider?.addEventListener("change", () => {
+    updateDeepSeekSearchProviderNotice();
+    resetSearchTestStatuses();
+  });
+  settingsDeepSeekSearchApiKey?.addEventListener("input", resetSearchTestStatuses);
+  settingsTavilyApiKey?.addEventListener("input", resetSearchTestStatuses);
+  settingsApiFormat?.addEventListener("change", () => {
+    updateApiPresetFields(true, true);
+    selectDefaultConnectionEffort();
+  });
+  settingsApiRegion?.addEventListener("change", () => {
+    updateApiPresetFields(true, false);
+    clearFetchedApiModels();
+  });
+  settingsApiService?.addEventListener("change", () => {
+    updateApiPresetFields(true, true);
+    selectDefaultConnectionEffort();
+  });
+  settingsApiUrl?.addEventListener("input", clearFetchedApiModels);
+  settingsApiKey?.addEventListener("input", clearFetchedApiModels);
+  settingsApiModel?.addEventListener("input", updateApiModelSelection);
+  settingsApiModel?.addEventListener("click", () => {
+    if (PenEchoApiPresets.forFamily(settingsApiFormat?.value)) showApiModelOptions();
+  });
+  settingsApiModel?.addEventListener("keydown", handleApiModelKeydown);
+  settingsApiModelOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-api-model-value]");
+    if (option) chooseApiModel(option.dataset.apiModelValue);
+  });
+  settingsApiModelOptions?.addEventListener("keydown", handleApiModelOptionKeydown);
+  settingsTraceToggle?.addEventListener("click", () => {
+    settings.requestTrace = !settings.requestTrace;
+    updateTraceToggle();
+  });
+  settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.autoPreference));
+  settingsCanvasHintsToggle.addEventListener("click", () => setCanvasHintsEnabled(!state.canvasHintsEnabled));
+  settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpenPreference));
+  settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
+  summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
+  settingsTourButton.addEventListener("click", () => {
+    closeSettings(false);
+    replayFeatureTour();
+  });
+  settingsChangelogButton.addEventListener("click", () => {
+    closeSettings(false);
+    maybeShowChangelog(true);
+  });
+  window.addEventListener("keydown", (event) => {
+    // Native modal dialogs own Escape before the Settings surface beneath them.
+    if (event.key === "Escape" && document.querySelector("dialog:modal")) return;
+    if (event.key === "Escape" && settings.open) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSettings();
+    } else if (event.key === "Escape" && settings.configurationMode) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeConfiguration();
+    }
+  }, true);
   window.addEventListener("keydown", handleFeatureTourKeydown, true);
   window.addEventListener("resize", handleFeatureTourViewportChange);
   window.addEventListener("scroll", scheduleFeatureTourPosition, true);
   window.visualViewport?.addEventListener("resize", handleFeatureTourViewportChange);
   window.visualViewport?.addEventListener("scroll", scheduleFeatureTourPosition);
   window.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.isComposing || keyboardShortcutTextEditingTarget(e.target)) return;
+    const canvasKeyContext = keyboardShortcutCanvasContext(e, keyboardShortcutChordFromEvent(e));
     if (e.key === "Escape" && (document.querySelector("#newCanvasDialog").open || document.querySelector("#textHelpDialog").open)) return;
-    if (e.key === "Escape" && state.selection) {
+    if (e.key === "Escape" && eraserToolMenu && !eraserToolMenu.hidden) {
+      hideEraserToolMenu({ restoreFocus:true });
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (e.key === "Escape" && canvasKeyContext && state.areaEraseGesture) {
+      cancelAreaEraseGesture();
+      setStatusKey("ready");
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (e.key === "Escape" && canvasKeyContext && state.selection) {
       cancelSelection();
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
-    if (e.key === "Escape" && state.pendingWidget) {
+    if (e.key === "Escape" && canvasKeyContext && state.pendingWidget) {
       rejectPendingWidget();
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
-    if (e.key === "Escape" && state.imageEdit) {
+    if (e.key === "Escape" && canvasKeyContext && activeWidgetRefinement()) {
+      cancelWidgetRefinement();
+      setStatusKey("ready");
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (e.key === "Escape" && canvasKeyContext && state.widgetRefineConfirmation) {
+      cancelWidgetRefineConfirmation();
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (e.key === "Escape" && canvasKeyContext && state.widgetRefineCandidate) {
+      dismissWidgetRefineCandidate();
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (e.key === "Escape" && canvasKeyContext && state.imageEdit) {
       cancelImageEdit();
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
-    if ((e.key === "Delete" || e.key === "Backspace") && state.imageEdit && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) {
+    if ((e.key === "Delete" || e.key === "Backspace") && state.imageEdit && canvasKeyContext) {
       deleteImage(selectedImage());
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
-    if (e.key === "Escape" && state.widgetEdit) {
+    if (e.key === "Escape" && canvasKeyContext && state.widgetEdit) {
       cancelWidgetEdit();
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
-    if ((e.key === "Delete" || e.key === "Backspace") && state.widgetEdit && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) {
+    if ((e.key === "Delete" || e.key === "Backspace") && state.widgetEdit && canvasKeyContext) {
       deleteWidget(selectedWidget());
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
-    if (e.key === "Enter" && state.selection?.phase === "active" && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) {
+    if (e.key === "Enter" && state.selection?.phase === "active" && canvasKeyContext) {
       commitSelection();
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
     if (e.key === "Escape" && !document.querySelector("#autoDelayPopover").hidden) {
       hideAutoDelayControl();
       document.querySelector("#auto").focus();
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
-    if (e.key === "Escape" && document.querySelector("#historyPanel").classList.contains("open")) {
+    if (e.key === "Tab" && trapHistoryPanelFocus(e)) return;
+    if (e.key === "Escape" && closeHistorySavePanel(true)) return;
+    if (e.key === "Escape" && document.querySelector("#historyPanel").classList.contains("open") && !document.querySelector("dialog[open]")) {
       closeHistoryPanel();
       document.querySelector("#historyBtn").focus();
-      return;
-    }
-    if (e.key === "Escape" && embodiment.classList.contains("menu-open")) {
-      state.radialGesture = null;
-      closeRadialMenu();
-      aiOrb.focus();
+      e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
     if (e.key === "Alt" && !state.drawing && !state.pending && !state.pendingWidget) setCanvasCursor("grab");
@@ -864,13 +2202,99 @@
     else requestAnimationLayerRender();
   });
 
-  document.querySelectorAll(".radial-action").forEach((button) => button.setAttribute("tabindex", "-1"));
+  window.PenEchoCommunityCanvas = Object.freeze({
+    widgetArtifact:communityWidgetArtifact,
+    canvasArtifact:communityCanvasArtifact,
+    suggestMetadata:suggestCommunityMetadata,
+    importWidget:importCommunityWidgetArtifact,
+    setWidgetFavorite:setCommunityWidgetFavorite,
+    importCanvas:importCommunityCanvasArtifact,
+    viewCanvas:viewCommunityCanvasArtifact,
+    lineageForArtifact:communityLineageForArtifact,
+    markPublishedOrigin:markPublishedCommunityOrigin,
+  });
+  window.PenEchoCloudProjects = Object.freeze({
+    currentExecutionScope:canvasAgentCloudExecutionScope,
+    currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) ? state.currentSnapshotId : null,
+    saveEcho:saveEchoToCloud,
+    saveForShare:saveLiveShareToCloud,
+    hasShareableContent:canvasHasShareableContent,
+    shareWidgetId:(id) => state.widgets.find(widget => widget.id === id)?.shareSourceId || null,
+    openHistory:openCloudProjectHistory,
+    openCanvas:openCloudCanvas,
+    confirmExternalOpen:confirmExternalCanvasOpen,
+  });
+  // Companion view controller. The minimal view keeps the narrow rail and
+  // hides PenEcho's own Agent and AI chrome; the full view is the complete
+  // Canvas. Both show the same document in this tab, and switching is reversible.
+  const companionViewToggle = document.querySelector("#companionViewToggle"),
+    companionRail = document.querySelector("#companionRail");
+  function canvasCompanionCopy(en, zh) { return state.language === "zh" ? zh : en; }
+  function renderCanvasCompanionView() {
+    if (!CANVAS_COMPANION_REQUESTED) return;
+    const minimal = canvasCompanionMinimal(),
+      label = minimal ? canvasCompanionCopy("Show full Canvas", "显示完整画布") : canvasCompanionCopy("Show compact Canvas", "显示精简画布");
+    document.documentElement.dataset.penechoCompanion = canvasCompanionView;
+    if (companionRail) {
+      companionRail.hidden = !minimal;
+      companionRail.setAttribute("aria-label", canvasCompanionCopy("Canvas tools", "画布工具"));
+    }
+    if (companionViewToggle) {
+      companionViewToggle.hidden = false;
+      companionViewToggle.setAttribute("aria-label", label);
+      companionViewToggle.title = label;
+      const text = document.querySelector("#companionViewLabel");
+      if (text) text.textContent = minimal ? canvasCompanionCopy("Full Canvas", "完整画布") : canvasCompanionCopy("Compact", "精简");
+    }
+  }
+  function setCanvasCompanionView(view) {
+    if (!CANVAS_COMPANION_REQUESTED) return false;
+    canvasCompanionView = view === "full" ? "full" : "minimal";
+    try { sessionStorage.setItem(canvasCompanionViewKey(), canvasCompanionView); } catch {}
+    if (canvasCompanionMinimal()) {
+      if (document.body.classList.contains("canvas-agent-open")) closeCanvasAgent({ focus:false, animate:false });
+      window.PenEchoStudioNavigator?.setOpen?.(false, { restoreAgent:false });
+    }
+    renderCanvasCompanionView();
+    window.dispatchEvent(new CustomEvent("penecho:companion-view", { detail:{ view:canvasCompanionView } }));
+    return true;
+  }
+  if (CANVAS_COMPANION_REQUESTED) {
+    companionViewToggle?.addEventListener("click", () => setCanvasCompanionView(canvasCompanionMinimal() ? "full" : "minimal"));
+    window.addEventListener("penecho:languagechange", renderCanvasCompanionView);
+    // Agent visibility and authentication never change the companion layout.
+    // Only the explicit view toggle may expand the left navigation.
+    // Pointer first: the AI's interactive previews stay usable; the rail switches to the pen.
+    if (canvasCompanionMinimal()) selectCanvasToolMode("hand");
+    renderCanvasCompanionView();
+  }
+  window.PenEchoCompanion = Object.freeze({
+    requested:() => CANVAS_COMPANION_REQUESTED,
+    view:() => canvasCompanionView,
+    setView:setCanvasCompanionView,
+  });
+  installDesktopMenuBridge();
   setPluginTemplate("simple");
   applyLanguage();
+  setWidgetShadowEnabled(state.widgetShadowEnabled);
   applyTheme(state.theme);
+  applyStudioPalette(state.studioPalette);
+  applyPageScale(state.pageScale);
+  resetCanvasCursor();
   loadPluginDocuments().catch(() => {});
-  refreshSnapshots().catch(() => {});
+  // The public viewer has no history UI and must never probe private/local
+  // snapshot APIs on the Cloud origin.
+  // A Cloud deep link already identifies its document. Do not prefetch a
+  // remembered Server Library (including every preview) on the opening path.
+  // Opening Library itself owns its refresh through openHistoryPanel().
+  if (window.PENECHO_CONFIG?.runtime !== "viewer"
+    && !(window.PENECHO_CONFIG?.runtime === "cloud" && window.PENECHO_CONFIG?.remoteCanvasNativeReads === true)) refreshSnapshots().catch(() => {});
   fit();
+  if(window.PENECHO_CONFIG?.runtime!=="cloud")void window.PenEchoPlayground?.start().catch(error=>setStatus(String(error.message)));
   setNavigating(true);
-  requestAnimationFrame(() => requestAnimationFrame(maybeStartOnboarding));
+  scheduleAIOrbIdle();
+  if(window.PENECHO_CONFIG?.runtime!=="viewer")void (window.PENECHO_CONFIG?.browserDraftId ? canvasDocumentsReady() : canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")).catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")));
+  requestAnimationFrame(() => {
+    if (window.PENECHO_CONFIG?.runtime !== "viewer") void loadCanvasSettings().finally(maybeStartOnboarding);
+  });
 })();

@@ -1,0 +1,23 @@
+{
+  "name": "penecho-cloud",
+  "version": "1.1.4",
+  "description": "A shared spatial workspace for you and Claude to create diagrams, draw, take notes, and share your work.",
+  "author": {
+    "name": "PenEcho",
+    "url": "https://penecho.ai"
+  },
+  "homepage": "https://penecho.ai",
+  "icon": "./assets/logo.png",
+  "documentationUrl": "https://github.com/penecho/penecho/tree/main/integrations/penecho-cloud",
+  "supportUrl": "https://penecho.ai/contact.html",
+  "privacyPolicyUrl": "https://penecho.ai/privacy.html",
+  "termsOfServiceUrl": "https://penecho.ai/terms.html",
+  "repository": "https://github.com/penecho/penecho",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "canvas",
+    "diagrams",
+    "visualization"
+  ]
+}

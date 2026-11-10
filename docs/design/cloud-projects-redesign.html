@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en" data-pe-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cloud Projects · Interactive Design</title>
+<style>
+:root {
+  --pe-font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --pe-bg: #f1f3ed;
+  --pe-surface: #fdfdfb;
+  --pe-surface-raised: #f5f6f1;
+  --pe-surface-muted: #f0f2ec;
+  --pe-surface-pressed: #e7eae2;
+  --pe-ink: #252923;
+  --pe-ink-2: #51594b;
+  --pe-ink-3: #626b5b;
+  --pe-line: rgba(48, 55, 45, .14);
+  --pe-line-strong: rgba(48, 55, 45, .22);
+  --pe-hover: rgba(48, 55, 45, .055);
+  --pe-selected: #e9eee5;
+  --pe-accent: #3b5034;
+  --pe-accent-strong: #293f25;
+  --pe-accent-label: #344a2d;
+  --pe-accent-soft: rgba(59, 80, 52, .09);
+  --pe-accent-focus: rgba(59, 80, 52, .28);
+  --pe-accent-ink: #fdfdfb;
+  --pe-danger: #b4232c;
+  --pe-danger-fill: #a91f28;
+  --pe-danger-soft: rgba(180, 35, 44, .08);
+  --pe-warning: #9a5b12;
+  --pe-warning-soft: rgba(154, 91, 18, .09);
+  --pe-success: #277a4c;
+  --pe-success-soft: rgba(39, 122, 76, .09);
+  --pe-glass-keep: 88%;
+  --pe-glass-blur: 14px;
+  --pe-popover-keep: 96%;
+  --pe-popover-blur: 12px;
+  --pe-scrim-alpha: 22%;
+  --pe-scrim-blur: 2px;
+  --pe-glass-saturate: 1.12;
+  --pe-frost-control: rgba(255, 255, 255, .88);
+  --pe-frost-popover: rgba(255, 255, 255, .96);
+  --pe-scrim: rgba(0, 0, 0, .22);
+  --pe-shadow-short: 0 6px 14px rgba(29, 38, 25, .14);
+  --pe-shadow-dialog: 0 14px 30px rgba(29, 38, 25, .20);
+  --pe-control-radius: 5px;
+  --pe-r-control: var(--pe-control-radius);
+  --pe-r-field: var(--pe-control-radius);
+  --pe-r-group: 10px;
+  --pe-r-popover: 10px;
+  --pe-r-dialog-s: 12px;
+  --pe-r-dialog: 14px;
+  --pe-r-dialog-l: 16px;
+  --pe-s1: 2px;
+  --pe-s2: 4px;
+  --pe-s3: 6px;
+  --pe-s4: 8px;
+  --pe-s5: 10px;
+  --pe-s6: 12px;
+  --pe-s8: 16px;
+  --pe-s10: 20px;
+  --pe-s12: 24px;
+  --pe-s16: 32px;
+  --pe-nav-w: 216px;
+  --pe-button-standard-h: 30px;
+  --pe-button-compact-h: 28px;
+  --pe-menu-item-h: 30px;
+  --pe-icon-button-h: 28px;
+  --pe-input-h: 30px;
+  --pe-control-h: var(--pe-button-standard-h);
+  --pe-control-compact-h: var(--pe-button-compact-h);
+  --pe-field-h: var(--pe-input-h);
+}
+
+html[data-pe-theme="light"] { color-scheme: light; }
+
+html[data-pe-theme="dark"] {
+  color-scheme: dark;
+  --pe-bg: #181b17;
+  --pe-surface: #242822;
+  --pe-surface-raised: #2b3028;
+  --pe-surface-muted: #1e221c;
+  --pe-surface-pressed: #353d31;
+  --pe-ink: #f1f4ed;
+  --pe-ink-2: #b7c0b0;
+  --pe-ink-3: #98a48f;
+  --pe-line: rgba(255, 255, 255, .12);
+  --pe-line-strong: rgba(255, 255, 255, .21);
+  --pe-hover: rgba(255, 255, 255, .06);
+  --pe-selected: #323c2c;
+  --pe-accent-soft: rgba(143, 170, 123, .17);
+  --pe-accent-focus: rgba(143, 170, 123, .32);
+  --pe-frost-control: rgba(36, 40, 34, .88);
+  --pe-frost-popover: rgba(36, 40, 34, .96);
+  --pe-accent-ink: #fdfdfb;
+  --pe-accent: #8faa7b;
+  --pe-accent-strong: #3b5034;
+  --pe-accent-label: #c5dab7;
+  --pe-danger: #ff7d86;
+  --pe-danger-fill: #a91f28;
+  --pe-danger-soft: rgba(255, 125, 134, .10);
+  --pe-warning: #e6aa58;
+  --pe-warning-soft: rgba(230, 170, 88, .10);
+  --pe-success: #62c48a;
+  --pe-success-soft: rgba(98, 196, 138, .10);
+  --pe-shadow-short: 0 6px 14px rgba(0, 0, 0, .34);
+  --pe-shadow-dialog: 0 14px 30px rgba(0, 0, 0, .46);
+}
+
+
+@supports (color: color-mix(in srgb, black, white)) {
+  :root {
+    --pe-selected: color-mix(in srgb, var(--pe-accent) 10%, var(--pe-surface));
+    --pe-accent-soft: color-mix(in srgb, var(--pe-accent) 9%, transparent);
+    --pe-accent-focus: color-mix(in srgb, var(--pe-accent) 28%, transparent);
+    --pe-frost-control: color-mix(in srgb, var(--pe-surface) var(--pe-glass-keep), transparent);
+    --pe-frost-popover: color-mix(in srgb, var(--pe-surface) var(--pe-popover-keep), transparent);
+    --pe-scrim: color-mix(in srgb, #000 var(--pe-scrim-alpha), transparent);
+  }
+
+  html[data-pe-theme="dark"] {
+    --pe-selected: color-mix(in srgb, var(--pe-accent) 17%, var(--pe-surface));
+  }
+}
+
+
+
+* { box-sizing: border-box; }
+html, body { width: 100%; min-width: 0; height: 100%; margin: 0; background: transparent; }
+body { font: 13px/1.45 var(--pe-font-ui); color: var(--pe-ink); -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button, input, select { -webkit-tap-highlight-color: transparent; }
+button:disabled { cursor: default; opacity: .5; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--pe-accent); outline-offset: 3px; }
+::selection { background: var(--pe-selected); color: var(--pe-accent-label); }
+input { caret-color: var(--pe-accent); }
+[hidden] { display: none !important; }
+svg.icon { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.app { display: grid; grid-template-columns: var(--pe-nav-w) minmax(0,1fr); height: 100%; min-height: 360px; overflow: hidden; background: var(--pe-surface); }
+.sidebar { display: flex; flex-direction: column; min-height: 0; padding: 24px 12px 12px; background: var(--pe-surface-raised); border-right: 1px solid var(--pe-line); }
+.nav { display: grid; gap: 4px; }
+.nav-btn { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; text-align: left; border: 0; border-radius: 5px; padding: 8px 12px; background: transparent; color: var(--pe-ink-2); }
+.nav-btn:hover { background: var(--pe-hover); }
+.nav-btn.active { background: var(--pe-selected); color: var(--pe-accent-label); font-weight: 500; }
+.nav-btn .count { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
+.side-projects { min-height: 0; overflow: auto; margin-top: 28px; scrollbar-width: thin; scrollbar-color: var(--pe-line-strong) transparent; }
+.side-label { display: flex; align-items: center; justify-content: space-between; padding: 0 12px 8px; color: var(--pe-ink-3); font-size: 12px; }
+.side-label button { padding: 0; border: 0; background: transparent; color: inherit; }
+.tree-btn { padding-left: 12px; }
+.tree-btn span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tree-btn .icon { color: var(--pe-ink-3); }
+.main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.main-head { padding: 28px 32px 20px; }
+.heading-line { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.heading-copy { min-width: 0; }
+h1 { margin: 0; font-size: 24px; line-height: 1.3; font-weight: 600; letter-spacing: -.025em; }
+.subheading { color: var(--pe-ink-3); margin: 6px 0 0; font-size: 13px; }
+.head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.btn { position: relative; display: inline-flex; height: 30px; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--pe-line); border-radius: 5px; background: transparent; font-size: 13px; font-weight: 500; line-height: 30px; white-space: nowrap; }
+.btn::after { content: ""; position: absolute; inset: -3px 0; }
+.btn:hover { border-color: var(--pe-accent); color: var(--pe-accent-label); }
+.btn.primary { background: var(--pe-accent-strong); border-color: var(--pe-accent-strong); color: var(--pe-accent-ink); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { border-color: transparent; }
+.btn.danger { color: var(--pe-danger); border-color: transparent; }
+.btn.danger-fill { background: var(--pe-danger-fill); border-color: var(--pe-danger-fill); color: white; }
+.icon-btn { width: 28px; height: 28px; padding: 0; border-color: transparent; line-height: 28px; }
+.toolbar { display: flex; gap: 12px; align-items: center; margin-top: 24px; }
+.search { display: flex; align-items: center; gap: 8px; padding: 0 9px; border: 1px solid var(--pe-line); border-radius: 5px; height: 30px; width: min(300px,100%); background: var(--pe-surface); color: var(--pe-ink-3); }
+.search:focus-within { outline: 2px solid var(--pe-accent-focus); border-color: var(--pe-accent); }
+.search input { width: 100%; min-width: 0; height: 28px; padding: 0; border: 0; background: transparent; outline: none; font-size: 13px; }
+.search input::placeholder { color: var(--pe-ink-3); }
+.tools-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.sort { height: 30px; max-width: 144px; background: transparent; border: 0; color: var(--pe-ink-2); font-size: 12px; cursor: pointer; }
+.segment { display: flex; height: 30px; gap: 2px; padding: 2px; border: 1px solid var(--pe-line); border-radius: 6px; background: var(--pe-surface-muted); }
+.segment button { display: grid; place-items: center; height: 24px; width: 28px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--pe-ink-3); }
+.segment button[aria-pressed="true"] { background: var(--pe-surface); border-color: var(--pe-line); color: var(--pe-ink); }
+.content { padding: 0 32px 24px; overflow-y: auto; min-height: 0; flex: 1; scrollbar-width: thin; scrollbar-color: var(--pe-line-strong) transparent; }
+.section-line { display: flex; align-items: center; gap: 8px; height: 40px; border-top: 1px solid var(--pe-line); margin-bottom: 12px; color: var(--pe-ink-3); font-size: 12px; }
+.section-line .prototype { padding-left: 8px; border-left: 1px solid var(--pe-line); }
+.section-line .sync { margin-left: auto; display: flex; gap: 5px; align-items: center; }
+.section-line .sync svg { width: 13px; height: 13px; color: var(--pe-success); }
+.grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px 12px; }
+.card { position: relative; min-width: 0; padding: 8px; border: 1px solid var(--pe-line); border-radius: 10px; background: var(--pe-surface); }
+.card:hover { border-color: var(--pe-line-strong); }
+.media { display: grid; place-items: center; position: relative; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; border: 0; border-radius: 6px; padding: 0; background: var(--pe-surface-muted); color: var(--pe-ink-3); }
+.media svg.preview { width: 100%; height: 100%; }
+.media .open-overlay { position: absolute; right: 8px; bottom: 8px; display: grid; place-items: center; width: 28px; height: 28px; background: var(--pe-surface); color: var(--pe-ink-2); border-radius: 5px; opacity: 0; transition: opacity 140ms ease; }
+.media:hover .open-overlay, .media:focus-visible .open-overlay { opacity: 1; }
+.blank-media { display: grid; justify-items: center; gap: 8px; font-size: 12px; }
+.blank-media .icon { width: 28px; height: 28px; color: var(--pe-line-strong); }
+.card-content { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; }
+.card-copy { min-width: 0; flex: 1; }
+.card-title { display: block; max-width: 100%; padding: 0; border: 0; background: transparent; font-size: 13px; font-weight: 500; line-height: 1.6; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-title:hover { color: var(--pe-accent-label); }
+.card-meta { color: var(--pe-ink-3); font-size: 12px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-actions { display: flex; flex-shrink: 0; }
+.tag { display: inline; margin-left: 6px; color: var(--pe-ink-3); font-size: 11px; font-weight: 400; }
+.grid.list { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--pe-line); border-radius: 10px; overflow: hidden; }
+.grid.list .card { display: flex; align-items: center; gap: 16px; border: 0; border-radius: 0; padding: 12px; }
+.grid.list .card + .card { border-top: 1px solid var(--pe-line); }
+.grid.list .media { flex: 0 0 96px; width: 96px; height: 64px; aspect-ratio: auto; }
+.grid.list .card-content { margin: 0; align-items: center; flex: 1; min-width: 0; }
+.grid.list .blank-media span { display: none; }
+.context-menu { position: fixed; z-index: 25; width: 172px; margin: 0; padding: 5px; border: 1px solid var(--pe-line); border-radius: 10px; background: var(--pe-surface); box-shadow: var(--pe-shadow-short); }
+.context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 6px 8px; background: transparent; border: 0; border-radius: 5px; text-align: left; font-size: 13px; }
+.context-menu button:hover { background: var(--pe-hover); }
+.context-menu .danger { color: var(--pe-danger); }
+.context-menu hr { margin: 4px; border: 0; border-top: 1px solid var(--pe-line); }
+.empty { grid-column: 1/-1; min-height: 240px; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; gap: 8px; color: var(--pe-ink-3); }
+.empty > svg { width: 28px; height: 28px; margin-bottom: 8px; }
+.empty h2 { margin: 0; font-size: 15px; font-weight: 500; color: var(--pe-ink); }
+.empty p { margin: 0 0 8px; max-width: 36ch; }
+.breadcrumb { display: flex; gap: 6px; align-items: center; margin-bottom: 14px; color: var(--pe-ink-3); font-size: 12px; }
+.breadcrumb button { border: 0; padding: 0; background: transparent; color: var(--pe-ink-3); font-size: 12px; }
+.modal-layer { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px; background: var(--pe-scrim); backdrop-filter: blur(2px); }
+.dialog { width: min(420px,100%); max-height: 100%; overflow: auto; padding: 24px; border-radius: 14px; background: var(--pe-surface); box-shadow: var(--pe-shadow-dialog); }
+.dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.dialog h2 { font-size: 17px; font-weight: 600; margin: 0; }
+.dialog p { color: var(--pe-ink-2); font-size: 13px; line-height: 1.65; margin: 0 0 18px; }
+.field-label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 500; }
+.field { display: block; width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--pe-line); border-radius: 5px; background: var(--pe-surface); }
+.help { display: block; font-size: 12px; color: var(--pe-ink-3); margin-top: 8px; }
+.error { color: var(--pe-danger); margin-top: 6px; font-size: 12px; }
+.dialog-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+.toast { position: fixed; z-index: 40; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 16px; max-width: calc(100% - 32px); background: var(--pe-ink); color: var(--pe-surface); border-radius: 8px; box-shadow: var(--pe-shadow-short); font-size: 13px; }
+@media (min-width: 1450px) { .grid { grid-template-columns: repeat(4,minmax(0,1fr)); } }
+@media (max-width: 1020px) { .grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .main-head { padding: 24px 24px 16px; } .content { padding: 0 24px 24px; } }
+@media (max-width: 700px) {
+ .app { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); }
+ .sidebar { padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--pe-line); display: block; }
+ .side-projects { display: none; }
+ .nav { display: flex; gap: 4px; overflow-x: auto; }
+ .nav-btn { width: auto; flex: 1; justify-content: center; gap: 6px; white-space: nowrap; padding: 8px; font-size: 12px; }
+ .nav-btn .count { display: none; }
+ .nav-btn .icon { width: 14px; height: 14px; flex-basis: 14px; }
+ .main-head { padding: 20px 20px 14px; }
+ .content { padding: 0 20px 20px; }
+ .heading-line { align-items: flex-start; gap: 12px; }
+ h1 { font-size: 22px; }
+ .subheading { font-size: 12px; }
+ .toolbar { flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+ .search { width: 100%; }
+ .tools-right { margin-left: auto; }
+ .grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .head-actions { padding-top: 1px; }
+ .head-actions .refresh { display: inline-flex; }
+ .section-line .sync span { display: none; }
+}
+@media (max-width: 470px) { .grid { grid-template-columns: minmax(0,1fr); } .nav-btn { padding: 8px 6px; gap: 4px; white-space: normal; line-height: 1.35; } .nav-btn .icon { display: none; } .content { padding: 0 20px 20px; } .grid.list .card { gap: 10px; } }
+@media (pointer: coarse) { .btn::after { inset: -7px 0; } .nav-btn { min-height: 44px; } .context-menu button { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+@media (forced-colors: active) { .nav-btn.active, .btn.primary { outline: 1px solid Highlight; } .card, .search { border-color: CanvasText; } }
+
+</style>
+</head>
+<body>
+
+<!--
+Design-source map:
+Page shell -> penecho-design-language.html Canvas Library manager #complete-surfaces, nav-content: one navigator and one content scroller.
+Cards -> Library grid/media-list #lists: 16:10 media; 13px/500 title; 12px metadata; one trailing action.
+Geometry -> penecho-design-language.css: established layout, type and controls.
+Palette -> current Cloud public/console.css paper-and-sage theme: warm neutral surfaces and charcoal text, with #3b5034 / #293f25 green accents. User-requested Canvas color proposal.
+Revision -> first-version equal 16:10 cards restored; circled sidebar brand and appearance control removed.
+Controls -> #buttons/#forms: 30px text/field, 28px icon, 5px control radius.
+Dialogs -> #dialogs M/single: one task, opaque content, 22% scrim, focus restoration.
+This is an interactive Canvas design artifact. All projects and canvases below are illustrative and in memory.
+-->
+<div class="app" id="app">
+ <aside class="sidebar" aria-label="Cloud project navigation">
+  <nav class="nav" aria-label="Library views">
+   <button class="nav-btn active" data-view="all"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg><span>All projects</span><span class="count" id="project-count">4</span></button>
+   <button class="nav-btn" data-view="recent"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Recent canvases</span></button>
+   <button class="nav-btn" data-view="starred"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg><span>Starred canvases</span></button>
+   <button class="nav-btn" data-view="trash"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg><span>Trash</span></button>
+  </nav>
+  <section class="side-projects">
+   <div class="side-label">
+    <span>Projects</span>
+    <button id="collapse-tree" class="btn icon-btn" aria-label="Collapse project list" aria-expanded="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+   </div>
+   <nav id="project-tree" aria-label="Project shortcuts"></nav>
+  </section>
+ </aside>
+ <main class="main">
+  <header class="main-head">
+   <div id="breadcrumb" class="breadcrumb" hidden></div>
+   <div class="heading-line">
+    <div class="heading-copy">
+     <h1 id="page-title" tabindex="-1">All projects</h1>
+     <p class="subheading" id="subtitle">Keep your ideas together. Pick up where you left off.</p>
+    </div>
+    <div class="head-actions">
+     <button class="btn icon-btn refresh" id="refresh" aria-label="Refresh library" title="Refresh"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7"/></svg></button>
+     <button class="btn primary" id="new-project"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New project</span></button>
+    </div>
+   </div>
+   <div class="toolbar">
+    <label class="search">
+     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
+     <input type="search" id="search" placeholder="Search projects" aria-label="Search projects" autocomplete="off">
+    </label>
+    <div class="tools-right">
+     <select class="sort" id="sort" aria-label="Sort by"><option value="updated">Last updated</option><option value="name">Name A–Z</option></select>
+     <div class="segment" role="group" aria-label="Display mode">
+      <button id="grid-mode" aria-label="Grid view" aria-pressed="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg></button>
+      <button id="list-mode" aria-label="List view" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01"/></svg></button>
+     </div>
+    </div>
+   </div>
+  </header>
+  <div class="content" id="content">
+   <div class="section-line"><span id="item-count">4 projects</span><span class="prototype">Sample data</span><span class="sync" title="Sample state shown in this prototype"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span id="sync-status">All changes saved to cloud</span></span></div>
+   <div class="grid" id="grid"></div>
+  </div>
+ </main>
+</div>
+<div class="context-menu" id="menu" role="menu" hidden></div>
+<div class="modal-layer" id="modal" hidden>
+ <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1">
+  <div class="dialog-head"><h2 id="dialog-title"></h2><button id="close-modal" class="btn icon-btn" aria-label="Close"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div>
+  <div id="dialog-body"></div>
+  <div class="dialog-foot" id="dialog-foot"></div>
+ </section>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+
+const icons = {"grid":"<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.4\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.4\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.4\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.4\"/>","clock":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/>","star":"<path d=\"m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z\"/>","trash":"<path d=\"M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6\"/>","folder":"<path d=\"M3 7V5h7l2 3h9v12H3Z\"/>","inbox":"<path d=\"m4 4-2 10v6h20v-6L20 4ZM2 14h6l2 3h4l2-3h6\"/>","plus":"<path d=\"M12 5v14M5 12h14\"/>","search":"<circle cx=\"10.5\" cy=\"10.5\" r=\"6.5\"/><path d=\"m16 16 5 5\"/>","refresh":"<path d=\"M20 11a8 8 0 1 0-2 6M20 4v7h-7\"/>","list":"<path d=\"M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01\"/>","chevron":"<path d=\"m9 5 7 7-7 7\"/>","down":"<path d=\"m6 9 6 6 6-6\"/>","more":"<circle cx=\"5\" cy=\"12\" r=\"1\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/>","check":"<path d=\"m5 12 4 4L19 6\"/>","cloud":"<path d=\"M7 18a5 5 0 1 1 1-10 6 6 0 0 1 11 3 3.5 3.5 0 0 1-1 7Z\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 1.4 1.4M19 5l-1.4 1.4M6.4 17.6 5 19\"/>","moon":"<path d=\"M20 14A8 8 0 0 1 10 4 8 8 0 1 0 20 14Z\"/>","x":"<path d=\"m6 6 12 12M6 18 18 6\"/>","edit":"<path d=\"m14 5 5 5M4 20l5-1L21 7l-5-5L4 14Z\"/>","canvas":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"M8 8h8M8 12h5\"/>","back":"<path d=\"m12 5-7 7 7 7M5 12h15\"/>","info":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 11v6M12 7h.01\"/>","restore":"<path d=\"M3 10a9 9 0 1 1 1 8M3 4v6h6M12 7v5l3 2\"/>","download":"<path d=\"M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4\"/>","menu":"<path d=\"M4 5h16M4 12h16M4 19h16\"/>"};
+const icon = name => '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + (icons[name] || icons.canvas) + '</svg>';
+const $ = id => document.getElementById(id);
+const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const projects = [
+ {id:'inbox',name:'Uncategorized',system:true,updated:0,time:'Just now',type:'blank'},
+ {id:'product',name:'Product design',updated:1,time:'40 min ago',type:'flow'},
+ {id:'research',name:'Research notes',updated:2,time:'Yesterday',type:'notes'},
+ {id:'ideas',name:'Ideas',updated:5,time:'5 days ago',type:'blank'}
+];
+const canvases = [
+ {id:'c1',project:'inbox',name:'Untitled canvas',type:'blank',updated:0,time:'Just now'},
+ {id:'c2',project:'product',name:'Product architecture',type:'flow',updated:1,time:'40 min ago',starred:true},
+ {id:'c3',project:'product',name:'Next steps',type:'notes',updated:2,time:'Yesterday'},
+ {id:'c4',project:'research',name:'Reading notes',type:'notes',updated:2,time:'Yesterday',starred:true},
+ {id:'c5',project:'ideas',name:'A new idea',type:'blank',updated:5,time:'5 days ago'}
+];
+let view='all', projectId=null, mode='grid', query='', sort='updated', modalAction=null, returnFocus=null, toastTimer=null, menuAnchor=null;
+const notify = () => window.parent.postMessage({type:'penecho-widget-updated'}, '*');
+function preview(type) {
+ if(type==='blank') return '<span class="blank-media">'+icon('canvas')+'<span>Blank canvas</span></span>';
+ if(type==='flow') return '<svg class="preview" viewBox="0 0 360 225" aria-hidden="true"><rect x="22" y="18" width="316" height="189" rx="5" fill="var(--pe-surface)"/><text x="44" y="46" fill="var(--pe-ink)" font-size="12" font-family="sans-serif">From idea to creation</text><path d="M100 111h36m88 0h34M180 136v28" fill="none" stroke="var(--pe-line-strong)" stroke-width="2"/><rect x="40" y="91" width="62" height="40" rx="5" fill="var(--pe-surface-muted)"/><rect x="136" y="86" width="88" height="50" rx="5" fill="var(--pe-selected)" stroke="var(--pe-accent)" stroke-opacity=".25"/><rect x="258" y="91" width="62" height="40" rx="5" fill="var(--pe-surface-muted)"/><rect x="142" y="164" width="76" height="26" rx="4" fill="var(--pe-surface-muted)"/><g font-size="10" text-anchor="middle" font-family="sans-serif" fill="var(--pe-ink-2)"><text x="71" y="115">Collect</text><text x="180" y="115" fill="var(--pe-accent-label)">Canvas</text><text x="289" y="115">Share</text><text x="180" y="181">Refine</text></g></svg>';
+ return '<svg class="preview" viewBox="0 0 360 225" aria-hidden="true"><rect x="44" y="16" width="272" height="193" rx="5" fill="var(--pe-surface)"/><text x="65" y="45" font-family="sans-serif" font-size="13" fill="var(--pe-ink)">Observe, capture, connect</text><path d="M65 61h230" stroke="var(--pe-line)"/><g fill="var(--pe-ink-3)" font-family="sans-serif" font-size="10"><text x="65" y="84">A question worth exploring</text><text x="77" y="112">Capture discoveries and your thinking</text><text x="77" y="135">Connect related ideas on one canvas</text></g><g stroke="var(--pe-accent)" stroke-width="1.5" fill="none"><path d="m65 108 3 3 5-6m-8 26 3 3 5-6"/></g><rect x="65" y="153" width="230" height="33" rx="4" fill="var(--pe-selected)"/><text x="77" y="174" font-size="10" fill="var(--pe-accent-label)" font-family="sans-serif">Next: turn discoveries into action.</text></svg>';
+}
+function getProject(id) { return projects.find(p=>p.id===id); }
+function toast(message) {
+ clearTimeout(toastTimer);
+ $('toast').textContent=message;
+ $('toast').hidden=false;
+ toastTimer=setTimeout(()=>{$('toast').hidden=true;},2600);
+}
+function closeMenu() { $('menu').hidden=true; }
+function closeModal() {
+ $('modal').hidden=true;
+ $('app').inert=false;
+ if(returnFocus && returnFocus.isConnected) returnFocus.focus();
+ modalAction=null;
+ notify();
+}
+function showDialog(title, body, actions) {
+ closeMenu();
+ returnFocus=$('menu').contains(document.activeElement) ? menuAnchor : document.activeElement;
+ $('dialog-title').textContent=title;
+ $('dialog-body').innerHTML=body;
+ $('dialog-foot').innerHTML=actions;
+ $('modal').hidden=false;
+ $('app').inert=true;
+ $('modal').querySelector('.dialog').focus();
+ notify();
+}
+function newItem() {
+ const isCanvas=Boolean(projectId);
+ showDialog(isCanvas?'New canvas':'New project',
+  '<label class="field-label" for="name-input">'+(isCanvas?'Canvas name':'Project name')+'</label><input class="field" id="name-input" maxlength="80" autocomplete="off" placeholder="'+(isCanvas?'Name your canvas':'e.g. Product design')+'"><span class="help">'+(isCanvas?'This canvas will be added to the current project.':'Your new project includes its first blank canvas.')+'</span><div id="name-error" class="error" hidden></div>',
+  '<button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="confirm-name">Create '+(isCanvas?'canvas':'project')+'</button>');
+ modalAction=()=>{
+  const value=$('name-input').value.trim();
+  if(!value){$('name-error').textContent='Please enter a name.';$('name-error').hidden=false;$('name-input').focus();return;}
+  const id='new-'+Date.now();
+  if(isCanvas) canvases.unshift({id,project:projectId,name:value,type:'blank',updated:0,time:'Just now'});
+  else {
+   projects.push({id,name:value,type:'blank',updated:0,time:'Just now'});
+   canvases.push({id:id+'-canvas',project:id,name:'Untitled canvas',type:'blank',updated:0,time:'Just now'});
+  }
+  closeModal(); render(); toast(isCanvas?'Canvas created':'Project created with its first canvas');
+ };
+ $('confirm-name').onclick=()=>modalAction?.();
+}
+function renameItem(item,isCanvas) {
+ showDialog('Rename '+(isCanvas?'canvas':'project'),
+ '<label class="field-label" for="name-input">Name</label><input class="field" id="name-input" maxlength="80" value="'+esc(item.name)+'"><div id="name-error" class="error" hidden></div>',
+ '<button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="confirm-name">Save</button>');
+ modalAction=()=>{
+  const value=$('name-input').value.trim();
+  if(!value){$('name-error').textContent='Please enter a name.';$('name-error').hidden=false;return;}
+  item.name=value;
+  closeModal();render();$('page-title').focus();toast('Name updated');
+ };
+ $('confirm-name').onclick=()=>modalAction?.();
+}
+function deleteItem(item,isCanvas,permanent=false) {
+ const explanation=permanent
+  ? 'This cannot be undone. Enter the name below to confirm.'
+  : isCanvas?'This canvas will move to Trash, where you can restore it.':'This project will move to Trash. Its canvases will move to Uncategorized, so your work is kept.';
+ showDialog(permanent?'Permanently delete “'+item.name+'”?':'Delete “'+item.name+'”?',
+ '<p>'+explanation+'</p>'+(permanent?'<label class="field-label" for="name-input">Enter “'+esc(item.name)+'”</label><input class="field" id="name-input" autocomplete="off"><div class="error" id="name-error" hidden></div>':''),
+ '<button class="btn ghost" data-close>Cancel</button><button class="btn danger-fill" id="confirm-delete">'+(permanent?'Delete permanently':'Move to Trash')+'</button>');
+ modalAction=()=>{
+  if(permanent && $('name-input').value!==item.name){$('name-error').textContent='The name does not match. Please try again.';$('name-error').hidden=false;return;}
+  item.trashed=true;
+  if(permanent) item.deleted=true;
+  if(!isCanvas) {
+   canvases.forEach(c=>{if(c.project===item.id && !c.trashed)c.project='inbox';});
+   if(projectId===item.id){projectId=null;view='all';}
+  }
+  closeModal();render();$('page-title').focus();toast(permanent?'Permanently deleted':isCanvas?'Canvas moved to Trash':'Project moved to Trash. Canvases kept in Uncategorized.');
+ };
+ $('confirm-delete').onclick=()=>modalAction?.();
+}
+function openCanvas(item) {
+ showDialog(item.name,
+  '<div class="media" style="aspect-ratio:16/10">'+preview(item.type)+'</div><span class="help">Canvas preview · Interactive prototype</span>',
+  '<button class="btn primary" data-close>Back to library</button>');
+}
+function setView(next) {
+ view=next;projectId=null;query='';$('search').value='';closeMenu();render();$('content').scrollTop=0;
+}
+function openProject(id) {
+ projectId=id;view='project';query='';$('search').value='';closeMenu();render();$('content').scrollTop=0;
+}
+function showMenu(button,item,isCanvas) {
+ if(!$('menu').hidden && menuAnchor===button){closeMenu();return;}
+ menuAnchor=button;
+ let html='';
+ if(item.trashed) {
+  html='<button role="menuitem" data-menu="restore">'+icon('restore')+'Restore '+(isCanvas?'canvas':'project')+'</button><hr><button role="menuitem" class="danger" data-menu="permanent">'+icon('trash')+'Delete permanently</button>';
+ } else {
+  html='<button role="menuitem" data-menu="open">'+icon(isCanvas?'canvas':'folder')+'Open '+(isCanvas?'canvas':'project')+'</button>';
+  if(isCanvas) html+='<button role="menuitem" data-menu="star">'+icon('star')+(item.starred?'Remove star':'Star canvas')+'</button>';
+  if(!item.system) html+='<button role="menuitem" data-menu="rename">'+icon('edit')+'Rename </button><hr><button role="menuitem" class="danger" data-menu="delete">'+icon('trash')+'Delete</button>';
+  else html+='<hr><button role="menuitem" data-menu="info">'+icon('info')+'About Uncategorized</button>';
+ }
+ const menu=$('menu');
+ menu.innerHTML=html;menu.hidden=false;
+ const rect=button.getBoundingClientRect();
+ menu.style.left=Math.max(8,Math.min(innerWidth-180,rect.right-172))+'px';
+ menu.style.top=Math.max(8,Math.min(innerHeight-menu.offsetHeight-8,rect.bottom+6))+'px';
+ menu.querySelector('button').focus();
+ menu.onclick=e=>{
+  const action=e.target.closest('[data-menu]')?.dataset.menu;
+  if(!action)return;
+  closeMenu();
+  if(action==='open'){isCanvas?openCanvas(item):openProject(item.id);}
+  if(action==='rename')renameItem(item,isCanvas);
+  if(action==='delete')deleteItem(item,isCanvas);
+  if(action==='permanent')deleteItem(item,isCanvas,true);
+  if(action==='star'){item.starred=!item.starred;render();toast(item.starred?'Canvas starred':'Star removed');}
+  if(action==='restore'){item.trashed=false;if(isCanvas && getProject(item.project)?.trashed)item.project='inbox';render();toast('Restored');}
+  if(action==='info')showDialog('Uncategorized','<p>This default project is always available. When you delete another project, its canvases move here.</p><p>You can keep using these canvases. The default project cannot be renamed or deleted.</p>','<button class="btn primary" data-close>Got it</button>');
+ };
+}
+function createCard(item,isCanvas) {
+ const card=document.createElement('article');
+ card.className='card';
+ card.dataset.id=item.id;
+ const parent=isCanvas?getProject(item.project):null;
+ const meta=(isCanvas && !projectId && parent?parent.name+' · ':'')+item.time;
+ card.innerHTML='<button class="media" aria-label="Open '+esc(item.name)+'">'+preview(item.type)+'<span class="open-overlay">'+icon('chevron')+'</span></button><div class="card-content"><div class="card-copy"><button class="card-title" title="'+esc(item.name)+'">'+esc(item.name)+(item.system?'<span class="tag">Default</span>':'')+'</button><div class="card-meta" title="'+esc(meta)+'">'+esc(meta)+'</div></div><div class="card-actions"><button class="btn icon-btn" aria-label="'+esc(item.name)+' — More options" aria-haspopup="menu">'+icon('more')+'</button></div></div>';
+ const open=()=>{if(!item.trashed){isCanvas?openCanvas(item):openProject(item.id);}};
+ card.querySelector('.media').onclick=open;
+ card.querySelector('.card-title').onclick=open;
+ if(item.trashed){card.querySelector('.media').disabled=true;card.querySelector('.card-title').disabled=true;}
+ card.querySelector('.card-actions button').onclick=e=>{e.stopPropagation();showMenu(e.currentTarget,item,isCanvas);};
+ return card;
+}
+function render() {
+ $('project-count').textContent=projects.filter(p=>!p.trashed&&!p.deleted).length;
+ document.querySelectorAll('[data-view]').forEach(b=>{
+  const active=b.dataset.view===view;
+  b.classList.toggle('active',active);
+  if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
+ });
+ $('project-tree').innerHTML=projects.filter(p=>!p.trashed&&!p.deleted).map(p=>'<button class="nav-btn tree-btn '+(projectId===p.id?'active':'')+'" data-project="'+p.id+'" title="'+esc(p.name)+'">'+icon(p.system?'inbox':'folder')+'<span>'+esc(p.name)+'</span></button>').join('');
+ const project=projectId?getProject(projectId):null;
+ const title=project?.name||({all:'All projects',recent:'Recent canvases',starred:'Starred canvases',trash:'Trash'}[view]);
+ $('page-title').textContent=title;
+ $('subtitle').textContent=project?(project.system?'A home for canvases that do not belong to another project.':'Ideas and canvases in this project.'):({all:'Keep your ideas together. Pick up where you left off.',recent:'Canvases updated in the last 3 days.',starred:'Your favorite canvases, ready when you are.',trash:'Restore removed work or delete it permanently.'}[view]);
+ $('breadcrumb').hidden=!project;
+ if(project)$('breadcrumb').innerHTML='<button id="back-all">All projects</button>'+icon('chevron')+'<span>'+esc(project.name)+'</span>';
+ $('new-project').hidden=view==='trash';
+ $('new-project').innerHTML=icon('plus')+'<span>'+(project?'New canvas':'New project')+'</span>';
+ const placeholder=project?'Search this project':view==='all'?'Search projects':view==='trash'?'Search Trash':'Search canvases';
+ $('search').placeholder=placeholder;$('search').setAttribute('aria-label',placeholder);
+ let items=[];
+ if(view==='all') items=projects.filter(p=>!p.trashed&&!p.deleted).map(p=>({item:p,isCanvas:false}));
+ else if(project)items=canvases.filter(c=>c.project===projectId&&!c.trashed&&!c.deleted).map(c=>({item:c,isCanvas:true}));
+ else if(view==='recent'||view==='starred')items=canvases.filter(c=>!c.trashed&&!c.deleted&&(view==='recent'?c.updated<=3:c.starred)).map(c=>({item:c,isCanvas:true}));
+ else items=[...projects.filter(p=>p.trashed&&!p.deleted).map(p=>({item:p,isCanvas:false})),...canvases.filter(c=>c.trashed&&!c.deleted).map(c=>({item:c,isCanvas:true}))];
+ items=items.filter(({item,isCanvas})=>(item.name+(isCanvas?getProject(item.project)?.name||'':'')).toLowerCase().includes(query.toLowerCase()));
+ items.sort((a,b)=>sort==='name'?a.item.name.localeCompare(b.item.name,'en'):a.item.updated-b.item.updated);
+ $('item-count').textContent=items.length+(view==='all'?' projects':view==='trash'?' deleted items':' canvases')+(query?' · Search results':'');
+ $('grid').className='grid'+(mode==='list'?' list':'');
+ $('grid').replaceChildren();
+ items.forEach(({item,isCanvas})=>$('grid').appendChild(createCard(item,isCanvas)));
+ if(!items.length) {
+  const title=query?'No results found':view==='trash'?'Trash is empty':view==='starred'?'No starred canvases yet':project?'No canvases here yet':'No recent canvases';
+  const message=query?'Try a different search.':view==='trash'?'Deleted projects and canvases appear here.':view==='starred'?'Choose “Star canvas” from a canvas menu to keep it here.':project?'Create a canvas to start capturing ideas.':'Canvases updated in the last 3 days appear here.';
+  $('grid').innerHTML='<section class="empty">'+icon(query?'search':view==='trash'?'trash':view==='starred'?'star':'canvas')+'<h2>'+title+'</h2><p>'+message+'</p>'+(query?'<button class="btn" id="clear-search">Clear search</button>':project?'<button class="btn primary" id="empty-create">New canvas</button>':'')+'</section>';
+ }
+ notify();
+}
+document.addEventListener('click',e=>{
+ const nav=e.target.closest('[data-view]');
+ if(nav)setView(nav.dataset.view);
+ const project=e.target.closest('[data-project]');
+ if(project)openProject(project.dataset.project);
+ if(e.target.closest('#back-all'))setView('all');
+ if(e.target.closest('[data-close]'))closeModal();
+ if(e.target.closest('#clear-search')){query='';$('search').value='';render();}
+ if(e.target.closest('#empty-create'))newItem();
+ if(!$('menu').hidden && !$('menu').contains(e.target) && !menuAnchor?.contains(e.target))closeMenu();
+});
+$('search').oninput=e=>{query=e.target.value;render();};
+$('sort').onchange=e=>{sort=e.target.value;render();};
+$('grid-mode').onclick=()=>{mode='grid';$('grid-mode').setAttribute('aria-pressed','true');$('list-mode').setAttribute('aria-pressed','false');render();};
+$('list-mode').onclick=()=>{mode='list';$('grid-mode').setAttribute('aria-pressed','false');$('list-mode').setAttribute('aria-pressed','true');render();};
+$('new-project').onclick=newItem;
+$('close-modal').onclick=closeModal;
+$('modal').onclick=e=>{if(e.target===$('modal'))closeModal();};
+$('collapse-tree').onclick=()=>{
+ const hidden=!$('project-tree').hidden;
+ $('project-tree').hidden=hidden;
+ $('collapse-tree').setAttribute('aria-expanded',String(!hidden));
+ $('collapse-tree').setAttribute('aria-label',hidden?'Expand project list':'Collapse project list');
+};
+$('refresh').onclick=()=>{
+ const button=$('refresh');button.disabled=true;
+ $('sync-status').textContent='Refreshing…';
+ setTimeout(()=>{button.disabled=false;$('sync-status').textContent='All changes saved to cloud';toast('Library refreshed');},500);
+};
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'){
+  if(!$('modal').hidden)closeModal();
+  else if(!$('menu').hidden){closeMenu();menuAnchor?.focus();}
+ }
+ if(e.key==='Enter' && !$('modal').hidden && e.target.id==='name-input'){e.preventDefault();modalAction?.();}
+ if(!$('modal').hidden && e.key==='Tab'){
+  const nodes=[...$('modal').querySelectorAll('button:not([disabled]),input:not([disabled]),[tabindex="0"]')];
+  const first=nodes[0],last=nodes[nodes.length-1];
+  if(e.shiftKey && (document.activeElement===first || document.activeElement.classList.contains('dialog'))){e.preventDefault();last.focus();}
+  else if(!e.shiftKey && document.activeElement===last){e.preventDefault();first.focus();}
+ }
+ if(!$('menu').hidden && ['ArrowDown','ArrowUp','Home','End'].includes(e.key)){
+  e.preventDefault();const buttons=[...$('menu').querySelectorAll('button')],at=buttons.indexOf(document.activeElement);
+  const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(at+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;
+  buttons[next].focus();
+ }
+});
+render();
+
+</script>
+</body>
+</html>

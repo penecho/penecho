@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { buildCodexArgs, callCodexCli, prepareIsolatedRuntime, sanitizeCodexEnv } = require("../src/providers/codex-cli.js");
+const { cliCandidates } = require("../src/providers/cli-discovery.js");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const WEBP = "data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA4AAAAvAAAAAAcQEf0PRET/Aw==";
@@ -16,6 +17,17 @@ function testCodexEnv(directory, overrides = {}) {
   fs.writeFileSync(path.join(codexHome, "auth.json"), '{"auth_mode":"test"}');
   return { ...process.env, CODEX_HOME:codexHome, ...overrides };
 }
+
+test("Windows npm PenEcho discovers the desktop-managed Codex before a stale saved npm wrapper", () => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-windows-codex-discovery-")),home=path.join(directory,"home"),appData=path.join(home,"AppData","Roaming"),stateDir=path.join(home,".penecho"),
+    privateManaged=path.join(stateDir,"tools","codex","bin","codex.exe"),desktopManaged=path.join(appData,"PenEcho","tools","codex","bin","codex.exe"),configured=path.join(appData,"npm","codex.cmd");
+  try {
+    for(const file of [privateManaged,desktopManaged,configured]){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,"test");}
+    const candidates=cliCandidates("codex-cli",{platform:"win32",home,stateDir,env:{APPDATA:appData,PATH:"",PATHEXT:".COM;.EXE;.BAT;.CMD"},configuredPath:configured});
+    assert.deepEqual(candidates.map(candidate=>candidate.executable),[privateManaged,desktopManaged,configured]);
+    assert.deepEqual(candidates.map(candidate=>candidate.source),["managed","managed","configured"]);
+  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
+});
 
 test("builds a non-interactive read-only Codex invocation", () => {
   const args = buildCodexArgs({ workDir: "work", imageFile: "image.png", outputFile: "answer.txt", model: "test-model", effort:"max" });
@@ -43,10 +55,21 @@ test("leaves Codex reasoning effort unset when the global value is empty", () =>
   assert.equal(args.some(value => String(value).startsWith("model_reasoning_effort=")), false);
 });
 
+test("passes the configured Codex effort through without model-family mapping", () => {
+  assert.ok(buildCodexArgs({ workDir:"work", imageFile:null, outputFile:"answer.txt", model:"gpt-5.5", effort:"max" }).includes('model_reasoning_effort="max"'));
+  assert.ok(buildCodexArgs({ workDir:"work", imageFile:null, outputFile:"answer.txt", model:"gpt-5.6-sol", effort:"max" }).includes('model_reasoning_effort="max"'));
+  assert.ok(buildCodexArgs({ workDir:"work", imageFile:null, outputFile:"answer.txt", model:"gpt-5.6-sol", effort:"Provider_Native" }).includes('model_reasoning_effort="Provider_Native"'));
+});
+
 test("omits the Codex image argument for a text-only request", () => {
   const args = buildCodexArgs({ workDir:"work", imageFile:null, outputFile:"answer.txt", model:null, effort:null });
   assert.equal(args.includes("-i"), false);
   assert.ok(args.includes("answer.txt"));
+});
+
+test("attaches up to five Codex vision files in message order", () => {
+  const args=buildCodexArgs({workDir:"work",imageFiles:["one.png","two.webp"],outputFile:"answer.txt",model:null,effort:null});
+  assert.deepEqual(args.flatMap((value,index)=>value==="-i"?[args[index+1]]:[]),["one.png","two.webp"]);
 });
 
 test("passes only the required environment to the Codex process", () => {
@@ -160,14 +183,32 @@ const fs = require("fs");
 fs.writeFileSync(${JSON.stringify(marker)}, process.cwd());
 process.stdout.write(JSON.stringify({type:"thread.started",thread_id:"test"})+"\\n");
 process.stdout.write(JSON.stringify({type:"turn.started"})+"\\n");
-process.stdout.write(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:${JSON.stringify(response)}}})+"\\n");
-process.stdout.write(JSON.stringify({type:"turn.completed",usage:{}})+"\\n");
-setInterval(() => {}, 1000);
+setTimeout(() => {
+  process.stdout.write(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:${JSON.stringify(response)}}})+"\\n");
+  process.stdout.write(JSON.stringify({type:"turn.completed",usage:{input_tokens:140,cached_input_tokens:90,output_tokens:12}})+"\\n");
+  setInterval(() => {}, 1000);
+}, 150);
 `);
   try {
-    const started = Date.now(), content = await callCodexCli({ executable:fakeCli, prompt:"stream", atlasImage:PNG, env:testCodexEnv(directory) }), elapsedMs=Date.now()-started;
+    let reportReceiving,activityCount=0,reportedUsage=null;
+    const receiving = new Promise(resolve => { reportReceiving=resolve; }), request = callCodexCli({
+      executable:fakeCli,
+      prompt:"stream",
+      atlasImage:PNG,
+      env:testCodexEnv(directory),
+      onProgress:phase => { if(phase === "receiving")reportReceiving(); },
+      onActivity:() => activityCount++,
+      onUsage:usage => { reportedUsage=usage; },
+    });
+    assert.equal(await Promise.race([receiving.then(() => "receiving"), request.then(() => "resolved")]), "receiving");
+    let completionTimer;
+    const completionDeadline = new Promise((_, reject) => {
+      completionTimer = setTimeout(() => reject(new Error("Codex waited for a completed child process to exit")), 5000);
+    });
+    const content = await Promise.race([request, completionDeadline]).finally(() => clearTimeout(completionTimer));
     assert.equal(JSON.parse(content).message, "immediate");
-    assert.ok(elapsedMs < 1500, `streamed completion took ${elapsedMs}ms`);
+    assert.ok(activityCount>0);
+    assert.deepEqual(reportedUsage,{input_tokens:140,cached_input_tokens:90,output_tokens:12});
     const workDir = await fs.promises.readFile(marker, "utf8"), deadline=Date.now()+5000;
     while(fs.existsSync(workDir)&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
     assert.equal(fs.existsSync(workDir), false);

@@ -1,0 +1,13 @@
+interface:
+  display_name: "PenEcho Canvas UAT"
+  short_description: "Ask to show, draw, or edit on your UAT canvas"
+  default_prompt: "Use $penecho-canvas-uat to set up any missing connection and show my plan on a UAT canvas beside this chat."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "penecho-uat"
+      description: "PenEcho UAT MCP; separate from production"
+      transport: "streamable_http"
+      url: "https://internaltest.penecho.ai/mcp"
+policy:
+  allow_implicit_invocation: true

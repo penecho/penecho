@@ -16,12 +16,40 @@ test("root JavaScript is limited to entry points and Electron Forge configuratio
   assert.deepEqual(rootScripts, ["cli.js", "forge.config.js", "server.js"]);
 });
 
-test("the browser application is maintained as five ordered source sections", () => {
+test("the browser application preserves its ordered source dependencies", () => {
   assert.deepEqual(SOURCES, [
+    "src/providers/api-presets.js",
+    "src/shared/finish-drawing.js",
+    "src/shared/sketch-puppet.js",
+    "src/shared/illustration-style.js",
+    "src/client/app/client-activity.js",
     "src/client/app/core.js",
     "src/client/app/canvas-runtime.js",
+    "src/client/app/visual-explainer.js",
     "src/client/app/persistence.js",
+    "src/client/app/library-pagination.js",
     "src/client/app/ai-runtime.js",
+    "src/client/app/canvas-agent-runtime.js",
+    "src/client/app/mcp-primitives.js",
+    "src/client/app/mcp-troubleshoot.js",
+    "src/client/app/mcp-runtime.js",
+    "src/client/app/document-identity.js",
+    "src/client/app/canvas-documents.js",
+    "src/client/app/companion-canvases.js",
+    "src/client/app/studio-navigator.js",
+    "src/client/app/keyboard-shortcuts.js",
+    "src/client/app/canvas-navigation.js",
+    "src/client/app/playground.js",
+    "src/client/app/desktop-menu.js",
+    "src/client/app/assist-agent.js",
+    "src/client/app/smart-suggestions.js",
+    "src/client/app/agent-suggest.js",
+    "src/client/app/widget-assist.js",
+    "src/client/app/pen-intelligence.js",
+    "src/client/app/canvas-index.js",
+    "src/client/app/note-cards.js",
+    "src/client/app/example-canvases.js",
+    "src/client/app/living-ink.js",
     "src/client/app/ui-bootstrap.js",
   ]);
   for (const source of SOURCES) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
@@ -32,13 +60,14 @@ test("the browser application is maintained as five ordered source sections", ()
 
 test("server, provider, and CLI implementations live under src without unrelated main-only features", () => {
   for (const source of [
-    "src/server/main.js", "src/server/api-config.js", "src/server/typeset.js",
-    "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
-    "src/cli/main.js", "src/cli/configure-ui.js", "src/cli/update.js",
-    "public/access.html", "public/access.css", "public/access.js",
+    "src/server/main.js", "src/server/cloud-connector.js", "src/server/activity-timeout.js", "src/server/api-config.js", "src/server/api-stream.js", "src/server/widget-patch.js", "src/server/typeset.js",
+    "src/server/canvas-agent/http.js", "src/server/canvas-agent/protocol.mjs", "src/server/canvas-agent/cli-adapter.mjs", "src/server/canvas-agent/runtime.mjs",
+    "src/providers/reasoning-effort.js", "src/providers/cli-discovery.js", "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
+    "src/cli/main.js", "src/cli/configure-ui.js", "src/cli/node-version.js", "src/cli/update.js",
+    "public/access.html", "public/access.css", "public/access.js", "public/cloud-connect.css", "public/cloud-connect.js",
   ]) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
   for (const excluded of [
-    "src/server/cloud-connector.js", "src/desktop/launcher.js", "src/desktop/update.js",
+    "src/desktop/launcher.js", "src/desktop/update.js",
     "public/cloud-library.js", "setup/setup.js",
   ]) assert.equal(fs.existsSync(path.join(ROOT, excluded)), false, excluded);
 });
@@ -48,4 +77,36 @@ test("the isolated Android and iOS packaging toolchain remains available", () =>
     "tools/mobile/build-mobile.js", "tools/mobile/capacitor.config.json", "tools/mobile/package.json",
     "tools/mobile/web/index.html", "tools/mobile/web/app.js", "tools/mobile/web/style.css",
   ]) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
+});
+
+test("desktop packaging unpacks the bundled project-search executable", () => {
+  const forge = fs.readFileSync(path.join(ROOT, "forge.config.js"), "utf8");
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  assert.equal(packageJson.dependencies["@vscode/ripgrep"], "1.18.0");
+  assert.match(forge, /asar:\{ unpack:"\*\*\/node_modules\/\{sharp,@img,@vscode\}\/\*\*\/\*" \}/);
+});
+
+test("the npm package includes the generated Live Clay runtime and its build inputs", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  for (const file of [
+    "public/playground.css",
+    "public/playground/liveclay-v1.js",
+    "public/playground/three-LICENSE.txt",
+    "scripts/build-playground.cjs",
+  ]) assert.ok(packageJson.files.includes(file), `${file} must ship in the npm package`);
+  assert.match(packageJson.scripts.check, /npm run check:playground/);
+});
+
+test("the npm package includes every local startup script and stylesheet", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8");
+  const assets = [...new Set([...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+    .map(match => match[1])
+    .filter(url => /\.(?:js|css)(?:\?|$)/.test(url) && !/^(?:https?:|\/)/.test(url))
+    .map(url => `public/${url.split("?")[0]}`))];
+  assert.ok(assets.length > 30);
+  for (const asset of assets) {
+    assert.ok(packageJson.files.some(file => file === asset || file.endsWith("/") && asset.startsWith(file)),
+      `${asset} must ship in the npm package`);
+  }
 });

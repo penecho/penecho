@@ -8,6 +8,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const sharp = require("sharp");
+const { widgetPatchFiles } = require("../src/server/widget-patch.js");
 
 const ROOT = path.resolve(__dirname, "..");
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -77,6 +78,18 @@ function claudeServerEnv(fakeCli, overrides = {}) {
   };
 }
 
+async function recoverableCodexCli(directory) {
+  const bin = path.join(directory, "bin"), record = path.join(directory, "codex-invocations.txt"), windows = process.platform === "win32",
+    command = path.join(bin, windows ? "codex.cmd" : "codex"),
+    script = windows ? path.join(bin, "node_modules", "@openai", "codex", "bin", "codex.js") : command,
+    communityMetadata = { name:"Recovered Widget", description:"A Widget whose metadata was generated after Codex CLI recovery.", category:"developer", tags:["codex","recovery"], continuationPrompt:"" };
+  await fs.promises.mkdir(path.dirname(script), { recursive:true });
+  await fs.promises.writeFile(script, `#!${process.execPath}\n"use strict";\nconst fs=require("node:fs");\nconst args=process.argv.slice(2),record=${JSON.stringify(record)};\nif(args[0]==="--version"){fs.appendFileSync(record,"version\\n");process.stdout.write("codex-cli 0.149.1\\n");process.exit(0);}\nif(args[0]==="login"&&args[1]==="status"){fs.appendFileSync(record,"login\\n");process.stdout.write("Logged in\\n");process.exit(0);}\nlet prompt="";process.stdin.setEncoding("utf8");process.stdin.on("data",chunk=>prompt+=chunk);process.stdin.on("end",()=>{const community=prompt.includes("public Craft metadata"),answer=community?${JSON.stringify(JSON.stringify(communityMetadata))}:'{"intent":"answer","observedText":"recovered","message":"Recovered Canvas AI","commands":[]}';fs.appendFileSync(record,community?"community\\n":"canvas\\n");const output=args[args.indexOf("-o")+1];fs.writeFileSync(output,answer);process.stdout.write(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:answer}})+"\\n");process.stdout.write(JSON.stringify({type:"turn.completed",usage:{}})+"\\n");});\n`, { mode:0o700 });
+  if (windows) await fs.promises.writeFile(command, "@echo off\r\n", "utf8");
+  else await fs.promises.chmod(command, 0o700);
+  return { bin, command, record, communityMetadata };
+}
+
 function startApiServer(responseContent = '{"intent":"none","commands":[]}', options = {}) {
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -88,6 +101,33 @@ function startApiServer(responseContent = '{"intent":"none","commands":[]}', opt
       const reply=()=>{
         if(res.destroyed)return;
         const configured=typeof options.response==="function"?options.response({index:requests.length-1,requestBody}):null,status=configured?.status||options.status||200,responseBody=configured?.body;
+        if(status===200&&options.stream){
+          const content=responseBody??responseContent,half=Math.max(1,Math.floor(content.length/2)),events=options.format==="anthropic"?[
+            `event: message_start\ndata: ${JSON.stringify({type:"message_start",message:{id:"test-response-id",model:"test-upstream-model",usage:{input_tokens:10}}})}\n\n`,
+            `event: content_block_delta\ndata: ${JSON.stringify({type:"content_block_delta",index:0,delta:{type:"text_delta",text:content.slice(0,half)}})}\n\n`,
+            `event: content_block_delta\ndata: ${JSON.stringify({type:"content_block_delta",index:0,delta:{type:"text_delta",text:content.slice(half)}})}\n\n`,
+            `event: message_delta\ndata: ${JSON.stringify({type:"message_delta",delta:{stop_reason:options.stopReason||"end_turn"},usage:{output_tokens:5}})}\n\n`,
+            `event: message_stop\ndata: ${JSON.stringify({type:"message_stop"})}\n\n`,
+          ]:[
+            `data: ${JSON.stringify({id:"test-response-id",model:"test-upstream-model",choices:[{delta:{role:"assistant"},finish_reason:null}]})}\n\n`,
+            `data: ${JSON.stringify({id:"test-response-id",model:"test-upstream-model",choices:[{delta:{content:content.slice(0,half)},finish_reason:null}]})}\n\n`,
+            `data: ${JSON.stringify({id:"test-response-id",model:"test-upstream-model",choices:[{delta:{content:content.slice(half)},finish_reason:null}]})}\n\n`,
+            `data: ${JSON.stringify({id:"test-response-id",model:"test-upstream-model",choices:[{delta:{},finish_reason:"stop"}],usage:{prompt_tokens:10,completion_tokens:5}})}\n\n`,
+            "data: [DONE]\n\n",
+          ];
+          res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache","x-request-id":"test-upstream-request"});
+          res.flushHeaders();
+          let index=0;
+          const writeNext=()=>{
+            if(res.destroyed)return;
+            if(index>=events.length){res.end();return}
+            res.write(events[index++]);
+            if(options.streamDelayMs)setTimeout(writeNext,options.streamDelayMs);
+            else setImmediate(writeNext);
+          };
+          writeNext();
+          return;
+        }
         res.writeHead(status, { "Content-Type":"application/json", "x-request-id":"test-upstream-request" });
         const successfulBody=options.format==="anthropic"?{id:"test-response-id",model:"test-upstream-model",stop_reason:options.stopReason||"end_turn",content:options.contentBlocks??[{type:"text",text:responseBody??responseContent}]}:{id:"test-response-id",model:"test-upstream-model",choices:[{finish_reason:"stop",message:{content:responseBody??responseContent}}]};
         res.end(status===200?JSON.stringify(successfulBody):responseBody??responseContent);
@@ -99,6 +139,146 @@ function startApiServer(responseContent = '{"intent":"none","commands":[]}', opt
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => resolve({ server, requests, origin:`http://127.0.0.1:${server.address().port}` }));
+  });
+}
+
+function startModelDiscoveryServer() {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", chunk => chunks.push(chunk));
+    req.on("end", () => {
+      const request = {
+        method:req.method,
+        path:req.url,
+        authorization:String(req.headers.authorization || ""),
+        xApiKey:String(req.headers["x-api-key"] || ""),
+        anthropicVersion:String(req.headers["anthropic-version"] || ""),
+        accept:String(req.headers.accept || ""),
+        body:Buffer.concat(chunks).toString("utf8"),
+      };
+      requests.push(request);
+      if (request.path === "/openai/v1/models") {
+        res.writeHead(200, { "Content-Type":"application/json" });
+        res.end(JSON.stringify({ data:[{ id:"zeta-model" }, { model:"alpha-model" }, "alpha-model", { name:"gamma-model" }] }));
+        return;
+      }
+      if (request.path === "/anthropic/v1/models") {
+        res.writeHead(200, { "Content-Type":"application/json; charset=utf-8" });
+        res.end(JSON.stringify(["claude-4-model", "claude-3-model", "claude-4-model"]));
+        return;
+      }
+      if (request.path === "/error/v1/models") {
+        res.writeHead(401, { "Content-Type":"application/json" });
+        res.end(JSON.stringify({ error:"provider-secret-error-body" }));
+        return;
+      }
+      if (request.path === "/malformed/v1/models") {
+        res.writeHead(200, { "Content-Type":"application/json" });
+        res.end(JSON.stringify({ data:{ id:"invalid-envelope" } }));
+        return;
+      }
+      if (request.path === "/plain/v1/models") {
+        res.writeHead(200, { "Content-Type":"text/plain; charset=utf-8" });
+        res.end("[]");
+        return;
+      }
+      res.writeHead(404, { "Content-Type":"application/json" });
+      res.end("{}");
+    });
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve({ server, requests, origin:`http://127.0.0.1:${server.address().port}` }));
+  });
+}
+
+function outboundModelText(rawRequest) {
+  const request = JSON.parse(rawRequest);
+  return request.messages[1].content.find(part => part.type === "text").text;
+}
+
+function decodeLineNumberedReadView(readView, logicalLines, endsWithNewline) {
+  if (!readView) {
+    assert.equal(logicalLines, 0);
+    return "";
+  }
+  const numberedLines = readView.split("\n");
+  assert.equal(numberedLines.length, logicalLines);
+  const lines = numberedLines.map((line,index) => {
+    const prefix = `${String(index+1).padStart(6," ")}\t`;
+    assert.equal(line.startsWith(prefix), true);
+    return line.slice(prefix.length);
+  });
+  return `${lines.join("\n")}${endsWithNewline ? "\n" : ""}`;
+}
+
+function parseRefineModelText(text) {
+  const stablePrefix = "PenEcho Refine stable context (JSON; cacheable across edits of this target):\n",
+    filesIntroduction = "\n\nPenEcho virtual files follow.",
+    stableEnd = text.indexOf(filesIntroduction), files = [];
+  assert.equal(text.startsWith(stablePrefix), true);
+  assert.ok(stableEnd > stablePrefix.length);
+  const stableMetadata = JSON.parse(text.slice(stablePrefix.length, stableEnd));
+  let cursor = text.indexOf("\n\nPenEcho virtual file:\n", stableEnd);
+  assert.ok(cursor > stableEnd);
+  while (text.startsWith("\n\nPenEcho virtual file:\n", cursor)) {
+    cursor += 2;
+    const header = /^PenEcho virtual file:\npath: ([^\n]+)\nutf8Bytes: (\d+)\nlogicalLines: (\d+)\nnumbering: nl -ba -w6 -s TAB\npatchBaselineEndsWithNewline: (true|false)\noriginalEndsWithNewline: (true|false)\n<<<BEGIN (PENECHO_VIRTUAL_FILE_[a-f0-9]{64})>>>\n/.exec(text.slice(cursor));
+    assert.ok(header);
+    const contentStart = cursor + header[0].length, endMarker = `\n<<<END ${header[6]}>>>`, contentEnd = text.indexOf(endMarker, contentStart);
+    assert.ok(contentEnd >= contentStart);
+    const readView = text.slice(contentStart, contentEnd), logicalLines = Number(header[3]),
+      patchBaselineEndsWithNewline = header[4] === "true",
+      content = decodeLineNumberedReadView(readView,logicalLines,patchBaselineEndsWithNewline);
+    assert.equal(Buffer.byteLength(content, "utf8"), Number(header[2]));
+    assert.equal(content.includes(header[6]), false);
+    files.push({ path:header[1], content, readView, utf8Bytes:Number(header[2]), logicalLines, patchBaselineEndsWithNewline, originalEndsWithNewline:header[5] === "true", boundary:header[6] });
+    cursor = contentEnd + endMarker.length;
+  }
+  const currentPrefix = "\n\nPenEcho current Refine request context (JSON; applies to the virtual files above):\n";
+  assert.equal(text.startsWith(currentPrefix, cursor), true);
+  const currentStart = cursor + currentPrefix.length,
+    retryPrefix = "\n\nPenEcho Refine retry instruction:\n",
+    retryStart = text.indexOf(retryPrefix, currentStart),
+    currentEnd = retryStart < 0 ? text.length : retryStart,
+    currentMetadata = JSON.parse(text.slice(currentStart, currentEnd)),
+    metadata = {
+      ...stableMetadata,
+      ...currentMetadata,
+      widgetEdit:{ ...stableMetadata.widgetEdit, ...currentMetadata.widgetEdit },
+    };
+  cursor = currentEnd;
+  let retryInstruction = "";
+  if (text.startsWith(retryPrefix, cursor)) {
+    retryInstruction = text.slice(cursor + retryPrefix.length);
+    cursor = text.length;
+  }
+  assert.equal(cursor, text.length);
+  return { metadata, files, retryInstruction };
+}
+
+function startTruncatedApiServer() {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", chunk => chunks.push(chunk));
+    req.on("end", () => {
+      requests.push(Buffer.concat(chunks).toString("utf8"));
+      const completeBody=JSON.stringify({id:"truncated-response",choices:[{message:{content:'{"intent":"answer","commands":[]}'}}]}),
+        partialBody=completeBody.slice(0,Math.max(1,Math.floor(completeBody.length/2)));
+      res.writeHead(200,{
+        "Content-Type":"application/json",
+        "Content-Length":String(Buffer.byteLength(completeBody)+100),
+        "x-request-id":"truncated-upstream-request",
+      });
+      res.write(partialBody);
+      setTimeout(()=>res.destroy(),20);
+    });
+  });
+  return new Promise((resolve,reject)=>{
+    server.once("error",reject);
+    server.listen(0,"127.0.0.1",()=>resolve({server,requests,origin:`http://127.0.0.1:${server.address().port}`}));
   });
 }
 
@@ -180,6 +360,50 @@ function validPayload() {
   };
 }
 
+async function progressEvents(response) {
+  assert.match(response.headers.get("content-type") || "", /^application\/x-ndjson\b/);
+  return (await response.text()).trim().split("\n").filter(Boolean).map(line => JSON.parse(line));
+}
+
+function validSharedCanvas(id = `${Date.now()}-123e4567-e89b-12d3-a456-426614174000`, overrides = {}) {
+  return {
+    version:1,
+    id,
+    createdAt:Date.now(),
+    name:"Shared design",
+    theme:"studio",
+    view:{scale:0.5,panX:120,panY:240},
+    animations:[],
+    widgets:[],
+    images:[],
+    tiles:[{k:"0,0",data:PNG}],
+    preview:PNG,
+    ...overrides,
+  };
+}
+
+function validSharedCanvasBundle(id = `${Date.now()}-123e4567-e89b-12d3-a456-426614174200`, overrides = {}) {
+  const createdAt=Date.now(),widget={id:"widget-1",pluginId:"general",widgetType:"html_widget",html:"<!doctype html><p>Portable</p>"};
+  return {
+    version:2,
+    bundleVersion:2,
+    mode:"snapshot",
+    formatVersion:1,
+    extensions:{"example.test":{portable:true}},
+    id,createdAt,updatedAt:createdAt,name:"Portable bundle",
+    manifest:{
+      format:"penecho-raster-tiles",formatVersion:1,canvasSize:{width:20000,height:20000},tileSize:512,theme:"studio",
+      view:{scale:.5,panX:120,panY:240,navigationLocked:false},animations:[],textBoxes:[],savedAt:new Date(createdAt).toISOString(),extensions:{},
+    },
+    assets:[
+      {kind:"preview",contentType:"image/png",metadata:{width:1,height:1},dataBase64:PNG.split(",",2)[1]},
+      {kind:"tile",contentType:"image/png",metadata:{tileKey:"0,0"},dataBase64:PNG.split(",",2)[1]},
+      {kind:"widget",contentType:"application/json",metadata:{widgetId:widget.id},dataBase64:Buffer.from(JSON.stringify(widget)).toString("base64")},
+    ],
+    ...overrides,
+  };
+}
+
 function weatherPluginDescriptor() {
   return {
     id:"weather",
@@ -187,18 +411,24 @@ function weatherPluginDescriptor() {
     version:"1",
     connect:["https://geocoding-api.open-meteo.com", "https://api.open-meteo.com"],
     recommendedRefreshSeconds:900,
-    document:fs.readFileSync(path.join(ROOT, "public", "plugins", "weather.md"), "utf8").trim(),
+    document:fs.readFileSync(path.join(ROOT, "public", "plugins", "weather", "plugin.md"), "utf8").trim(),
+    styles:"",
   };
 }
 
 function builtInPluginDescriptor(id, connect = []) {
+  const bundleDirectory = path.join(ROOT, "public", "plugins", id),
+    bundled = fs.existsSync(path.join(bundleDirectory, "plugin.md")),
+    documentPath = bundled ? path.join(bundleDirectory, "plugin.md") : path.join(ROOT, "public", "plugins", `${id}.md`),
+    stylesPath = path.join(bundleDirectory, "styles.css");
   return {
     id,
     name:id,
     version:"1",
     connect,
     recommendedRefreshSeconds:86400,
-    document:fs.readFileSync(path.join(ROOT, "public", "plugins", `${id}.md`), "utf8").trim(),
+    document:fs.readFileSync(documentPath, "utf8").trim(),
+    ...(bundled && fs.existsSync(stylesPath) ? { styles:fs.readFileSync(stylesPath, "utf8").trim() } : {}),
   };
 }
 
@@ -207,7 +437,7 @@ test("server uses applied global configuration and one timeout for every executo
   assert.doesNotMatch(server, /loadEnv\(path\.join\(ROOT, ["']\.env["']\)\)/);
   assert.match(server, /process\.env\.AI_TIMEOUT_SECONDS/);
   assert.match(server, /MODEL_TIMEOUT_MS/);
-  assert.match(server, /LAN access \(open one of these addresses on another device\)/);
+  assert.match(server, /LAN access \(try these addresses from a device on the same network\)/);
   assert.match(server, /inbound TCP port/);
   assert.doesNotMatch(server, /offerWindowsLanAccess|listenErrorMessage/);
   assert.doesNotMatch(packageJson.files.join("\n"), /^\.env(?:\.|$)/m);
@@ -218,14 +448,353 @@ test("server uses applied global configuration and one timeout for every executo
 });
 
 test("Codex CLI mode starts with no extra access or model-provider settings", { timeout: 10000 }, async () => {
-  const {child,origin}=await startServer(serverEnv({HOST:"0.0.0.0"}));
+  const {child,origin}=await startServer(serverEnv({HOST:"0.0.0.0",DEEPSEEK_API_KEY:"",DEEPSEEK_SEARCH_API_KEY:"",TAVILY_API_KEY:""}));
   try {
     const localPage=await fetch(origin);
     assert.equal(localPage.status,200);
     assert.ok(localPage.headers.get("set-cookie"));
     const config=await fetch(`${origin}/api/config`).then(response=>response.json());
-    assert.equal(config.aiEffort,"config");
+    assert.equal(config.aiEffort,"medium");
+    assert.equal(config.canvasAgentSearchConfigured,true);
+    const settings=await fetch(`${origin}/api/settings`,{headers:{Origin:origin}}).then(response=>response.json());
+    assert.equal(settings.deepSeekSearchProvider,"deepseek-official");
+    assert.equal(settings.hasDeepSeekSearchApiKey,false);
+    assert.equal(settings.hasTavilyApiKey,false);
+    assert.equal(settings.webSearchAvailable,true);
   } finally { await stopServer(child); }
+});
+
+test("canvas settings expose no API secret and save validated configuration for restart", { timeout:10000 }, async () => {
+  const { child, origin, stateDir } = await startServer(apiServerEnv("https://api.example.test", { AI_API_KEY:"saved-secret", DEEPSEEK_SEARCH_API_KEY:"saved-deepseek-secret", TAVILY_API_KEY:"saved-tavily-secret" }));
+  try {
+    const headers = { Origin:origin, "Content-Type":"application/json" };
+    const currentResponse = await fetch(`${origin}/api/settings`, { headers:{ Origin:origin } }), current = await currentResponse.json();
+    assert.equal(currentResponse.status, 200);
+    assert.equal(current.hasApiKey, true);
+    assert.equal(current.deepSeekSearchProvider, "deepseek-official");
+    assert.equal(current.hasDeepSeekSearchApiKey, true);
+    assert.equal(current.hasTavilyApiKey, true);
+    assert.equal(current.webSearchAvailable, true);
+    assert.equal(Object.hasOwn(current, "apiKey"), false);
+    assert.equal(Object.hasOwn(current, "deepseekSearchApiKey"), false);
+    assert.equal(Object.hasOwn(current, "tavilyApiKey"), false);
+    assert.equal(current.maxTokens, 64000);
+    assert.equal(current.canvasAgentTurnLimit,100);
+    const invalidSearchTestResponse=await fetch(`${origin}/api/settings/search/test`,{method:"POST",headers,body:JSON.stringify({deepSeekSearchProvider:"opencode-go",deepseekSearchApiKey:"bad\nkey",tavilyApiKey:""})}),invalidSearchTest=await invalidSearchTestResponse.json();
+    assert.equal(invalidSearchTestResponse.status,400);
+    assert.doesNotMatch(JSON.stringify(invalidSearchTest),/saved-(?:deepseek|tavily)-secret/);
+    const searchResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ scope:"search", deepSeekSearchProvider:"opencode-go", deepseekSearchApiKey:"sk-deepseek-next-secret", tavilyApiKey:"tvly-next-secret" }) }), search = await searchResponse.json();
+    assert.equal(searchResponse.status, 200, JSON.stringify(search));
+    assert.equal(search.searchApplied, true);
+    assert.equal(search.deepSeekSearchProvider, "opencode-go");
+    assert.equal(search.hasDeepSeekSearchApiKey, true);
+    assert.equal(search.hasTavilyApiKey, true);
+    assert.equal(search.webSearchAvailable, true);
+    assert.equal((await fetch(`${origin}/api/config`).then(response => response.json())).canvasAgentSearchConfigured, true);
+    const savedResponse = await fetch(`${origin}/api/settings`, {
+      method:"POST", headers,
+      body:JSON.stringify({ scope:"api", provider:"api", apiFormat:"anthropic", apiUrl:"https://api.example.test/anthropic/", apiModel:"model-next", apiKey:"", effort:"high", timeoutSeconds:120, autoDelaySeconds:2.5, imageFormat:"png", requestTrace:true, requestTraceLimit:25 }),
+    }), saved = await savedResponse.json();
+    assert.equal(savedResponse.status, 200, JSON.stringify(saved));
+    assert.equal(saved.providerApplied, true);
+    assert.equal(saved.restartRequired, false);
+    const text = await fs.promises.readFile(path.join(stateDir, "config.env"), "utf8");
+    const apiStore = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    assert.equal(apiStore.connections[0].apiFormat, "anthropic");
+    assert.equal(apiStore.connections[0].apiUrl, "https://api.example.test/anthropic");
+    assert.equal(apiStore.connections[0].apiModel, "model-next");
+    assert.equal(apiStore.connections[0].apiKey, "saved-secret");
+    assert.doesNotMatch(text, /^AI_API_(?:FORMAT|URL|MODEL|KEY)=/m);
+    const publicSettings = await fetch(`${origin}/api/settings`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.doesNotMatch(JSON.stringify(publicSettings), /saved-secret|sk-deepseek-next-secret|tvly-next-secret/);
+    assert.match(text, /^DEEPSEEK_SEARCH_API_KEY=sk-deepseek-next-secret$/m);
+    assert.match(text, /^DEEPSEEK_SEARCH_PROVIDER=opencode-go$/m);
+    assert.match(text, /^TAVILY_API_KEY=tvly-next-secret$/m);
+    assert.doesNotMatch(text, /^AUTO_AI_DELAY_SECONDS=/m);
+    const switchedResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"api", provider:"codex-cli", codexModel:"gpt-hot", codexPath:"codex-next", effort:"high", timeoutSeconds:120, autoDelaySeconds:5, imageFormat:"webp", requestTrace:false, requestTraceLimit:100 }) });
+    assert.equal(switchedResponse.status, 200);
+    const hot = await fetch(`${origin}/api/config`).then(response => response.json());
+    assert.equal(hot.aiProvider, "codex-cli");
+    const systemResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"system", timeoutSeconds:120, canvasAgentTurnLimit:1000000, autoDelaySeconds:2.5, imageFormat:"png", requestTrace:true, requestTraceLimit:25 }) });
+    const system = await systemResponse.json();
+    assert.equal(system.restartRequired, true);
+    assert.equal(system.providerApplied, false);
+    const afterSystem = await fetch(`${origin}/api/config`).then(response => response.json());
+    assert.equal(afterSystem.aiProvider, "codex-cli");
+    const updatedText = await fs.promises.readFile(path.join(stateDir, "config.env"), "utf8");
+    assert.match(updatedText, /^AUTO_AI_DELAY_SECONDS=2\.5$/m);
+    assert.match(updatedText, /^MAX_TOKENS=64000$/m);
+    assert.match(updatedText, /^PENECHO_CANVAS_AGENT_TURN_LIMIT=1000000$/m);
+    const invalidMaxTokens = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"system", maxTokens:14999 }) });
+    assert.equal(invalidMaxTokens.status, 400);
+    const invalidLowTurnLimit = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"system", canvasAgentTurnLimit:49 }) });
+    assert.equal(invalidLowTurnLimit.status,400);
+    const invalidFractionalTurnLimit = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"system", canvasAgentTurnLimit:50.5 }) });
+    assert.equal(invalidFractionalTurnLimit.status,400);
+    const invalidPreciseAutoDelay = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"system", autoDelaySeconds:2.55 }) });
+    assert.equal(invalidPreciseAutoDelay.status,400);
+    const invalid = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"api", apiKey:"", apiUrl:"file:///tmp/model", timeoutSeconds:120, autoDelaySeconds:5, imageFormat:"webp", requestTraceLimit:100 }) });
+    assert.equal(invalid.status, 400);
+  } finally { await stopServer(child); }
+});
+
+test("canvas shares ten persistent API and CLI connections without a server-wide selection", { timeout:10000 }, async () => {
+  const { child, origin, stateDir } = await startServer(apiServerEnv("https://api.example.test", { AI_API_KEY:"default-secret" })), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const initial = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.equal(initial.connections.length, 1);
+    assert.equal(initial.connections[0].id, "default");
+    assert.equal(initial.connections[0].removable, true);
+    assert.equal(Object.hasOwn(initial, "activeConnectionId"), false);
+    assert.equal(Object.hasOwn(initial.connections[0], "active"), false);
+    assert.equal(Object.hasOwn(initial.connections[0], "apiKey"), false);
+
+    const emptyEffort = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"codex-cli", cliPath:"codex", effort:"" } }) }), emptyEffortBody = await emptyEffort.json();
+    assert.equal(emptyEffort.status, 200, JSON.stringify(emptyEffortBody));
+    const defaultedConnection = emptyEffortBody.connections.find(connection => connection.id === emptyEffortBody.savedId);
+    assert.equal(defaultedConnection?.effort, "medium");
+    const defaultedStore = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    assert.equal(defaultedStore.connections.find(connection => connection.id === emptyEffortBody.savedId)?.effort, "medium");
+    const removeDefaulted = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:emptyEffortBody.savedId }) });
+    assert.equal(removeDefaulted.status, 200);
+
+    const customEffort = "Provider_Native";
+    const customResponse = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"openai", apiUrl:"https://custom.example.test/v1", apiModel:"custom", apiKey:"custom", effort:customEffort } }) }), customBody = await customResponse.json();
+    assert.equal(customResponse.status, 200, JSON.stringify(customBody));
+    assert.equal(customBody.connections.find(connection => connection.id === customBody.savedId)?.effort, customEffort);
+    const customStore = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    assert.equal(customStore.connections.find(connection => connection.id === customBody.savedId)?.effort, customEffort);
+    const removeCustom = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:customBody.savedId }) });
+    assert.equal(removeCustom.status, 200);
+
+    const missingCliTest = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"codex-cli", cliPath:path.join(stateDir, "missing-codex"), effort:"xhigh" } }) }), missingCliBody = await missingCliTest.json();
+    assert.equal(missingCliTest.status, 400);
+    assert.equal(missingCliBody.installable, true, JSON.stringify(missingCliBody));
+    assert.equal(missingCliBody.provider, "codex-cli");
+    assert.match(missingCliBody.guidance, /chatgpt\.com\/codex\/install\.sh/);
+    assert.match(missingCliBody.guidance, /codex login/);
+    assert.doesNotMatch(missingCliBody.guidance, /restart/i);
+    assert.equal((await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json())).connections.length, 1);
+
+    const missingKimiTest = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"kimi-cli", cliPath:path.join(stateDir, "missing-kimi"), effort:"high" } }) }), missingKimiBody = await missingKimiTest.json();
+    assert.equal(missingKimiTest.status, 400);
+    assert.equal(missingKimiBody.installable, true, JSON.stringify(missingKimiBody));
+    assert.equal(missingKimiBody.provider, "kimi-cli");
+    assert.match(missingKimiBody.guidance, /code\.kimi\.com\/kimi-code\/install\.sh/);
+    assert.match(missingKimiBody.guidance, /kimi login/);
+    assert.doesNotMatch(missingKimiBody.error, /Install it|restart PenEcho/);
+    assert.doesNotMatch(missingKimiBody.guidance, /restart/i);
+
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"codex-cli", cliModel:"gpt-5.6-sol", cliPath:"codex", effort:"high" } }) }), created = await create.json();
+    assert.equal(create.status, 200, JSON.stringify(created));
+    const codex = created.connections.find(connection => connection.provider === "codex-cli");
+    assert.ok(codex?.removable);
+    assert.equal(codex.name, "gpt-5.6-sol");
+    assert.equal(created.connections.length, 2);
+
+    const edit = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", id:codex.id, connection:{ provider:"codex-cli", cliModel:"gpt-5.6-sol-edited", cliPath:"codex", effort:"high" } }) }), edited = await edit.json();
+    assert.equal(edit.status, 200, JSON.stringify(edited));
+    assert.equal(edited.connections.find(connection => connection.id === codex.id)?.name, "gpt-5.6-sol-edited");
+
+    const activate = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"activate", id:codex.id }) }), activated = await activate.json();
+    assert.equal(activate.status, 200, JSON.stringify(activated));
+    assert.equal(Object.hasOwn(activated, "activeConnectionId"), false);
+    assert.equal((await fetch(`${origin}/api/config`).then(response => response.json())).aiProvider, "api");
+
+    for (let index = 2; index <= 9; index++) {
+      const preset = index === 2 ? { apiPreset:"minimax-china-coding", apiFormat:"anthropic", apiUrl:"https://api.minimaxi.com/anthropic", apiModel:"MiniMax-M3" } : { apiFormat:"openai", apiUrl:`https://api${index}.example.test/v1`, apiModel:`model-${index}` };
+      const response = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", ...preset, apiKey:`key-${index}`, effort:index === 2 ? "medium" : "xhigh" } }) });
+      assert.equal(response.status, 200, `connection ${index}`);
+    }
+    const full = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.equal(full.connections.length, 10);
+    const minimax = full.connections.find(connection => connection.apiPreset === "minimax-china-coding");
+    assert.equal(minimax?.name, "MiniMax-M3");
+    assert.equal(minimax?.apiFormat, "anthropic");
+    assert.equal(minimax?.apiUrl, "https://api.minimaxi.com/anthropic");
+    const overflow = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"openai", apiUrl:"https://overflow.example.test/v1", apiModel:"overflow", apiKey:"overflow", effort:"xhigh" } }) });
+    assert.equal(overflow.status, 400);
+
+    const remove = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:codex.id }) }), removed = await remove.json();
+    assert.equal(remove.status, 200, JSON.stringify(removed));
+    assert.equal(Object.hasOwn(removed, "activeConnectionId"), false);
+    assert.equal((await fetch(`${origin}/api/config`).then(response => response.json())).aiProvider, "api");
+    const stored = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    assert.equal(stored.connections.length, 9);
+    assert.equal(Object.hasOwn(stored, "activeId"), false);
+    const editDefault = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", id:"default", connection:{ provider:"api", apiFormat:"openai", apiUrl:"https://changed.example.test/v1", apiModel:"changed", apiKey:"changed", effort:"medium" } }) }), editDefaultBody = await editDefault.json();
+    assert.equal(editDefault.status, 200, JSON.stringify(editDefaultBody));
+    assert.equal(editDefaultBody.savedId, "default");
+    const deleteDefault = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:"default" }) });
+    assert.equal(deleteDefault.status, 200);
+    const afterDeleteDefault = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    assert.equal(afterDeleteDefault.connections.length, 8);
+    assert.equal(afterDeleteDefault.connections.some(connection => connection.id === "default"), false);
+    const missingDefault = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:"default" }) });
+    assert.equal(missingDefault.status, 400);
+  } finally { await stopServer(child); }
+});
+
+test("connection manager CLI inspection returns the platform install fallback without running a model request", { timeout:10000 }, async () => {
+  const env = apiServerEnv("https://api.example.test", { PATH:"", KIMI_CLI_PATH:"kimi" });
+  env.HOME = path.join(env.PENECHO_STATE_DIR, "home");
+  env.USERPROFILE = env.HOME;
+  const { child, origin } = await startServer(env), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const response = await fetch(`${origin}/api/settings/connections/inspect-cli`, { method:"POST", headers, body:JSON.stringify({ provider:"kimi-cli" }) }), body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(body.status.state, "missing");
+    assert.equal(body.status.executable, "");
+    assert.equal(body.status.loginCommand, "kimi login");
+    assert.match(body.status.installCommand, /code\.kimi\.com\/kimi-code\/install\.(?:sh|ps1)/);
+
+    const invalid = await fetch(`${origin}/api/settings/connections/inspect-cli`, { method:"POST", headers, body:JSON.stringify({ provider:"api" }) });
+    assert.equal(invalid.status, 400);
+  } finally { await stopServer(child); }
+});
+
+test("connection model discovery validates requests and safely lists provider models", { timeout:10000 }, async () => {
+  const provider = await startModelDiscoveryServer(), { child, origin, stateDir } = await startServer(apiServerEnv(provider.origin)), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${provider.origin}/anthropic/v1/messages`, apiModel:"manual-model", apiKey:"anthropic-saved-key", effort:"medium" } }) }), created = await create.json();
+    assert.equal(create.status, 200, JSON.stringify(created));
+    const connection = created.connections.find(item => item.apiFormat === "anthropic"), storedAfterCreate = await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8");
+
+    const openai = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/openai/v1`, apiModel:"", apiKey:"openai-key", effort:"medium" } }) }), openaiBody = await openai.json();
+    assert.equal(openai.status, 200, JSON.stringify(openaiBody));
+    assert.deepEqual(openaiBody.models, ["alpha-model", "gamma-model", "zeta-model"]);
+
+    const anthropic = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ id:connection.id, connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${provider.origin}/anthropic/v1/messages`, apiModel:"manual-model", apiKey:"", effort:"medium" } }) }), anthropicBody = await anthropic.json();
+    assert.equal(anthropic.status, 200, JSON.stringify(anthropicBody));
+    assert.deepEqual(anthropicBody.models, ["claude-3-model", "claude-4-model"]);
+    assert.equal(Object.hasOwn(anthropicBody, "apiKey"), false);
+    assert.doesNotMatch(JSON.stringify(anthropicBody), /anthropic-saved-key/);
+    assert.deepEqual(provider.requests.map(request => request.path), ["/openai/v1/models", "/anthropic/v1/models"]);
+    assert.equal(provider.requests[0].method, "GET");
+    assert.equal(provider.requests[0].accept, "application/json");
+    assert.equal(provider.requests[0].authorization, "Bearer openai-key");
+    assert.equal(provider.requests[0].xApiKey, "");
+    assert.equal(provider.requests[1].accept, "application/json");
+    assert.equal(provider.requests[1].authorization, "");
+    assert.equal(provider.requests[1].xApiKey, "anthropic-saved-key");
+    assert.equal(provider.requests[1].anthropicVersion, "2023-06-01");
+
+    const upstreamError = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/error/v1`, apiKey:"bad-key", effort:"medium" } }) }), upstreamErrorBody = await upstreamError.json();
+    assert.equal(upstreamError.status, 502);
+    assert.match(upstreamErrorBody.error, /HTTP 401/);
+    assert.doesNotMatch(upstreamErrorBody.error, /provider-secret-error-body/);
+    const malformed = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/malformed/v1`, apiKey:"valid-key", effort:"medium" } }) });
+    assert.equal(malformed.status, 502);
+    assert.equal((await malformed.json()).error, "Provider returned an invalid model list.");
+    const wrongType = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/plain/v1`, apiKey:"valid-key", effort:"medium" } }) });
+    assert.equal(wrongType.status, 502);
+    assert.equal((await wrongType.json()).error, "Provider returned a non-JSON model list.");
+
+    const requestCount = provider.requests.length;
+    for (const [label, body] of [
+      ["provider", { connection:{ provider:"codex-cli", effort:"medium" } }],
+      ["url", { connection:{ provider:"api", apiFormat:"openai", apiUrl:"file:///tmp/models", apiKey:"key", effort:"medium" } }],
+      ["key", { connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/openai/v1`, apiKey:"key\n", effort:"medium" } }],
+      ["id", { id:"missing-connection", connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/openai/v1`, apiKey:"key", effort:"medium" } }],
+    ]) {
+      const response = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify(body) }), parsed = await response.json();
+      assert.equal(response.status, 400, `${label}: ${JSON.stringify(parsed)}`);
+    }
+    assert.equal(provider.requests.length, requestCount);
+    assert.equal((await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers:{ Origin:"https://evil.example", "Content-Type":"application/json" }, body:"{}" })).status, 403);
+    assert.equal((await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers:{ "Content-Type":"application/json" }, body:"{}" })).status, 403);
+    assert.equal((await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers:{ Origin:origin }, body:"{}" })).status, 415);
+    assert.equal((await fetch(`${origin}/api/settings/connections/models`, { headers })).status, 405);
+    assert.equal(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"), storedAfterCreate);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => provider.server.close(resolve));
+  }
+});
+
+test("two clients independently route requests through the shared connection list", { timeout:10000 }, async () => {
+  const openai = await startApiServer('{"intent":"none","commands":[]}', { delayMs:250 }), anthropic = await startApiServer('{"intent":"none","commands":[]}', { format:"anthropic", delayMs:250 });
+  const { child, origin, stateDir } = await startServer(apiServerEnv(openai.origin)), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${anthropic.origin}/v1`, apiModel:"model-b", apiKey:"key-b", effort:"medium" } }) }), created = await create.json();
+    assert.equal(create.status, 200, JSON.stringify(created));
+    const connection = created.connections.find(item => item.apiModel === "model-b");
+    const clientAList = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json()),
+      clientBList = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.deepEqual(clientAList.connections, clientBList.connections);
+
+    const testedResponse = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ id:connection.id, connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${anthropic.origin}/v1`, apiModel:"model-b", apiKey:"", effort:"medium" } }) }), tested = await testedResponse.json();
+    assert.equal(testedResponse.status, 200, JSON.stringify(tested));
+    assert.match(tested.message, /anthropic API responded with HTTP 200/);
+    const testRequest = JSON.parse(anthropic.requests[0]), testImage = testRequest.messages[0].content.find(part => part.type === "image");
+    assert.equal(testImage.source.media_type, "image/webp");
+    assert.ok(testImage.source.data.length > 0);
+    assert.equal((await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json())).connections.length, 2);
+
+    const clientA = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/x-ndjson", "X-PenEcho-Connection":"default" }, body:JSON.stringify(validPayload()) }),
+      clientB = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/x-ndjson", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
+    const deadline = Date.now() + 3000;
+    while ((!openai.requests.length || anthropic.requests.length < 2) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(openai.requests.length, 1);
+    assert.equal(anthropic.requests.length, 2);
+    assert.equal(JSON.parse(anthropic.requests[0]).model, "model-b");
+
+    const remove = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:connection.id }) });
+    assert.equal(remove.status, 200, await remove.text());
+    const [clientAResponse, clientBResponse] = await Promise.all([clientA, clientB]);
+    assert.equal(clientAResponse.status, 200);
+    assert.equal(clientBResponse.status, 200);
+    const [clientAEvents,clientBEvents]=await Promise.all([progressEvents(clientAResponse),progressEvents(clientBResponse)]),
+      clientAIds=new Set(clientAEvents.map(event=>event.requestId)),clientBIds=new Set(clientBEvents.map(event=>event.requestId));
+    assert.equal(clientAIds.size,1);
+    assert.equal(clientBIds.size,1);
+    assert.notEqual([...clientAIds][0],[...clientBIds][0]);
+    for(const events of [clientAEvents,clientBEvents]){
+      assert.deepEqual(events.filter(event=>event.type==="progress").map(event=>event.phase),["received","preparing-image","connecting","waiting","receiving","validating"]);
+      assert.equal(events.at(-1).type,"result");
+      assert.equal(events.at(-1).data.requestId,events.at(-1).requestId);
+    }
+
+    const deletedSelection = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
+    assert.equal(deletedSelection.status, 409);
+    assert.equal((await deletedSelection.json()).errorCode, "CONNECTION_STALE");
+    assert.equal(openai.requests.length, 1, "stale selection must not fall back to another provider");
+    assert.equal(anthropic.requests.length, 2, "deleted selection must not run another request");
+    const explicitDefault = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":"default" }, body:JSON.stringify(validPayload()) });
+    assert.equal(explicitDefault.status, 200, await explicitDefault.text());
+    assert.equal(openai.requests.length, 2);
+
+    const legacyStore = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    legacyStore.activeId = "missing-old-global-choice";
+    await fs.promises.writeFile(path.join(stateDir, "connections.json"), `${JSON.stringify(legacyStore, null, 2)}\n`);
+    const afterLegacy = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.equal(Object.hasOwn(afterLegacy, "activeConnectionId"), false);
+  } finally {
+    await stopServer(child);
+    await Promise.all([openai.server, anthropic.server].map(server => new Promise(resolve => server.close(resolve))));
+  }
+});
+
+test("a device can select a shared CLI connection while the server default remains API", { timeout:20000 }, async () => {
+  const openai = await startApiServer(), directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-device-cli-")),
+    fakeCli = path.join(directory, "fake-codex.js"), record = path.join(directory, "record.json");
+  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),args=process.argv.slice(2),image=args[args.indexOf("-i")+1],output=args[args.indexOf("-o")+1];fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({model:args[args.indexOf("--model")+1],imageExists:fs.existsSync(image)}));fs.writeFileSync(output,'{"intent":"none","commands":[]}');\n`);
+  const { child, origin } = await startServer(apiServerEnv(openai.origin, { CODEX_HOME:TEST_CODEX_HOME })), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"codex-cli", cliModel:"gpt-device", cliPath:fakeCli, effort:"high" } }) }), created = await create.json();
+    assert.equal(create.status, 200, JSON.stringify(created));
+    const connection = created.connections.find(item => item.provider === "codex-cli");
+    const response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ ...headers, "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
+    assert.equal(response.status, 200, await response.text());
+    const saved = JSON.parse(await fs.promises.readFile(record, "utf8"));
+    assert.equal(saved.model, "gpt-device");
+    assert.equal(saved.imageExists, true);
+    assert.equal((await fetch(`${origin}/api/config`).then(item => item.json())).aiProvider, "api");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => openai.server.close(resolve));
+    await fs.promises.rm(directory, { recursive:true, force:true });
+  }
 });
 
 test("process-lifetime PIN gates the Canvas and local APIs, then clears on restart", { timeout:30000 }, async () => {
@@ -385,7 +954,7 @@ test("Claude CLI mode sends the canvas to the authenticated local CLI with the s
 
 test("Kimi CLI mode uses the documented prompt stream, no-tools agent, and temporary canvas reference", { timeout:20000 }, async () => {
   const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-server-kimi-")),fakeCli=path.join(directory,"fake-kimi.js"),record=path.join(directory,"record.json");
-  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prompt=args[args.indexOf("--prompt")+1]||"",agentFile=args[args.indexOf("--agent-file")+1],image=/@(canvas\\.(?:png|webp))/.exec(prompt)?.[1];fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({args,imageExists:Boolean(image&&fs.existsSync(path.join(process.cwd(),image))),agent:fs.readFileSync(agentFile,"utf8")}));process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"answer","observedText":"hi","message":"hello","commands":[]}'}]})+"\\n");\n`);
+  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prompt=args[args.indexOf("--prompt")+1]||"",agentFile=args[args.indexOf("--agent-file")+1],image=/@(canvas-[0-9]+[.](?:png|webp))/.exec(prompt)?.[1];fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({args,imageExists:Boolean(image&&fs.existsSync(path.join(process.cwd(),image))),agent:fs.readFileSync(agentFile,"utf8")}));process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"answer","observedText":"hi","message":"hello","commands":[]}'}]})+"\\n");\n`);
   const {child,origin}=await startServer(serverEnv({AI_PROVIDER:"kimi-cli",KIMI_CLI_PATH:fakeCli,KIMI_CLI_MODEL:"kimi-code/k3",AI_EFFORT:"medium"}));
   try {
     const page=await fetch(origin),cookie=page.headers.get("set-cookie")?.split(";",1)[0],response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,Cookie:cookie},body:JSON.stringify(validPayload())}),body=await response.json(),saved=JSON.parse(await fs.promises.readFile(record,"utf8"));
@@ -396,6 +965,8 @@ test("Kimi CLI mode uses the documented prompt stream, no-tools agent, and tempo
     assert.ok(saved.args.includes("--agent-file"));
     assert.match(saved.agent,/tools: \[\]/);
     assert.match(saved.agent,/subagents: \[\]/);
+    assert.match(saved.agent,/Use only supplied content and images[\s\S]*Even if Kimi advertises built-in tools, never invoke them[\s\S]*If the prompt contains HARNESS REQUEST\.availableTools/);
+    assert.doesNotMatch(saved.agent,/must not attempt to read files/);
     assert.equal(saved.args[saved.args.indexOf("--model")+1],"kimi-code/k3");
   } finally {
     await stopServer(child);
@@ -416,11 +987,32 @@ test("Codex CLI mode writes the configured WebP image with a .webp extension", {
     assert.equal(saved.extension,".webp");
     assert.equal(saved.signature,"RIFF");
     assert.equal(saved.json,true);
-    assert.ok(saved.args.includes('model_reasoning_effort="xhigh"'));
+    assert.ok(saved.args.includes('model_reasoning_effort="max"'));
     const configuredPayload=validPayload(),configuredResponse=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,Cookie:cookie},body:JSON.stringify(configuredPayload)});
     assert.equal(configuredResponse.status,200);
     const configured=JSON.parse(await fs.promises.readFile(record,"utf8"));
-    assert.ok(!configured.args.some(argument=>argument.startsWith("model_reasoning_effort=")));
+    assert.ok(configured.args.includes('model_reasoning_effort="medium"'));
+  } finally {
+    await stopServer(child);
+    await fs.promises.rm(directory,{recursive:true,force:true});
+  }
+});
+
+test("Main Canvas AI rediscovers Codex CLI after its configured executable disappears and reuses the recovery", { timeout:20000 }, async () => {
+  const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-codex-recovery-")),cli=await recoverableCodexCli(directory),stateDir=path.join(directory,"state"),
+    missing=path.join(directory,"removed-codex"),env=serverEnv({PENECHO_STATE_DIR:stateDir,CODEX_CLI_PATH:missing,PATH:`${cli.bin}${path.delimiter}${process.env.PATH||""}`}),
+    {child,origin}=await startServer(env);
+  try {
+    const page=await fetch(origin),cookie=page.headers.get("set-cookie")?.split(";",1)[0],headers={"Content-Type":"application/json",Origin:origin,Cookie:cookie};
+    for(let index=0;index<2;index++){
+      const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers,body:JSON.stringify(validPayload())}),body=await response.json();
+      assert.equal(response.status,200,JSON.stringify(body));
+      assert.equal(body.message,"Recovered Canvas AI");
+    }
+    const invocations=(await fs.promises.readFile(cli.record,"utf8")).trim().split(/\r?\n/);
+    assert.deepEqual(invocations,["version","login","canvas","canvas"]);
+    const logText=await fs.promises.readFile(path.join(stateDir,"logs","penecho.log"),"utf8");
+    assert.match(logText,/"type":"cli-auto-recovery"/);
   } finally {
     await stopServer(child);
     await fs.promises.rm(directory,{recursive:true,force:true});
@@ -445,14 +1037,22 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     const disabledResponse=await fetch(`${openaiServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(disabledPayload)});
     assert.equal(disabledResponse.status,200);
     const disabledRequest=JSON.parse(openai.requests[0]);
+    assert.equal(disabledRequest.stream,true);
+    assert.equal(disabledRequest.max_tokens,64000);
     assert.equal(disabledRequest.reasoning_effort,"none");
     assert.equal(Object.hasOwn(disabledRequest,"temperature"),false);
+    assert.match(disabledRequest.messages[0].content,/Never spend more than one half of the available output-token allowance on internal reasoning/);
+    assert.match(disabledRequest.messages[0].content,/reserve at least the other half for one complete final response/);
     const maxPayload=validPayload();maxPayload.reasoningEffort="max";
     const maxResponse=await fetch(`${openaiServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(maxPayload)});
     assert.equal(maxResponse.status,200);
     const maxRequest=JSON.parse(openai.requests[1]);
-    assert.equal(maxRequest.reasoning_effort,"xhigh");
+    assert.equal(maxRequest.reasoning_effort,"max");
     assert.equal(Object.hasOwn(maxRequest,"temperature"),false);
+    const customPayload=validPayload();customPayload.reasoningEffort="Provider_Native";
+    const customResponse=await fetch(`${openaiServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(customPayload)});
+    assert.equal(customResponse.status,200);
+    assert.equal(JSON.parse(openai.requests[2]).reasoning_effort,"provider_native");
   } finally { await stopServer(openaiServer.child); await new Promise(resolve=>openai.server.close(resolve)); }
 
   const kimi=await startApiServer(),kimiServer=await startServer(apiServerEnv(kimi.origin,{AI_API_MODEL:"k3"}));
@@ -462,12 +1062,12 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     assert.equal(Object.hasOwn(JSON.parse(kimi.requests[0]),"temperature"),false);
   } finally { await stopServer(kimiServer.child); await new Promise(resolve=>kimi.server.close(resolve)); }
 
-  const configuredOpenai=await startApiServer(),configuredOpenaiServer=await startServer(apiServerEnv(configuredOpenai.origin,{AI_EFFORT:"future-tier"}));
+  const configuredOpenai=await startApiServer(),customEffort="Provider_Native",configuredOpenaiServer=await startServer(apiServerEnv(configuredOpenai.origin,{AI_EFFORT:customEffort}));
   try {
     const response=await fetch(`${configuredOpenaiServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())});
     assert.equal(response.status,200);
     const configuredRequest=JSON.parse(configuredOpenai.requests[0]);
-    assert.equal(configuredRequest.reasoning_effort,"future-tier");
+    assert.equal(configuredRequest.reasoning_effort,customEffort);
     assert.equal(Object.hasOwn(configuredRequest,"temperature"),false);
   } finally { await stopServer(configuredOpenaiServer.child); await new Promise(resolve=>configuredOpenai.server.close(resolve)); }
 
@@ -476,18 +1076,26 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     const response=await fetch(`${anthropicServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())});
     assert.equal(response.status,200);
     const request=JSON.parse(anthropic.requests[0]);
+    assert.equal(request.stream,true);
     assert.deepEqual(request.thinking,{type:"adaptive"});
     assert.equal(request.output_config.effort,"max");
     assert.equal(Object.hasOwn(request,"temperature"),false);
-    assert.equal(request.max_tokens,16384);
+    assert.equal(request.max_tokens,64000);
     assert.match(request.system,/Treat the canvas as an existing document to extend/);
     assert.match(request.system,/place only `5` immediately after the equals sign/);
-    assert.match(request.system,/within approximately 4096 tokens/);
-    assert.match(request.system,/no more than roughly 7000 tokens/);
-    assert.match(request.system,/Reserve sufficient output budget for one complete valid JSON response/);
-    const schemaStart=request.system.lastIndexOf('{"$schema":"https://json-schema.org/draft/2020-12/schema"');
-    assert.ok(schemaStart > request.system.indexOf("Reserve sufficient output budget"));
-    assert.doesNotThrow(() => JSON.parse(request.system.slice(schemaStart)));
+    assert.match(request.system,/within approximately 6144 tokens/);
+    assert.match(request.system,/Never spend more than one half of the available output-token allowance on internal reasoning/);
+    assert.match(request.system,/reserve at least the other half for one complete final response/);
+    const fallbackStart=request.system.indexOf("Mandatory final visible-response fallback"),
+      refineGateStart=request.system.indexOf("Refine mode gate:"),
+      schemaStart=request.system.lastIndexOf('{"$schema":"https://json-schema.org/draft/2020-12/schema"');
+    assert.ok(fallbackStart > request.system.indexOf("reserve at least the other half"));
+    assert.match(request.system.slice(fallbackStart,schemaStart),/their absence is not evidence that there is no new input/);
+    assert.match(request.system.slice(fallbackStart,schemaStart),/entire attached input image within sourceRect/);
+    assert.match(request.system.slice(refineGateStart,schemaStart),/modelInput\.widgetEdit[\s\S]*?exactly one widget_patch command[\s\S]*?write_text fallback rules do not apply/);
+    assert.ok(schemaStart > refineGateStart && refineGateStart > fallbackStart);
+    const responseSchema=JSON.parse(request.system.slice(schemaStart));
+    assert.equal(responseSchema.properties.commands.minItems,1);
   } finally { await stopServer(anthropicServer.child); await new Promise(resolve=>anthropic.server.close(resolve)); }
 
   const disabled=await startApiServer(undefined,{format:"anthropic"}),disabledServer=await startServer(apiServerEnv(disabled.origin,{AI_API_FORMAT:"anthropic",AI_API_URL:disabled.origin,AI_EFFORT:"max"}));
@@ -499,12 +1107,38 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     assert.deepEqual(request.thinking,{type:"disabled"});
     assert.equal(request.output_config,undefined);
     assert.equal(Object.hasOwn(request,"temperature"),false);
-    assert.equal(request.max_tokens,8192);
-    assert.doesNotMatch(request.system,/no more than roughly 7000 tokens/);
+    assert.equal(request.max_tokens,64000);
+    assert.match(request.system,/Never spend more than one half of the available output-token allowance on internal reasoning/);
   } finally { await stopServer(disabledServer.child); await new Promise(resolve=>disabled.server.close(resolve)); }
 });
 
-test("animation plugin conditionally adds prompt instructions and filters disabled output", { timeout:20000 }, async () => {
+test("API mode consumes true upstream SSE and reports receiving before validation", { timeout:20000 }, async () => {
+  const responseContent=JSON.stringify({intent:"answer",commands:[{tool:"write_text",x:10,y:10,text:"streamed",fontSize:24,maxWidth:300,lineHeight:1.35}]}),
+    upstream=await startApiServer(responseContent,{stream:true,streamDelayMs:10}),running=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/x-ndjson"},body:JSON.stringify(validPayload())}),
+      events=await progressEvents(response),phases=events.filter(event=>event.type==="progress").map(event=>event.phase),terminal=events.at(-1);
+    assert.equal(response.status,200);
+    assert.deepEqual(phases,["received","preparing-image","connecting","waiting","receiving","validating"]);
+    assert.equal(terminal.type,"result");
+    assert.equal(terminal.data.commands[0].text,"streamed");
+    assert.equal(JSON.parse(upstream.requests[0]).stream,true);
+  } finally { await stopServer(running.child); await new Promise(resolve=>upstream.server.close(resolve)); }
+});
+
+test("AI progress streams send heartbeats while the model is silent", { timeout:20000 }, async () => {
+  const upstream=await startApiServer('{"intent":"none","commands":[]}',{delayMs:140}),
+    running=await startServer(apiServerEnv(upstream.origin,{PENECHO_TEST_AI_PROGRESS_HEARTBEAT_MS:"25"}));
+  try {
+    const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/x-ndjson"},body:JSON.stringify(validPayload())}),
+      events=await progressEvents(response),heartbeats=events.filter(event=>event.type==="activity");
+    assert.equal(response.status,200);
+    assert.ok(heartbeats.length>=2);
+    assert.equal(events.at(-1).type,"result");
+  } finally { await stopServer(running.child); await new Promise(resolve=>upstream.server.close(resolve)); }
+});
+
+test("legacy animate_scene output is always filtered in favor of General HTML SVG", { timeout:20000 }, async () => {
   const animationCommand = { tool:"animate_scene", x:0, y:0, w:200, h:120, durationMs:1000, loop:true, objects:[{id:"dot",type:"circle",cx:20,cy:20,r:5}], motions:[{type:"spin",target:"dot",periodMs:1000}] },
     responseContent = JSON.stringify({ intent:"answer", commands:[animationCommand] }),
     upstream = await startApiServer(responseContent),
@@ -520,38 +1154,8 @@ test("animation plugin conditionally adds prompt instructions and filters disabl
     assert.doesNotMatch(disabledSystem, /animate_scene/);
     assert.doesNotMatch(disabledMetadata, /animationEnabled/);
 
-    const enabledPayload = validPayload();
-    enabledPayload.animationEnabled = true;
-    const enabledResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(enabledPayload) }),
-      enabledBody = await enabledResponse.json(),
-      enabledRequest = JSON.parse(upstream.requests[1]),
-      enabledSystem = enabledRequest.messages[0].content,
-      enabledMetadata = enabledRequest.messages[1].content.find(part => part.type === "text").text;
-    assert.equal(enabledResponse.status, 200);
-    assert.equal(enabledBody.commands[0]?.tool, "animate_scene");
-    assert.match(enabledSystem, /at most one animate_scene command/);
-    assert.match(enabledSystem, /32 objects and 32 motions/);
-    assert.match(enabledSystem, /120 <= w <= 5000 and 90 <= h <= 5000/);
-    assert.match(enabledSystem, /appropriate scene dimensions based on the user's actual request/);
-    assert.match(enabledSystem, /5000 is only an upper bound, never a target/);
-    assert.match(enabledSystem, /do not enlarge a scene merely to approach it/);
-    assert.doesNotMatch(enabledSystem, /x \+ w <= 20000, y \+ h <= 20000/);
-    assert.match(enabledSystem, /background is always transparent/);
-    assert.match(enabledSystem, /do not output a background field/);
-    assert.match(enabledSystem, /Every motion MUST have both an explicit "type" and an existing object "target"/);
-    assert.match(enabledSystem, /Never infer or omit the motion type/);
-    assert.match(enabledSystem, /\{"type":"orbit","target":"id"/);
-    assert.match(enabledSystem, /Use lineWidth, not strokeWidth/);
-    assert.match(enabledSystem, /use "transparent", not "none"/);
-    assert.doesNotMatch(enabledSystem, /background\?/);
-    assert.match(enabledMetadata, /"animationEnabled":true/);
-    assert.ok(enabledSystem.length - disabledSystem.length >= 800);
-
-    const invalidPayload = validPayload();
-    invalidPayload.animationEnabled = "true";
-    const invalidResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(invalidPayload) });
-    assert.equal(invalidResponse.status, 400);
-    assert.equal(upstream.requests.length, 2);
+    assert.match(fs.readFileSync(path.join(ROOT,"public","plugins","general","plugin.md"),"utf8"), /SVG is the default static and animated visual format/);
+    assert.equal(upstream.requests.length, 1);
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));
@@ -563,7 +1167,7 @@ test("Anthropic output exhaustion reports the real response limit instead of a J
   try {
     const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
     assert.equal(response.status,502);
-    assert.match(body.error,/8192-token response allowance/);
+    assert.match(body.error,/64000-token response allowance/);
     assert.doesNotMatch(body.error,/Unexpected end of JSON input/);
   } finally { await stopServer(running.child); await new Promise(resolve=>upstream.server.close(resolve)); }
 });
@@ -669,9 +1273,273 @@ test("PIN authentication leaves the API provider request behavior unchanged", { 
   }
 });
 
+test("shared PenEcho server canvases support authorized metadata-first CRUD", { timeout:20000 }, async () => {
+  const stateDir=testStateDir({}),
+    {child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
+    snapshot=validSharedCanvas(undefined,{version:undefined,view:{scale:0.5,panX:120,panY:240,navigationLocked:true}}),
+    mutationHeaders={"Content-Type":"application/json",Origin:origin};
+  try {
+    const created=await fetch(`${origin}/api/canvases`,{method:"POST",headers:mutationHeaders,body:JSON.stringify(snapshot)}),
+      createdBody=await created.json();
+    assert.equal(created.status,201,JSON.stringify(createdBody));
+    assert.equal(createdBody.canvas.id,snapshot.id);
+    assert.equal(createdBody.canvas.tileCount,1);
+    assert.equal(Object.hasOwn(createdBody.canvas,"tiles"),false);
+    assert.equal(Object.hasOwn(createdBody.canvas,"widgets"),false);
+
+    const listed=await fetch(`${origin}/api/canvases`),
+      listedBody=await listed.json();
+    assert.equal(listed.status,200);
+    assert.equal(listedBody.canvases.length,1);
+    assert.equal(listedBody.canvases[0].id,snapshot.id);
+    assert.equal(listedBody.canvases[0].preview,PNG);
+    assert.equal(Object.hasOwn(listedBody.canvases[0],"tiles"),false);
+
+    const loaded=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`),
+      loadedBody=await loaded.json();
+    assert.equal(loaded.status,200);
+    assert.deepEqual(loadedBody.canvas.tiles,snapshot.tiles);
+    assert.deepEqual(loadedBody.canvas.widgets,[]);
+    assert.equal(loadedBody.canvas.version,1);
+    assert.equal(loadedBody.canvas.view.navigationLocked,true);
+
+    const changed={...snapshot,name:"Updated shared design",theme:"future-theme",createdAt:Date.now(),view:{scale:0.5,panX:120,panY:240}};
+    const updated=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`,{method:"PUT",headers:mutationHeaders,body:JSON.stringify(changed)}),
+      updatedBody=await updated.json();
+    assert.equal(updated.status,200,JSON.stringify(updatedBody));
+    assert.equal(updatedBody.canvas.name,"Updated shared design");
+    assert.equal(updatedBody.canvas.theme,"studio");
+    const legacyLoaded=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`).then(response=>response.json());
+    assert.equal(legacyLoaded.canvas.view.navigationLocked,false);
+    assert.equal(legacyLoaded.canvas.theme,"studio");
+
+    const renamed=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`,{method:"PATCH",headers:mutationHeaders,body:JSON.stringify({name:"Renamed from History"})}),
+      renamedBody=await renamed.json();
+    assert.equal(renamed.status,200,JSON.stringify(renamedBody));
+    assert.equal(renamedBody.canvas.name,"Renamed from History");
+    assert.equal((await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`).then(response=>response.json())).canvas.name,"Renamed from History");
+    const blankRename=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`,{method:"PATCH",headers:mutationHeaders,body:JSON.stringify({name:"   "})});
+    assert.equal(blankRename.status,400);
+
+    const invalidId=await fetch(`${origin}/api/canvases/../../package.json`);
+    assert.equal(invalidId.status,404);
+    const invalidSnapshot=await fetch(`${origin}/api/canvases`,{method:"POST",headers:mutationHeaders,body:JSON.stringify({...validSharedCanvas(),preview:"data:text/plain;base64,SGk="})});
+    assert.equal(invalidSnapshot.status,400);
+
+    const removed=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`,{method:"DELETE",headers:{Origin:origin}});
+    assert.equal(removed.status,200,await removed.text());
+    assert.equal((await fetch(`${origin}/api/canvases`)).status,200);
+    assert.deepEqual(await fetch(`${origin}/api/canvases`).then(response=>response.json()),{canvases:[]});
+  } finally {
+    await stopServer(child);
+  }
+});
+
+test("Canvas metadata-only lists validated document identity without content and V2 keeps its saved view region", { timeout:20000 }, async () => {
+  const stateDir=testStateDir({}),{child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
+    headers={"Content-Type":"application/json",Origin:origin},legacy=validSharedCanvas(),base=validSharedCanvasBundle(),
+    documentId="document-identity-1",region={x:144,y:288,w:1200,h:800},
+    modern={...base,extensions:{...base.extensions,penechoDocument:{version:1,documentId}},manifest:{...base.manifest,view:{...base.manifest.view,region}}},
+    invalidBase=validSharedCanvasBundle(`${Date.now()}-123e4567-e89b-12d3-a456-426614174201`),
+    invalidIdentity={...invalidBase,extensions:{...invalidBase.extensions,penechoDocument:{version:99,documentId:"unknown-version-document"}}};
+  try {
+    const legacyResponse=await fetch(`${origin}/api/canvases`,{method:"POST",headers,body:JSON.stringify(legacy)}),
+      modernResponse=await fetch(`${origin}/api/canvases`,{method:"POST",headers,body:JSON.stringify(modern)}),
+      invalidResponse=await fetch(`${origin}/api/canvases`,{method:"POST",headers,body:JSON.stringify(invalidIdentity)});
+    assert.equal(legacyResponse.status,201,await legacyResponse.text());
+    assert.equal(modernResponse.status,201,await modernResponse.text());
+    assert.equal(invalidResponse.status,201,await invalidResponse.text());
+
+    const metadataResponse=await fetch(`${origin}/api/canvases?metadataOnly=1`),metadata=await metadataResponse.json();
+    assert.equal(metadataResponse.status,200);
+    const legacyEntry=metadata.canvases.find(item=>item.id===legacy.id),modernEntry=metadata.canvases.find(item=>item.id===base.id),invalidEntry=metadata.canvases.find(item=>item.id===invalidBase.id);
+    assert.deepEqual(Object.keys(legacyEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
+    assert.equal(legacyEntry.documentId,null,"legacy snapshots without document identity remain valid");
+    assert.deepEqual(Object.keys(modernEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
+    assert.equal(modernEntry.documentId,documentId);
+    for (const [entry, version, widgetCount] of [[legacyEntry,1,0],[modernEntry,2,1],[invalidEntry,2,1]]) {
+      assert.equal(entry.version,version);
+      assert.equal(entry.projectId,"uncategorized");
+      assert.equal(entry.theme,"studio");
+      assert.equal(entry.hasPreview,true);
+      assert.equal(entry.tileCount,1);
+      assert.equal(entry.widgetCount,widgetCount);
+      for (const key of ["animationCount","textBoxCount","imageCount"]) assert.equal(entry[key],0);
+      for (const key of ["preview","assets","tiles","widgets","manifest","extensions"]) assert.equal(Object.hasOwn(entry,key),false);
+    }
+    assert.equal(invalidEntry.documentId,null,"unknown identity versions are not advertised");
+    assert.equal(Object.hasOwn(modernEntry,"preview"),false);
+    assert.equal(Object.hasOwn(modernEntry,"assets"),false);
+
+    const loaded=await fetch(`${origin}/api/canvases/${encodeURIComponent(base.id)}`).then(response=>response.json());
+    assert.deepEqual(loaded.canvas.manifest.view.region,region);
+    assert.equal(loaded.canvas.extensions.penechoDocument.documentId,documentId);
+  } finally { await stopServer(child); }
+});
+
+test("shared canvas v2 is one portable bundle and server projects move without rewriting it", { timeout:20000 }, async () => {
+  const stateDir=testStateDir({}),{child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
+    headers={"Content-Type":"application/json",Origin:origin},bundle=validSharedCanvasBundle();
+  try {
+    const initialProjects=await fetch(`${origin}/api/canvas-projects`).then(response=>response.json());
+    assert.deepEqual(initialProjects.projects.map(project=>project.id),["uncategorized"]);
+    const createdProjectResponse=await fetch(`${origin}/api/canvas-projects`,{method:"POST",headers,body:JSON.stringify({name:"Research"})}),
+      createdProject=(await createdProjectResponse.json()).project;
+    assert.equal(createdProjectResponse.status,201);
+    assert.match(createdProject.id,/^project-/);
+
+    const created=await fetch(`${origin}/api/canvases`,{method:"POST",headers,body:JSON.stringify({...bundle,projectId:createdProject.id})}),
+      createdBody=await created.json();
+    assert.equal(created.status,201,JSON.stringify(createdBody));
+    assert.equal(createdBody.canvas.version,2);
+    assert.equal(createdBody.canvas.projectId,createdProject.id);
+    assert.equal(createdBody.canvas.widgetCount,1);
+
+    const bundleFile=path.join(stateDir,"canvases","shared",`${bundle.id}.json`),
+      stored=JSON.parse(await fs.promises.readFile(bundleFile,"utf8")),beforeMove=await fs.promises.readFile(bundleFile,"utf8");
+    assert.equal(stored.version,2);
+    assert.equal(stored.bundleVersion,2);
+    assert.equal(stored.assets.filter(asset=>asset.kind==="widget").length,1);
+    assert.equal(Object.hasOwn(stored,"projectId"),false);
+    assert.equal(Object.hasOwn(stored,"id"),false);
+    assert.deepEqual(stored.extensions,bundle.extensions);
+    assert.deepEqual(stored.manifest.canvasSize,{width:20000,height:20000});
+
+    const loaded=await fetch(`${origin}/api/canvases/${encodeURIComponent(bundle.id)}`).then(response=>response.json());
+    assert.equal(loaded.canvas.version,2);
+    assert.equal(loaded.canvas.id,bundle.id);
+    assert.equal(loaded.canvas.projectId,createdProject.id);
+    assert.equal(loaded.canvas.assets.find(asset=>asset.kind==="widget").metadata.widgetId,"widget-1");
+
+    const moved=await fetch(`${origin}/api/canvases/${encodeURIComponent(bundle.id)}/project`,{method:"PUT",headers,body:JSON.stringify({projectId:"uncategorized"})});
+    assert.equal(moved.status,200,await moved.text());
+    assert.equal(await fs.promises.readFile(bundleFile,"utf8"),beforeMove);
+
+    await fetch(`${origin}/api/canvases/${encodeURIComponent(bundle.id)}/project`,{method:"PUT",headers,body:JSON.stringify({projectId:createdProject.id})});
+    const removed=await fetch(`${origin}/api/canvas-projects/${encodeURIComponent(createdProject.id)}`,{method:"DELETE",headers:{Origin:origin}}),removedBody=await removed.json();
+    assert.equal(removed.status,200,JSON.stringify(removedBody));
+    assert.equal(removedBody.project.movedCanvasCount,1);
+    const listed=await fetch(`${origin}/api/canvases`).then(response=>response.json());
+    assert.equal(listed.canvases[0].projectId,"uncategorized");
+    assert.equal(await fs.promises.readFile(bundleFile,"utf8"),beforeMove);
+
+    const cloudBundle=structuredClone(bundle);
+    for(const key of ["version","id","createdAt","updatedAt","name"])delete cloudBundle[key];
+    const importedResponse=await fetch(`${origin}/api/canvases`,{method:"POST",headers,body:JSON.stringify(cloudBundle)}),
+      imported=(await importedResponse.json()).canvas;
+    assert.equal(importedResponse.status,201);
+    assert.match(imported.id,/^\d{13}-[a-f0-9-]{36}$/);
+    assert.equal(imported.version,2);
+    assert.equal(imported.projectId,"uncategorized");
+    const importedBundle=await fetch(`${origin}/api/canvases/${encodeURIComponent(imported.id)}`).then(response=>response.json());
+    assert.equal(importedBundle.canvas.manifest.format,"penecho-raster-tiles");
+    assert.equal(importedBundle.canvas.assets.find(asset=>asset.kind==="widget").metadata.widgetId,"widget-1");
+  } finally { await stopServer(child); }
+});
+
+test("shared PenEcho server canvases retain up to one hundred widgets, images, and animations", { timeout:20000 }, async () => {
+  const stateDir=testStateDir({}),
+    {child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
+    mutationHeaders={"Content-Type":"application/json",Origin:origin},
+    widgets=Array.from({length:100},(_,index)=>({id:`widget-${index + 1}`})),
+    animations=Array.from({length:100},(_,index)=>({id:`animation-${index + 1}`})),
+    images=Array.from({length:100},(_,index)=>({
+      id:`image-${index + 1}`,
+      x:0,
+      y:0,
+      w:80,
+      h:80,
+      naturalW:1,
+      naturalH:1,
+      sourceName:"",
+      ...(index===0?{plotExpression:"x^2+1"}:{}),
+      data:PNG,
+    }));
+  try {
+    const widgetsAccepted=await fetch(`${origin}/api/canvases`,{
+        method:"POST",
+        headers:mutationHeaders,
+        body:JSON.stringify(validSharedCanvas(`${Date.now()}-123e4567-e89b-12d3-a456-426614174100`,{widgets})),
+      }),
+      widgetsAcceptedBody=await widgetsAccepted.json();
+    assert.equal(widgetsAccepted.status,201,JSON.stringify(widgetsAcceptedBody));
+    assert.equal(widgetsAcceptedBody.canvas.widgetCount,100);
+
+    const widgetsRejected=await fetch(`${origin}/api/canvases`,{
+      method:"POST",
+      headers:mutationHeaders,
+      body:JSON.stringify(validSharedCanvas(`${Date.now() + 1}-123e4567-e89b-12d3-a456-426614174101`,{widgets:[...widgets,{id:"widget-101"}]})),
+    });
+    assert.equal(widgetsRejected.status,400,await widgetsRejected.text());
+
+    const imagesAccepted=await fetch(`${origin}/api/canvases`,{
+        method:"POST",
+        headers:mutationHeaders,
+        body:JSON.stringify(validSharedCanvas(`${Date.now() + 2}-123e4567-e89b-12d3-a456-426614174102`,{images})),
+      }),
+      imagesAcceptedBody=await imagesAccepted.json();
+    assert.equal(imagesAccepted.status,201,JSON.stringify(imagesAcceptedBody));
+    assert.equal(imagesAcceptedBody.canvas.imageCount,100);
+    const imagesStored=await fetch(`${origin}/api/canvases/${encodeURIComponent(imagesAcceptedBody.canvas.id)}`).then(response=>response.json());
+    assert.equal(imagesStored.canvas.images.find(image=>image.id==="image-1").plotExpression,"x^2+1");
+
+    const imagesRejected=await fetch(`${origin}/api/canvases`,{
+      method:"POST",
+      headers:mutationHeaders,
+      body:JSON.stringify(validSharedCanvas(`${Date.now() + 3}-123e4567-e89b-12d3-a456-426614174103`,{images:[...images,{...images[0],id:"image-101"}]})),
+    });
+    assert.equal(imagesRejected.status,400,await imagesRejected.text());
+
+    const animationsAccepted=await fetch(`${origin}/api/canvases`,{
+        method:"POST",
+        headers:mutationHeaders,
+        body:JSON.stringify(validSharedCanvas(`${Date.now() + 4}-123e4567-e89b-12d3-a456-426614174104`,{animations})),
+      }),
+      animationsAcceptedBody=await animationsAccepted.json();
+    assert.equal(animationsAccepted.status,201,JSON.stringify(animationsAcceptedBody));
+    assert.equal(animationsAcceptedBody.canvas.animationCount,100);
+
+    const animationsRejected=await fetch(`${origin}/api/canvases`,{
+      method:"POST",
+      headers:mutationHeaders,
+      body:JSON.stringify(validSharedCanvas(`${Date.now() + 5}-123e4567-e89b-12d3-a456-426614174105`,{animations:[...animations,{id:"animation-101"}]})),
+    });
+    assert.equal(animationsRejected.status,400,await animationsRejected.text());
+  } finally {
+    await stopServer(child);
+  }
+});
+
+test("shared server canvases obey the process-lifetime PenEcho PIN session", { timeout:20000 }, async () => {
+  const {child,origin}=await startServer(serverEnv({PENECHO_TEST_OPEN_ACCESS:"0"})),
+    snapshot=validSharedCanvas();
+  try {
+    assert.equal((await fetch(`${origin}/api/canvases`)).status,403);
+    const setup=await fetch(`${origin}/api/local-access/setup-pin`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json",Origin:origin},
+        body:JSON.stringify({pin:"271828",confirmation:"271828"}),
+      }),
+      setupBody=await setup.json(),
+      sessionHeaders={"X-PenEcho-Session":setupBody.accessSessionToken},
+      mutationHeaders={...sessionHeaders,"Content-Type":"application/json",Origin:origin};
+    assert.equal(setup.status,200,JSON.stringify(setupBody));
+    const created=await fetch(`${origin}/api/canvases`,{method:"POST",headers:mutationHeaders,body:JSON.stringify(snapshot)});
+    assert.equal(created.status,201,await created.text());
+    assert.equal((await fetch(`${origin}/api/canvases`,{headers:sessionHeaders})).status,200);
+    assert.equal((await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`,{headers:sessionHeaders})).status,200);
+    assert.equal((await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`)).status,403);
+  } finally {
+    await stopServer(child);
+  }
+});
+
 test("enabled plugin documents reach the model and gate html_widget commands", { timeout:20000 }, async () => {
   const command = (pluginId="weather", html="<!doctype html><title>Weather</title>", placement = {}) => JSON.stringify({ intent:"answer", commands:[{ tool:"html_widget", pluginId, x:100, y:200, w:1200, h:700, title:"Weather", refreshSeconds:900, html, ...placement }] }),
-    upstream = await startApiServer("", { response:({index}) => ({ body:index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(40001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { copyText:"flowchart TD\nA-->B", copyLabel:"Copy Mermaid" }) : command() }) }),
+    upstream = await startApiServer("", { response:({index}) => {
+      const professional = placement => command("flowchart", undefined, { sourceFormat:"mermaid", copyText:"flowchart LR\nA --> B", ...placement });
+      return { body:index === 0 ? command("weather", "x".repeat(200000)) : index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(200001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { diagramKind:"process", sourceFormat:"bpmn-xml", frameworkVersion:"penecho-professional-diagrams-v1", copyText:'<?xml version="1.0"?><definitions />' }) : index === 7 ? professional({ w:7800, h:2100 }) : index === 8 ? professional({ w:10000, h:20000 }) : index === 9 ? professional({ w:8000, h:6000 }) : command() };
+    } }),
     {child,origin} = await startServer(apiServerEnv(upstream.origin));
   try {
     const descriptor = weatherPluginDescriptor(), enabled = validPayload();
@@ -681,13 +1549,29 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.equal(acceptedResponse.status, 200);
     assert.equal(accepted.commands.length, 1);
     assert.equal(accepted.commands[0].tool, "html_widget");
+    assert.equal(accepted.commands[0].html.length, 200000);
     const outbound = JSON.parse(upstream.requests[0]),
       modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
-    assert.deepEqual(modelInput.enabledPlugins, [descriptor]);
-    assert.match(modelInput.widgetRenderingPolicy, /most important information/);
-    assert.match(modelInput.widgetRenderingPolicy, /180-240px/);
-    assert.match(modelInput.widgetRenderingPolicy, /remove secondary detail instead of shrinking text/);
-    assert.match(modelInput.widgetRenderingPolicy, /transparent[\s\S]*no outer background, border, corner radius, or box shadow/);
+    const { styles:ignoredStyles, ...modelDescriptor } = descriptor;
+    assert.equal(Object.keys(modelInput)[0], "languagePolicy");
+    assert.ok(Object.keys(modelInput).indexOf("enabledPlugins") < Object.keys(modelInput).indexOf("trigger"));
+    assert.deepEqual(modelInput.enabledPlugins, [modelDescriptor]);
+    assert.equal("styles" in modelInput.enabledPlugins[0], false);
+    assert.equal(Object.keys(modelInput).at(-1), "widgetGeometry");
+    assert.deepEqual(modelInput.widgetGeometry.viewportBucket, { w:1000, h:1000, rounding:"ceil-to-1000-before-halving" });
+    assert.deepEqual(modelInput.widgetGeometry.max, { w:500, h:500 });
+    assert.match(modelInput.widgetRenderingPolicy, /Layout and typography must be designed together/);
+    assert.match(modelInput.widgetRenderingPolicy, /clamp\(\) with container- or viewport-relative units/);
+    assert.match(modelInput.widgetRenderingPolicy, /Width-only or height-only resizing changes the layout viewport[\s\S]*?SVG or professional-graphic bounds tight on every side with only slight padding/);
+    assert.match(modelInput.widgetRenderingPolicy, /prominent without crowding[\s\S]*comfortably readable/);
+    assert.match(modelInput.widgetRenderingPolicy, /Do not fix overflow by making text excessively small[\s\S]*do not use oversized text/);
+    assert.match(modelInput.widgetRenderingPolicy, /reflowing, regrouping, shortening secondary copy, or choosing a more appropriate widget size/);
+    assert.match(modelInput.widgetRenderingPolicy, /verify the longest labels and every section at the actual widget dimensions/);
+    assert.match(modelInput.widgetRenderingPolicy, /For SVG, size text relative to its viewBox, not browser defaults/);
+    assert.match(modelInput.widgetRenderingPolicy, /Match the current uiTheme and nearby Canvas visual language/);
+    assert.doesNotMatch(modelInput.widgetRenderingPolicy, /180-240px|at least 100px|at least 80px/);
+    assert.match(modelInput.widgetRenderingPolicy, /visualization backdrop transparent by default[\s\S]*smallest necessary opaque or translucent backing[\s\S]*materially improves contrast, legibility, semantic grouping, or media presentation/);
+    assert.match(modelInput.widgetRenderingPolicy, /no outer background, border, corner radius, or box shadow/);
 
     const disabledResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(validPayload()) }),
       disabled = await disabledResponse.json();
@@ -704,7 +1588,7 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     const edgeResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(enabled) }),
       edge = await edgeResponse.json();
     assert.equal(edgeResponse.status, 200);
-    assert.deepEqual({ x:edge.commands[0].x, y:edge.commands[0].y, w:edge.commands[0].w, h:edge.commands[0].h }, { x:17900, y:19300, w:2100, h:700 });
+    assert.deepEqual({ x:edge.commands[0].x, y:edge.commands[0].y, w:edge.commands[0].w, h:edge.commands[0].h }, { x:17600, y:18850, w:2400, h:1150 });
 
     const imagePayload = validPayload();
     imagePayload.plugins = [builtInPluginDescriptor("image-search", ["https://commons.wikimedia.org", "https://upload.wikimedia.org", "https://api.openverse.org"])];
@@ -716,30 +1600,731 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.equal("copyLabel" in imageBody.commands[0], false);
 
     const flowchartPayload = validPayload();
+    flowchartPayload.visibleRect = { x:0, y:0, w:10000, h:10000 };
     flowchartPayload.plugins = [builtInPluginDescriptor("flowchart")];
     const flowchartResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(flowchartPayload) }),
       flowchartBody = await flowchartResponse.json();
     assert.equal(flowchartResponse.status, 200);
     assert.equal(flowchartBody.commands[0].pluginId, "flowchart");
-    assert.equal(flowchartBody.commands[0].copyText, "flowchart TD\nA-->B");
-    assert.equal(flowchartBody.commands[0].copyLabel, "Copy Mermaid");
+    assert.equal(flowchartBody.commands[0].sourceFormat, "bpmn-xml");
+    assert.equal(flowchartBody.commands[0].copyText, '<?xml version="1.0"?><definitions />');
+    assert.equal(flowchartBody.commands[0].copyLabel, "Copy bpmn-xml");
+
+    const wideFlowchartResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(flowchartPayload) }),
+      wideFlowchart = await wideFlowchartResponse.json(),
+      wideOutbound = JSON.parse(upstream.requests[7]),
+      wideModelInput = JSON.parse(wideOutbound.messages[1].content.find(part => part.type === "text").text);
+    assert.equal(wideFlowchartResponse.status, 200);
+    assert.deepEqual({ w:wideFlowchart.commands[0].w, h:wideFlowchart.commands[0].h }, { w:7800, h:2100 });
+    assert.deepEqual(wideModelInput.widgetGeometry.max, { w:5000, h:5000 });
+    assert.equal(wideOutbound.messages[0].content, outbound.messages[0].content);
+    assert.match(wideOutbound.messages[0].content, /Follow the request-specific min and max dimensions in modelInput\.widgetGeometry/);
+    assert.match(wideOutbound.messages[0].content, /bounds are not size targets[\s\S]*?do not make a widget large[\s\S]*?do not minimize it/);
+    assert.match(wideOutbound.messages[0].content, /semantic source[\s\S]*?appropriate browser library loaded on demand inside that widget/);
+    assert.match(wideOutbound.messages[0].content, /following any matching plugin renderer contract first/);
+    assert.match(wideOutbound.messages[0].content, /mature, fixed, documented browser entries[\s\S]*?never use latest tags[\s\S]*?guess internal \/lib or \/dist paths[\s\S]*?invent library APIs/);
+    assert.match(wideOutbound.messages[0].content, /never clear a successful render because a non-rendering follow-up fails/);
+
+    const oversizedFlowchartResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(flowchartPayload) }),
+      oversizedFlowchart = await oversizedFlowchartResponse.json();
+    assert.equal(oversizedFlowchartResponse.status, 200);
+    assert.deepEqual({ w:oversizedFlowchart.commands[0].w, h:oversizedFlowchart.commands[0].h }, { w:2500, h:5000 });
+
+    const areaPayload = { ...flowchartPayload, visibleRect:{ x:0, y:0, w:20000, h:20000 } },
+      areaResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(areaPayload) }),
+      areaBody = await areaResponse.json();
+    assert.equal(areaResponse.status, 200);
+    assert.deepEqual({ w:areaBody.commands[0].w, h:areaBody.commands[0].h }, { w:7302, h:5477 });
+    assert.ok(areaBody.commands[0].w * areaBody.commands[0].h <= 40000000);
 
     const malformed = validPayload();
     malformed.plugins = [{ ...descriptor, connect:["https://*.open-meteo.com"] }];
     const rejected = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(malformed) });
     assert.equal(rejected.status, 400);
     const oversized = validPayload();
-    oversized.plugins = [{ ...descriptor, document:"x".repeat(3001) }];
+    oversized.plugins = [{ ...descriptor, document:"x".repeat(12001) }];
     const oversizedResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(oversized) });
     assert.equal(oversizedResponse.status, 400);
-    assert.equal(upstream.requests.length, 7);
+    assert.equal(upstream.requests.length, 10);
   } finally {
     await stopServer(child);
     await new Promise(resolve => upstream.server.close(resolve));
   }
 });
 
-test("widget host CSP contains only exact declared HTTPS origins", { timeout:10000 }, async () => {
+test("Canvas AI preserves multiple valid widgets while rejecting invalid plugin commands", { timeout:20000 }, async () => {
+  const clocks = [
+      { title:"Beijing time", x:13746, zone:"Asia/Shanghai" },
+      { title:"New York time", x:14258, zone:"America/New_York" },
+      { title:"London time", x:14781, zone:"Europe/London" },
+    ].map(({ title, x, zone }) => ({
+      tool:"html_widget", pluginId:"general", x, y:10600, w:440, h:600,
+      title, refreshSeconds:0, html:`<!doctype html><html><body><p data-zone="${zone}">${title}</p></body></html>`,
+    })),
+    diagram = {
+      tool:"diagram_source", pluginId:"flowchart", x:100, y:200, w:1200, h:700,
+      title:"Clock zones", sourceFormat:"vega-lite", source:'{"mark":"bar","data":{"values":[{"zone":"Beijing","offset":8},{"zone":"London","offset":1}]},"encoding":{"x":{"field":"zone"},"y":{"field":"offset","type":"quantitative"}}}', refreshSeconds:0,
+    },
+    upstream = await startApiServer("", { response:({index}) => ({ body:JSON.stringify({
+      intent:"answer", commands:index === 0 ? clocks : [
+        { tool:"write_text", x:100, y:100, text:"Clock zones", fontSize:100, maxWidth:1000 },
+        clocks[0],
+        { ...clocks[1], html:"" },
+        { ...clocks[2], pluginId:"disabled-plugin" },
+        diagram,
+      ],
+    }) }) }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    payload = { ...validPayload(), plugins:[builtInPluginDescriptor("general"), builtInPluginDescriptor("flowchart")] };
+  try {
+    const post = async () => {
+      const response = await fetch(`${running.origin}/api/ai/command`, {
+        method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    assert.deepEqual((await post()).commands, clocks);
+    assert.deepEqual((await post()).commands, [clocks[0], diagram]);
+    assert.equal(upstream.requests.length, 2, "valid widget batches need no retry");
+    const outbound = JSON.parse(upstream.requests[0]);
+    assert.match(outbound.messages[0].content, /A plugin command must be the only returned command/);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("html_widget commands fill required fields and discard invalid optional metadata", { timeout:20000 }, async () => {
+  const response = index => JSON.stringify({
+      intent:"answer",
+      commands:[{
+        tool:"html_widget",
+        pluginId:"general",
+        ...(index ? { x:30000, y:-500, w:2, h:3, title:"T".repeat(140), refreshSeconds:30 } : {
+          diagramKind:"D".repeat(100),
+          sourceFormat:"S".repeat(100),
+          frameworkVersion:"F".repeat(140),
+          copyText:"C".repeat(16001),
+          copyLabel:"L".repeat(100),
+        }),
+        html:"<!doctype html><title>Store Points Map</title>",
+      }],
+    }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:response(index) }) }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    plugin = {
+      ...builtInPluginDescriptor("general"),
+      name:"General HTML",
+      recommendedRefreshSeconds:60,
+    },
+    payload = validPayload();
+  payload.visibleRect = { x:0, y:0, w:10000, h:10000 };
+  payload.plugins = [plugin];
+  try {
+    const resultResponse = await fetch(`${running.origin}/api/ai/command`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload),
+      }),
+      result = await resultResponse.json();
+    assert.equal(resultResponse.status, 200);
+    assert.equal(result.commands.length, 1);
+    assert.deepEqual(
+      {
+        tool:result.commands[0].tool,
+        pluginId:result.commands[0].pluginId,
+        x:result.commands[0].x,
+        y:result.commands[0].y,
+        w:result.commands[0].w,
+        h:result.commands[0].h,
+        title:result.commands[0].title,
+        refreshSeconds:result.commands[0].refreshSeconds,
+      },
+      {
+        tool:"html_widget",
+        pluginId:"general",
+        x:0,
+        y:61,
+        w:2400,
+        h:1400,
+        title:"General HTML",
+        refreshSeconds:0,
+      },
+    );
+    assert.equal(result.commands[0].diagramKind, "D".repeat(80));
+    for (const field of ["sourceFormat", "frameworkVersion", "copyText", "copyLabel"])
+      assert.equal(field in result.commands[0], false, field);
+
+    const clampedResponse = await fetch(`${running.origin}/api/ai/command`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload),
+      }),
+      clamped = await clampedResponse.json();
+    assert.equal(clampedResponse.status,200);
+    assert.deepEqual(
+      {
+        x:clamped.commands[0].x,
+        y:clamped.commands[0].y,
+        w:clamped.commands[0].w,
+        h:clamped.commands[0].h,
+        title:clamped.commands[0].title,
+        refreshSeconds:clamped.commands[0].refreshSeconds,
+      },
+      {
+        x:19700,
+        y:0,
+        w:300,
+        h:450,
+        title:"T".repeat(120),
+        refreshSeconds:60,
+      },
+    );
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("professional diagrams accept local source renderers and keep unknown formats on html_widget", { timeout:20000 }, async () => {
+  const diagram = (sourceFormat, source = "digraph G {\nA -> B;\n}") => ({
+      tool:"diagram_source",
+      pluginId:"flowchart",
+      x:120,
+      y:240,
+      w:1200,
+      h:700,
+      title:"Professional diagram",
+      diagramKind:"process",
+      sourceFormat,
+      source,
+    }),
+    response = command => JSON.stringify({ intent:"answer", commands:[command] }),
+    upstream = await startApiServer("", {
+      response:({index}) => ({
+        body:[
+          response(diagram("vega-lite", '{"mark":"bar","data":{"values":[{"a":1}]},"encoding":{"y":{"field":"a","type":"quantitative"}}}')),
+          response(diagram("Graphviz DOT", "digraph G { A -> B }")),
+          response(diagram("plantuml", "@startuml\nA -> B\n@enduml")),
+          response({ tool:"widget_patch", patch:"--- a/widget.source\n+++ b/widget.source\n@@ -1,3 +1,3 @@\n digraph G {\n-A -> B;\n+A -> B -> C;\n }\n" }),
+          response(diagram("dot", "digraph G { A -> B -> C }")),
+          response(diagram("dot", "digraph G { A -> B -> C }")),
+          response(diagram("vega-lite", JSON.stringify({ mark:"bar", description:"x".repeat(90 * 1024) }))),
+          response(diagram("mermaid", "flowchart LR; A --> B")),
+        ][index],
+      }),
+    }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    payload = validPayload();
+  payload.plugins = [builtInPluginDescriptor("flowchart")];
+  try {
+    const first = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.deepEqual(first.commands[0], {
+      tool:"diagram_source",
+      pluginId:"flowchart",
+      x:120,
+      y:240,
+      w:1200,
+      h:700,
+      title:"Professional diagram",
+      refreshSeconds:0,
+      sourceFormat:"vega-lite",
+      source:'{"mark":"bar","data":{"values":[{"a":1}]},"encoding":{"y":{"field":"a","type":"quantitative"}}}',
+      diagramKind:"process",
+    });
+
+    const graphviz = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.deepEqual(graphviz.commands, [], "new Graphviz diagram_source commands are rejected");
+
+    const unsupported = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.deepEqual(unsupported.commands, []);
+
+    const refinePayload = {
+      ...payload,
+      trigger:"manual",
+      userAction:"answer",
+      widgetEdit:{
+        mode:"replace",
+        widgetType:"diagram_source",
+        pluginId:"flowchart",
+        title:"Professional diagram",
+        instructionMode:"implicit-polish",
+        box:{ x:120, y:240, w:1200, h:700 },
+        diagramKind:"process",
+        sourceFormat:"dot",
+        source:"digraph G {\nA -> B;\n}",
+        communityOriginItemId:"123e4567-e89b-42d3-a456-426614174099",
+        communityRootItemId:"123e4567-e89b-42d3-a456-426614174098",
+        communityOriginName:"Forged origin",
+        communityOriginGeneration:99,
+      },
+    };
+    const refined = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(refinePayload),
+    }).then(value => value.json());
+    assert.equal(refined.commands[0].tool, "diagram_source");
+    assert.equal(refined.commands[0].sourceFormat, "dot");
+    assert.equal(refined.commands[0].source, "digraph G {\nA -> B -> C;\n}");
+
+    const fullReplacementResponse = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(refinePayload),
+    }), fullReplacement = await fullReplacementResponse.json();
+    assert.equal(fullReplacementResponse.status, 502);
+    assert.match(fullReplacement.error, /widget patch that could not be applied after retry/);
+
+    const largeSource = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.equal(largeSource.commands.length,1);
+    assert.ok(Buffer.byteLength(largeSource.commands[0].source,"utf8") > 20 * 1024);
+    assert.ok(Buffer.byteLength(largeSource.commands[0].source,"utf8") <= 100 * 1024);
+
+    const retired = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.deepEqual(retired.commands, [], "new Mermaid diagram_source commands are rejected");
+
+
+    const modelText = outboundModelText(upstream.requests[3]),
+      { metadata:modelInput, files, retryInstruction } = parseRefineModelText(modelText);
+    assert.equal(modelInput.widgetEdit.widgetType, "diagram_source");
+    assert.equal("source" in modelInput.widgetEdit, false);
+    assert.equal("html" in modelInput.widgetEdit, false);
+    for (const field of ["communityOriginItemId", "communityRootItemId", "communityOriginName", "communityOriginGeneration"]) {
+      assert.equal(field in modelInput.widgetEdit, false);
+      assert.doesNotMatch(files.find(file => file.path === "widget.json").content, new RegExp(field));
+    }
+    assert.deepEqual(modelInput.widgetEdit.patchFiles, [{ path:"widget.json" },{ path:"widget.source" }]);
+    assert.equal(modelInput.actionMeaning, "refine the supplied target widget in place using the newest instructions; return only the required widget_patch command");
+    assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff/);
+    assert.match(modelInput.widgetEditPolicy, /nl -ba -w6 -s TAB read views[\s\S]*?first ASCII TAB[\s\S]*?display metadata[\s\S]*?never copy either into diff lines/);
+    assert.match(modelInput.widgetEditPolicy, /input `    42<TAB>  <p>x<\/p>`[\s\S]*?removal line is `-  <p>x<\/p>`[\s\S]*?never `-<TAB>/);
+    assert.match(modelInput.widgetEditPolicy, /Canvas annotations request a visible content change[\s\S]*?widget\.json-only patch only when the user explicitly requests metadata alone/);
+    assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?widget\.json is editable only through its existing keys; never add manifest keys/);
+    assert.match(modelInput.widgetEditPolicy, /complete @@ -oldStart,oldCount \+newStart,newCount @@ headers/);
+    assert.match(modelInput.widgetEditPolicy, /leading space or minus as the diff marker[\s\S]*?original indentation/);
+    assert.match(modelInput.widgetEditPolicy, /never reconstruct or normalize removed lines[\s\S]*?character-for-character/);
+    assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?patch field must contain only the bare unified diff[\s\S]*?final response remains the required JSON object/);
+    assert.match(modelInput.widgetEditPolicy, /Example only when all three listed files need the same semantic change:[\s\S]*?--- a\/widget\.json[\s\S]*?--- a\/widget\.html[\s\S]*?--- a\/widget\.source/);
+    assert.equal(retryInstruction, "");
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })),
+      widgetPatchFiles(refinePayload.widgetEdit).map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })));
+    assert.deepEqual(JSON.parse(files[0].content), {
+      tool:"diagram_source",
+      pluginId:"flowchart",
+      title:"Professional diagram",
+      refreshSeconds:0,
+      diagramKind:"process",
+      sourceFormat:"dot",
+      sourceFile:"widget.source",
+    });
+    assert.equal(files[1].readView, "     1\tdigraph G {\n     2\tA -> B;\n     3\t}");
+    assert.match(modelText, /numbering: nl -ba -w6 -s TAB\n[\s\S]*?<<<BEGIN PENECHO_VIRTUAL_FILE_[a-f0-9]{64}>>>\n     1\tdigraph G {\n     2\tA -> B;\n     3\t}\n<<<END/);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("Make diagram builds local architecture and sequence widgets and retries an invalid diagram object", { timeout:20000 }, async () => {
+  const architecture = {
+      version:1, title:"Browser → API",
+      nodes:[{ id:"browser", label:"Browser", type:"frontend" }, { id:"api", label:"API" }, { id:"pg", label:"Postgres", type:"database" }, { id:"cache", label:"Cache", type:"database" }],
+      edges:[{ from:"browser", to:"api" }, { from:"api", to:"pg", kind:"data" }, { from:"api", to:"cache", kind:"data" }],
+    },
+    sequence = { version:1, title:"Login", participants:[{ id:"ui", label:"Client" }, { id:"api", label:"API" }], messages:[{ from:"ui", to:"api", label:"POST /login" }, { from:"api", to:"ui", label:"Token", kind:"return" }] },
+    widget = fields => ({ tool:"html_widget", pluginId:"general", x:120, y:240, w:1400, h:900, title:"Browser → API", ...fields }),
+    response = command => JSON.stringify({ intent:"plot", commands:[command] }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:[
+      response(widget({ architecture })),
+      response(widget({ architecture:{ ...architecture, version:2 } })),
+      response(widget({ architecture })),
+      response({ tool:"sequence", x:120, y:240, w:1400, h:900, sequence }),
+    ][index] }) }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    payload = { ...validPayload(), trigger:"manual", userAction:"plot", suggestion:"diagram", plugins:[builtInPluginDescriptor("general"), builtInPluginDescriptor("flowchart")] },
+    post = () => fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(payload) }).then(value => value.json());
+  try {
+    const first = await post(), [built] = first.commands;
+    assert.equal(first.attempts, 1);
+    assert.equal(first.commands.length, 1);
+    assert.equal(built.tool, "html_widget");
+    assert.equal(built.pluginId, "general");
+    assert.equal(built.title, "Browser → API");
+    assert.equal(built.refreshSeconds, 0);
+    assert.equal("architecture" in built, false);
+    assert.equal(built.html, require("../src/architecture/schema.js").architectureHtml(architecture));
+    assert.match(JSON.parse(upstream.requests[0]).messages[0].content, /# Local diagram contract[\s\S]*?instead of HTML, SVG, Graphviz, Mermaid, Cytoscape or a professional diagram_source[\s\S]*?architecture:\{\.\.\.\}/);
+
+    const retried = await post();
+    assert.equal(retried.attempts, 2);
+    assert.match(retried.commands[0].html, /data-penecho-architecture/);
+    assert.match(outboundModelText(upstream.requests[2]), /architecture diagram failed PenEcho validation \(Architecture: version:1 is required\)\. Return exactly one html_widget command with pluginId "general" and a corrected architecture object/);
+
+    const ordered = await post();
+    assert.equal(ordered.commands[0].title, "Login");
+    assert.equal(ordered.commands[0].html, require("../src/sequence/schema.js").sequenceHtml(sequence));
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("diagram refinement applies editable manifest metadata and a new source format", { timeout:20000 }, async () => {
+  const patch = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -3,6 +3,6 @@",
+      '   "pluginId": "flowchart",',
+      '-  "title": "Molecule",',
+      '+  "title": "Process",',
+      '   "refreshSeconds": 0,',
+      '-  "diagramKind": "molecular-structure",',
+      '-  "sourceFormat": "smiles",',
+      '+  "diagramKind": "process",',
+      '+  "sourceFormat": "vega-lite",',
+      '   "sourceFile": "widget.source"',
+      "--- a/widget.source",
+      "+++ b/widget.source",
+      "@@ -1 +1,2 @@",
+      "-CCO",
+      '+{"mark":"bar",',
+      '+"data":{"values":[]}}',
+      "",
+    ].join("\n"),
+    upstream = await startApiServer(JSON.stringify({ intent:"answer",commands:[{ tool:"widget_patch",patch }] })),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    payload = validPayload();
+  payload.trigger = "manual";
+  payload.userAction = "answer";
+  payload.plugins = [builtInPluginDescriptor("flowchart")];
+  payload.widgetEdit = {
+    mode:"replace",
+    widgetType:"diagram_source",
+    pluginId:"flowchart",
+    title:"Molecule",
+    instructionMode:"implicit-polish",
+    box:{ x:120,y:240,w:1200,h:700 },
+    diagramKind:"molecular-structure",
+    sourceFormat:"smiles",
+    source:"CCO",
+  };
+  try {
+    const response = await fetch(`${running.origin}/api/ai/command`, { method:"POST",headers:{ "Content-Type":"application/json" },body:JSON.stringify(payload) }),
+      result = await response.json();
+    assert.equal(response.status,200);
+    assert.equal(result.attempts,1);
+    assert.deepEqual(result.commands[0], {
+      tool:"diagram_source",
+      pluginId:"flowchart",
+      x:120,
+      y:240,
+      w:1200,
+      h:700,
+      title:"Process",
+      refreshSeconds:0,
+      sourceFormat:"vega-lite",
+      source:'{"mark":"bar",\n"data":{"values":[]}}',
+      diagramKind:"process",
+    });
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("custom plugin widget refinement applies one patch and rejects ambiguous patches", { timeout:20000 }, async () => {
+  const replacement = {
+      tool:"widget_patch",
+      patch:"--- a/widget.html\n+++ b/widget.html\n@@ -1,1 +1,1 @@\n-<!doctype html><main class=\"custom-node\">Existing</main>\n+<!doctype html><main class=\"custom-node\">Updated</main>\n",
+    },
+    oversized = {
+      tool:"widget_patch",
+      patch:`--- a/widget.html\n+++ b/widget.html\n@@ -1,1 +1,1 @@\n-<!doctype html><main class="custom-node">Existing</main>\n+<!doctype html><main>${"x".repeat(200000)}</main>\n`,
+    },
+    response = commands => JSON.stringify({ intent:"answer", commands }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:index === 0 || index >= 5 ? response([replacement]) : index <= 2 ? response([replacement, replacement]) : response([oversized]) }) }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    plugin = {
+      id:"custom-diagram",
+      name:"Custom Diagram",
+      version:"1",
+      connect:[],
+      recommendedRefreshSeconds:86400,
+      document:"---\npenecho-plugin: 1\nid: custom-diagram\nname: Custom Diagram\nversion: 1\n---\n# Custom Diagram\n\n## One-shot example\nReturn one html_widget.",
+      styles:".custom-node { color: #123456; }",
+    },
+    payload = validPayload();
+  payload.trigger = "manual";
+  payload.userAction = "answer";
+  payload.plugins = [plugin];
+  payload.widgetEdit = {
+    mode:"replace",
+    pluginId:plugin.id,
+    title:"Existing custom architecture",
+    instructionMode:"implicit-polish",
+    box:{ x:120, y:240, w:1200, h:700 },
+    html:"<!doctype html><main class=\"custom-node\">Existing</main>",
+    sourceFormat:"d2",
+    source:"client -> api\n\napi -> database",
+    targetId:"client-only-widget-id",
+    runtimeDiagnostics:{
+      errors:[{
+        kind:"error",
+        name:"TypeError",
+        message:"A widget script failed",
+        file:"widget.html",
+        line:35,
+        column:12,
+        repeatedCount:2,
+        stack:["at render (widget.html:35:12)"],
+      }],
+      truncated:false,
+    },
+  };
+  try {
+    const acceptedResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      accepted = await acceptedResponse.json();
+    assert.equal(acceptedResponse.status, 200);
+    assert.equal(accepted.commands.length, 1);
+    assert.equal(accepted.commands[0].pluginId, plugin.id);
+    assert.deepEqual(
+      {
+        x:accepted.commands[0].x,
+        y:accepted.commands[0].y,
+        w:accepted.commands[0].w,
+        h:accepted.commands[0].h,
+        title:accepted.commands[0].title,
+        refreshSeconds:accepted.commands[0].refreshSeconds,
+      },
+      {
+        x:payload.widgetEdit.box.x,
+        y:payload.widgetEdit.box.y,
+        w:payload.widgetEdit.box.w,
+        h:payload.widgetEdit.box.h,
+        title:payload.widgetEdit.title,
+        refreshSeconds:0,
+      },
+    );
+    assert.equal(accepted.commands[0].sourceFormat, "d2");
+    assert.equal(accepted.commands[0].copyLabel, "Copy d2");
+    assert.equal(accepted.commands[0].html, "<!doctype html><main class=\"custom-node\">Updated</main>");
+    assert.equal(accepted.commands[0].copyText, payload.widgetEdit.source);
+
+    const { metadata:modelInput, files, retryInstruction } = parseRefineModelText(outboundModelText(upstream.requests[0]));
+    assert.equal(modelInput.enabledPlugins[0].document, plugin.document);
+    assert.equal("styles" in modelInput.enabledPlugins[0], false);
+    assert.equal(modelInput.widgetEdit.pluginId, plugin.id);
+    assert.equal("html" in modelInput.widgetEdit, false);
+    assert.equal("source" in modelInput.widgetEdit, false);
+    assert.equal("targetId" in modelInput.widgetEdit, false);
+    assert.deepEqual(modelInput.widgetEdit.runtimeDiagnostics, payload.widgetEdit.runtimeDiagnostics);
+    assert.deepEqual(modelInput.widgetEdit.patchFiles, [
+      { path:"widget.json" },
+      { path:"widget.html" },
+      { path:"widget.source" },
+    ]);
+    assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff/);
+    assert.match(modelInput.widgetEditPolicy, /Required response-shape example \(replace <path> with an exact widgetEdit\.patchFiles path\):[\s\S]*?"intent":"answer"[\s\S]*?"commands"[\s\S]*?"tool":"widget_patch"/);
+    assert.match(modelInput.widgetEditPolicy, /Every changed file starts with --- and \+\+\+; no other file-section marker is valid/);
+    assert.match(modelInput.widgetEditPolicy, /nl -ba -w6 -s TAB read views[\s\S]*?first ASCII TAB[\s\S]*?display metadata[\s\S]*?never copy either into diff lines/);
+    assert.match(modelInput.widgetEditPolicy, /input `    42<TAB>  <p>x<\/p>`[\s\S]*?removal line is `-  <p>x<\/p>`[\s\S]*?never `-<TAB>/);
+    assert.match(modelInput.widgetEditPolicy, /Canvas annotations request a visible content change[\s\S]*?widget\.json-only patch only when the user explicitly requests metadata alone/);
+    assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?widget\.json is editable only through its existing keys; never add manifest keys/);
+    assert.match(modelInput.widgetEditPolicy, /complete @@ -oldStart,oldCount \+newStart,newCount @@ headers/);
+    assert.match(modelInput.widgetEditPolicy, /leading space or minus as the diff marker[\s\S]*?original indentation/);
+    assert.match(modelInput.widgetEditPolicy, /nearby edits would produce overlapping or touching context[\s\S]*?Never repeat an original line across two hunks/);
+    assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?patch field must contain only the bare unified diff[\s\S]*?final response remains the required JSON object/);
+    assert.match(modelInput.widgetEditPolicy, /Example only when all three listed files need the same semantic change:[\s\S]*?--- a\/widget\.json[\s\S]*?--- a\/widget\.html[\s\S]*?--- a\/widget\.source/);
+    assert.match(modelInput.widgetEditPolicy, /newly added or replaced HTML[\s\S]*?one long or minified line[\s\S]*?below 160 characters/);
+    assert.match(modelInput.widgetEditPolicy, /runtimeDiagnostics[\s\S]*?try to repair JavaScript errors[\s\S]*?display or interaction[\s\S]*?preserving unrelated behavior/);
+    assert.doesNotMatch(modelInput.widgetEditPolicy, /JSXGraph|earliest runtime error/);
+    assert.equal(retryInstruction, "");
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })),
+      widgetPatchFiles({ ...payload.widgetEdit,widgetType:"html_widget" }).map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })));
+    assert.equal(files.find(file => file.path === "widget.source").readView,
+      "     1\tclient -> api\n     2\t\n     3\tapi -> database");
+
+    const shiftedPayload = { ...payload, widgetEdit:{ ...payload.widgetEdit, box:{ ...payload.widgetEdit.box, x:payload.widgetEdit.box.x + 1 } } },
+      ambiguousResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(shiftedPayload) }),
+      ambiguous = await ambiguousResponse.json();
+    assert.equal(ambiguousResponse.status, 502);
+    assert.match(ambiguous.error, /widget patch that could not be applied after retry/);
+    assert.equal(upstream.requests.length, 3);
+    const firstText = outboundModelText(upstream.requests[0]), shiftedText = outboundModelText(upstream.requests[1]),
+      currentContextMarker = "\n\nPenEcho current Refine request context (JSON; applies to the virtual files above):\n",
+      firstCurrent = firstText.indexOf(currentContextMarker), shiftedCurrent = shiftedText.indexOf(currentContextMarker);
+    assert.ok(firstCurrent > 0);
+    assert.equal(firstText.slice(0, firstCurrent), shiftedText.slice(0, shiftedCurrent));
+    assert.notEqual(firstText.slice(firstCurrent), shiftedText.slice(shiftedCurrent));
+    const retryRequest = parseRefineModelText(outboundModelText(upstream.requests[2]));
+    assert.deepEqual(retryRequest.files.map(file => file.content),widgetPatchFiles({ ...payload.widgetEdit,widgetType:"html_widget" }).map(file => file.content));
+    assert.match(retryRequest.retryInstruction, /failed local validation: widget-patch-command-count[\s\S]*?original virtual files[\s\S]*?widgetEdit\.patchFiles paths/);
+    assert.match(retryRequest.retryInstruction, /standard ---\/\+\+\+ section[\s\S]*?complete, correctly counted, ordered, non-overlapping hunks/);
+    assert.match(retryRequest.retryInstruction, /bare unified diff[\s\S]*?no prose, fences, metadata, wrappers/);
+    assert.ok(outboundModelText(upstream.requests[2]).endsWith(retryRequest.retryInstruction));
+
+    const oversizedResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      rejectedOversized = await oversizedResponse.json();
+    assert.equal(oversizedResponse.status, 502);
+    assert.match(rejectedOversized.error, /widget patch that could not be applied after retry/);
+    assert.equal(upstream.requests.length, 5);
+
+    const mirroredPayload = {
+        ...payload,
+        widgetEdit:{
+          ...payload.widgetEdit,
+          sourceFormat:"html",
+          source:payload.widgetEdit.html,
+          copyLabel:"Copy HTML",
+        },
+      },
+      mirroredResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(mirroredPayload) }),
+      mirrored = await mirroredResponse.json(),
+      { metadata:mirroredModelInput, files:mirroredFiles } = parseRefineModelText(outboundModelText(upstream.requests[5]));
+    assert.equal(mirroredResponse.status, 200);
+    assert.equal(mirrored.commands[0].html, "<!doctype html><main class=\"custom-node\">Updated</main>");
+    assert.equal("copyText" in mirrored.commands[0], false);
+    assert.equal("copyLabel" in mirrored.commands[0], false);
+    assert.equal("sourceMirrorsHtml" in mirroredModelInput.widgetEdit, false);
+    assert.equal("source" in mirroredModelInput.widgetEdit, false);
+    assert.deepEqual(mirroredModelInput.widgetEdit.patchFiles, [{ path:"widget.json" },{ path:"widget.html" },{ path:"widget.source" }]);
+    assert.match(mirroredModelInput.widgetEditPolicy, /copyTextFile value selects no copy source, HTML itself, or the distinct source/);
+    assert.equal(JSON.parse(mirroredFiles[0].content).copyTextFile,"widget.html");
+    assert.deepEqual(mirroredFiles.slice(1).map(file => ({ path:file.path, content:file.content })), [
+      { path:"widget.html", content:`${mirroredPayload.widgetEdit.html}\n` },
+      { path:"widget.source", content:"" },
+    ]);
+    assert.equal(upstream.requests.length, 6);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("widget refinement applies an exact uniquely located patch without a model retry", { timeout:20000 }, async () => {
+  const patch = [
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -40,99 +42,70 @@",
+      " <main>",
+      "-<h1>Old</h1>",
+      "+<h1>Updated</h1>",
+      " <p>Keep</p>",
+      "",
+    ].join("\n"),
+    upstream = await startApiServer(JSON.stringify({ intent:"answer", commands:[{ tool:"widget_patch", patch }] })),
+    running = await startServer(apiServerEnv(upstream.origin)), payload = validPayload();
+  payload.trigger = "manual";
+  payload.userAction = "answer";
+  payload.plugins = [builtInPluginDescriptor("general")];
+  payload.widgetEdit = {
+    mode:"replace",
+    widgetType:"html_widget",
+    pluginId:"general",
+    title:"Existing widget",
+    instructionMode:"nearby-dirty",
+    box:{ x:120, y:240, w:1200, h:700 },
+    html:"<!doctype html>\n<main>\n<h1>Old</h1>\n<p>Keep</p>\n</main>\n",
+    sourceFormat:"html",
+    sourceMirrorsHtml:true,
+    refreshSeconds:0,
+  };
+  try {
+    const response = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(payload) }),
+      result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.attempts, 1);
+    assert.equal(upstream.requests.length, 1);
+    assert.match(result.commands[0].html, /<h1>Updated<\/h1>/);
+    const { metadata:modelInput, files } = parseRefineModelText(outboundModelText(upstream.requests[0]));
+    assert.equal("html" in modelInput.widgetEdit, false);
+    assert.equal("source" in modelInput.widgetEdit, false);
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })),
+      widgetPatchFiles(payload.widgetEdit).map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })));
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("widget refinement traces a strict overlapping-hunk rejection before retry", { timeout:20000 }, async () => {
+  const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-overlapping-hunk-trace-")),
+    patch=[
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -2,4 +2,4 @@",
+      " <main>",
+      "-one",
+      "+ONE",
+      " keep-a",
+      " keep-b",
+      "@@ -4,4 +4,4 @@",
+      " keep-a",
+      " keep-X",
+      "-two",
+      "+TWO",
+      " </main>",
+      "",
+    ].join("\n"),
+    upstream=await startApiServer(JSON.stringify({intent:"answer",commands:[{tool:"widget_patch",patch}]})),
+    running=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:directory,PENECHO_REQUEST_TRACE:"true",PENECHO_AI_IMAGE_FORMAT:"png"})),
+    payload=validPayload();
+  payload.trigger="manual";
+  payload.userAction="answer";
+  payload.plugins=[builtInPluginDescriptor("general")];
+  payload.widgetEdit={
+    mode:"replace",
+    widgetType:"html_widget",
+    pluginId:"general",
+    title:"Existing widget",
+    instructionMode:"nearby-dirty",
+    box:{x:120,y:240,w:1200,h:700},
+    html:"<!doctype html>\n<main>\none\nkeep-a\nkeep-b\ntwo\n</main>\n",
+    sourceFormat:"html",
+    sourceMirrorsHtml:true,
+    refreshSeconds:0,
+  };
+  try {
+    const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),
+      body=await response.json(),root=path.join(directory,"logs","requests"),
+      name=(await fs.promises.readdir(root)).find(entry=>entry.endsWith(body.requestId)),
+      trace=JSON.parse(await fs.promises.readFile(path.join(root,name,"trace.json"),"utf8"));
+    assert.equal(response.status,502);
+    assert.equal(trace.attempts.length,2);
+    assert.deepEqual(trace.attempts.map(attempt=>attempt.localValidation),[
+      {accepted:false,reason:"overlapping-hunk-context"},
+      {accepted:false,reason:"overlapping-hunk-context"},
+    ]);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+    await fs.promises.rm(directory,{recursive:true,force:true});
+  }
+});
+
+test("widget host CSP permits on-demand HTTPS resources inside the isolated widget", { timeout:10000 }, async () => {
   const {child,origin} = await startServer(serverEnv());
   try {
     const query = new URLSearchParams();
@@ -747,18 +2332,52 @@ test("widget host CSP contains only exact declared HTTPS origins", { timeout:100
     query.append("connect", "https://api.open-meteo.com");
     const response = await fetch(`${origin}/widget-host.html?${query}`), policy = response.headers.get("content-security-policy");
     assert.equal(response.status, 200);
-    assert.match(policy, /connect-src https:\/\/geocoding-api\.open-meteo\.com https:\/\/api\.open-meteo\.com;/);
-    assert.match(policy, /img-src data: blob: https:\/\/geocoding-api\.open-meteo\.com https:\/\/api\.open-meteo\.com;/);
+    assert.match(policy, /script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https:/);
+    assert.match(policy, /style-src 'unsafe-inline' https:/);
+    assert.match(policy, /connect-src 'self' https:/);
+    assert.match(policy, /img-src data: blob: https:/);
     assert.match(policy, /frame-ancestors 'self'/);
-    assert.doesNotMatch(policy, /connect-src[^;]*\*/);
     const offlinePolicy = (await fetch(`${origin}/widget-host.html`)).headers.get("content-security-policy");
-    assert.match(offlinePolicy, /connect-src 'none';/);
+    assert.match(offlinePolicy, /connect-src 'self' https:/);
     const renderer = await fetch(`${origin}/widget-renderer.js`);
     assert.equal(renderer.status, 200);
     assert.match(renderer.headers.get("content-type"), /^application\/javascript/);
     assert.equal(renderer.headers.get("cross-origin-resource-policy"), "cross-origin");
     assert.equal(renderer.headers.get("access-control-allow-origin"), "*");
     assert.match(await renderer.text(), /html2canvas/);
+    const visualVendor=await fetch(`${origin}/visual-explainer-vendor.js`),visualRuntime=await fetch(`${origin}/visual-explainer-runtime.js`);
+    assert.equal(visualVendor.status,200);
+    assert.match(visualVendor.headers.get("content-type"),/^application\/javascript/);
+    assert.equal(visualVendor.headers.get("cross-origin-resource-policy"),"cross-origin");
+    assert.match(await visualVendor.text(),/AntVInfographic/);
+    assert.equal(visualRuntime.status,200);
+    assert.equal(visualRuntime.headers.get("cross-origin-resource-policy"),"cross-origin");
+    assert.match(await visualRuntime.text(),/penecho-visual-explainer-diagnostics/);
+
+    const privateData = await fetch(`${origin}/api/widget-fetch?url=${encodeURIComponent("https://127.0.0.1/")}`, { headers:{ Origin:origin } });
+    assert.equal(privateData.status, 403);
+    assert.match(await privateData.text(), /Local and private destinations/);
+    const configScript = await fetch(`${origin}/api/config.js`).then(response => response.text()),
+      accessSession = /"accessSessionToken":"([A-Za-z0-9_-]+)"/.exec(configScript)?.[1];
+    assert.match(accessSession, /^[A-Za-z0-9_-]{40,}$/);
+    const staleSessionHost = await fetch(`${origin}/widget-host.html?access-session=${accessSession}stale`);
+    assert.equal(staleSessionHost.status, 200, "an open Canvas survives a server restart with its previous process token");
+    assert.match(await staleSessionHost.text(), /widget-host\.js/);
+    const duplicateSession = new URLSearchParams();
+    duplicateSession.append("access-session", accessSession);
+    duplicateSession.append("access-session", accessSession);
+    const duplicateSessionHost = await fetch(`${origin}/widget-host.html?${duplicateSession}`);
+    assert.equal(duplicateSessionHost.status, 400);
+    assert.match(await duplicateSessionHost.text(), /Invalid widget host session/);
+    const sandboxedWidgetData = await fetch(`${origin}/api/widget-fetch`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "X-PenEcho-Session":accessSession },
+      body:JSON.stringify({ url:"https://127.0.0.1:8443/image.png" }),
+    });
+    assert.equal(sandboxedWidgetData.status, 403);
+    assert.match(await sandboxedWidgetData.text(), /Local and private destinations/);
+    assert.equal((await fetch(`${origin}/api/widget-fetch?url=${encodeURIComponent("http://example.com/")}`, { headers:{ Origin:origin } })).status, 400);
+    assert.equal((await fetch(`${origin}/api/widget-fetch?url=${encodeURIComponent("https://example.com/")}`)).status, 403);
 
     for (const values of [
       ["https://*.open-meteo.com"],
@@ -777,20 +2396,46 @@ test("widget host CSP contains only exact declared HTTPS origins", { timeout:100
 
 test("local plugin discovery is constrained and widget prompting is conditional", () => {
   const source = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
-    basePrompt = /const SYSTEM_PROMPT = `([\s\S]*?)`;\s*\n\s*const ACTIVE_SYSTEM_PROMPT_BASE/.exec(source)?.[1] || "";
+    basePrompt = /const SYSTEM_PROMPT = `([\s\S]*?)`;\s*\n\s*const JSON_RESPONSE_SCHEMA_PROMPT/.exec(source)?.[1] || "";
   assert.doesNotMatch(basePrompt, /html_widget|enabledPlugins/);
-  assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin documents/);
-  assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_SYSTEM_PROMPT\)/);
+  assert.match(basePrompt, /If the newest input is non-empty but unclear, incomplete, or lacks enough context, return one short write_text clarification question stating what is missing\./);
+  assert.match(basePrompt, /Use intent none with an empty commands array only when there is genuinely no new input\./);
+  assert.doesNotMatch(basePrompt, /If genuinely unreadable or incomplete, use intent none/);
+  assert.match(basePrompt, /existing canvas objects as actors, anchors, background, or targets[\s\S]*?overlay only the newly requested paths, effects, or actions[\s\S]*?never recreate those objects/);
+  assert.match(source, /const MANDATORY_VISIBLE_RESPONSE_PROMPT = `Mandatory final visible-response fallback/);
+  assert.match(source, /Empty hotspotGrid\.hotspots, absent typedInput, absent focusInset, clipped or fragmentary content, nonsensical content/);
+  assert.match(source, /Hotspots only help refine reading order; their absence is not evidence that there is no new input\./);
+  assert.match(source, /treat all visible content inside latestInput\.imageRect as the current input/);
+  assert.match(source, /inspect and use the entire attached input image within sourceRect as the current input/);
+  assert.match(source, /return one short write_text clarification question asking what the user wants done with the visible content/);
+  assert.match(source, /commands contains at least one renderable command/);
+  assert.match(source, /Return only one compact final JSON object needed by PenEcho[\s\S]*?Omit drafts, reasoning, progress or status updates, alternatives, duplicate objects, Markdown, and any wrapper text/);
+  assert.match(source, /"commands":\{"type":"array","minItems":1,"maxItems":16/);
+  assert.match(source, /return \[base, literalTypeset \? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, REFINE_MODE_GATE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT\]/);
+  assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles/);
+  assert.match(source, /Do not minify generated HTML[\s\S]*?stable multiline formatting[\s\S]*?below 160 characters/);
+  assert.match(source, /reusable source is the HTML document itself[\s\S]*?omit copyText and copyLabel[\s\S]*?Copy HTML/);
+  assert.match(source, /clamp\(36px,1\.2cqw,52px\)[\s\S]*?at least 28px[\s\S]*?clamp\(52px,2cqw,80px\)[\s\S]*?14–16px are too small/);
+  assert.match(source, /Width-only or height-only resizing changes the layout viewport[\s\S]*?SVG or professional-graphic bounds tight on every side with only slight padding/);
+  assert.match(source, /Public HTTPS reference links are allowed[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer[\s\S]*?never navigate the widget itself/);
+  assert.match(source, /const PLUGIN_ROUTING_PROMPT = `Apply the Explain presentation rule[\s\S]*General HTML is otherwise always available as a fallback, not the default drawing route/);
+  assert.match(source, /Choose exactly one command path by the defining deliverable[\s\S]*never return speculative alternatives/);
+  assert.match(source, /does not expose the PenEcho Agent Visual Explainer tool[\s\S]*General HTML as its explicit compatibility fallback/);
+  assert.match(source, /custom behavior is primary[\s\S]*faithful quantitative chart with axes and scales[\s\S]*diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one/);
+  assert.match(source, /filterCapabilityCommands[\s\S]*?command\?\.tool !== "animate_scene"/);
+  assert.match(source, /current or changing public information such as news[\s\S]*?network-backed html_widget[\s\S]*?refreshSeconds interval[\s\S]*?update frequency and rate limits/);
+  assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT, SCENE_CONTRACT_PROMPT, LOCAL_DIAGRAM_CONTRACT_PROMPT\)/);
+  assert.match(source, /When an architecture, sequence or workflow diagram is the deliverable, including a service dependency graph, network or deployment topology, or data lineage, follow the local diagram contract instead of a professional capability/);
   assert.match(source, /pluginsEnabled = Array\.isArray\(modelInput\?\.enabledPlugins\) && modelInput\.enabledPlugins\.length > 0/);
-  assert.match(source, /function localPluginCatalog\(\)[\s\S]*?entry\.isFile\(\)[\s\S]*?\^\[a-z0-9\][\s\S]*?MAX_LOCAL_PLUGINS/);
+  assert.match(source, /function localPluginCatalog\(scope = "all"\)[\s\S]*?entry\.isFile\(\)[\s\S]*?entry\.isDirectory\(\)[\s\S]*?MAX_LOCAL_PLUGINS/);
   assert.match(source, /process\.env\.PENECHO_PRIVATE_PLUGIN_DIR[\s\S]*?path\.resolve\(process\.env\.PENECHO_PRIVATE_PLUGIN_DIR\)/);
   assert.match(source, /STATE_DIRECTORY[\s\S]*?path\.join\(STATE_DIRECTORY, "plugins", "private"\)/);
-  assert.match(source, /function localPluginCatalog\(\)[\s\S]*?PRIVATE_PLUGIN_DIRECTORY[\s\S]*?plugins\/private/);
+  assert.match(source, /function localPluginCatalog\(scope = "all"\)[\s\S]*?PRIVATE_PLUGIN_DIRECTORY[\s\S]*?plugins\/private[\s\S]*?scope !== "private" \|\| !builtIn/);
   assert.match(source, /function saveLocalPluginDocument\([\s\S]*?BUILTIN_PLUGIN_IDS\.has\(manifest\.id\)[\s\S]*?mkdirSync\(PRIVATE_PLUGIN_DIRECTORY/);
   assert.match(source, /function deleteLocalPlugin\([\s\S]*?path\.join\(PRIVATE_PLUGIN_DIRECTORY/);
-  assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?localPluginCatalog\(\)/);
-  assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document\)/);
-  assert.match(source, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?under 3000 UTF-8 bytes/);
+  assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?url\.searchParams\.get\("scope"\) === "private"[\s\S]*?localPluginCatalog\(scope\)/);
+  assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document, body\.styles \|\| ""\)/);
+  assert.match(source, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?under 12000 UTF-8 bytes[\s\S]*?under 32000 UTF-8 bytes/);
   assert.match(source, /url\.pathname === "\/api\/plugins\/improve"[\s\S]*?improvePluginDocument/);
 });
 
@@ -799,7 +2444,7 @@ test("personal plugins use the writable desktop directory and remain fetchable",
     privateDirectory=path.join(stateDir,"desktop-plugins","private"),
     upstream=await startApiServer(),
     running=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:stateDir,PENECHO_PRIVATE_PLUGIN_DIR:privateDirectory})),
-    document=fs.readFileSync(path.join(ROOT,"public","plugins","general.md"),"utf8")
+    document=fs.readFileSync(path.join(ROOT,"public","plugins","general","plugin.md"),"utf8")
       .replace(/^id: general$/m,"id: desktop-private-test")
       .replace(/^name: General HTML$/m,"name: Desktop Private Test")
       .replace(/^# General HTML$/m,"# Desktop Private Test");
@@ -810,25 +2455,76 @@ test("personal plugins use the writable desktop directory and remain fetchable",
     const response=await fetch(`${running.origin}/api/plugins`,{
       method:"POST",
       headers:{"Content-Type":"application/json",Origin:running.origin,Cookie:cookie},
-      body:JSON.stringify({document}),
+      body:JSON.stringify({document,styles:".desktop-private-test { color: #123456; }"}),
     }),body=await response.json();
     assert.equal(response.status,201);
-    assert.equal(body.plugin.path,"plugins/private/desktop-private-test.md");
-    assert.equal(fs.readFileSync(path.join(privateDirectory,"desktop-private-test.md"),"utf8").trim(),document.trim());
+    assert.equal(body.plugin.path,"plugins/private/desktop-private-test/plugin.md");
+    assert.equal(body.plugin.stylePath,"plugins/private/desktop-private-test/styles.css");
+    assert.equal(fs.readFileSync(path.join(privateDirectory,"desktop-private-test","plugin.md"),"utf8").trim(),document.trim());
+    assert.equal(fs.readFileSync(path.join(privateDirectory,"desktop-private-test","styles.css"),"utf8").trim(),".desktop-private-test { color: #123456; }");
 
     const catalog=await fetch(`${running.origin}/api/plugins`).then(value=>value.json()),
-      entry=catalog.plugins.find(plugin=>plugin.path==="plugins/private/desktop-private-test.md");
+      entry=catalog.plugins.find(plugin=>plugin.path==="plugins/private/desktop-private-test/plugin.md");
     assert.equal(entry?.builtIn,false);
+    assert.equal(entry?.stylePath,"plugins/private/desktop-private-test/styles.css");
+    const privateCatalog=await fetch(`${running.origin}/api/plugins?scope=private`).then(value=>value.json());
+    assert.ok(privateCatalog.plugins.length >= 1);
+    assert.ok(privateCatalog.plugins.every(plugin=>plugin.builtIn===false));
+    assert.ok(privateCatalog.plugins.some(plugin=>plugin.path==="plugins/private/desktop-private-test/plugin.md"));
     const served=await fetch(`${running.origin}/${entry.path}`);
     assert.equal(served.status,200);
     assert.equal((await served.text()).trim(),document.trim());
+    const servedStyles=await fetch(`${running.origin}/${entry.stylePath}`);
+    assert.equal(servedStyles.status,200);
+    assert.equal((await servedStyles.text()).trim(),".desktop-private-test { color: #123456; }");
 
     const removed=await fetch(`${running.origin}/api/plugins/desktop-private-test`,{method:"DELETE",headers:{Origin:running.origin,Cookie:cookie}});
     assert.equal(removed.status,200);
-    assert.equal(fs.existsSync(path.join(privateDirectory,"desktop-private-test.md")),false);
+    assert.equal(fs.existsSync(path.join(privateDirectory,"desktop-private-test")),false);
   } finally {
     await stopServer(running.child);
     await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("community metadata accepts an optional continuation prompt and validates the automatic WebP thumbnail", { timeout:20000 }, async () => {
+  const generated={name:"Solar System Learning Map",description:"A clear visual map for exploring planets and their relationships.",category:"education",tags:["solar system","planets","learning"],continuationPrompt:""},
+    upstream=await startApiServer(JSON.stringify(generated)),running=await startServer(apiServerEnv(upstream.origin)),image=await sharp({create:{width:96,height:64,channels:4,background:{r:35,g:92,b:155,alpha:1}}}).webp({quality:80}).toBuffer(),
+    payload={kind:"canvas",language:"en",preview:{contentType:"image/webp",width:96,height:64,dataBase64:image.toString("base64")},current:{name:"Map",description:"",category:"productivity",tags:[]},context:{title:"Map"}};
+  try {
+    const response=await fetch(`${running.origin}/api/community/metadata`,{method:"POST",headers:{Origin:running.origin,"Content-Type":"application/json","X-PenEcho-Connection":"default"},body:JSON.stringify(payload)}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.deepEqual(body.metadata,generated);
+    assert.equal(upstream.requests.length,1);
+    const outbound=JSON.parse(upstream.requests[0]);
+    assert.match(outbound.messages[0].content,/public Craft metadata/);
+    assert.match(outbound.messages[1].content[1].image_url.url,/^data:image\/webp;base64,/);
+    assert.doesNotMatch(JSON.stringify(outbound),/priceCredits|apiKey/);
+
+    const invalid=await fetch(`${running.origin}/api/community/metadata`,{method:"POST",headers:{Origin:running.origin,"Content-Type":"application/json"},body:JSON.stringify({...payload,preview:{...payload.preview,width:97}})});
+    assert.equal(invalid.status,400);
+    assert.equal(upstream.requests.length,1);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("Widget publish metadata uses the same Codex CLI auto-recovery as Main Canvas AI", { timeout:20000 }, async () => {
+  const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-community-codex-recovery-")),cli=await recoverableCodexCli(directory),stateDir=path.join(directory,"state"),
+    image=await sharp({create:{width:96,height:64,channels:4,background:{r:35,g:92,b:155,alpha:1}}}).webp({quality:80}).toBuffer(),
+    payload={kind:"widget",language:"en",preview:{contentType:"image/webp",width:96,height:64,dataBase64:image.toString("base64")},current:{name:"",description:"",category:"productivity",tags:[]},context:{title:"Recovered Widget"}},
+    env=serverEnv({PENECHO_STATE_DIR:stateDir,CODEX_CLI_PATH:path.join(directory,"removed-codex"),PATH:`${cli.bin}${path.delimiter}${process.env.PATH||""}`}),
+    running=await startServer(env);
+  try {
+    const response=await fetch(`${running.origin}/api/community/metadata`,{method:"POST",headers:{Origin:running.origin,"Content-Type":"application/json","X-PenEcho-Connection":"default"},body:JSON.stringify(payload)}),body=await response.json();
+    assert.equal(response.status,200,JSON.stringify(body));
+    assert.deepEqual(body.metadata,cli.communityMetadata);
+    const invocations=(await fs.promises.readFile(cli.record,"utf8")).trim().split(/\r?\n/);
+    assert.deepEqual(invocations,["version","login","community"]);
+  } finally {
+    await stopServer(running.child);
+    await fs.promises.rm(directory,{recursive:true,force:true});
   }
 });
 
@@ -897,6 +2593,125 @@ test("debug mode captures the raw model exchange and upstream request identifier
   }
 });
 
+test("local suggestion status preserves upstream failure status, Retry-After and no-store caching", { timeout:20000 }, async () => {
+  for (const status of [401,404,429,503]) {
+    let probes=0;
+    const upstreamServer=http.createServer((req,res)=>{
+      if(req.url!=="/api/v1/apps/penecho-llm/suggest/status") { res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({account:{id:"status-test-account"}}));return; }
+      probes++;
+      res.writeHead(status,{"Content-Type":"application/json",...(status===429||status===503?{"Retry-After":"120"}:{})});
+      res.end(JSON.stringify({error:`status_${status}`,details:{access:{remaining:0}}}));
+    });
+    await new Promise(resolve=>upstreamServer.listen(0,"127.0.0.1",resolve));
+    const upstreamOrigin=`http://127.0.0.1:${upstreamServer.address().port}`,directory=testStateDir({});
+    fs.writeFileSync(path.join(directory,"cloud-device.json"),JSON.stringify({version:2,origin:upstreamOrigin,accountToken:"status-test-session",enabled:false}));
+    let child;
+    try {
+      const local=await startServer(apiServerEnv(upstreamOrigin,{PENECHO_STATE_DIR:directory,PENECHO_JEVISION_ENABLED:"true",PENECHO_JEVISION_MOCK:"false"}));
+      child=local.child;
+      const session=await(await fetch(`${local.origin}/api/local-access/status`)).json(),headers={Origin:local.origin,"x-penecho-session":session.accessSessionToken};
+      const first=await fetch(`${local.origin}/api/suggest/status`,{headers});
+      assert.equal(first.status,status);
+      assert.equal(first.headers.get("cache-control"),"no-store");
+      if(status===429||status===503)assert.equal(first.headers.get("retry-after"),"120");
+      const data=await first.json();assert.equal(data.configured,false);assert.equal(data.reason,`status_${status}`);assert.equal(data.access.remaining,0);
+      const second=await fetch(`${local.origin}/api/suggest/status`,{headers});
+      assert.equal(second.status,status);assert.equal(probes,1,"another local window reuses the failure/cooldown");
+      const refreshed=await fetch(`${local.origin}/api/suggest/status`,{headers:{...headers,"X-PenEcho-Suggest-Refresh":"1"}});
+      assert.equal(refreshed.status,status);
+      assert.equal(probes,status===429||status===503?1:2,"explicit retry refreshes unavailable status while preserving Retry-After");
+    } finally {
+      if(child)await stopServer(child);
+      await new Promise(resolve=>upstreamServer.close(resolve));
+    }
+  }
+});
+
+test("LAN Canvas forwards all PenEchoLLM modes without client questions and rejects foreign page origins", { timeout:20000 }, async () => {
+  const address=Object.values(os.networkInterfaces()).flat().find(item=>item.family==="IPv4"&&!item.internal&&/^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(item.address))?.address;
+  const answers={action:{type:"choice",choice:"typeset",confidence:.9}};
+  const requests=[],server=http.createServer((req,res)=>{
+    const chunks=[];
+    req.on("data",chunk=>chunks.push(chunk));
+    req.on("end",()=>{
+      const body=chunks.length?JSON.parse(Buffer.concat(chunks)):null;
+      requests.push({headers:req.headers,path:req.url,method:req.method,body});
+      const invalid=body?.mode==="custom";
+      res.writeHead(invalid?400:200,{"Content-Type":"application/json"});
+      res.end(JSON.stringify(invalid?{error:"invalid_action_space",message:"Outside the action space"}:req.url.endsWith("/status")?{configured:true,model:"PenEchoLLM",access:{remaining:500},guestToken:"lan-trial-secret"}:{ok:true,model:"PenEchoLLM",answers}));
+    });
+  });
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const upstream={server,requests,origin:`http://127.0.0.1:${server.address().port}`};
+  const directory=testStateDir({});
+  fs.writeFileSync(path.join(directory,"cloud-device.json"),JSON.stringify({version:2,origin:upstream.origin,accountToken:"lan-cloud-session",enabled:false}));
+  const {child,origin}=await startServer(apiServerEnv(upstream.origin,{HOST:"0.0.0.0",PENECHO_STATE_DIR:directory,PENECHO_JEVISION_ENABLED:"true",PENECHO_JEVISION_MOCK:"false"}));
+  try {
+    const lan=`http://${address||"127.0.0.1"}:${new URL(origin).port}`;
+    const session=await (await fetch(`${lan}/api/local-access/status`)).json();
+    const headers={Origin:lan,"x-penecho-session":session.accessSessionToken,"Content-Type":"application/json"};
+    const status=await (await fetch(`${lan}/api/suggest/status`,{headers})).json();
+    assert.equal(status.model,"PenEchoLLM");
+    assert.equal(status.access.remaining,500);
+    assert.equal(status.guestToken,undefined);
+    for (const [mode,context] of Object.entries({ink:{shapesFit:false},selection:{shapesFit:true},widget:{actions:["animate","scene_replay"],marks:true},gesture:{shape:"double_underline"},step:{},index:{},handwriting:{script:"latin"}})) {
+      const payload={version:1,mode,image:PNG,context};
+      const response=await fetch(`${lan}/api/suggest`,{method:"POST",headers,body:JSON.stringify(payload)});
+      assert.equal(response.status,200,`${mode}: ${await response.clone().text()}`);
+      assert.equal((await response.json()).model,"PenEchoLLM");
+      const forwarded=upstream.requests.at(-1);
+      assert.equal(forwarded.path,"/api/v1/apps/penecho-llm/suggest");
+      assert.equal(forwarded.method,"POST");
+      assert.deepEqual(forwarded.body,payload);
+      assert.equal(forwarded.headers.authorization,"Bearer lan-cloud-session");
+      assert.equal(forwarded.headers["x-penecho-guest"],"lan-trial-secret");
+      assert.equal(forwarded.headers.origin,undefined);
+    }
+    assert.equal(upstream.requests.length,8);
+    const invalid=await fetch(`${lan}/api/suggest`,{method:"POST",headers,body:JSON.stringify({version:1,mode:"custom",image:PNG,context:{}})});
+    assert.equal(invalid.status,400);
+    assert.equal((await invalid.json()).reason,"invalid_action_space");
+    const denied=await fetch(`${lan}/api/suggest`,{method:"POST",headers:{...headers,Origin:"https://third-party.example"},body:"{}"});
+    assert.equal(denied.status,403);
+    assert.equal(upstream.requests.length,9);
+  } finally { await stopServer(child);await new Promise(resolve=>upstream.server.close(resolve)); }
+});
+
+test("JeVision request recording follows the existing trace switch and keeps failed inputs separately", { timeout:20000 }, async () => {
+  const upstream = await startApiServer("JeVision unavailable", { status:503 });
+  try {
+    for (const enabled of [false, true]) {
+      const directory = testStateDir({});
+      fs.writeFileSync(path.join(directory, "cloud-device.json"), JSON.stringify({version:2, origin:upstream.origin, accountToken:"local-account-session", enabled:false}));
+      fs.writeFileSync(path.join(directory,"suggestion-guests.json"),JSON.stringify({[upstream.origin]:"trace-trial-secret"}));
+      const { child, origin } = await startServer(apiServerEnv(upstream.origin, {
+        PENECHO_STATE_DIR:directory, PENECHO_REQUEST_TRACE:String(enabled), PENECHO_DEBUG_ARTIFACTS:"false",
+        PENECHO_JEVISION_ENABLED:"true", PENECHO_JEVISION_MOCK:"false", PENECHO_JEVISION_KEY:"unused-legacy-key", PENECHO_JEVISION_URL:"https://unused-legacy.example",
+      }));
+      try {
+        const response = await fetch(`${origin}/api/suggest`, { method:"POST", headers:{ "Content-Type":"application/json", Origin:origin }, body:JSON.stringify({
+          version:1,mode:"ink",image:PNG,context:{shapesFit:true},
+        }) });
+        assert.equal((await response.json()).reason, "upstream");
+        const root = path.join(directory, "logs", "jevision-requests");
+        assert.equal(fs.existsSync(root), enabled);
+        if (enabled) {
+          const names = fs.readdirSync(root);
+          assert.equal(names.length, 1);
+          const traceDirectory = path.join(root, names[0]), trace = JSON.parse(fs.readFileSync(path.join(traceDirectory, "trace.json")));
+          assert.equal(trace.status, "failed");
+          assert.equal(trace.response.status, 503);
+          assert.equal(trace.response.body, "JeVision unavailable");
+          assert.deepEqual(fs.readFileSync(path.join(traceDirectory, "image.png")), Buffer.from(PNG.split(",")[1], "base64"));
+          assert.ok(fs.readFileSync(path.join(traceDirectory, "prompt.txt"), "utf8").includes("shapesFit"));
+          assert.ok(!JSON.stringify(trace).includes("local-account-session"));
+          assert.equal(trace.endpoint, `${upstream.origin}/api/v1/apps/penecho-llm/suggest`);
+        }
+      } finally { await stopServer(child); }
+    }
+  } finally { await new Promise(resolve => upstream.server.close(resolve)); }
+});
+
 test("request tracing retains the configured number of complete image and model exchanges", { timeout: 20000 }, async () => {
   const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-request-trace-")),responseContent=JSON.stringify({intent:"answer",observedText:"trace input",message:"trace reply",commands:[]}),upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:directory,PENECHO_REQUEST_TRACE:"true",PENECHO_REQUEST_TRACE_LIMIT:"2",PENECHO_DEBUG_ARTIFACTS:"false"}));
   try {
@@ -950,14 +2765,96 @@ test("request tracing records upstream failures without credentials", { timeout:
   try {
     const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json(),root=path.join(directory,"logs","requests"),directories=(await fs.promises.readdir(root,{withFileTypes:true})).filter(entry=>entry.isDirectory()).map(entry=>entry.name),name=directories.find(entry=>entry.endsWith(body.requestId));
     assert.equal(response.status,503);
+    assert.equal(body.error,"AI service is temporarily unavailable (HTTP 503). Please retry.");
+    assert.doesNotMatch(body.error,/upstream unavailable/);
     assert.ok(name);
     const trace=JSON.parse(await fs.promises.readFile(path.join(root,name,"trace.json"),"utf8")),serialized=JSON.stringify(trace);
     assert.equal(trace.status,"failed");
     assert.equal(trace.final.httpStatus,503);
     assert.equal(trace.attempts[0].error.status,503);
+    assert.equal(trace.attempts[0].error.phase,"reading-error-response-body");
+    assert.equal(trace.attempts[0].error.transport.response.status,503);
+    assert.equal(trace.attempts[0].error.transport.response.headers["x-request-id"],"test-upstream-request");
     assert.equal(trace.attempts[0].error.upstream.body,"upstream unavailable");
     assert.equal(upstream.requests.length,1);
     assert.equal(serialized.includes("test-key"),false);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+    await fs.promises.rm(directory,{recursive:true,force:true});
+  }
+});
+
+test("upstream HTML error pages remain in request traces but never reach the user", { timeout:20000 }, async () => {
+  const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-upstream-html-error-")),
+    upstreamHtml='<!DOCTYPE html><html><head><title>524: A timeout occurred</title></head><body>private proxy details</body></html>',
+    upstream=await startApiServer(upstreamHtml,{status:524}),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:directory,PENECHO_REQUEST_TRACE:"true"}));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),
+      body=await response.json(),
+      root=path.join(directory,"logs","requests"),
+      name=(await fs.promises.readdir(root)).find(entry=>entry.endsWith(body.requestId)),
+      trace=JSON.parse(await fs.promises.readFile(path.join(root,name,"trace.json"),"utf8"));
+    assert.equal(response.status,524);
+    assert.equal(body.error,"AI service timed out (HTTP 524). Please retry.");
+    assert.doesNotMatch(JSON.stringify(body),/DOCTYPE|private proxy details/);
+    assert.equal(trace.attempts[0].error.upstream.body,upstreamHtml);
+    assert.equal(trace.final.body.error,body.error);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+    await fs.promises.rm(directory,{recursive:true,force:true});
+  }
+});
+
+test("disabled request recording omits detailed transport failures and per-request files", { timeout:20000 }, async () => {
+  const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-request-trace-disabled-")),
+    upstream=await startApiServer("upstream unavailable",{status:503}),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:directory,PENECHO_REQUEST_TRACE:"false"}));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),
+      body=await response.json(),
+      logEntries=(await fs.promises.readFile(path.join(directory,"logs","penecho.log"),"utf8")).trim().split("\n").map(line=>JSON.parse(line)),
+      requestLog=logEntries.find(entry=>entry.requestId===body.requestId);
+    assert.equal(response.status,503);
+    assert.equal(requestLog.error,"upstream-error");
+    assert.equal(Object.hasOwn(requestLog,"failure"),false);
+    assert.equal(fs.existsSync(path.join(directory,"logs","requests")),false);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+    await fs.promises.rm(directory,{recursive:true,force:true});
+  }
+});
+
+test("request tracing distinguishes a truncated successful response body from an upstream model failure", { timeout:20000 }, async () => {
+  const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-request-trace-truncated-")),
+    upstream=await startTruncatedApiServer(),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:directory,PENECHO_REQUEST_TRACE:"true"}));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),
+      body=await response.json(),
+      root=path.join(directory,"logs","requests"),
+      name=(await fs.promises.readdir(root)).find(entry=>entry.endsWith(body.requestId)),
+      trace=JSON.parse(await fs.promises.readFile(path.join(root,name,"trace.json"),"utf8")),
+      logEntries=(await fs.promises.readFile(path.join(directory,"logs","penecho.log"),"utf8")).trim().split("\n").map(line=>JSON.parse(line)),
+      requestLog=logEntries.find(entry=>entry.requestId===body.requestId);
+    assert.equal(response.status,502);
+    assert.equal(trace.status,"failed");
+    assert.equal(trace.attempts[0].error.phase,"reading-response-body");
+    assert.equal(trace.attempts[0].error.transport.response.status,200);
+    assert.equal(trace.attempts[0].error.transport.response.headers["x-request-id"],"truncated-upstream-request");
+    assert.ok(trace.attempts[0].error.transport.responseHeadersAt);
+    assert.ok(trace.attempts[0].error.cause);
+    assert.equal(typeof trace.attempts[0].error.stack,"string");
+    assert.ok(trace.attempts[0].error.stack.length>0);
+    assert.equal(requestLog.failure.phase,"reading-response-body");
+    assert.equal(requestLog.failure.responseReceived,true);
+    assert.equal(requestLog.failure.responseStatus,200);
+    assert.equal(requestLog.failure.upstreamRequestId,"truncated-upstream-request");
+    assert.equal(JSON.stringify(trace).includes("test-key"),false);
+    assert.equal(upstream.requests.length,1);
   } finally {
     await stopServer(child);
     await new Promise(resolve=>upstream.server.close(resolve));
@@ -971,9 +2868,12 @@ test("API mode retries the original PNG only after an explicit WebP format rejec
     return imageUrl.startsWith("data:image/webp")?{status:415,body:'{"error":{"message":"Unsupported image format: webp"}}'}:{status:200};
   }}),{child,origin}=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:directory,PENECHO_REQUEST_TRACE:"true"}));
   try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/x-ndjson"},body:JSON.stringify(validPayload())}),events=await progressEvents(response),body=events.at(-1).data;
     assert.equal(response.status,200);
     assert.equal(body.attempts,2);
+    assert.deepEqual(events.filter(event=>event.type==="progress").map(event=>[event.phase,event.attempt||null]),[
+      ["received",null],["preparing-image",null],["connecting",1],["waiting",1],["receiving",1],["image-fallback",2],["waiting",2],["receiving",2],["validating",2],
+    ]);
     assert.equal(upstream.requests.length,2);
     const imageUrls=upstream.requests.map(raw=>JSON.parse(raw).messages[1].content.find(part=>part.type==="image_url").image_url.url);
     assert.match(imageUrls[0],/^data:image\/webp;base64,/);
@@ -1030,8 +2930,8 @@ test("Anthropic API mode labels the lossless WebP payload with its matching medi
     const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
     assert.equal(response.status,200);
     assert.equal(body.attempts,1);
-    assert.equal(body.commands[0]?.tool,"write_text");
-    assert.equal(body.commands[0]?.text,"hello");
+    assert.deepEqual(body.commands,[]);
+    assert.equal(body.message,"hello");
     assert.equal(upstream.requests.length,1);
     const outbound=JSON.parse(upstream.requests[0]),image=outbound.messages[0].content.find(part=>part.type==="image");
     assert.equal(image.source.media_type,"image/webp");
@@ -1050,6 +2950,8 @@ test("request tracing preserves an upstream response that fails model parsing", 
     assert.ok(name);
     const trace=JSON.parse(await fs.promises.readFile(path.join(root,name,"trace.json"),"utf8"));
     assert.equal(trace.status,"failed");
+    assert.equal(trace.attempts[0].error.phase,"parsing-model-result");
+    assert.equal(trace.attempts[0].error.transport.response.status,200);
     assert.equal(trace.attempts[0].error.upstream.rawContent,"not-json");
   } finally {
     await stopServer(child);
@@ -1058,7 +2960,7 @@ test("request tracing preserves an upstream response that fails model parsing", 
   }
 });
 
-test("model parsing recovers the first complete JSON object from trailing junk", { timeout: 20000 }, async () => {
+test("model parsing recovers a complete final JSON object from wrapper text and trailing junk", { timeout: 20000 }, async () => {
   const message='Keep literal braces { and }, a backslash \\, and an escaped quote " intact.',command={tool:"write_text",x:10,y:10,text:"Recovered",fontSize:80,maxWidth:400,lineHeight:1.35},responseContent=`Model response:\n${JSON.stringify({intent:"answer",observedText:"robust JSON",message,commands:[command]})}]}`,
     upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
   try {
@@ -1068,6 +2970,36 @@ test("model parsing recovers the first complete JSON object from trailing junk",
     assert.equal(body.commands.length,1);
     assert.equal(body.commands[0].tool,"write_text");
     assert.equal(body.commands[0].text,"Recovered");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("model parsing ignores unrelated JSON objects before the final response", { timeout: 20000 }, async () => {
+  const command={tool:"write_text",x:10,y:10,text:"Final",fontSize:80,maxWidth:400,lineHeight:1.35},responseContent=`${JSON.stringify({status:"finished",detail:"intermediate metadata"})}\n${JSON.stringify({intent:"answer",commands:[command]})}`,
+    upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,1);
+    assert.equal(body.commands.length,1);
+    assert.equal(body.commands[0].text,"Final");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("model parsing selects the last schema-valid top-level response object", { timeout: 20000 }, async () => {
+  const command=text=>({tool:"write_text",x:10,y:10,text,fontSize:80,maxWidth:400,lineHeight:1.35}),responseContent=`${JSON.stringify({intent:"answer",commands:[command("Draft")]})}\n${JSON.stringify({intent:"answer",commands:[command("Final")]})}`,
+    upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,1);
+    assert.equal(body.commands.length,1);
+    assert.equal(body.commands[0].text,"Final");
   } finally {
     await stopServer(child);
     await new Promise(resolve=>upstream.server.close(resolve));
@@ -1113,7 +3045,7 @@ test("request tracing preserves a client-cancelled model attempt", { timeout: 20
   }
 });
 
-test("API mode does not retry or reject a valid in-canvas draw because of aggregate area", { timeout: 20000 }, async () => {
+test("API mode accepts a valid simple native draw", { timeout: 20000 }, async () => {
   const responseContent=JSON.stringify({intent:"plot",commands:[{tool:"draw",origin:[100,100],types:["rect"],items:[[0,0,4000,4000]]}]}),upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
   try {
     const payload=validPayload();payload.trigger="manual";payload.userAction="plot";
@@ -1127,37 +3059,290 @@ test("API mode does not retry or reject a valid in-canvas draw because of aggreg
   }
 });
 
-test("API mode retries an invalid draw once and returns the corrected command", { timeout: 20000 }, async () => {
+test("Practice reaches Canvas AI as one unsolved question and rejects a mismatched action", {timeout:20000}, async()=>{
+  const command={tool:"write_text",x:0,y:0,text:"练一题：求解 2x + 5 = 17。",fontSize:80,maxWidth:1200,lineHeight:1.35},
+    upstream=await startApiServer(JSON.stringify({intent:"answer",commands:[command]})),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try{
+    const payload={...validPayload(),trigger:"manual",userAction:"answer",suggestion:"practice"};
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    assert.equal(response.status,200);
+    assert.deepEqual((await response.json()).commands,[command]);
+    const request=JSON.parse(upstream.requests[0]),input=JSON.parse(request.messages[1].content.find(part=>part.type==="text").text);
+    assert.match(input.actionMeaning,/Create exactly one new, self-contained practice question/);
+    assert.match(input.actionMeaning,/privately check that it is solvable/);
+    assert.match(input.actionMeaning,/Do not solve the source or include an answer, worked solution, hint, answer key or hidden solution/);
+    assert.match(input.actionMeaning,/Preserve the original content/);
+    const invalid=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,userAction:"hint"})});
+    assert.equal(invalid.status,400);
+    assert.equal(upstream.requests.length,1);
+  }finally{
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("Create visual reaches Canvas AI as visual creation and rejects a mismatched action", {timeout:20000}, async()=>{
+  const command={tool:"draw",origin:[100,100],types:["rect"],items:[[0,0,200,120]]},
+    upstream=await startApiServer(JSON.stringify({intent:"plot",commands:[command]})),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try{
+    const payload={...validPayload(),trigger:"manual",userAction:"plot",suggestion:"create_visual"};
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    assert.equal(response.status,200);
+    assert.deepEqual((await response.json()).commands,[command]);
+    const request=JSON.parse(upstream.requests[0]),input=JSON.parse(request.messages[1].content.find(part=>part.type==="text").text);
+    assert.match(input.actionMeaning,/Create the new visual content requested/);
+    assert.match(input.actionMeaning,/Preserve existing content/);
+    assert.doesNotMatch(input.actionMeaning,/Return exactly one plot_function/);
+    const invalid=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,userAction:"answer"})});
+    assert.equal(invalid.status,400);
+    assert.equal(upstream.requests.length,1);
+  }finally{
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("Sketch illustration sends the selected style and background policy to the model", { timeout: 20000 }, async () => {
+  const ILLUSTRATION = require("../src/shared/illustration-style.js");
+  const command = { tool:"html_widget", pluginId:"general", x:1200, y:1000, w:400, h:300, title:"Illustration", html:"<!doctype html><html><body style=\"background:transparent\"><svg viewBox=\"0 0 400 300\"></svg></body></html>" },
+    upstream = await startApiServer(JSON.stringify({ intent:"plot", commands:[command] })),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const payload = { ...validPayload(), trigger:"manual", userAction:"plot", suggestion:"vivid", plugins:[builtInPluginDescriptor("general")] },
+      post = body => fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) }),
+      sent = index => JSON.parse(JSON.parse(upstream.requests[index]).messages[1].content.find(part => part.type === "text").text).actionMeaning;
+    const first = await post(payload);
+    assert.equal(first.status, 200, await first.text());
+    assert.ok(sent(0).endsWith(`Suggestion chosen by the user: ${ILLUSTRATION.canvasPrompt("storybook", "auto")}`), "older clients get the Storybook style with an automatic background");
+    assert.equal((await post({ ...payload, illustrationStyle:"3d", illustrationBackground:"none" })).status, 200);
+    assert.ok(sent(1).endsWith(ILLUSTRATION.canvasPrompt("3d", "none")));
+    assert.match(sent(1), /Add no scenery of your own/);
+    for (const invalid of [
+      { ...payload, illustrationStyle:"neon" },
+      { ...payload, illustrationBackground:"forest" },
+      { ...payload, illustrationStyle:"vivid" },
+      { ...payload, suggestion:"plot", illustrationStyle:"3d" },
+      { ...payload, suggestion:null, illustrationBackground:"none" },
+    ]) assert.equal((await post(invalid)).status, 400);
+    assert.equal(upstream.requests.length, 2, "an invalid style never reaches the provider");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("Finish drawing preserves a multi-stroke completion and native routing through the API", { timeout: 20000 }, async () => {
+  // 12 paths with 12 segments each exceeded the old prompt's whole-figure limit.
+  const command = { tool:"draw", origin:[1000,1000], width:8,
+    types:Array(12).fill("smooth"),
+    items:Array.from({ length:12 }, (_, row) => Array.from({ length:13 }, (_, point) => [point*20,row*20+(point%2)*5]).flat()) },
+    upstream = await startApiServer(JSON.stringify({ intent:"continue", commands:[command] })),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const sourceInk = { coordinateSpace:"canvas-world", strokeWidth:6, strokes:[{ width:6, points:[[0,0],[0.5,0.8],[1,1]] }] },
+      payload = { ...validPayload(), trigger:"manual", userAction:"continue", suggestion:"finish_drawing", sourceInk, plugins:[builtInPluginDescriptor("general")] },
+      response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.attempts, 1);
+    assert.deepEqual(body.commands, [command]);
+    const request = JSON.parse(upstream.requests[0]), system = request.messages[0].content,
+      input = JSON.parse(request.messages[1].content.find(part => part.type === "text").text);
+    assert.match(system, /Prefer native draw for static drawings and for completing existing freehand ink/);
+    assert.match(system, /align only the new marks with the selected source in place/);
+    assert.doesNotMatch(system, /10 or fewer|counts as n-1 segments|mandatory and always enabled/);
+    assert.match(input.actionMeaning, /in the same hand-drawn style/);
+    assert.match(input.actionMeaning, /Do not create a separate illustration or replace the drawing with HTML/);
+    assert.match(input.actionMeaning, /without moving, erasing or redrawing existing strokes/);
+    assert.match(input.actionMeaning, /missing repeated parts/);
+    assert.deepEqual(input.sourceInk,sourceInk,'source world coordinates reach the actual provider without image scaling');
+    for (const invalid of [
+      { ...payload, suggestion:null },
+      { ...payload, sourceInk:{ ...sourceInk, instruction:"Do another task" } },
+      { ...payload, sourceInk:{ ...sourceInk, strokes:[{ width:6, points:[[0,0],[2,2]] }] } },
+      { ...payload, sourceInk:{ ...sourceInk, strokes:Array(33).fill(sourceInk.strokes[0]) } },
+      { ...payload, selectionContext:{ box:payload.sourceRect, path:[[0,0],[1,0],[1,1],[0,1]], closed:true } },
+    ]) {
+      const rejected=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(invalid)});
+      assert.equal(rejected.status,400);
+    }
+    assert.equal(upstream.requests.length,1,'invalid geometry never reaches the provider');
+    const fallback=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,sourceInk:null})});
+    assert.equal(fallback.status,200,'raster-only drawings remain supported');
+    const general = input.enabledPlugins.find(plugin => plugin.id === "general");
+    assert.ok(general);
+    assert.doesNotMatch(general.document, /10 or fewer/);
+    assert.match(general.document, /More than 10 marks or many curve points does not require HTML/);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("Delete suggestion reaches Canvas AI as scoped crossed-content erasure", { timeout:20000 }, async () => {
+  const command = { tool:"erase", mode:"rect", x:1000, y:1000, w:140, h:50 },
+    upstream = await startApiServer(JSON.stringify({ intent:"erase", commands:[command] })),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ ...validPayload(), trigger:"manual", userAction:"answer", suggestion:"delete" }) }),
+      result = await response.json();
+    assert.equal(response.status, 200); assert.deepEqual(result.commands, [command]);
+    const request = JSON.parse(upstream.requests[0]), input = JSON.parse(request.messages[1].content.find(part => part.type === "text").text);
+    assert.match(input.actionMeaning, /Delete crossed-out content/);
+    assert.match(input.actionMeaning, /preserving every neighboring word, line and object/);
+    assert.match(input.actionMeaning, /patch only the crossed-out content inside that existing widget/);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("3D illustration accepts compact scene input without model-authored HTML", { timeout: 20000 }, async () => {
+  const command = { tool:"html_widget", pluginId:"general", x:1000, y:1000, w:960, h:540,
+    title:"Cube", sourceFormat:"penecho-scene+json",
+    scene:{ engine:"3d", shapes:[{ id:"cube", type:"box", width:100, height:100, depth:100, color:"blue" }] } },
+    upstream = await startApiServer(JSON.stringify({ intent:"plot", commands:[command] })),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const payload = { ...validPayload(), trigger:"manual", userAction:"plot", plugins:[builtInPluginDescriptor("general")] },
+      response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.attempts, 1);
+    assert.equal(body.commands[0]?.sourceFormat, "penecho-scene+json");
+    assert.equal(JSON.parse(body.commands[0].copyText).engine, "3d");
+    assert.match(body.commands[0].html, /data-penecho-scene/);
+    const request = JSON.parse(upstream.requests[0]);
+    assert.match(request.messages[0].content, /For 3D illustrations, choose engine:"3d" and send shapes, not renderer code/);
+    assert.match(request.messages[0].content, /omit html and copyText/);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("automatic physics scenes render despite a missing or mistyped format label", { timeout:20000 }, async () => {
+  const command = { tool:"html_widget", pluginId:"general", x:8400, y:9330, w:1200, h:680,
+    title:"Falling ball", refreshSeconds:0,
+    scene:{ engine:"physics", gravity:[0,1], walls:"floor", duration:6, bodies:[
+      { id:"ball", shape:"circle", x:480, y:60, r:26, restitution:0.72, friction:0.05, fill:"orange", label:"Ball" },
+      { id:"ground", shape:"segment", x:100, y:500, to:[860,500], static:true },
+    ], labels:[{ text:"Free fall and bounce", x:480, y:40 }] } },
+    formats = ["penecho-scene+", undefined],
+    upstream = await startApiServer("", { response:({index}) => ({ body:JSON.stringify({ intent:"answer", message:"Simulation created.", commands:[{ ...command, sourceFormat:formats[index] }] }) }) }),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const payload = { ...validPayload(), plugins:[builtInPluginDescriptor("general")] };
+    for (const sourceFormat of formats) {
+      const response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+        body = await response.json();
+      assert.equal(response.status,200);
+      assert.equal(body.attempts,1,`format ${sourceFormat} should not require another model call`);
+      assert.equal(body.commands.length,1);
+      const widget = body.commands[0], scene = JSON.parse(widget.copyText);
+      assert.equal(widget.sourceFormat,"penecho-scene+json");
+      assert.match(widget.html,/data-penecho-scene-engine="physics"/);
+      assert.equal(scene.bodies[0].restitution,0.72);
+      assert.equal(scene.bodies[1].x2,860);
+      assert.deepEqual([widget.x,widget.y],[8400,9330]);
+    }
+    assert.equal(upstream.requests.length,2);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("automatic invalid scenes retry once and never report empty output as success", { timeout:20000 }, async () => {
+  const invalid = { tool:"html_widget", pluginId:"general", sourceFormat:"penecho-scene+",
+    scene:{ engine:"physics", bodies:[{ id:"ball", shape:"unsupported" }] } },
+    corrected = { ...invalid, scene:{ engine:"physics", bodies:[{ id:"ball", shape:"circle", x:100, y:50, r:20 }] } };
+  for (const retryCommands of [[corrected], [invalid], []]) {
+    const upstream = await startApiServer("", { response:({index}) => ({ body:JSON.stringify({ intent:"answer", message:"Simulation created.", commands:index === 0 ? [invalid] : retryCommands }) }) }),
+      { child, origin } = await startServer(apiServerEnv(upstream.origin));
+    try {
+      const payload = { ...validPayload(), plugins:[builtInPluginDescriptor("general")] },
+        response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+        body = await response.json();
+      assert.equal(upstream.requests.length,2);
+      assert.match(upstream.requests[1],/Your scene failed PenEcho validation/);
+      if (retryCommands[0] === corrected) {
+        assert.equal(response.status,200,JSON.stringify(body));
+        assert.equal(body.attempts,2);
+        assert.equal(body.commands.length,1);
+        assert.match(body.commands[0].html,/data-penecho-scene-engine="physics"/);
+      } else {
+        assert.equal(response.status,502);
+        assert.match(body.error,/scene that could not be rendered after retry/);
+        assert.equal(body.message,undefined);
+        assert.equal(body.commands,undefined);
+      }
+    } finally {
+      await stopServer(child);
+      await new Promise(resolve => upstream.server.close(resolve));
+    }
+  }
+});
+
+test("API mode retries an invalid native draw without restoring legacy animation", { timeout: 20000 }, async () => {
   const invalid=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["circle","line"],items:[[0,0,100,200],[0,0,200]]}]}),
     corrected=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["ellipse","circle"],items:[[0,0,100,200],[0,0,20]]}]}),
     upstream=await startApiServer("",{response:({index})=>({body:index===0?invalid:corrected})}),
     {child,origin}=await startServer(apiServerEnv(upstream.origin));
   try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/x-ndjson"},body:JSON.stringify(validPayload())}),events=await progressEvents(response),body=events.at(-1).data;
     assert.equal(response.status,200);
     assert.equal(body.attempts,2);
-    assert.equal(upstream.requests.length,2);
-    assert.equal(body.commands.length,1);
-    assert.deepEqual(body.commands[0].types,["ellipse","circle"]);
+    assert.deepEqual(events.filter(event=>event.type==="progress").map(event=>[event.phase,event.attempt||null]),[
+      ["received",null],["preparing-image",null],["connecting",1],["waiting",1],["receiving",1],["validating",1],["retrying",2],["waiting",2],["receiving",2],["validating",2],
+    ]);
+    assert.deepEqual(body.commands[0]?.types,["ellipse","circle"]);
     const retryRequest=JSON.parse(upstream.requests[1]),retryText=retryRequest.messages[1].content.find(part=>part.type==="text")?.text||"";
-    assert.match(retryText,/previous response contained a draw command that PenEcho cannot render/);
-    assert.match(retryText,/circle needs exactly three/);
+    assert.match(retryText,/previous response contained a draw command/);
+    assert.match(retryText,/Keep the native draw route for static drawings and Finish drawing/);
+    assert.doesNotMatch(retryText,/10 or fewer|use General HTML SVG instead/);
+    assert.doesNotMatch(retryText,/animate_scene/);
   } finally {
     await stopServer(child);
     await new Promise(resolve=>upstream.server.close(resolve));
   }
 });
 
-test("API mode never makes a second retry when the corrected draw is still invalid", { timeout: 20000 }, async () => {
-  const invalid=JSON.stringify({intent:"continue",commands:[{tool:"draw",origin:[1000,1000],types:["circle"],items:[[0,0,100,200]]}]}),
-    upstream=await startApiServer(invalid),
+test("manual empty responses preserve full reinspection guidance with a domain-neutral supplement", { timeout: 20000 }, async () => {
+  const empty=JSON.stringify({intent:"none",observedText:"h₁",commands:[]}),
+    corrected=JSON.stringify({intent:"answer",observedText:"hi",commands:[{tool:"write_text",x:0,y:0,text:"Hi!",fontSize:80,maxWidth:400,lineHeight:1.35}]}),
+    upstream=await startApiServer("",{response:({index})=>({body:index===0?empty:corrected})}),
     {child,origin}=await startServer(apiServerEnv(upstream.origin));
   try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    const payload=validPayload();
+    payload.trigger="manual";
+    payload.userAction="answer";
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),
+      body=await response.json();
     assert.equal(response.status,200);
     assert.equal(body.attempts,2);
+    assert.equal(body.commands[0]?.tool,"write_text");
+    assert.equal(body.commands[0]?.text,"Hi!");
     assert.equal(upstream.requests.length,2);
-    assert.deepEqual(body.commands,[]);
+    const firstRequest=JSON.parse(upstream.requests[0]),
+      retryRequest=JSON.parse(upstream.requests[1]),
+      systemText=firstRequest.messages[0].content,
+      retryText=retryRequest.messages[1].content.find(part=>part.type==="text")?.text||"",
+      retryInstruction=retryText.split("\n\n").at(-1);
+    assert.doesNotMatch(systemText,/short standalone Latin|dotted lowercase|ambiguous marks alone/);
+    assert.match(retryInstruction,/Perform a second independent inspection/);
+    assert.match(retryInstruction,/Use focusInset as the primary transcription view/);
+    assert.match(retryInstruction,/Inspect any box\/circle-selected content and arrow chain/);
+    assert.match(retryInstruction,/Follow the final arrowhead as the intended destination/);
+    assert.match(retryInstruction,/Every write_text command must include finite global x and y/);
+    assert.match(retryInstruction,/prior transcription may be wrong/);
+    assert.match(retryInstruction,/fulfill modelInput\.userAction or ask one brief clarification question with write_text/);
+    assert.match(retryInstruction,/Use none only when there is no new input/);
+    assert.ok(retryInstruction.length<800,`manual empty retry grew to ${retryInstruction.length} characters`);
+    assert.doesNotMatch(retryInstruction,/\b(?:hi|hello|hey|yo)\b|h₁|subscript/i);
   } finally {
     await stopServer(child);
     await new Promise(resolve=>upstream.server.close(resolve));
@@ -1301,6 +3486,25 @@ test("a new Codex request immediately supersedes the running request", { timeout
   }
 });
 
+test("local CLI requests from different Canvas clients do not supersede each other", { timeout: 20000 }, async () => {
+  const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-client-isolation-test-")),
+    fakeCli = path.join(directory, "fake-codex.js"), completedFile = path.join(directory, "completed.txt");
+  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),path=require("node:path"),at=process.argv.indexOf("-o");setTimeout(()=>{fs.appendFileSync(path.join(__dirname,"completed.txt"),"1");fs.writeFileSync(process.argv[at+1],'{"intent":"none","commands":[]}')},300);\n`);
+  const { child, origin } = await startServer(serverEnv({ CODEX_CLI_PATH:fakeCli }));
+  try {
+    const base = { "Content-Type":"application/json", Origin:origin },
+      clientA = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ ...base, "X-PenEcho-Client":"123e4567-e89b-12d3-a456-426614174000" }, body:JSON.stringify(validPayload()) }),
+      clientB = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ ...base, "X-PenEcho-Client":"223e4567-e89b-12d3-a456-426614174000" }, body:JSON.stringify(validPayload()) }),
+      [responseA, responseB] = await Promise.all([clientA, clientB]);
+    assert.equal(responseA.status, 200, await responseA.text());
+    assert.equal(responseB.status, 200, await responseB.text());
+    assert.equal(await fs.promises.readFile(completedFile, "utf8"), "11");
+  } finally {
+    await stopServer(child);
+    await fs.promises.rm(directory, { recursive:true, force:true });
+  }
+});
+
 test("rapid Codex requests leave only the newest request active", { timeout: 20000 }, async () => {
   const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-latest-chain-test-")),fakeCli=path.join(directory,"fake-codex.js"),countFile=path.join(directory,"count.txt"),startedFile=path.join(directory,"started.txt");
   await fs.promises.writeFile(fakeCli,`"use strict";const fs=require("node:fs"),path=require("node:path"),countFile=path.join(__dirname,"count.txt"),count=Number(fs.existsSync(countFile)?fs.readFileSync(countFile,"utf8"):0)+1;fs.writeFileSync(countFile,String(count));fs.appendFileSync(path.join(__dirname,"started.txt"),String(count));if(count<3)setInterval(()=>{},1000);else{const at=process.argv.indexOf("-o");fs.writeFileSync(process.argv[at+1],'{"intent":"none","commands":[]}')}\n`);
@@ -1364,7 +3568,7 @@ test("debug persistence redacts recognized and generated text", { timeout: 20000
     const malformedResponse = await fetch(`${origin}/api/ai/command`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin, Cookie: cookie }, body: JSON.stringify(malformed) });
     assert.equal(malformedResponse.status, 400);
     const invalidEffort = validPayload();
-    invalidEffort.reasoningEffort = marker;
+    invalidEffort.reasoningEffort = `${marker}\ninvalid`;
     const invalidEffortResponse = await fetch(`${origin}/api/ai/command`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin, Cookie: cookie }, body: JSON.stringify(invalidEffort) });
     assert.equal(invalidEffortResponse.status, 400);
     const extra = validPayload(), nested = { value: marker };
@@ -1400,12 +3604,20 @@ test("debug persistence redacts recognized and generated text", { timeout: 20000
   }
 });
 
-test("static page keeps strict styles while allowing the pinned MathJax CDN", () => {
-  const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8"), css = fs.readFileSync(path.join(ROOT, "public", "style.css"), "utf8"), app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"), config=fs.readFileSync(path.join(ROOT,"public","mathjax-config.js"),"utf8"), server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8");
+test("static page keeps strict styles while serving pinned MathJax locally", () => {
+  const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8"), css = fs.readFileSync(path.join(ROOT, "public", "style.css"), "utf8"), app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"), pageScale=fs.readFileSync(path.join(ROOT,"public","page-scale.js"),"utf8"), config=fs.readFileSync(path.join(ROOT,"public","mathjax-config.js"),"utf8"), server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8"), elementStyleWrites=[...app.matchAll(/([A-Za-z_$][\w$?.]*)\.style\.(?:setProperty|removeProperty|[A-Za-z_$][\w$]*\s*=)/g)].filter(([,owner])=>!owner.endsWith(".styleRule")).map(([write])=>write);
   assert.doesNotMatch(html, /\sstyle=/i);
   assert.match(css, /\.color-blue\s*\{/);
-  assert.doesNotMatch(app, /\.style\.|setAttribute\(\s*["']style["']/);
-  assert.match(html, /https:\/\/cdn\.jsdelivr\.net\/npm\/mathjax@3\.2\.2\/es5\/tex-svg\.js/);
+  // CSP permits individual CSSOM property writes, but blocks inline style text:
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src-attr
+  assert.equal(elementStyleWrites.some(write=>/\.style\.cssText\s*=/.test(write)),false);
+  // Note-card source records use a data field named style, not a DOM style.
+  const styleAssignments = [...app.matchAll(/([A-Za-z_$][\w$?.]*)\.style\s*=(?!=)/g)];
+  assert.deepEqual(styleAssignments.map(([, owner]) => owner).filter(owner => !["value", "note"].includes(owner)), []);
+  assert.match(app, /noteCardUpdate\(widget, value => \{ value\.style = value\.style === "card" \? "note" : "card"/);
+  assert.doesNotMatch(app, /setAttribute\(\s*["']style["']/);
+  assert.doesNotMatch(pageScale,/\.style\.|setAttribute\(\s*["']style["']/);
+  assert.match(html, /src="vendor\/mathjax-3\.2\.2\/es5\/tex-svg\.js"/);
   assert.match(html, /integrity="sha384-KKWa9jJ1MZvssLeOoXG6FiOAZfAgmzsIIfw8BXwI9\+kYm0lPCbC6yTQPBC00F1\/L"/);
   assert.match(html, /crossorigin="anonymous"/);
   assert.match(config, /fontCache:\s*"none"/);
@@ -1428,11 +3640,11 @@ test("API mode uses one configured key without probes or fallback credentials", 
   const server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8"),cli=fs.readFileSync(path.join(ROOT,"src","cli","main.js"),"utf8"),configure=fs.readFileSync(path.join(ROOT,"src","cli","configure-ui.js"),"utf8");
   for(const source of [server,cli,configure])assert.doesNotMatch(source,/OPENAI_PRO_API_KEY/);
   assert.doesNotMatch(server,/api-health|api-selection|api-runtime-failure|refreshApiConfig|testApiKey|HEALTH_INTERVAL|HEALTH_TIMEOUT/);
-  assert.match(server,/providerRequest\(API_KEY,MODEL,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled\)/);
+  assert.match(server,/providerRequest\(provider\.apiKey,provider\.model,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled,provider\.api,provider\)/);
 });
 
 test("client and server contain no aggregate draft rejection budget", () => {
-  const app=fs.readFileSync(path.join(ROOT,"public","app.js"),"utf8"),draw=fs.readFileSync(path.join(ROOT,"public","draw.js"),"utf8"),server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8");
-  for(const source of [app,draw,server])assert.doesNotMatch(source,/Draft destination budget|Draft raster budget|MAX_DRAFT_RASTER_PIXELS|MAX_LOGICAL_PIXELS|MAX_DESTINATION_TILES/);
+  const app=fs.readFileSync(path.join(ROOT,"public","app.js"),"utf8"),server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8");
+  for(const source of [app,server])assert.doesNotMatch(source,/Draft destination budget|Draft raster budget|MAX_DRAFT_RASTER_PIXELS|MAX_LOGICAL_PIXELS|MAX_DESTINATION_TILES/);
   assert.doesNotMatch(server,/padded union bounds may total at most|intersect at most 64/);
 });
