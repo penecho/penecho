@@ -8,6 +8,7 @@ const { spawn } = require("child_process");
 const mapKimiEffort = effort => require("./kimi-cli.js").mapKimiEffort(effort);
 
 const ACP_HANDSHAKE_TIMEOUT_MS = 45000;
+const ACP_SHUTDOWN_TIMEOUT_MS = 3000;
 const ACP_RESPAWN_BACKOFF_MS = 15000;
 const MAX_KIMI_TOOL_RECOVERIES = 2;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -60,6 +61,7 @@ class KimiAcpClient {
     this.kimiHome = kimiHome;
     this.logger = logger;
     this.child = null;
+    this.childClosePromise = null;
     this.startPromise = null;
     this.lastStartFailureAt = 0;
     this.lastPruneAt = 0;
@@ -92,10 +94,16 @@ class KimiAcpClient {
 
   async _start() {
     await fs.promises.mkdir(this.workDir, { recursive:true, mode:0o700 });
+    if (this.closed) {
+      throw acpInfraError("Kimi ACP client is closed.");
+    }
     const child = spawn(this.launch.command, [...this.launch.prefixArgs, "acp"], {
       cwd:this.workDir, env:this.env, stdio:["pipe", "pipe", "pipe"], windowsHide:true, shell:false,
     });
     this.child = child;
+    this.childClosePromise = new Promise(resolve => {
+      child.once("close", resolve);
+    });
     child.unref();
     child.stdin.unref?.();
     child.stdout.unref?.();
@@ -333,12 +341,29 @@ class KimiAcpClient {
   async close() {
     this.closed = true;
     const child = this.child;
+    const childClosePromise = this.childClosePromise;
     this.child = null;
     const error = new Error("Kimi ACP client closed.");
     for (const { reject } of this.pending.values()) reject(error);
     this.pending.clear();
     this.activeRequest?.fail(error);
     await stopChildProcess(child);
+    if (childClosePromise) {
+      let timer;
+      try {
+        await Promise.race([
+          childClosePromise,
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error("Kimi ACP process did not close within the shutdown timeout.")),
+              ACP_SHUTDOWN_TIMEOUT_MS
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
   }
 }
 

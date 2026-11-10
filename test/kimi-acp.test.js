@@ -81,6 +81,32 @@ test("Kimi ACP keeps one process while creating isolated sessions", async () => 
     assert.deepEqual(events.filter(entry=>entry.event==="acp-tool-rejected").map(entry=>entry.data.tool), ["ReadMediaFile"]);
     assert.deepEqual(events.filter(entry=>entry.event==="acp-tool-recovery").map(entry=>entry.data.attempt), [1]);
   } finally {
+    const child = client.child;
+    assert.ok(child, "Expected the ACP child process to exist");
+    let processClosed = false;
+    child.once("close", () => {
+      processClosed = true;
+    });
     await client.close();
+    assert.equal(
+      processClosed,
+      true,
+      "client.close() must wait until the ACP child process closes"
+    );
   }
+});
+
+test("Kimi ACP close times out when the child does not close", async () => {
+  const client = new KimiAcpClient({
+    launch: { command: process.execPath, prefixArgs: [] },
+    env: process.env,
+    workDir: os.tmpdir(),
+    kimiHome: os.tmpdir(),
+  });
+  // Simulate a child whose close event never arrives.
+  client.childClosePromise = new Promise(() => {});
+  await assert.rejects(
+    client.close(),
+    /Kimi ACP process did not close within the shutdown timeout/
+  );
 });
