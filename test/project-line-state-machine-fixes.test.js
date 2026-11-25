@@ -16,7 +16,7 @@ const LINE_STATUS = require("../public/lines/line-status.js");
 
 function makeRoot(t, prefix = "line-sm-fixes-") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  t.after(() => fs.rmSync(root, { recursive:true, force:true, maxRetries:5, retryDelay:50 }));
+  t.after(() => fs.rmSync(root, { recursive:true, force:true, maxRetries:20, retryDelay:50 }));
   return root;
 }
 
