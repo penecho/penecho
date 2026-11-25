@@ -721,6 +721,8 @@ function createModelProxy({ connect, describe, target, idleMs = () => 0, hostedS
         const waitMs = Number.isFinite(last.retryAfter) ? Math.max(last.retryAfter, ramp) : Math.max(0, backoff !== backoffMs ? Math.min(backoff(inProgressPolls), remaining) : ramp);
         try { if (active && !closed) onRetry(updated.id, { attempt:inProgressPolls, of:inProgressPollsMost, why:WHY.inProgress, waitMs }); } catch { /* A listener's trouble is not the call's. */ }
         await wait(waitMs);
+        // A timer can end a millisecond early: a wait that took all the time left has used it up.
+        if (waitMs >= remaining) inProgressDeadline = Math.min(inProgressDeadline, Date.now());
         continue;
       }
       failureTries++;
@@ -733,8 +735,10 @@ function createModelProxy({ connect, describe, target, idleMs = () => 0, hostedS
         if (Number.isFinite(last.retryAfter) && waitMs > remaining) { last = inProgressTimedOut(); break; }
         waitMs = Math.max(0, Math.min(waitMs, remaining));
       }
+      const usesUp = inProgressDeadline > 0 && Date.now() + waitMs >= inProgressDeadline;
       try { if (active && !closed) onRetry(updated.id, { attempt:failureTries + 1, of:TRIES, why:last.why, waitMs }); } catch { /* A listener's trouble is not the call's. */ }
       await wait(waitMs);
+      if (usesUp) inProgressDeadline = Math.min(inProgressDeadline, Date.now());
     }
     if (gone) return stopHolding();
     // Refused in a way another try cannot fix: the answer is passed on as it was. Every try failed: the runner hears one plain sentence.

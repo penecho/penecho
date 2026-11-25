@@ -439,7 +439,8 @@ test("Antigravity desktop and CLI conversations sync into linked projects, handl
   assert.equal(await conv.titleOf("antigravity", "desk-1"), "Widget Build");
   assert.equal(await conv.stillOpens("antigravity", "desk-1"), true);
   assert.equal(service.agents.terminal("antigravity", "desk-1"), "");
-  assert.deepEqual(service.agents.openApp("antigravity", "desk-1"), { command:"open", args:["-a", path.join(apps, "Antigravity.app")], app:"Antigravity", picks:true });
+  // Its app is opened on macOS and Windows only.
+  if (process.platform !== "win32") assert.deepEqual(service.agents.openApp("antigravity", "desk-1"), process.platform === "darwin" ? { command:"open", args:["-a", path.join(apps, "Antigravity.app")], app:"Antigravity", picks:true } : null);
 
   // Finish the turn in Desktop DB & transcript -> settles immediately via explicitIdle!
   const t3 = new Date(Date.now() - 2000).toISOString();

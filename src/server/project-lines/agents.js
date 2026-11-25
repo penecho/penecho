@@ -26,8 +26,10 @@ function firstLaunch(resolve, candidates) {
   }
   return null;
 }
+// On Linux the agents' own installers use the same places as on macOS.
 function managed(provider, paths) {
-  try { const file = managedCliPath(provider, paths); return file && fs.existsSync(file) ? file : null; } catch { return null; }
+  const platform = paths?.platform || process.platform;
+  try { const file = managedCliPath(provider, { ...paths, platform:platform === "win32" ? platform : "darwin" }); return file && fs.existsSync(file) ? file : null; } catch { return null; }
 }
 const electronNodeEnv = () => (process.versions?.electron ? { env:{ ELECTRON_RUN_AS_NODE:"1" } } : {});
 function withLaunchEnv(launch, spec, adapter = null, platform = process.platform) {

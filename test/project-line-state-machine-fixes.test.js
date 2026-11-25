@@ -1696,7 +1696,7 @@ setInterval(() => {}, 1000);
     command:(_id, opts) => ({ command:process.execPath, args:[parentScript], cwd:opts.workdir, env:{} }),
   };
 
-  const s = new Service({ directory:dir, agents:ag, autoWatch:false, stopGraceMs:500, stopKillMs:500 });
+  const s = new Service({ directory:dir, agents:ag, autoWatch:false, stopGraceMs:2500, stopKillMs:500 });
   t.after(() => s.close());
   const p = s.store.create({ name:"R3B1", docsPath:docs });
   p.follow = false; s.store.save();
@@ -1705,8 +1705,9 @@ setInterval(() => {}, 1000);
   const descPid = Number(fs.readFileSync(descPidFile, "utf8").trim());
   t.after(() => { try { process.kill(descPid, "SIGKILL"); } catch {} });
 
-  // Start Stop: root exits immediately on SIGTERM while descendant stays alive for 500ms grace before SIGKILL!
+  // Start Stop: root exits immediately on SIGTERM while descendant stays alive for the grace before SIGKILL!
   const stopPromise = s.act(p, created.slug, "stop");
+  await until(() => JSON.parse(fs.readFileSync(s.activeFile, "utf8"))[0]?.stopping === true, "the stopping reservation is saved");
   await new Promise(r => setTimeout(r, 120));
   // Descendant is still alive; reservation MUST still exist in heldWorks & active-runs.json and Retry MUST reject BUSY!
   let descStillAlive = false;

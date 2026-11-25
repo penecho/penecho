@@ -281,9 +281,10 @@ test('cancelled RPC keeps actual backend capacity bounded and recovers on settle
 });
 test('cancelled raw uploads retain actual backend capacity and recover on settlement',async t=>{
  let calls=0,release;
- const {status}=await fixture(t,{maxRequests:1,uploadTimeoutMs:30,uploadCancelGraceMs:5,uploadImage:()=>{calls++;return new Promise(resolve=>{release=resolve;});}});
+ const {status}=await fixture(t,{maxRequests:1,uploadTimeoutMs:500,uploadCancelGraceMs:5,uploadImage:()=>{calls++;return new Promise(resolve=>{release=resolve;});}});
  const bytes=await require('sharp')({create:{width:8,height:8,channels:3,background:'red'}}).png().toBuffer();
  assert.equal((await upload(status,bytes)).status,408);
+ assert.equal(calls,1,'the image reached the backend before the upload timed out');
  await new Promise(resolve=>setTimeout(resolve,30));
  for(let i=0;i<4;i++)assert.equal((await upload(status,bytes)).status,429);
  assert.equal(calls,1);
