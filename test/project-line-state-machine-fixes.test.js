@@ -16,7 +16,14 @@ const LINE_STATUS = require("../public/lines/line-status.js");
 
 function makeRoot(t, prefix = "line-sm-fixes-") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  t.after(() => fs.rmSync(root, { recursive:true, force:true, maxRetries:20, retryDelay:50 }));
+  // An agent that is still ending may write one more file, and Node 22.19's own retries do not look for what came since.
+  t.after(async () => {
+    for (let tries = 0; ; tries++) {
+      try { return fs.rmSync(root, { recursive:true, force:true }); }
+      catch (error) { if (error.code !== "ENOTEMPTY" || tries >= 100) throw error; }
+      await new Promise(r => setTimeout(r, 50));
+    }
+  });
   return root;
 }
 

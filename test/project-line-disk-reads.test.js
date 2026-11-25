@@ -432,7 +432,7 @@ test("store.exists with trust rejects a parent symlink swapped to a different fi
     assert.equal(service.store.exists(project, "works/one/work-1.md", { trust:true }), false, "trusted exists catches swapped parent symlink to different outside file");
   } finally { Date.now = origNow; }
   // Restore works/one and verify README hand-edit is repaired at the next syncGenerated.
-  fs.rmSync(path.join(project.docsPath, "works/one"));
+  fs.unlinkSync(path.join(project.docsPath, "works/one"));
   fs.renameSync(path.join(temp, "one-orig"), path.join(project.docsPath, "works/one"));
   service.store.syncGenerated(project, "main");
   const readmePath = path.join(project.docsPath, "README.md");
