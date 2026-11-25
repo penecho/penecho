@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const NOTE=require('../public/note-card.js');
 
@@ -223,6 +224,7 @@ test('maximizing creates one zoom control set, resets it on re-entry, and preser
  const h=harness();
  const fixture=widgetFixture({presentationToolbar:null});
  const {widget,parent,shell,frame}=fixture;
+ shell.clientWidth=1000; // A width-limited page still starts at 100%.
  const geometry={w:widget.w,h:widget.h,contentW:widget.contentW,contentH:widget.contentH};
 
  h.api.setWidgetMaximized(widget,true);
@@ -292,12 +294,12 @@ test('Widget download button restores itself after success and failure without t
  assert.deepEqual(failure.downloads,[failureFixture.widget]);
 });
 
-test('presentation fits width on entry and resize, with manual zoom and cleanup',()=>{
+test('presentation fits both page axes on entry, with manual zoom and cleanup',()=>{
  const h=harness(),{widget}=widgetFixture();
  const properties=new Map();
  widget.styleRule={style:{setProperty:(k,v)=>properties.set(k,v),removeProperty:k=>properties.delete(k)}};
  h.api.setWidgetMaximized(widget,true);
- assert.equal(Number(properties.get('--widget-page-scale')),1400/480);
+ assert.equal(Number(properties.get('--widget-page-scale')),(900-52-20)/320);
  h.api.setWidgetPresentationZoom(widget,50);
  assert.equal(Number(properties.get('--widget-page-scale')),1400/480*.5);
  widget.shell.clientWidth=520;
@@ -332,10 +334,11 @@ test('content changes grow the scroll track without resizing the layout viewport
  widget.presentationScrollContent={height:2200,viewportHeight:1100,width:900,viewportWidth:900};
  h.api.updateWidgetPresentationScroll(widget);
  const height=properties.get('--widget-presentation-frame-height');
- assert.equal(height,'1100px');assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-2200*1400/900)<1e-9);
+ const scale=(900-52-20)/1100;
+ assert.equal(height,'1100px');assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-2200*scale)<1e-9);
  widget.presentationScrollContent.height=2800;h.api.updateWidgetPresentationScroll(widget);
  assert.equal(properties.get('--widget-presentation-frame-height'),height);
- assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-2800*1400/900)<1e-9);
+ assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-2800*scale)<1e-9);
  widget.shell.scrollTop=widget.presentationScrollMetrics.outside+200*widget.presentationScrollMetrics.scale;h.api.syncWidgetPresentationScroll(widget);
  assert.ok(Math.abs(messages.at(-1).top-200)<1e-9);
  assert.equal(widget.contentH,1100);
@@ -357,9 +360,9 @@ test('viewport graphs fit a short presentation without changing saved Canvas dim
  assert.equal(widget.contentH,1100);assert.equal(widget.h,1100);
 });
 
-for(const style of ['card','note'])test(`${style} defaults to showing the full card height below 50% and refits on resize`,()=>{
+for(const style of ['card','note','html'])test(`${style} defaults to showing the full page below 40% and refits on resize`,()=>{
  const h=harness(),{widget}=widgetFixture({presentationToolbar:null}),properties=new Map();
- Object.assign(widget,{sourceFormat:NOTE.FORMAT,note:{style},w:1800,h:6000,contentW:900,contentH:3000});
+ Object.assign(widget,{sourceFormat:style==='html'?null:NOTE.FORMAT,note:{style},w:1800,h:6000,contentW:900,contentH:3000});
  const geometry=[widget.w,widget.h,widget.contentW,widget.contentH],frame=widget.frame;
  widget.styleRule.style.setProperty=(k,v)=>properties.set(k,v);
  h.api.setWidgetMaximized(widget,true);

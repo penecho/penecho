@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { prepareAgentEnv, resolveWindowsCmdShim } = require("./agent-env.js");
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 const MAX_ERROR_REASON_CHARS = 4000;
@@ -19,6 +20,10 @@ function findOnPath(name, env = process.env) {
   return null;
 }
 
+function electronNodeEnv() {
+  return process.versions?.electron ? { env: { ELECTRON_RUN_AS_NODE: "1" } } : {};
+}
+
 function resolveClaudeLaunch(configuredPath = "claude", env = process.env) {
   const requested = String(configuredPath || "claude").trim();
   if (!requested || requested.includes("\0")) throw new Error("CLAUDE_CLI_PATH is invalid.");
@@ -28,12 +33,18 @@ function resolveClaudeLaunch(configuredPath = "claude", env = process.env) {
   try { if (!fs.statSync(executable).isFile()) throw new Error(); }
   catch { throw new Error(`Claude CLI path is not a file: ${executable}`); }
   const extension = path.extname(executable).toLowerCase();
-  if ([".js", ".cjs", ".mjs"].includes(extension)) return { command: process.execPath, prefixArgs: [executable] };
+  if ([".js", ".cjs", ".mjs"].includes(extension)) return { command: process.execPath, prefixArgs: [executable], ...electronNodeEnv() };
   if (process.platform === "win32" && [".cmd", ".bat", ".ps1"].includes(extension)) {
     const packageRoot = path.join(path.dirname(executable), "node_modules", "@anthropic-ai", "claude-code"),
       native = path.join(packageRoot, "bin", "claude.exe"), wrapper = path.join(packageRoot, "cli-wrapper.cjs");
     if (fs.existsSync(native)) return { command: native, prefixArgs: [] };
-    if (fs.existsSync(wrapper)) return { command: process.execPath, prefixArgs: [wrapper] };
+    if (fs.existsSync(wrapper)) return { command: process.execPath, prefixArgs: [wrapper], ...electronNodeEnv() };
+    const shimTarget = resolveWindowsCmdShim(executable, ["claude.exe", "cli-wrapper.cjs", "cli.js"]);
+    if (shimTarget) {
+      return path.extname(shimTarget).toLowerCase() === ".exe"
+        ? { command: shimTarget, prefixArgs: [] }
+        : { command: process.execPath, prefixArgs: [shimTarget], ...electronNodeEnv() };
+    }
     throw new Error("The Claude shell wrapper cannot be launched safely. Set CLAUDE_CLI_PATH to the Claude executable.");
   }
   return { command: executable, prefixArgs: [] };
@@ -53,7 +64,7 @@ function sanitizeClaudeEnv(env = process.env, effort = null) {
   clean.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
   clean.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
   if (String(effort || "").trim().toLowerCase() === "none") clean.MAX_THINKING_TOKENS = "0";
-  return clean;
+  return prepareAgentEnv(clean, null, { platform: process.platform });
 }
 
 function buildClaudeArgs({ systemPrompt, model, effort }) {
@@ -233,7 +244,8 @@ function runProcess(launch, args, input, cwd, env, signal, onProgress = null, on
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
     let child;
-    try { child = spawn(launch.command, [...launch.prefixArgs, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: false, detached: process.platform !== "win32" }); }
+    const spawnEnv = prepareAgentEnv(env, launch.env, { platform: process.platform });
+    try { child = spawn(launch.command, [...launch.prefixArgs, ...args], { cwd, env: spawnEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: false, detached: process.platform !== "win32" }); }
     catch (error) { reject(error); return; }
     let termination = null, settled = false, lineBuffer = "", stderr = "", responseStarted = false;
     const events = [];

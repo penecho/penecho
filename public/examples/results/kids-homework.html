@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Homework checked</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; color: #1f2937; font: 24px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+  body { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 36px 56px; box-sizing: border-box; }
+  h1 { margin: 0 0 18px; color: #475569; font-size: 28px; font-weight: 600; }
+  .row { display: grid; grid-template-columns: 70px auto 1fr; align-items: center; gap: 26px; min-height: 120px; border-bottom: 1px dashed #e2e8f0; }
+  .row:last-of-type { border-bottom: 0; }
+  .mark { font: 700 64px/1 "Bradley Hand", "Comic Sans MS", "Kaiti SC", cursive; }
+  .ok .mark { color: #16a34a; }
+  .bad .mark { color: #dc2626; }
+  .sum { font: 600 58px/1 "Bradley Hand", "Comic Sans MS", "Kaiti SC", cursive; color: #1f2937; white-space: nowrap; }
+  .bad .sum s { text-decoration-color: #dc2626; text-decoration-thickness: 3px; }
+  .fix { color: #dc2626; font: 600 52px/1.1 "Bradley Hand", "Comic Sans MS", "Kaiti SC", cursive; }
+  .fix small { display: block; margin-top: 8px; font: 500 22px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; color: #b91c1c; }
+  p { margin: 22px 0 0; color: #475569; font-size: 24px; }
+</style>
+</head>
+<body>
+<h1 data-t="title">Checked: 2 of 3 right</h1>
+<div class="row ok"><span class="mark">✓</span><span class="sum">8 + 5 = 13</span><span></span></div>
+<div class="row bad"><span class="mark">✗</span><span class="sum">12 − 7 = <s>6</s></span><span class="fix">= 5<small data-t="why">Count up from 7: 8, 9, 10, 11, 12 is five steps.</small></span></div>
+<div class="row ok"><span class="mark">✓</span><span class="sum">6 × 3 = 18</span><span></span></div>
+<p data-t="tip">The handwriting stays as it was; only the fix is added.</p>
+<script>
+  if (document.documentElement.lang === "zh") {
+    const words = { title:"已检查：3 题对 2 题", why:"从 7 往上数：8、9、10、11、12，一共五步。", tip:"手写内容保持原样，只补上更正。" };
+    document.querySelectorAll("[data-t]").forEach(el => { el.textContent = words[el.dataset.t]; });
+  }
+</script>
+</body>
+</html>

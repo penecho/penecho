@@ -1,0 +1,24 @@
+/* Settings → Other devices: who may open this PenEcho from a tablet or phone. It wears the look of the code page (access.css). */
+.dev-back { position: absolute; top: max(14px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left)); z-index: 2; display: inline-flex; align-items: center; height: 30px; padding: 0 12px; color: var(--d-ink2); border-radius: 9px; background: var(--d-soft); font-size: 13.5px; font-weight: 500; text-decoration: none; }
+.dev-back:hover { color: var(--d-ink); }
+.dev-panel { width: min(100%, 440px); }
+#devBody, #devOpen { display: grid; gap: 18px; width: 100%; justify-items: center; }
+#devBody[hidden], #devOpen[hidden], .dev-note[hidden], .dev-scan[hidden], .dev-code-block[hidden] { display: none; }
+.dev-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 12px 14px; text-align: left; border: 1px solid var(--d-line); border-radius: 14px; }
+.dev-row strong { color: var(--d-ink); font-size: 15.5px; font-weight: 600; }
+.dev-switch { position: relative; flex: none; width: 46px; height: 28px; padding: 0; border: 0; border-radius: 14px; background: var(--d-line2); cursor: pointer; transition: background .16s; }
+.dev-switch i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(17, 24, 39, .3); transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.dev-switch[aria-checked="true"] { background: var(--d-accent); }
+.dev-switch[aria-checked="true"] i { transform: translateX(18px); }
+.dev-scan { display: grid; gap: 10px; justify-items: center; }
+.dev-qr { display: block; width: 208px; height: 208px; padding: 10px; border: 1px solid var(--d-line); border-radius: 18px; background: #fff; }
+.dev-address { padding: 6px 12px; color: var(--d-ink); border: 0; border-radius: 9px; background: var(--d-soft); font: 500 14.5px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; cursor: pointer; }
+.dev-address:hover { background: var(--d-accent-soft); }
+.dev-code-block { display: grid; gap: 6px; justify-items: center; }
+.dev-code i { display: grid; place-items: center; color: var(--d-ink); font: 600 24px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-style: normal; }
+.dev-code i::after, .dev-code i::before { display: none; }
+.dev-note { width: 100%; padding: 10px 14px; color: var(--d-ink2); border-radius: 12px; background: var(--d-soft); font-size: 14px; line-height: 1.45; text-align: left; }
+.dev-warn { color: #8f5410; background: rgba(217, 138, 31, .14); }
+.dev-risk-acts { display: flex; gap: 4px; margin-top: 6px; }
+@media (prefers-color-scheme: dark) { .dev-warn { color: #f6c177; background: rgba(240, 166, 60, .16); } }
+@media (max-width: 520px) { .dev-qr { width: 184px; height: 184px; } }

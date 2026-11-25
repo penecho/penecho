@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),os=require("node:os"),path=require("node:path");
 const LLM=require("../src/server/jevision.js"),{CloudConnector}=require("../src/server/cloud-connector.js");
 const {createJeVisionRequestTracer}=require("../src/server/jevision-request-trace.js");

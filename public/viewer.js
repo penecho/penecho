@@ -6,15 +6,17 @@
   // The viewer shell is served at /canvas/view/:itemId on PenEcho Cloud.
   // Everything else (including the regular local app) never enters this mode.
   const match = location.pathname.match(/^\/canvas\/view\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
-  const liveMatch = location.pathname.match(/^\/canvas\/share\/([0-9a-f-]{36})\/?$/i);
-  if (!match && !liveMatch) return;
+  const liveMatch = location.pathname.match(/^\/canvas\/(?:share|collaborate)\/([0-9a-f-]{36})\/?$/i);
+  const collaboration = /^\/canvas\/collaborate\//i.test(location.pathname);
+  // A link that allows editing runs the editor, which opens the share itself.
+  if ((!match && !liveMatch) || window.PENECHO_CONFIG?.liveShare) return;
   const live = Boolean(liveMatch), itemId = (liveMatch || match)[1];
   const config = {
     itemId,
     itemKind: null, // discovered from the artifact payload itself
     artifactUrl: `/api/v1/community/items/${itemId}/view`,
     previewUrl: `/api/v1/community/items/${itemId}/preview`,
-    communityUrl: "/community.html",
+    communityUrl: "/?public=1",
     signupUrl: `/auth.html?returnTo=${encodeURIComponent(`/canvas/community/${itemId}`)}`,
     dashboardUrl: "/dashboard.html#community",
     takeFurtherUrl: `/canvas/community/${itemId}`,
@@ -32,7 +34,7 @@
       openDashboard:"Open console",
       previewOnly:"This Craft's full view needs a redemption. Showing the preview.",
       failed:"This Craft could not be opened.",
-      backTitle:"Back to Echoes",
+      backTitle:"Back to PenEcho",
       retry:"Try again",
       saving:"Saving a copy…",
       editHint:"Save a copy to your space and edit it",
@@ -46,7 +48,7 @@
       openDashboard:"打开控制台",
       previewOnly:"查看完整内容需要先赎回，正在展示预览图。",
       failed:"这个 Craft 暂时无法打开。",
-      backTitle:"返回 Echoes",
+      backTitle:"返回 PenEcho",
       retry:"重新加载",
       saving:"正在保存副本…",
       editHint:"保存副本到你的空间后编辑",
@@ -55,6 +57,10 @@
   if (live) {
     Object.assign(COPY.en,{loading:"Opening shared content…",takeFurther:"Edit in my space",copyFailed:"Could not save to your space. Please try again.",failed:"Shared content could not be loaded. Please try again later.",unavailable:"Sharing has been turned off, or this Canvas / Widget has been removed. You can ask the owner for a new link.",backTitle:"PenEcho home"});
     Object.assign(COPY.zh,{loading:"正在打开分享内容…",takeFurther:"在我的空间编辑",copyFailed:"暂时无法保存到你的空间，请重试。",failed:"分享内容暂时无法加载，请稍后重试。",unavailable:"分享已关闭，或此 Canvas / Widget 已被移除。你可以联系分享者获取新的链接。",backTitle:"PenEcho 首页"});
+  }
+  if (collaboration) {
+    COPY.en.unavailable = "This collaboration has ended. Ask the owner for a new link.";
+    COPY.zh.unavailable = "此协作已结束，可以请所有者发一个新链接。";
   }
   let accountState = { kind:"loading", account:null };
   function viewerLanguage() {
@@ -77,7 +83,7 @@
   // Live shares surface the site wordmark (same as the public header/404 page)
   // linking to the PenEcho homepage; ?public=1 keeps signed-in visitors on the
   // public site instead of bouncing to the dashboard.
-  brand.href = live ? "/?public=1" : config.communityUrl || "/community.html";
+  brand.href = live ? "/?public=1" : config.communityUrl || "/?public=1";
   brand.title = copy.backTitle;
   brand.setAttribute("aria-label", copy.backTitle);
   brand.innerHTML = "<span class=\"viewer-brand-mark\" aria-hidden=\"true\"></span><span>Pen<strong>Echo</strong></span>";
@@ -255,6 +261,8 @@
       const bridge = await waitForCanvasBridge();
       if (artifact?.format === "penecho-widget") await bridge.importWidget(artifact, null, { fitViewport:true });
       else await bridge.viewCanvas(artifact);
+      // A shared Canvas keeps following the changes people make after its last save.
+      if (live && payload?.live) window.PenEchoLiveCanvas?.start({ share:itemId }, { have:payload.live.seq || 0 });
       document.getElementById("handToolBtn")?.click();
       status.hidden = true;
       contentReady = true;

@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -96,6 +97,7 @@ function createHarness({ frontPlacedCanvasObjectKind = "image", selected = true 
     state,
     selectedWidgetMaterial,
     ...layers,
+    syncCanvasPlacedInputRegions() {},
     runtimeElementStyle: (element) => element?.style || null,
     scheduleHandObjectToolbarTick: () => calls.push(["toolbar-tick"]),
     acceptWidgetEdit: () => {

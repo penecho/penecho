@@ -4,10 +4,6 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto')
 const root=path.resolve(__dirname,'..'),out=path.join(root,'src/server/canvas-agent/vendor')
 const check=process.argv.includes('--check')
-function replace(source,from,to){
-  if(source.split(from).length!==2)throw Error(`Backport anchor must match exactly once: ${from.slice(0,80)}`)
-  return source.replace(from,to)
-}
 function build(name,sha,patch){
   const input=path.join(root,'node_modules/@deepseek-ai',name,'lib/index.js'),source=fs.readFileSync(input,'utf8')
   if(crypto.createHash('sha256').update(source).digest('hex')!==sha)throw Error(`${name}: dependency changed; review the backport before rebuilding.`)
@@ -16,18 +12,9 @@ function build(name,sha,patch){
   if(check){if(fs.readFileSync(filename,'utf8')!==output)throw Error(`${name}: generated backport is stale`)}
   else {fs.mkdirSync(out,{recursive:true});fs.writeFileSync(filename,output)}
 }
-build('dsh-agent-loop','1ca83637892559e88c43b815e8d5d7b065951751e73eee7a7bef99d65a71ad6c',source=>{
-  source=replace(source,'\trequestHeaderLogged = false;','\trequestHeaderLogged = false;\n\tfrozenMessages = new WeakSet();')
-  source=replace(source,'\t\treturn {\n\t\t\trequest: markAgentLoopRequest(deepFreeze({',
-    '\t\tdeepFreeze(header);\n\t\tfor (const message of boundaryMessages) {\n\t\t\tif (this.frozenMessages.has(message)) continue;\n\t\t\tdeepFreeze(message);\n\t\t\tthis.frozenMessages.add(message);\n\t\t}\n\t\tObject.freeze(boundaryMessages);\n\t\treturn {\n\t\t\trequest: markAgentLoopRequest(Object.freeze({')
-  return source+'\nexport { ReactLoopAgent };\n'
-})
-build('dsh-llm-pi-ai','e183a9cdde703b47485410bd68d247c8becdb277c390f0f91c6dd28718d350e2',source=>{
-  source=replace(source,'function toPiReplayState(message) {','function toPiReplayState(message, requestedModel = message.model) {\n\tconst responseModel = message.api === "anthropic-messages" && message.model !== requestedModel ? message.model : message.responseModel;')
-  source=replace(source,'\t\t\tmodel: message.model,\n\t\t\t...message.responseModel === void 0 ? {} : { responseModel: message.responseModel },','\t\t\tmodel: requestedModel,\n\t\t\t...responseModel === void 0 ? {} : { responseModel },')
-  source=replace(source,'\t\tmodel: state.response.model,','\t\tmodel: state.response.api === "anthropic-messages" ? state.response.responseModel ?? state.response.model : state.response.model,')
-  source=replace(source,'async function* toStreamChunks(events, contextWindow) {','async function* toStreamChunks(events, contextWindow, requestedModel) {')
-  source=replace(source,'replayState: toPiReplayState(event.message)','replayState: toPiReplayState(event.message, requestedModel)')
-  source=replace(source,'}), model.contextWindow)[Symbol.asyncIterator]();','}), model.contextWindow, model.id)[Symbol.asyncIterator]();')
-  return source+'\nexport { toPiReplayState, replayedAssistant, toStreamChunks };\n'
-})
+// Both historical behavioral patches are upstream in the selected DSH/Pi stack.
+// Keep only test visibility; production behavior is the published bundle.
+build('dsh-agent-loop','cf57e3ecd487ac5c2553455aaa5cef2c6fb41e6bd61be5aa455675d1d7193033',source=>
+  source+'\nexport { ReactLoopAgent };\n')
+build('dsh-llm-pi-ai','99b5c20830a52f69641df8a18a39206079b0c725201958cce2c4a934f1d4f7cd',source=>
+  source+'\nexport { toPiReplayState, replayedAssistant, toStreamChunks };\n')

@@ -1,0 +1,44 @@
+/* My Canvases in the rail, and the Canvases page of a project. */
+#railMine { display: flex; flex-direction: column; flex: none; }
+.pglyph.mine { background: var(--c-canvas); }
+.rail-mine .rail-row { padding-right: 28px; }
+.rail-mine .rail-add { right: 6px; width: 24px; height: 24px; opacity: 1; }
+.rail-rule { width: 100%; border: 0; border-top: 1px solid var(--line); margin: 6px 0; flex: none; }
+
+.canvases-page { padding-bottom: 48px; }
+.canvases-page .add-tile { min-height: 211px; }
+.cv-card { position: relative; cursor: pointer; }
+.cv-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cv-card .ft { height: 174px; }
+.cv-card .fc-foot { padding-right: 6px; }
+.cv-where { flex: 0 1 auto; min-width: 0; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink3); font-size: 12.5px; }
+.cv-more { opacity: 0; }
+.cv-card:hover .cv-more, .cv-more:focus-visible, .cv-more[aria-expanded="true"] { opacity: 1; }
+.cv-gone { margin-top: 34px; max-width: 640px; }
+.cv-gone-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 2px; border-top: 1px solid var(--line); color: var(--ink2); font-size: 14px; }
+.cv-gone-row strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 550; }
+.cv-gone-row span { color: var(--ink3); font-size: 12.5px; }
+@media (hover: none) { .cv-more { opacity: 1; } }
+
+/* My Canvases: the names of old Canvas projects as a filter, and bringing Canvases in from the old Library. */
+.cv-head-actions { display: flex; align-items: center; gap: 8px; }
+.cv-groups { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: -2px 0 16px; }
+.cv-group { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink2); font-size: 13px; font-weight: 550; }
+.cv-group:hover { background: var(--hover); }
+.cv-group.on { border-color: var(--accent); background: var(--selected); color: var(--accent2, var(--accent)); }
+.cv-make { margin-left: auto; }
+.cv-library h2 { margin: 0 0 14px; font-size: 18px; }
+.cv-lib-list { display: flex; flex-direction: column; max-height: min(calc(52vh / var(--penecho-page-scale, 1)), 420px); overflow-y: auto; margin: 0 -6px; }
+.cv-lib-row { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 4px 6px; border-top: 1px solid var(--line); font-size: 14px; color: var(--ink2); }
+.cv-lib-row:first-child { border-top: 0; }
+.cv-lib-row strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 550; }
+.cv-lib-row span { flex: 0 1 auto; max-width: 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink3); font-size: 12.5px; }
+.cv-lib-row.done strong { color: var(--ink3); }
+.cv-lib-note { margin: 4px 6px 8px; color: var(--ink2); font-size: 14px; }
+@media (max-width: 440px) {
+  .cv-lib-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 8px; padding-block: 8px; }
+  .cv-lib-row > svg { grid-column: 1; grid-row: 1 / 3; }
+  .cv-lib-row strong, .cv-lib-row span { grid-column: 2; }
+  .cv-lib-row span { max-width: none; }
+  .cv-lib-row button { grid-column: 3; grid-row: 1 / 3; }
+}

@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const SMART=require('../public/smart-suggest.js'),SCENE=require('../public/scene-spec.js');
 const {validateToolArguments,TOOLS}=require('../src/server/mcp/schema.js');
@@ -16,17 +17,18 @@ test('create_visual has an independent execution verdict and visual request',()=
 test('instant conditional actions use Canvas AI; only a closed JeVision choice upgrades them',()=>{
  for(const id of ['ask','answer','create_visual','explain','solve','practice','diagram','organize','vivid','finish_drawing']) {
   assert.equal(SMART.executionRoute(id), 'canvas_ai');
-  assert.equal(SMART.executionRoute(id,choice('penecho_agent')), 'penecho_agent');
+  assert.equal(SMART.executionRoute(id,choice('penecho_agent')), 'sidebar_task');
+  assert.equal(SMART.executionRoute(id,choice('sidebar_task')), 'sidebar_task');
   for(const bad of [{choice:'penecho_agent'},choice('shell'),choice('canvas_ai')])assert.equal(SMART.executionRoute(id,bad),'canvas_ai');
  }
  for(const id of ['typeset','hint','check_step','next_step','plot','snap_shapes'])assert.equal(SMART.executionRoute(id,choice('penecho_agent')),'canvas_ai');
- for(const id of ['animate','prototype'])assert.equal(SMART.executionRoute(id),'penecho_agent');
+ for(const id of ['animate','prototype'])assert.equal(SMART.executionRoute(id),'sidebar_task');
  // Sketch animation rigs the user's own strokes in one Canvas AI response.
  assert.equal(SMART.executionRoute('animate_sketch'),'canvas_ai');
  assert.equal(SMART.executionRoute('animate_sketch',choice('penecho_agent')),'canvas_ai');
- assert.equal(SMART.executionRoute('fix_error',null,'widget'),'penecho_agent');
+ assert.equal(SMART.executionRoute('fix_error',null,'widget'),'sidebar_task');
  assert.equal(SMART.executionRoute('fix_layout',null,'widget'),'canvas_ai');
- assert.equal(SMART.executionRoute('fix_layout',choice('penecho_agent'),'widget'),'penecho_agent');
+ assert.equal(SMART.executionRoute('fix_layout',choice('penecho_agent'),'widget'),'sidebar_task');
  for(const id of ['scene_replay','scene_slower','scene_faster','present','larger_text'])assert.equal(SMART.executionRoute(id,choice('penecho_agent'),'widget'),'canvas_ai');
 });
 const scenes=[
@@ -58,26 +60,26 @@ test('MCP and bound Agent compile identical scenes and preserve source across th
   for(const field of ['html','sourceFormat','frameworkVersion','copyText','copyLabel'])assert.equal(agentArgs[field],externalArgs[field],field);
  }
 });
-test('failed Agent submission preserves input and never falls through to a duplicate AI task',async()=>{
+test('failed sidebar saves preserve input and never fall through to a duplicate AI task',async()=>{
  const source=fs.readFileSync('src/client/app/smart-suggestions.js','utf8');
  const start=source.indexOf('  async function executeAssistAction('),end=source.indexOf('  // Kept for callers',start);
  const calls=[],stroke={id:7},target={box:{x:1,y:2,w:3,h:4},strokes:[stroke]};
- let outcome='blocked';
- const context={SMART_SUGGEST:SMART,state:{language:'en'},smartSuggest:{consumedStrokeId:0},clearTimeout(){},cancelWidgetRefinement(){},supersedeActiveAI(){},assistAgentRun:async()=>outcome,smartSuggestRecent:x=>calls.push(x),hideAssist:x=>calls.push(x)};
+ let outcome=false;
+ const context={SMART_SUGGEST:SMART,state:{language:'en'},smartSuggest:{consumedStrokeId:0},clearTimeout(){},cancelWidgetRefinement(){},supersedeActiveAI(){},projectLinesCanAsk:()=>true,assistSaveSidebarTask:async()=>outcome,smartSuggestRecent:x=>calls.push(x),hideAssist:x=>calls.push(x)};
  vm.createContext(context);vm.runInContext(source.slice(start,end),context);
  await context.executeAssistAction({id:'prototype'},target);assert.equal(context.smartSuggest.consumedStrokeId,0);assert.deepEqual(calls,[]);
- outcome='submitted';await context.executeAssistAction({id:'animate'},target);assert.equal(context.smartSuggest.consumedStrokeId,0,'submission keeps suggestions recoverable until completion');assert.deepEqual(calls,['accepted animate'],'submission retains the bar for source-aware request visibility');
+ outcome=true;await context.executeAssistAction({id:'animate'},target);assert.equal(context.smartSuggest.consumedStrokeId,0,'submission keeps suggestions recoverable until completion');assert.deepEqual(calls,['accepted animate'],'submission retains the bar for source-aware request visibility');
 });
 test('non-primary ink and lasso actions use their saved executor without a classification request',async()=>{
  const source=fs.readFileSync('src/client/app/smart-suggestions.js','utf8');
  const start=source.indexOf('  async function executeAssistAction('),end=source.indexOf('  // Kept for callers',start);
  const calls=[],target={box:{x:1,y:2,w:3,h:4},strokes:[],routing:{action:choice('typeset'),execution:choice('canvas_ai'),execution_organize:choice('penecho_agent'),execution_explain:choice('canvas_ai')}};
- const context={SMART_SUGGEST:SMART,state:{language:'en'},smartSuggest:{cooldown:{}},assistSelectionTargetValid:()=>true,renderAssist:model=>calls.push(['working',model.label]),clearTimeout(){},cancelWidgetRefinement(){},supersedeActiveAI(){},assistRequestOptions:()=>({}),debug(){},smartSuggestRecent:()=>{},hideAssist:()=>{},assistAgentRun:async id=>{calls.push(['submit',id]);return 'submitted';},requestAI:async id=>calls.push(['ai',id]),assistClassifyRequest:()=>assert.fail('suggestion clicks must not classify')};
+ const context={SMART_SUGGEST:SMART,state:{language:'en'},smartSuggest:{cooldown:{}},assistSelectionTargetValid:()=>true,renderAssist:model=>calls.push(['working',model.label]),clearTimeout(){},cancelWidgetRefinement(){},supersedeActiveAI(){},assistRequestOptions:()=>({}),debug(){},smartSuggestRecent:()=>{},hideAssist:()=>{},projectLinesCanAsk:()=>true,assistSaveSidebarTask:async (_target,label)=>{calls.push(['saved',label]);return true;},requestAI:async id=>calls.push(['ai',id]),assistClassifyRequest:()=>assert.fail('suggestion clicks must not classify')};
  vm.createContext(context);vm.runInContext(source.slice(start,end),context);
  await context.executeAssistAction({id:'organize'},target);
- assert.deepEqual(calls,[['submit','organize']]);
+ assert.deepEqual(calls,[['saved','Organize notes']]);
  calls.length=0;await context.executeAssistAction({id:'organize'},{...target,selection:{}});
- assert.deepEqual(calls,[['submit','organize']]);
+ assert.deepEqual(calls,[['saved','Organize notes']]);
  calls.length=0;await context.executeAssistAction({id:'explain'},target);
  assert.deepEqual(calls,[['working','Explain'],['ai','explain']]);
  for(const routing of [null,{action:choice('organize'),execution:choice('penecho_agent')}]) {
@@ -93,7 +95,7 @@ test('ordinary Answer uses the real manual Canvas AI entry point for ink and sel
  const calls=[],selection={phase:'active'},packed={sourceRect:{x:20,y:30,w:60,h:50}},target={box:{x:1,y:2,w:3,h:4},strokes:[{id:7}],routing:{action:choice('answer'),execution_answer:choice('penecho_agent')}};
  const context={SMART_SUGGEST:SMART,state:{language:'en',dirty:target.box},smartSuggest:{consumedStrokeId:0},assistSelectionTargetValid:()=>true,
   clearTimeout(){},cancelWidgetRefinement(){},supersedeActiveAI(){},hideAssist:()=>{},buildSelectionTypesetRequest:s=>{assert.equal(s,selection);return packed;},
-  requestAI:(...args)=>calls.push(args),requestSelectionAI:(...args)=>calls.push(args),assistAgentRun:()=>assert.fail('manual Answer cannot be rerouted to Agent'),assistClassifyRequest:()=>assert.fail('manual Answer cannot classify its executor')};
+  requestAI:(...args)=>calls.push(args),requestSelectionAI:(...args)=>calls.push(args),assistSaveSidebarTask:()=>assert.fail('manual Answer uses Canvas AI'),assistClassifyRequest:()=>assert.fail('manual Answer cannot classify its executor')};
  vm.createContext(context);vm.runInContext(core.slice(manualStart,manualEnd)+source.slice(start,end),context);
  await context.executeAssistAction({id:'answer'},target);
  assert.deepEqual(JSON.parse(JSON.stringify(calls)),[['auto',null,{fromSuggestBar:true,captureCurrentViewport:true}]]);
@@ -109,7 +111,7 @@ test('legacy verdicts apply only to their own action and specific verdicts take 
  const answers={action:choice('answer'),execution:choice('penecho_agent'),execution_answer:choice('canvas_ai')};
  assert.equal(SMART.executionRoute('answer',SMART.suggestionExecution('answer',answers)),'canvas_ai');
  delete answers.execution_answer;
- assert.equal(SMART.executionRoute('answer',SMART.suggestionExecution('answer',answers)),'penecho_agent');
+ assert.equal(SMART.executionRoute('answer',SMART.suggestionExecution('answer',answers)),'sidebar_task');
  assert.equal(SMART.executionRoute('explain',SMART.suggestionExecution('explain',answers)),'canvas_ai');
 });
 
@@ -117,7 +119,7 @@ test('Widget actions ignore saved executor verdicts and use the central Refine e
  const source=fs.readFileSync('src/client/app/widget-assist.js','utf8');
  const start=source.indexOf('  function runWidgetAssistAction('),end=source.indexOf('  async function submitWidgetAsk(',start);
  const calls=[],widget={id:'w'},answers={action:choice('animate'),execution:choice('penecho_agent'),execution_fix_layout:choice('canvas_ai'),execution_apply_marks:choice('penecho_agent')};
- const context={window:{PENECHO_SMART_SUGGEST:SMART},state:{widgets:[widget]},debug(){},widgetAssistEntry:()=>({cached:{answers}}),widgetBox:()=>({x:1,y:2,w:3,h:4}),widgetAssistActionLabel:a=>a.id,triggerWidgetRefineClickPulse(){},requestWidgetRefinement:(_w,_mode,options)=>{calls.push(['refine',options.actionId]);return true;},assistAgentRun:()=>assert.fail('Widget actions must use the central Refine router'),assistClassifyRequest:()=>assert.fail('Widget clicks must not classify')};
+ const context={window:{PENECHO_SMART_SUGGEST:SMART},state:{widgets:[widget]},debug(){},widgetAssistEntry:()=>({cached:{answers}}),widgetBox:()=>({x:1,y:2,w:3,h:4}),widgetAssistActionLabel:a=>a.id,triggerWidgetRefineClickPulse(){},requestWidgetRefinement:(_w,_mode,options)=>{calls.push(['refine',options.actionId]);return true;},assistSaveSidebarTask:()=>assert.fail('Widget actions must use the central Refine router'),assistClassifyRequest:()=>assert.fail('Widget clicks must not classify')};
  context.PenEchoIllustrationStyle=require('../src/shared/illustration-style.js');
  vm.createContext(context);
  vm.runInContext(source.slice(source.indexOf('  function widgetAssistInstruction('),source.indexOf('  function widgetAssistChipWidth('))+source.slice(start,end),context);
@@ -134,4 +136,40 @@ test('ranking updates hovered buttons executor without moving them or adopting a
  context.assistRefresh('ranking');assert.equal(target.routing,routing);
  context.smartSuggest.bar.cluster={key:'old'};target.routing=null;
  context.assistRefresh('ranking');assert.equal(target.routing,null);
+});
+
+test('without a project sidebar, complex buttons and typed questions use Canvas AI directly', async () => {
+  const source = fs.readFileSync('src/client/app/smart-suggestions.js','utf8');
+  const calls = [], ctx = vm.createContext({
+    SMART_SUGGEST:SMART, state:{language:'en'}, smartSuggest:{cooldown:{}}, projectLinesCanAsk:()=>false,
+    clearTimeout(){}, cancelWidgetRefinement(){}, supersedeActiveAI(){}, debug(){}, smartSuggestRecent(){}, renderAssist(){}, t:key=>key,
+    assistRequestOptions:()=>({}), requestAI:(action,_selection,options)=>calls.push({ action, options }),
+  });
+  vm.runInContext(source.slice(source.indexOf('  async function executeAssistAction('),source.indexOf('  // Kept for callers')),ctx);
+  vm.runInContext(source.slice(source.indexOf('  async function assistAsk('),source.indexOf('  // Local graph widgets')),ctx);
+  const box = { x:10, y:20, w:80, h:50 };
+  await ctx.executeAssistAction({id:'prototype'},{box,strokes:[]});
+  await ctx.assistAsk('What does this wireframe show?',{box});
+  assert.deepEqual(calls.map(c=>c.action),['plot','answer']);
+  assert.equal(calls[0].options.suggestion,'prototype');
+  assert.equal(calls[1].options.question,'What does this wireframe show?');
+  assert.ok(calls.every(c=>c.options.fromSuggestBar));
+});
+
+test('a failed or stale capture cannot create a sidebar task or start Canvas AI', async () => {
+  const source = fs.readFileSync('src/client/app/smart-suggestions.js','utf8'), box = { x:1,y:2,w:3,h:4 };
+  for (const failure of ['capture','switched']) {
+    const outcomes = [], saves = [], ctx = vm.createContext({
+      projectLinesSaveSuggestion:(...args)=>saves.push(args),
+      projectLinesCanAsk:()=>true, canvasDocumentsCurrent:()=>({id:'canvas'}), canvasDocuments:{epoch:1}, smartSuggest:{},
+      assistAgentTaskContext:()=>({box}), assistAgentTargetCurrent:()=>true, suggestionCopy:en=>en, setStatus(){},
+      assistRequestStarted(){}, assistRequestFinished:(_owner,outcome)=>outcomes.push(outcome),
+      canvasAgentCapture:async()=>{ if(failure==='capture') throw Error('Image unavailable'); ctx.canvasDocuments.epoch++; return {dataUrl:'stale'}; },
+    });
+    vm.runInContext(source.slice(source.indexOf('  async function assistSaveSidebarTask('),source.indexOf('  async function executeAssistAction(')),ctx);
+    assert.equal(await ctx.assistSaveSidebarTask({box},'Build a prototype'),false);
+    assert.deepEqual(outcomes,['failed']);
+    assert.deepEqual(saves,[]);
+    assert.equal(ctx.smartSuggest.savingSidebarTask,false);
+  }
 });

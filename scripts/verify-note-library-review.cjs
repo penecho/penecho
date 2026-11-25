@@ -7,7 +7,7 @@ fs.mkdirSync(output, {recursive:true}); app.setPath("userData", path.join(tempor
 Object.assign(process.env, {NODE_ENV:"test", PENECHO_TEST_OPEN_ACCESS:"1", PENECHO_STATE_DIR:path.join(temporary,"state"), PENECHO_CONFIG_FILE:path.join(temporary,"config.env"), HOST:"127.0.0.1", PORT:"0", PENECHO_CANVAS_AGENT_AUTO_OPEN:"false", PENECHO_REQUEST_TRACE:"false", PENECHO_JEVISION_ENABLED:"false"});
 const readStream = fs.createReadStream;
 const exposeRuntime = source => source.replace(/\}\)\(\);\s*$/, `
-    window.noteReviewTest={state,noteCards,canvasDocumentsReady,noteLibraryLoad,noteLibraryPut,noteLibraryPersist,noteLibraryRender,openNoteLibrary,closeNoteLibrary,applyLanguage,applyTheme,closeCanvasAgent};
+    window.noteReviewTest={state,noteCards,canvasDocumentsReady,noteLibraryLoad,noteLibraryPut,noteLibraryPersist,noteLibraryRender,openNoteLibrary,closeNoteLibrary,applyLanguage,applyTheme};
     penIntelRemote=()=>false;
   })();`);
 fs.createReadStream = function(file, ...args) {
@@ -46,7 +46,7 @@ app.whenReady().then(async () => { try {
   };
   await win.loadURL(url);
   await until(()=>js("!!window.noteReviewTest"),"Canvas startup");
-  await js(`(async()=>{const t=noteReviewTest;await t.canvasDocumentsReady();await t.noteLibraryLoad();t.state.auto=false;t.state.language='en';t.applyLanguage();t.applyTheme('studio');t.closeCanvasAgent();document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();
+  await js(`(async()=>{const t=noteReviewTest;await t.canvasDocumentsReady();await t.noteLibraryLoad();t.state.auto=false;t.state.language='en';t.applyLanguage();t.applyTheme('studio');document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();
     const NOTE=PENECHO_NOTE_CARD,now=Date.now(),image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/ZkAAAAASUVORK5CYII=';
     for(const entry of [
       NOTE.libraryEntry({id:'review-complete',note:{title:'Complete knowledge card',language:'en',style:'card',styleChosen:true,category:'concept',bookmarked:true,blocks:[{type:'qa',question:'What should Reveal display?',answer:'The complete original answer.'},{type:'formula',latex:'E=mc^2'},{type:'graph',expression:'y=sin(x)'},{type:'markdown',text:Array.from({length:15},(_,i)=>'Paragraph '+(i+1)+': The complete text remains readable and can be selected.').join('\\n\\n')},{type:'qa',question:'Is the second answer preserved?',answer:'SECOND ANSWER AT THE END'},{type:'image',src:image,caption:'Original media'},{type:'markdown',text:'END OF COMPLETE CARD'}],updated:now},thumb:image,updatedAt:now}),

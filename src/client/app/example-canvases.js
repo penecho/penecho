@@ -4,13 +4,12 @@
     EXAMPLE_INK = window.PENECHO_EXAMPLE_INK || null,
     EXAMPLES_STORAGE_KEY = "penecho-examples-v1",
     EXAMPLE_RESULT_TIMEOUT_MS = 180000,
-    EXAMPLE_WELCOME_COUNT = 4;
-  const exampleCanvases = { progress:null, session:null, opening:false, coachTimer:0, watchTimer:0, doneTimer:0, coachHidden:false, previews:new Map() };
+    // An agent reads the sketch and builds its result on the line beside the Canvas; that can take a while.
+    EXAMPLE_AGENT_TIMEOUT_MS = 15 * 60000;
+  // agent: the agent an example's Ask goes to (the first one found on this computer), null when there is none, undefined until known.
+  const exampleCanvases = { progress:null, session:null, opening:false, coachTimer:0, watchTimer:0, doneTimer:0, savedTimer:0, coachHidden:false, previews:new Map(), agent:undefined };
   const exampleWelcome = document.querySelector("#canvasWelcomeExamples"),
-    exampleWelcomeTitle = document.querySelector("#canvasWelcomeExamplesTitle"),
-    exampleWelcomeProgress = document.querySelector("#canvasWelcomeExamplesProgress"),
     exampleWelcomeAll = document.querySelector("#canvasWelcomeExamplesAll"),
-    exampleWelcomeGoals = document.querySelector("#canvasWelcomeGoals"),
     exampleWelcomeList = document.querySelector("#canvasWelcomeExampleList"),
     examplesDialog = document.querySelector("#examplesDialog"),
     examplesDialogTitle = document.querySelector("#examplesDialogTitle"),
@@ -33,13 +32,23 @@
     exampleDoneBody = document.querySelector("#exampleDoneBody"),
     exampleDoneNext = document.querySelector("#exampleDoneNext"),
     exampleDoneOwn = document.querySelector("#exampleDoneOwn"),
-    exampleDoneClose = document.querySelector("#exampleDoneClose");
+    exampleDoneClose = document.querySelector("#exampleDoneClose"),
+    exampleSaved = document.querySelector("#exampleSaved"),
+    exampleSavedTitle = document.querySelector("#exampleSavedTitle"),
+    exampleSavedBody = document.querySelector("#exampleSavedBody"),
+    exampleSavedActions = document.querySelector("#exampleSavedActions"),
+    exampleSavedClose = document.querySelector("#exampleSavedClose");
 
   function exampleCopy(en, zh) { return state.language === "zh" ? zh : en; }
   function exampleText(value) { return EXAMPLES ? EXAMPLES.localized(value, state.language) : ""; }
   function examplesAvailable() {
     const config = window.PENECHO_CONFIG || {};
-    return Boolean(EXAMPLES && EXAMPLE_INK) && config.runtime !== "viewer" && !config.guestCanvas && !CANVAS_COMPANION_REQUESTED;
+    return Boolean(EXAMPLES && EXAMPLE_INK) && config.runtime !== "viewer" && (!config.guestCanvas || canvasTrialDraft()) && !CANVAS_COMPANION_REQUESTED;
+  }
+  function guestExampleLabel(scenario) {
+    if (scenario.route === "instant") return exampleBadgeLabel("instant");
+    if (EXAMPLES.savedResult(scenario.id)) return exampleCopy("Saved result", "示例成品");
+    return scenario.image ? exampleCopy("Starter photo", "起始图片") : exampleCopy("Starter sketch", "起始草图");
   }
   function exampleGoalLabel(goal) {
     return {
@@ -53,8 +62,27 @@
     return {
       instant:exampleCopy("Instant", "即时"),
       ai:exampleCopy("Uses AI", "使用 AI"),
-      agent:"PenEcho Agent",
+      agent:exampleAgentLabel(),
     }[route] || "";
+  }
+  // What each of the eight needs, as its badge says it.
+  function exampleBadgeLabel(route) {
+    return route === "instant" ? exampleCopy("Works now", "现在就能用") : route === "ai" ? exampleCopy("Uses AI", "使用 AI") : exampleAgentLabel();
+  }
+  function exampleAgentLabel() {
+    const agent = exampleCanvases.agent;
+    return agent ? exampleCopy(`Uses ${agent.name}`, `使用 ${agent.name}`) : exampleCopy("Uses an agent", "使用 Agent");
+  }
+  // The agents on this computer, as PenEcho Lines found them. The first one is the one an Ask goes to.
+  async function exampleFindAgent() {
+    if (exampleCanvases.agent !== undefined) return exampleCanvases.agent;
+    // PenEcho Lines' own script may not be there yet: nothing is known then, and the next look asks again.
+    if (typeof window.PenEchoProjects?.agents !== "function") return null;
+    let list = [];
+    try { list = await window.PenEchoProjects.agents(); } catch { list = []; }
+    const found = list.find(agent => agent.available && agent.id !== "penecho") || null;
+    exampleCanvases.agent = found ? { id:found.id, name:found.name } : null;
+    return exampleCanvases.agent;
   }
   function exampleFeatureLabel(feature) {
     return {
@@ -105,9 +133,10 @@
   function examplePreview(scenario) {
     if (scenario.image) {
       const image = document.createElement("img");
-      image.src = scenario.image.src;
+      image.src = scenario.image.preview || scenario.image.src;
       image.alt = "";
       image.decoding = "async";
+      image.loading = "lazy";
       return image;
     }
     let markup = exampleCanvases.previews.get(scenario.id);
@@ -129,6 +158,10 @@
     }
     return svg;
   }
+  const EXAMPLE_BADGE_ICON = {
+    instant:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6Z"/></svg>',
+    ai:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>',
+  };
   function exampleCard(scenario, options = {}) {
     const tried = exampleProgress()?.tried.includes(scenario.id),
       button = document.createElement("button"),
@@ -144,17 +177,26 @@
     preview.className = "example-card-preview";
     preview.append(examplePreview(scenario));
     copy.className = "example-card-copy";
-    title.textContent = exampleText(scenario.title);
-    description.textContent = exampleText(scenario.description);
-    meta.className = "example-card-meta";
-    const feature = exampleFeatureLabel(scenario.feature), route = exampleRouteLabel(scenario.route);
-    meta.textContent = [options.numbered ? feature : "", options.numbered && route === feature ? "" : route, tried ? exampleCopy("Tried", "已体验") : exampleCopy(`About ${scenario.seconds} s`, `约 ${scenario.seconds} 秒`)].filter(Boolean).join(" · ");
+    const card = options.badge && scenario.card;
+    title.textContent = exampleText(card ? card.title : scenario.title);
+    description.textContent = exampleText(card ? card.description : scenario.description);
+    if (options.badge) {
+      // One badge: what it needs. Works now, Uses AI, or the agent it uses.
+      meta.className = "example-badge";
+      meta.dataset.route = scenario.route;
+      meta.innerHTML = EXAMPLE_BADGE_ICON[scenario.route === "instant" ? "instant" : "ai"];
+      meta.append(canvasGuest() ? guestExampleLabel(scenario) : exampleBadgeLabel(scenario.route));
+    } else {
+      meta.className = "example-card-meta";
+      const feature = exampleFeatureLabel(scenario.feature), route = canvasGuest() ? guestExampleLabel(scenario) : exampleRouteLabel(scenario.route);
+      meta.textContent = [options.numbered ? feature : "", options.numbered && route === feature ? "" : route, tried ? exampleCopy("Tried", "已体验") : canvasGuest() ? "" : exampleCopy(`About ${scenario.seconds} s`, `约 ${scenario.seconds} 秒`)].filter(Boolean).join(" · ");
+    }
     copy.append(title, description, meta);
     button.append(preview, copy);
     // A host that does not serve the example photo hides its card rather than
     // offering an example that cannot open.
     preview.querySelector("img")?.addEventListener("error", () => { button.hidden = true; }, { once:true });
-    button.setAttribute("aria-label", `${exampleText(scenario.title)}. ${exampleText(scenario.description)} ${meta.textContent}`);
+    button.setAttribute("aria-label", `${title.textContent}. ${description.textContent} ${meta.textContent}`);
     return button;
   }
   function renderExampleGoals(host) {
@@ -171,23 +213,25 @@
     }));
     host.setAttribute("aria-label", exampleCopy("What would you like to do first?", "你想先做什么？"));
   }
+  // An empty Canvas: the eight that finish best, in two rows, each saying what it needs. "All 20 examples" has the rest.
   function renderExampleWelcome() {
     if (!exampleWelcome) return;
     exampleWelcome.hidden = !examplesAvailable();
     if (exampleWelcome.hidden) return;
-    const goal = exampleProgress()?.goal;
-    exampleWelcomeTitle.textContent = goal ? exampleCopy(`Examples for ${exampleGoalLabel(goal).toLowerCase()}`, `${exampleGoalLabel(goal)}示例`) : exampleCopy("New here? Pick what you do, or try one of these", "第一次使用？选择你的场景，或先试试这些");
-    exampleWelcomeProgress.textContent = exampleProgressText();
-    exampleWelcomeAll.textContent = exampleCopy("All examples", "全部示例");
-    renderExampleGoals(exampleWelcomeGoals);
-    const progress = exampleProgress();
-    exampleWelcomeList.replaceChildren(...EXAMPLES.welcome(progress?.goal, progress?.tried, EXAMPLE_WELCOME_COUNT).map(scenario => exampleCard(scenario)));
+    exampleWelcomeAll.textContent = exampleCopy(`All ${EXAMPLES.SCENARIOS.length} examples`, `全部 ${EXAMPLES.SCENARIOS.length} 个示例`);
+    exampleWelcomeList.replaceChildren(...EXAMPLES.first().map(scenario => exampleCard(scenario, { badge:true })));
+    // The badge names the agent once PenEcho knows which one is here.
+    if (!canvasGuest() && exampleCanvases.agent === undefined) {
+      if (typeof window.PenEchoProjects?.agents === "function") void exampleFindAgent().then(() => renderExampleWelcome());
+      else addEventListener("DOMContentLoaded", () => renderExampleWelcome(), { once:true });
+    }
   }
   function renderExamplesDialog() {
     if (!examplesDialog || !EXAMPLES) return;
     const total = EXAMPLES.SCENARIOS.length;
     examplesDialogTitle.textContent = exampleCopy(`Learn PenEcho in ${total} tries`, `${total} 个示例，快速上手 PenEcho`);
     examplesDialogDescription.textContent = exampleCopy("Each example opens a ready canvas. Tap the highlighted suggestion and see the result. Most take under 30 seconds.", "每个示例都会打开一张准备好的画布。点击高亮的建议即可看到结果，大多不到 30 秒。");
+    if (canvasGuest()) examplesDialogDescription.textContent = exampleCopy("Open a working example, explore a saved result, or use a starter sketch or photo on your own canvas.", "打开可交互的示例、查看示例成品，或在自己的画布上使用起始草图和图片。");
     examplesDialogProgress.textContent = exampleProgressText();
     examplesDialogMeter.max = EXAMPLES.SCENARIOS.length;
     examplesDialogMeter.value = exampleTriedCount();
@@ -238,7 +282,7 @@
   // just holds the photo and the Agent would refuse.
   function exampleModelReady(scenario) {
     if (!scenario || scenario.route === "instant") return true;
-    if (scenario.route === "agent" && typeof canvasAgentExecutionAvailable === "function" && !canvasAgentExecutionAvailable()) return false;
+    if (scenario.route === "agent") return Boolean(exampleCanvases.agent);
     return typeof hasSelectedAiConnection !== "function" || hasSelectedAiConnection();
   }
   function openExampleAiSetup() {
@@ -252,7 +296,8 @@
     return session && canvasDocumentsCurrent()?.id === session.documentId ? session : null;
   }
   function exampleCanvasIsEmpty() {
-    return !tiles.size && !state.images.length && !state.textBoxes.length && !visibleWidgets().length && !state.currentSnapshotId;
+    return !tiles.size && !state.images.length && !state.textBoxes.length && !state.widgets.length
+      && !state.animations.length && !state.preservedSnapshotAnimations.length && !state.currentSnapshotId;
   }
   function exampleBox(points) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -277,8 +322,6 @@
       for (let index = 1; index < points.length; index++) stroke(points[index - 1], points[index], false, size, true, color);
     }
     state.userRevision++;
-    // The Agent example keeps the panel open; first ink would otherwise hide it.
-    if (!suggest && typeof canvasAgentDidStartUserConversation === "function") canvasAgentDidStartUserConversation();
     saveUserCanvasChange();
     requestCommittedInkRender();
     requestRender();
@@ -303,13 +346,18 @@
   }
   // Photo examples go through the normal image import, so the photo is new
   // input for Suggest exactly as if the person had added it themselves.
-  async function addExampleImage(scenario) {
+  function assertExampleDocument(documentId) {
+    if (canvasDocumentsCurrent().id !== documentId) throw Error(exampleCopy("The active canvas changed. Open the example again to continue.", "当前画布已切换。请重新打开示例。"));
+  }
+  async function addExampleImage(scenario, documentId) {
     const response = await fetch(scenario.image.src, { cache:"force-cache" });
     if (!response.ok) throw Error(exampleCopy("The example photo could not be loaded.", "示例照片加载失败。"));
     const blob = await response.blob(), before = state.images.length;
     // Some hosts serve example files as octet-stream; the bytes are a known JPEG.
     const type = blob.type?.startsWith("image/") ? blob.type : "image/jpeg";
+    assertExampleDocument(documentId);
     await addImageFile(new File([blob], scenario.image.name, { type }));
+    assertExampleDocument(documentId);
     const item = state.images.length > before ? state.images.at(-1) : null;
     if (!item) throw Error(exampleCopy("The example photo could not be added.", "示例照片无法添加。"));
     // Leave image editing so the suggestion bar is not held back.
@@ -341,35 +389,60 @@
     const observer = new ResizeObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        if (exampleCanvases.session === session && exampleSessionCurrent() && !state.drawing) centerExampleView(box);
+        if (exampleCanvases.session === session && exampleSessionCurrent() && !state.drawing && !session.framed) centerExampleView(box);
       }, 60);
     });
     observer.observe(viewport);
     for (const type of ["pointerdown", "wheel"]) viewport.addEventListener(type, stop, true);
     setTimeout(stop, 2500);
   }
-  async function openExampleCanvas(id) {
+  // Where an example's Ask can go: the line of the project Canvas in front, in the local app.
+  function exampleOnLine() {
+    return typeof projectLinesCanAsk === "function" && projectLinesCanAsk();
+  }
+  // here: opened on a Canvas made for it, so it never goes on to another one.
+  async function openExampleCanvas(id, { here = false } = {}) {
     const scenario = EXAMPLES?.get(id);
     if (!scenario || exampleCanvases.opening || !examplesAvailable()) return false;
     exampleCanvases.opening = true;
     try {
       closeExamplesDialog();
       hideExampleDone();
+      hideExampleSaved();
       endExampleSession();
+      // An example is a start of its own: the "Draw anywhere" hint has done its job.
+      if (typeof doneCanvasHint === "function") doneCanvasHint();
+      const guest = canvasGuest(), saved = EXAMPLES.savedResult(scenario.id), agent = !guest && scenario.route === "agent" ? await exampleFindAgent() : null;
+      if (guest) await window.PenEchoBrowserDraft.open();
+      const empty = exampleCanvasIsEmpty() || typeof projectLinesBlank === "function" && exampleOnLine() && projectLinesBlank();
+      // An agent example runs on a line, so it needs a Canvas of its own in a project: a new one in My Canvases, where the example opens.
+      // So does any example on a project Canvas that already holds something.
+      if (!here && typeof projectLinesDrawOnCanvas === "function" && projectLinesLocal() && (agent && !(exampleOnLine() && empty) || !empty && exampleOnLine())) {
+        await projectLinesDrawOnCanvas(null, { linesExample:scenario.id });
+        return true;
+      }
       // An empty, unsaved canvas is reused; anything else stays open in the workspace.
-      if (!exampleCanvasIsEmpty() && await openNewCanvasDialog() === false) return false;
+      if (!empty && await openNewCanvasDialog() === false) return false;
       applyCurrentCanvasGeneratedName(`${exampleCopy("Example", "示例")} · ${exampleText(scenario.title)}`);
       if (state.mode !== "pen") setCanvasMode("pen", { preserveSelection:true });
-      const agent = scenario.route === "agent" && canvasAgentReadyForExample();
-      // Open the Agent first so the ink is laid out in the space it leaves.
-      if (agent) await openExampleAgentPanel();
-      const box = scenario.image ? await addExampleImage(scenario) : drawExampleInk(scenario, { suggest:scenario.route !== "agent" });
-      exampleCanvases.session = { id:scenario.id, documentId:canvasDocumentsCurrent().id, box, status:"waiting", baseline:"", deadline:0 };
+      // Its saved result shows when what it needs is not here: no model for an AI example, no agent for an agent example.
+      const live = !guest && (scenario.route === "instant" || scenario.route === "ai" && exampleModelReady(scenario) || scenario.route === "agent" && agent && exampleOnLine());
+      const documentId = canvasDocumentsCurrent().id;
+      const box = scenario.image ? await addExampleImage(scenario, documentId) : drawExampleInk(scenario, { suggest:live && scenario.route !== "agent" });
+      const session = exampleCanvases.session = { id:scenario.id, documentId, box, status:"waiting", baseline:"", deadline:0 };
+      if (guest) state.autoEligible = false;
       exampleCanvases.coachHidden = false;
-      if (agent) fillExampleAgentPrompt(scenario);
       centerExampleView(box);
-      keepExampleCentred(box, exampleCanvases.session);
-      startExampleCoach();
+      keepExampleCentred(box, session);
+      if (guest && scenario.route === "instant") await exampleCanvasesActionStarted(scenario.action, {box});
+      else if (!live && saved) await showExampleSavedResult(scenario, session, saved);
+      else if (guest) {
+        session.status = "done";
+        exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), scenario.id));
+        showExampleDone(scenario);
+      }
+      else if (scenario.route === "agent" && live) await runExampleOnLine(scenario, session);
+      else startExampleCoach();
       return true;
     } catch (error) {
       setStatus(error?.message || String(error));
@@ -377,22 +450,6 @@
     } finally {
       exampleCanvases.opening = false;
     }
-  }
-  function canvasAgentReadyForExample() {
-    return typeof canvasAgentAvailable !== "function" || canvasAgentAvailable();
-  }
-  async function openExampleAgentPanel() {
-    if (canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open")) openCanvasAgent({ focus:false });
-    // A new canvas may have just started opening the panel too; let it finish
-    // resizing the canvas before the view is measured.
-    await new Promise(resolve => setTimeout(resolve, 360));
-  }
-  function fillExampleAgentPrompt(scenario) {
-    if (!exampleSessionCurrent() || canvasAgentInput.disabled) return;
-    canvasAgentInput.value = exampleText(scenario.prompt);
-    canvasAgentInput.dispatchEvent(new Event("input", { bubbles:true }));
-    canvasAgentInput.focus({ preventScroll:true });
-    canvasAgentInput.setSelectionRange?.(canvasAgentInput.value.length, canvasAgentInput.value.length);
   }
   function endExampleSession() {
     clearInterval(exampleCanvases.watchTimer);
@@ -429,7 +486,6 @@
     session.status = "running";
     if (target) target.example = true;
     hideExampleCoach();
-    exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), scenario.id));
     // Instant examples insert their known result: a graph, or the local
     // architecture diagram of the sketched boxes.
     if (id === "plot" && scenario.graph || id === "diagram" && scenario.architecture) {
@@ -442,13 +498,21 @@
             html:EXAMPLES.architectureDocument(scenario.architecture, state.language) };
       if (spec) {
         hideAssist(scenario.graph ? "example-graph" : "example-diagram");
-        await insertAssistWidget(spec, { place:"beside" });
+        const widget = await insertAssistWidget(spec, { place:"beside", assertCurrent:() => assertExampleDocument(session.documentId) });
+        if (!widget) throw Error(exampleCopy("The example could not be added. Try opening it again.", "未能添加示例。请重新打开。"));
+        assertExampleDocument(session.documentId);
+        if (canvasGuest() && widget) {
+          session.framed = true;
+          frameExampleResult(session.box, widgetBox(widget));
+        }
         consumeDirtyInputScope({ x:session.box.x - 24, y:session.box.y - 24, w:session.box.w + 48, h:session.box.h + 48 });
         smartSuggestInputConsumed(smartSuggest.strokes.at(-1)?.id || 0);
+        exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), scenario.id));
         finishExample(session);
         return true;
       }
     }
+    exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), scenario.id));
     watchExampleResult(session);
     return false;
   }
@@ -459,10 +523,10 @@
     return Boolean(state.activeAI) || smartSuggest.bar?.mode === "working" || Boolean(canvasAgent.running || canvasAgent.requestPending);
   }
   // A result has landed once the canvas changed and nothing is still running.
-  function watchExampleResult(session) {
+  function watchExampleResult(session, timeout = EXAMPLE_RESULT_TIMEOUT_MS) {
     clearInterval(exampleCanvases.watchTimer);
     session.baseline = exampleSignature();
-    session.deadline = performance.now() + EXAMPLE_RESULT_TIMEOUT_MS;
+    session.deadline = performance.now() + timeout;
     exampleCanvases.watchTimer = setInterval(() => {
       if (exampleCanvases.session !== session || performance.now() > session.deadline) {
         clearInterval(exampleCanvases.watchTimer);
@@ -475,26 +539,125 @@
       finishExample(session);
     }, 600);
   }
-  function exampleAgentSubmitted(event) {
-    const session = exampleSessionCurrent();
-    if (!session || session.status !== "waiting" || EXAMPLES.get(session.id)?.route !== "agent") return;
-    if (!exampleModelReady(EXAMPLES.get(session.id))) {
-      event?.preventDefault();
-      event?.stopImmediatePropagation();
-      openExampleAiSetup();
-      return;
-    }
-    session.status = "running";
-    hideExampleCoach();
-    exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), session.id));
-    watchExampleResult(session);
-  }
   function finishExample(session) {
     session.status = "done";
     // Results are live. In Pen a press on a Widget draws, so switch to Hand and
     // let the person use the new graph, card or widget straight away.
     if (exampleSessionCurrent() === session && state.mode !== "hand") setCanvasMode("hand", { preserveSelection:true, skipDraftFinalize:true, preserveWidgetRefinement:true });
     showExampleDone(EXAMPLES.get(session.id));
+  }
+
+  // ---------- An agent example: an Ask on the Canvas's line ----------
+  // The sketch is saved with the Canvas, the example's prompt goes to the agent as an Ask on this Canvas's line and runs at once,
+  // and the line opens beside the Canvas. What the agent draws lands on the Canvas as it does for any Ask.
+  async function runExampleOnLine(scenario, session) {
+    session.status = "running";
+    exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), scenario.id));
+    try {
+      await projectLinesAskOnLine({ text:exampleText(scenario.prompt), title:exampleText(scenario.card?.title || EXAMPLES.FIRST.find(card => card.id === scenario.id)?.title || scenario.title) });
+      setStatus(exampleCopy(`Sent to ${exampleCanvases.agent?.name || "the agent"}. Its result lands on this Canvas.`, `已交给 ${exampleCanvases.agent?.name || "Agent"}，结果会出现在这张画布上。`));
+      watchExampleResult(session, EXAMPLE_AGENT_TIMEOUT_MS);
+    } catch (error) {
+      // The Ask could not go: the saved result shows instead, so the example still ends in something.
+      setStatus(String(error?.message || error));
+      const saved = EXAMPLES.savedResult(scenario.id);
+      if (saved) await showExampleSavedResult(scenario, session, saved);
+    }
+  }
+
+  // ---------- Saved results ----------
+  // With no model and no agent, each of the eight that needs one still ends in a result: the one saved with PenEcho,
+  // put beside the example's ink at once, and a bar under it saying so and how to make your own.
+  async function showExampleSavedResult(scenario, session, address) {
+    const response = await fetch(address, { cache:"force-cache" });
+    if (!response.ok) throw Error(exampleCopy("The example's saved result could not be loaded.", "示例的保存结果加载失败。"));
+    const assertCurrent = () => assertExampleDocument(session.documentId);
+    let widget = null;
+    if (address.endsWith(".json")) {
+      // A note card, as Organize as Note makes one.
+      const NOTE = noteCardRuntime(), source = await response.json(), words = source[state.language === "zh" ? "zh" : "en"] || source.en;
+      assertCurrent();
+      const note = NOTE.normalize({ ...words, created:Date.now(), updated:Date.now(), source:{ kind:"example" } }, { categories:noteCategories(), language:state.language });
+      const h = Math.round(Math.max(480, Math.min(2400, session.box.h))), gap = Math.round(Math.max(40, session.box.h * 0.08));
+      const box = { x:Math.round(session.box.x + session.box.w + gap), y:Math.round(session.box.y + session.box.h / 2 - h / 2), w:Math.round(h * NOTE.CONTENT.w / NOTE.CONTENT.h), h };
+      // The guest preview lives in the browser draft. The note library requires an account.
+      widget = canvasGuest() ? await insertAssistWidget({ ...box, title:note.title, html:noteCardDocument(note) }, { place:"exact", assertCurrent }) : await noteCardInsert(note, box);
+    } else {
+      // A Widget page, in the Canvas's language.
+      const html = (await response.text()).replace(/<html lang="en"/, `<html lang="${state.language === "zh" ? "zh" : "en"}"`);
+      assertCurrent();
+      widget = await insertAssistWidget({ ...exampleSavedPlace(session.box), title:exampleText(scenario.card?.title || scenario.title), html }, { place:"exact", assertCurrent });
+    }
+    assertCurrent();
+    if (!widget) throw Error(exampleCopy("The example could not be added. Try opening it again.", "未能添加示例。请重新打开。"));
+    session.status = "done";
+    // The example's input has its answer: Suggest does not offer to make it again.
+    hideAssist("example-saved");
+    consumeDirtyInputScope({ x:session.box.x - 24, y:session.box.y - 24, w:session.box.w + 48, h:session.box.h + 48 });
+    smartSuggestInputConsumed(smartSuggest.strokes.at(-1)?.id || 0);
+    // The ink and its result are framed together, with room under them for the bar.
+    session.framed = true;
+    if (widget) frameExampleResult(session.box, widgetBox(widget));
+    session.savedWidget = widget?.id || "";
+    exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), scenario.id));
+    // Results are live: in Hand, the model turns and the buttons press.
+    if (exampleSessionCurrent() === session && state.mode !== "hand") setCanvasMode("hand", { preserveSelection:true, skipDraftFinalize:true, preserveWidgetRefinement:true });
+    showExampleSaved(session);
+  }
+  // To the right of the ink, about as tall as it, so the two read side by side.
+  function exampleSavedPlace(box) {
+    const h = Math.round(Math.max(480, Math.min(2400, Math.max(box.h * 1.2, box.w * 0.8)))), gap = Math.round(Math.max(40, box.h * 0.15));
+    return { x:Math.round(box.x + box.w + gap), y:Math.round(box.y + box.h / 2 - h / 2), w:Math.round(h * 1.3), h };
+  }
+  function frameExampleResult(ink, result) {
+    invalidateCanvasViewportMetrics();
+    const { width, height } = canvasViewportMetrics();
+    if (!width || !height || !result) return;
+    const x0 = Math.min(ink.x, result.x), y0 = Math.min(ink.y, result.y), x1 = Math.max(ink.x + ink.w, result.x + result.w), y1 = Math.max(ink.y + ink.h, result.y + result.h);
+    const side = width < 700 ? 16 : 48, top = 24, bottom = Math.min(height / 3, width < 700 ? 230 : 180), before = { panX:state.panX, panY:state.panY, scale:state.scale };
+    state.scale = Math.max(.05, Math.min(2, (width - side * 2) / Math.max(1, x1 - x0), (height - top - bottom) / Math.max(1, y1 - y0)));
+    state.panX = (width - (x1 - x0) * state.scale) / 2 - x0 * state.scale;
+    state.panY = top + (height - top - bottom - (y1 - y0) * state.scale) / 2 - y0 * state.scale;
+    requestCanvasNavigationPreview(before.panX, before.panY, before.scale);
+    requestCoordinatesUpdate();
+    requestRender();
+  }
+  function renderExampleSaved() {
+    if (!exampleSaved) return;
+    exampleSavedTitle.textContent = exampleCopy("This is the example's saved result.", "这是示例保存好的结果。");
+    exampleSavedBody.textContent = canvasGuest() ? exampleCopy("You can draw or write beside it.", "你可以在旁边继续书写或绘画。") : exampleCopy("To make your own from a sketch:", "要用自己的草图做一个：");
+    exampleSavedActions.innerHTML = canvasGuest() ? "" : window.PenEchoProjects?.toAskAIHTML?.(state.language === "zh" ? "zh" : "en") || "";
+    exampleSavedClose.setAttribute("aria-label", exampleCopy("Close", "关闭"));
+    exampleSavedClose.title = exampleCopy("Close", "关闭");
+  }
+  // Under the result while it is in view; at the bottom of the Canvas when it is not. Looked at a few times a second, never every frame.
+  function placeExampleSaved() {
+    const id = exampleSaved?.dataset.widgetId, widget = id && state.widgets.find(item => item.id === id), viewportElement = document.querySelector("#viewport");
+    const frame = viewportElement && pageLayoutRect(viewportElement), card = pageLayoutRect(exampleSaved), style = runtimeElementStyle(exampleSaved, "example-saved");
+    if (!frame || !card || !style) return;
+    const at = widget ? exampleInkScreenRect(widgetBox(widget)) : null;
+    const under = at && at.bottom + card.height + 16 < frame.bottom && at.right > frame.left && at.left < frame.right && at.bottom > frame.top;
+    const left = under ? Math.max(frame.left + 12, Math.min(at.left, frame.right - card.width - 12)) : frame.left + (frame.width - card.width) / 2;
+    style.setProperty("left", `${Math.round(left)}px`);
+    style.setProperty("top", `${Math.round(under ? at.bottom + 10 : frame.bottom - card.height - 84)}px`);
+  }
+  function showExampleSaved(session) {
+    if (!exampleSaved) return;
+    renderExampleSaved();
+    exampleSaved.dataset.documentId = session.documentId;
+    exampleSaved.dataset.widgetId = session.savedWidget || "";
+    exampleSaved.hidden = false;
+    placeExampleSaved();
+    clearInterval(exampleCanvases.savedTimer);
+    exampleCanvases.savedTimer = setInterval(() => {
+      if (exampleSaved.hidden || canvasDocumentsCurrent()?.id !== exampleSaved.dataset.documentId) hideExampleSaved();
+      else placeExampleSaved();
+    }, 250);
+  }
+  function hideExampleSaved() {
+    clearInterval(exampleCanvases.savedTimer);
+    exampleCanvases.savedTimer = 0;
+    if (exampleSaved) exampleSaved.hidden = true;
   }
 
   function showExampleDone(scenario) {
@@ -505,6 +668,15 @@
     exampleDone.dataset.nextId = next?.id || "";
     exampleDoneTitle.textContent = tried >= total ? exampleCopy(`You tried all ${total} examples`, `${total} 个示例都体验过了`) : `${exampleCopy(`You tried “${exampleText(scenario.title)}”`, `已体验“${exampleText(scenario.title)}”`)} · ${exampleProgressText()}`;
     exampleDoneBody.textContent = [exampleText(scenario.learned), exampleText(scenario.tip)].filter(Boolean).join(" ");
+    if (canvasGuest()) {
+      if (scenario.route === "instant") exampleDoneBody.textContent = exampleText(EXAMPLES.FIRST.find(card => card.id === scenario.id)?.description);
+      else {
+        exampleDoneTitle.textContent = exampleText(scenario.title);
+        exampleDoneBody.textContent = canvasGuestAiRestricted()
+          ? exampleCopy("This starter is yours to edit. Draw or write beside it.", "你可以编辑这个示例，也可以在旁边书写或绘画。")
+          : exampleCopy("This starter is yours to edit. Select part of it and choose Run AI to ask a question.", "你可以编辑这个示例。选中一部分，点击「运行 AI」即可提问。");
+      }
+    }
     exampleDoneNext.hidden = !next;
     exampleDoneNext.textContent = next ? `${exampleCopy("Next", "下一个")}: ${exampleText(next.title)}` : "";
     exampleDoneOwn.textContent = exampleCopy("Start my own canvas", "新建我的画布");
@@ -533,7 +705,7 @@
     const needsModel = !exampleModelReady(scenario) && !scenario.graph && !scenario.architecture;
     exampleCoachBody.textContent = needsModel
       ? exampleCopy("This example needs an AI model to produce the real result, and none is connected yet. Set one up, then try it.", "此示例需要 AI 模型才能生成真实结果，目前尚未连接。请先设置，再来体验。")
-      : suggestOff ? exampleCopy("Suggestions are turned off. Turn them on in Settings, or tap the AI button to try this example.", "建议已关闭。请在设置中开启，或点击 AI 按钮体验此示例。") : exampleText(scenario.coach);
+      : suggestOff ? exampleCopy("Suggestions are turned off. Turn them on in Settings, or choose Run AI to try this example.", "建议已关闭。请在设置中开启，或点击「运行 AI」体验此示例。") : exampleText(scenario.coach);
     exampleCoachSetup.hidden = !needsModel;
     exampleCoachSetup.textContent = exampleCopy("Set up AI", "设置 AI");
     exampleCoachTip.textContent = exampleText(scenario.tip);
@@ -549,17 +721,15 @@
     return { left, top, right:left + width, bottom:top + height, width, height };
   }
   function exampleCoachTarget(session, scenario) {
-    if (scenario.route === "agent") {
-      const send = document.querySelector("#canvasAgentSend");
-      return send && !canvasAgentPanel.hidden ? { rect:pageLayoutRect(send), placement:"top" } : null;
-    }
-    const chip = document.querySelector(`#smartSuggestLayer:not([hidden]) .assist-bar[data-mode="suggest"] [data-suggestion="${scenario.action}"]`);
+    // An example that was made for the Agent's box has nothing on the page to point at.
+    if (scenario.route === "agent") return null;
+    const chip = document.querySelector(`:is(#smartSuggestLayer:not([hidden]), #aiToolsSection) > .assist-bar[data-mode="suggest"] [data-suggestion="${scenario.action}"]`);
     if (chip?.getClientRects().length) return { rect:pageLayoutRect(chip), placement:"bottom" };
     return smartSuggestActive() ? null : { rect:exampleInkScreenRect(session.box), placement:"bottom" };
   }
   function positionExampleCoach() {
     const session = exampleSessionCurrent(), scenario = session && EXAMPLES.get(session.id);
-    if (!scenario || session.status !== "waiting" || exampleCanvases.coachHidden || state.viewMode || featureTour.active || examplesDialog?.open) { if (exampleCoach) exampleCoach.hidden = true; return; }
+    if (!scenario || session.status !== "waiting" || exampleCanvases.coachHidden || state.viewMode || examplesDialog?.open) { if (exampleCoach) exampleCoach.hidden = true; return; }
     const target = exampleCoachTarget(session, scenario);
     if (!target?.rect || !TOUR.rectHasArea(target.rect)) { exampleCoach.hidden = true; return; }
     const wasHidden = exampleCoach.hidden;
@@ -568,7 +738,7 @@
     if (wasHidden || exampleCanvases.coachReady !== ready) { exampleCanvases.coachReady = ready; renderExampleCoach(); }
     exampleCoach.hidden = false;
     const card = pageLayoutRect(exampleCoach),
-      position = TOUR.placeCoachmark(target.rect, { width:card.width, height:card.height }, featureTourViewport(), target.placement, { margin:12, gap:14, arrowMargin:22 }),
+      position = TOUR.placeCoachmark(target.rect, { width:card.width, height:card.height }, canvasOverlayViewport(), target.placement, { margin:12, gap:14, arrowMargin:22 }),
       style = runtimeElementStyle(exampleCoach, "example-coach");
     style?.setProperty("left", `${Math.round(position.x)}px`);
     style?.setProperty("top", `${Math.round(position.y)}px`);
@@ -618,12 +788,20 @@
     exampleDoneNext?.addEventListener("click", () => { const next = exampleDone.dataset.nextId; if (next) void openExampleCanvas(next); });
     exampleDoneOwn?.addEventListener("click", () => { hideExampleDone(); endExampleSession(); canvasDocumentsUiAction(openNewCanvasDialog); });
     exampleDoneClose?.addEventListener("click", hideExampleDone);
-    document.querySelector("#canvasAgentForm")?.addEventListener("submit", exampleAgentSubmitted, true);
+    exampleSavedClose?.addEventListener("click", hideExampleSaved);
+    exampleSaved?.addEventListener("pointerdown", event => event.stopPropagation());
+    // Set up an agent is a page of its own: a project's Canvas is saved before it goes.
+    exampleSaved?.addEventListener("click", event => {
+      const setup = event.target.closest?.("[data-pls-setup]");
+      if (!setup || typeof projectLinesLeave !== "function" || !exampleOnLine()) return;
+      event.preventDefault();
+      projectLinesLeave("/projects.html#setup").catch(error => setStatus(String(error?.message || error)));
+    });
     window.addEventListener("penecho:languagechange", renderExamples);
     renderExamples();
   }
   window.PenEchoExamples = Object.freeze({
-    open:id => openExampleCanvas(id),
+    open:(id, options) => openExampleCanvas(id, options),
     openDialog:openExamplesDialog,
     progress:() => ({ ...exampleProgress() }),
   });

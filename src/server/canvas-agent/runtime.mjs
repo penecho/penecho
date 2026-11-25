@@ -1,28 +1,18 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { spawn, spawnSync } from 'node:child_process'
-import { createReadStream, accessSync, constants as fsConstants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { createReadStream, constants as fsConstants, existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, open, opendir, readFile, realpath, rm, stat as statFile, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { tmpdir } from 'node:os'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
+import { updateVolatile } from '@deepseek-ai/cosmokit'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
-import LlmRuntime, { createUserMessage, isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
-import AgentRegistry, { installModelSelection } from '@deepseek-ai/dsh-agent'
-import AgentLoop from './vendor/dsh-agent-loop.mjs'
-import TokenMeter from '@deepseek-ai/dsh-token-meter'
-import ToolResultPruner from '@deepseek-ai/dsh-compaction-tool-result-pruner'
-import BasicCompaction from '@deepseek-ai/dsh-compaction-basic'
-import * as llmRetry from '@deepseek-ai/dsh-llm-retry'
-import * as toolTimeoutPolicy from '@deepseek-ai/dsh-tool-call-timeout-policy'
-import SettingsProvider, { settingsNamespace } from '@deepseek-ai/dsh-settings'
-import CredentialProvider from '@deepseek-ai/dsh-credentials'
-import * as PiAi from './vendor/dsh-llm-pi-ai.mjs'
+import { createUserMessage, isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import { defineTool } from '@deepseek-ai/dsh-tools'
+import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import { FsError } from '@deepseek-ai/dsh-fs'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
@@ -34,28 +24,37 @@ import {
   admitCanvasAgentDecisionStream,
   canvasDecisionFeedbackResult,
 } from './decision-admission.mjs'
-import PenEchoAttachmentStore, { canonicalCanvasCaptureImage } from './image-attachments.mjs'
+import PenEchoAttachmentStore, { canonicalCanvasCaptureImage, PENECHO_ATTACHMENT_NORMALIZATION } from './image-attachments.mjs'
 import { BackgroundMaintenance } from './background-maintenance.mjs'
-import { DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS, canvasAgentTimeoutLimits } from './model-timeout.mjs'
+import { DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS } from './model-timeout.mjs'
 import { projectReadPositiveInteger, projectReadWindow, projectReadWindowAppend, projectReadWindowText, projectReadStringWindow, readPdfDocument, readWordDocument, readSpreadsheetDocument, readPptxDocument } from './document-readers.mjs'
 import { assertCanvasAgentModelBackend, canvasAgentPrincipalKey } from './model-backend.mjs'
 import { createDocumentTools, DOCUMENT_TOOL_INSTRUCTIONS } from './document-tools.mjs'
+import { boundedText, hash, textOutput } from '../agent-core/text.mjs'
+import { killProjectProcess, redactRuntimePath } from '../agent-core/shell.mjs'
+import { HARNESS_RUNTIME_PLUGIN_ALLOWLIST, PenEchoCredentials, mountAgentLoop, mountLoopServices, mountPiAi, mountRuntimePlugin, validatePiProviders } from '../agent-core/loop.mjs'
+import {
+  CANVAS_AGENT_CONTEXT_WINDOW,
+  CANVAS_AGENT_COMPACTION_THRESHOLD_RATIO,
+  CANVAS_AGENT_REQUEST_IMAGE_MAX_PIXELS,
+  CANVAS_AGENT_HARNESS_REASONING_EFFORTS,
+  connectionProfile,
+  harnessRequestReasoningEffort,
+  resolveCanvasAgentRequestEffort,
+} from '../agent-core/connection-profile.mjs'
 
 const require = createRequire(import.meta.url)
 const additionalApiPresets = require('../../providers/api-presets.js')
-const { presetRequestHeaders } = require('../../providers/preset-discovery.js')
 const { commandFromWidgetPatch } = require('../widget-patch.js')
 let packagedRipgrepPath = ''
 const PLUGIN_FORMAT = require('../../../public/plugins.js')
-const { DEFAULT_REASONING_EFFORT, reasoningEffortMapping, isGlm53Model, modelSupportsReasoningEffort } = require('../../providers/reasoning-effort.js')
+const { DEFAULT_REASONING_EFFORT, reasoningEffortMapping } = require('../../providers/reasoning-effort.js')
 const { projectFileReader, validateProjectFileContent } = require('./project-store.js')
 const { fetchPublicResource } = require('../public-fetch.js')
 const turnLimit = require('./turn-limit.js')
 
-const SETTINGS_NS = settingsNamespace('llm-pi-ai')
 const SESSION_TTL_MS = 30_000
 const TOOL_TIMEOUT_MS = 45_000
-const MAX_TOOL_RESULT_CHARS = 400_000
 const CANVAS_AGENT_CAPTURE_LIMITS = Object.freeze({
   basic:Object.freeze({ maxLongEdge:1024, maxPixels:520_000, maxBytes:700 * 1024 }),
   detail:Object.freeze({ maxLongEdge:1440, maxPixels:1_800_000, maxBytes:1200 * 1024 }),
@@ -65,9 +64,7 @@ const MAX_CAPTURE_DELIVERY_EVENTS = 4
 const MAX_SESSION_ATTACHMENT_BYTES = 100 * 1024 * 1024
 const MAX_SESSION_ATTACHMENTS = 100
 export const CANVAS_AGENT_MAX_TURN_ATTACHMENTS = 5
-export const CANVAS_AGENT_CONTEXT_WINDOW = 160_000
-export const CANVAS_AGENT_COMPACTION_THRESHOLD_RATIO = 100_000 / CANVAS_AGENT_CONTEXT_WINDOW
-export const CANVAS_AGENT_REQUEST_IMAGE_MAX_PIXELS = 2048 * 2048
+export { CANVAS_AGENT_CONTEXT_WINDOW, CANVAS_AGENT_COMPACTION_THRESHOLD_RATIO, CANVAS_AGENT_REQUEST_IMAGE_MAX_PIXELS }
 const MAX_BACKLOG = 500
 const MAX_CONVERSATION_LOG_CHARS = 100_000
 const MAX_CONVERSATION_LOG_STRING_CHARS = 50_000
@@ -94,8 +91,8 @@ const MAX_WEB_SEARCH_RESULTS = 10
 const MAX_WEB_READ_RESULT_CHARS = 50_000
 const WEB_READ_TIMEOUT_MS = 12_000
 const MAX_CANVAS_AGENT_PRIVATE_PLUGINS = 12
-const MAX_CANVAS_AGENT_PRIVATE_PLUGIN_BYTES = 12_000
-const MAX_CANVAS_AGENT_PRIVATE_PLUGIN_TOTAL_BYTES = 48 * 1024
+const MAX_CANVAS_AGENT_PRIVATE_PLUGIN_BYTES = 100_000
+const MAX_CANVAS_AGENT_PRIVATE_PLUGIN_TOTAL_BYTES = 400 * 1024
 const CANVAS_AGENT_VISUAL_SKILL_IDS = Object.freeze(['math-2d', 'physics-2d', 'math-3d'])
 const CANVAS_AGENT_VISUAL_SKILL_ID_SET = new Set(CANVAS_AGENT_VISUAL_SKILL_IDS)
 const MANIM_WEB_BROWSER_URL = 'https://cdn.jsdelivr.net/npm/manim-web@0.3.24/dist/manim-web.browser.js'
@@ -114,7 +111,6 @@ const CONVERSATION_LOG_SECRET_KEY = /^(?:authorization|proxy-authorization|api[-
 const PROJECT_ACCESS_MODES = new Set(['controlled', 'full'])
 const PROJECT_DOCUMENT_EXTENSIONS = new Set(['.pdf', '.docx', '.xlsx', '.csv', '.pptx'])
 const PROJECT_IMAGE_MEDIA_TYPES = new Map([['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.webp', 'image/webp'], ['.gif', 'image/gif']])
-const PROJECT_BASH_COMMAND_LIMIT = 20_000
 const PROJECT_DOCUMENT_INPUT_LIMIT = 64 * 1024 * 1024
 const PROJECT_READ_MAX_LINES = 2_000
 const PROJECT_READ_MAX_LINE_LENGTH = 2_000
@@ -130,41 +126,13 @@ const PROJECT_SEARCH_RESULT_LIMIT = 50_000
 const PROJECT_SEARCH_EXCLUDED_DIRECTORIES = Object.freeze(['.git', '.svn', '.hg', '.bzr', '.jj', '.sl', '.penecho'])
 const ACTIVE_PROJECT_ROOTS = new Map()
 
-// Keep this list deliberately small. Harness packages may install peer seams for
-// composition, but only these plugins are allowed to run inside PenEcho.
-export const HARNESS_RUNTIME_PLUGIN_ALLOWLIST = Object.freeze([
-  'timer',
-  'penecho-settings',
-  'penecho-credentials',
-  'attachment-local',
-  'llm',
-  'session',
-  'system-prompt',
-  'tools',
-  'agent',
-  'llm-retry',
-  'tool-call-timeout-policy',
-  'token-meter',
-  'tool-result-pruner',
-  'compaction-basic',
-  'llm-pi-ai',
-  'penecho-cli-llm',
-  'project-fs',
-  'fs-observation-policy',
-  'agent-loop',
-])
-const HARNESS_RUNTIME_PLUGIN_IDS = new Set(HARNESS_RUNTIME_PLUGIN_ALLOWLIST)
+export { HARNESS_RUNTIME_PLUGIN_ALLOWLIST }
 const CANVAS_TITLE_OPEN = '<penecho_canvas_title>'
 const CANVAS_TITLE_CLOSE = '</penecho_canvas_title>'
 const CANVAS_TITLE_OPEN_VARIANTS = Object.freeze([CANVAS_TITLE_OPEN, '<phenecho_canvas_title>'])
 const CANVAS_TITLE_CLOSE_VARIANTS = Object.freeze([CANVAS_TITLE_CLOSE, '</phenecho_canvas_title>'])
 const CANVAS_TITLE_ENVELOPE_LIMIT = 160
 const CANVAS_TITLE_REQUEST_CONTEXT = `This Canvas has no saved title. Without a tool call, separate task, or extra model request, summarize the conversation's subject, grounded primarily in its initial user request, as a concise title in the user's language (2-8 words or 4-16 Chinese characters, maximum 48 characters). At the very beginning of the final assistant text only, emit exactly one line: <penecho_canvas_title>title</penecho_canvas_title>. Then continue the normal answer immediately. The host hides this line and applies it only after the turn completes. If no reliable title is available, omit the line; never delay, retry, or fail the answer for the title.`
-
-async function mountRuntimePlugin(ctx, id, plugin, config) {
-  if (!HARNESS_RUNTIME_PLUGIN_IDS.has(id)) throw new Error(`PenEcho Agent refused non-allowlisted Harness plugin: ${id}`)
-  return config === undefined ? ctx.plugin(plugin) : ctx.plugin(plugin, config)
-}
 
 export const PERSONA = `You are PenEcho Agent inside a visual canvas.
 Introduce yourself as PenEcho Agent without volunteering a model or provider name. Harness and transport names do not identify the underlying model. If asked about the model, use only explicit current runtime model metadata; otherwise say the exact model is unavailable.
@@ -361,10 +329,6 @@ export function loadCanvasAgentPublicApi(host) {
   return host.publicApiDiscovery
 }
 
-function hash(value) {
-  return createHash('sha256').update(String(value)).digest('hex')
-}
-
 export function isCanvasAgentHandwritingImageName(value) {
   return /^canvas-agent-message\.(?:webp|png)$/.test(String(value || ''))
 }
@@ -386,10 +350,7 @@ export function canvasAgentHandwritingAdmissionDiagnostic(image, attachment) {
   }
 }
 
-export function boundedText(value, limit = MAX_TOOL_RESULT_CHARS) {
-  const text = String(value ?? '')
-  return text.length > limit ? `${text.slice(0, limit)}\n…[truncated]` : text
-}
+export { boundedText }
 
 // Browser RPC errors must remain structured for shared bound-operation recovery.
 export function canvasBrowserToolError(value) {
@@ -619,240 +580,6 @@ export async function clearCanvasAgentTurnFiles(session) {
   await discardCanvasAgentTurnFiles(current)
 }
 
-function assertProjectCommand(command) {
-  const source = String(command || '')
-  if (!source.trim()) throw new Error('bash requires a non-empty command.')
-  if (source.length > PROJECT_BASH_COMMAND_LIMIT || source.includes('\0')) throw new Error('The bash command is invalid or too large.')
-  if (/(?:^|[\s"'`=:(])~(?:[\/\s"'`]|$)|\$(?:\{HOME\}|HOME)(?:[\/\s"'`]|$)/.test(source)) {
-    throw new Error('Home-directory paths are outside the selected project.')
-  }
-  if (/(?:^|[\/\s"'`])\.\.(?:[\/\s"'`]|$)/.test(source)) throw new Error('Parent-directory traversal is outside the selected project.')
-}
-
-function criticalProjectCommand(command) {
-  const checks = [
-    [/\b(?:rm|rmdir)\b/, 'This command removes project files.'],
-    [/\bgit\s+(?:reset|clean|checkout|restore|switch|commit|push|rebase|merge)\b/, 'This command can materially change Git history or project files.'],
-    [/\b(?:npm|pnpm|yarn|bun)\s+(?:install|uninstall|remove|add|update|upgrade|publish|link)\b/, 'This command changes project dependencies or publishes a package.'],
-    [/\b(?:pip|pip3|uv|poetry|cargo|go)\s+(?:install|uninstall|remove|add|update|publish|get)\b/, 'This command changes dependencies or installs software.'],
-    [/\b(?:chmod|chown|kill|pkill|killall|sudo|dd|mkfs|mount|umount)\b/, 'This command changes permissions, processes, or system-level state.'],
-    [/\b(?:docker|podman)\b/, 'This command controls containers.'],
-    [/(?:curl|wget)[^\n|;]*(?:\||;|&&)\s*(?:sh|bash|zsh)\b/, 'This command downloads and executes code.'],
-  ]
-  const highRisk = checks.find(([pattern]) => pattern.test(command))?.[1]
-  if (highRisk) return highRisk
-  const source = String(command || '').trim()
-  if (/[\r\n;&|<>`$(){}]/.test(source)) return 'This Bash command uses shell composition or expansion and is not provably read-only.'
-  // A command name is not a capability grammar: seemingly read-only programs
-  // such as file(1) and tree(1) also have output modes. Keep the no-prompt set
-  // intentionally closed and tiny; all richer Bash remains available after a
-  // controlled-mode approval.
-  if (/^pwd(?:\s+-(?:L|P))?$/.test(source)) return ''
-  if (/^ls(?:\s+-[ACFHLRSUacdfghiklmnopqrstuvwx1]+)?(?:\s+\.)?$/.test(source)) return ''
-  if (/^cat(?:\s+(?:--\s+)?[A-Za-z0-9._\/-]+)+$/.test(source)) return ''
-  return 'This Bash command is outside PenEcho’s closed no-write command grammar.'
-}
-
-function redactRuntimePath(text, session) {
-  let output = String(text || '')
-  for (const [privatePath, label] of [[session?.projectRuntimeDirectory, '<project-runtime>'], [session?.project?.path, '.']]) {
-    if (privatePath) output = output.split(String(privatePath)).join(label)
-  }
-  return output
-}
-
-function projectBashText(result, session) {
-  let output = String(result.stdout?.text || '')
-  const stderr = String(result.stderr?.text || '')
-  if (stderr) output += `${output && !output.endsWith('\n') ? '\n' : ''}[stderr]\n${stderr}`
-  output = redactRuntimePath(output, session)
-  if (!output) output = '(no output)'
-  const markers = []
-  if (result.stdout?.truncated || result.stderr?.truncated) markers.push('[output truncated]')
-  if (result.sandbox?.denied) markers.push('[project sandbox denied file access]')
-  if (result.timedOut) markers.push(`[timed out after ${result.timeoutMs}ms]`)
-  if (result.signal) markers.push(`[killed by signal: ${result.signal}]`)
-  else if (result.exitCode !== 0) markers.push(`[exit code: ${result.exitCode}]`)
-  return boundedText(`${output}${markers.length ? `${output.endsWith('\n') ? '' : '\n'}${markers.join('\n')}` : ''}`, 100_000)
-}
-
-function executableAt(paths) {
-  for (const candidate of paths) {
-    try { accessSync(candidate, fsConstants.X_OK); return candidate } catch {}
-  }
-  return ''
-}
-
-let cachedProjectShellSupport
-
-function shellLiteral(value) {
-  return `'${String(value).replaceAll("'", `'"'"'`)}'`
-}
-
-function probeProjectShellSupport(support) {
-  const base = mkdtempSync(join(tmpdir(), 'penecho-bash-probe-'))
-  try {
-    const projectRoot = join(base, 'project'), runtimeRoot = join(base, 'runtime'), outsideRoot = join(base, 'outside')
-    mkdirSync(projectRoot, { mode:0o700 }); mkdirSync(runtimeRoot, { mode:0o700 }); mkdirSync(outsideRoot, { mode:0o700 })
-    writeFileSync(join(projectRoot, 'inside.txt'), 'inside', { mode:0o600 })
-    writeFileSync(join(outsideRoot, 'secret.txt'), 'outside-secret', { mode:0o600 })
-    const command = [
-      'set -eu',
-      'test "$(cat inside.txt)" = inside',
-      'printf written > probe-written.txt',
-      `if cat ${shellLiteral(join(outsideRoot, 'secret.txt'))} >/dev/null 2>&1; then exit 91; fi`,
-      `if printf escaped > ${shellLiteral(join(outsideRoot, 'escaped.txt'))} 2>/dev/null; then exit 92; fi`,
-      "if printf x >/dev/udp/127.0.0.1/9 2>/dev/null; then exit 93; fi",
-    ].join('\n')
-    const argv = projectShellArgv(support, command, projectRoot, runtimeRoot), probe = spawnSync(argv[0], argv.slice(1), {
-      cwd:projectRoot,
-      env:{ PATH:process.platform === 'darwin' ? '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin' : '/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin', HOME:runtimeRoot, TMPDIR:runtimeRoot, LANG:'C.UTF-8', LC_ALL:'C.UTF-8' },
-      stdio:'ignore', timeout:3_000, windowsHide:true,
-    })
-    return probe.status === 0 && !probe.error
-      && readFileSync(join(projectRoot, 'probe-written.txt'), 'utf8') === 'written'
-      && readFileSync(join(outsideRoot, 'secret.txt'), 'utf8') === 'outside-secret'
-      && !existsSync(join(outsideRoot, 'escaped.txt'))
-  } catch { return false }
-  finally { rmSync(base, { recursive:true, force:true }) }
-}
-
-function projectShellSupport() {
-  if (cachedProjectShellSupport !== undefined) return cachedProjectShellSupport
-  const bash = executableAt(['/bin/bash', '/usr/bin/bash'])
-  if (!bash) return (cachedProjectShellSupport = null)
-  let support = null
-  if (process.platform === 'darwin') {
-    const runner = executableAt(['/usr/bin/sandbox-exec'])
-    support = runner ? { kind:'seatbelt', runner, bash } : null
-  } else if (process.platform === 'linux') {
-    const runner = executableAt(['/usr/bin/bwrap', '/bin/bwrap'])
-    support = runner ? { kind:'bwrap', runner, bash } : null
-  }
-  if (!support) return (cachedProjectShellSupport = null)
-  // Prove positive in-project read/write and negative outside read/write and
-  // networking before exposing Bash. Merely launching the runner is not a
-  // confinement capability probe.
-  return (cachedProjectShellSupport = probeProjectShellSupport(support) ? support : null)
-}
-
-function seatbeltString(value) {
-  return `"${String(value).replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`)}"`
-}
-
-function seatbeltProjectProfile(projectRoot, runtimeRoot) {
-  const readSubpaths = [projectRoot, runtimeRoot, '/System/Library', '/System/Cryptexes', '/usr/bin', '/usr/lib', '/usr/sbin', '/usr/share', '/bin', '/sbin', '/Library/Apple', '/Library/Frameworks', '/Library/Developer', '/Applications/Xcode.app', '/opt/homebrew/bin', '/opt/homebrew/lib', '/opt/homebrew/Cellar', '/opt/homebrew/opt', '/usr/local/bin', '/usr/local/lib', '/usr/local/Cellar', '/usr/local/opt']
-  const readLiterals = ['/dev/null', '/dev/zero', '/dev/random', '/dev/urandom']
-  const filters = readSubpaths.map(path => `(subpath ${seatbeltString(path)})`).join(' ')
-  const forms = [
-    '(version 1)', '(deny default)', '(import "system.sb")',
-    '(deny network*)', '(deny file-read*)', '(deny file-write*)', '(deny appleevent-send)',
-    '(deny signal (target others))', '(deny process-info* (target others))',
-    '(deny mach-lookup (global-name-prefix "com.apple.lsd") (global-name-prefix "com.apple.coreservices") (global-name-prefix "com.apple.launchservices"))',
-    '(allow process-fork)', '(allow signal (target self))', '(allow signal (target children))',
-    '(allow process-info* (target self))', '(allow process-info* (target children))',
-    `(allow process-exec ${filters})`, `(allow file-map-executable ${filters})`,
-  ]
-  forms.push(`(allow file-read* ${filters} ${readLiterals.map(path => `(literal ${seatbeltString(path)})`).join(' ')})`)
-  forms.push(`(allow file-write* (subpath ${seatbeltString(projectRoot)}) (subpath ${seatbeltString(runtimeRoot)}) (literal ${seatbeltString('/dev/null')}))`)
-  forms.push(`(deny file-read* file-write* (subpath ${seatbeltString(join(projectRoot, '.penecho'))}))`)
-  return forms.join(' ')
-}
-
-function bwrapSystemPathArgs() {
-  const args = ['--dir', '/usr', '--dir', '/usr/local']
-  for (const path of ['/usr/bin', '/usr/lib', '/usr/lib64', '/usr/sbin', '/usr/share', '/usr/local/bin', '/usr/local/lib', '/usr/local/share']) if (existsSync(path)) args.push('--ro-bind', path, path)
-  for (const path of ['/bin', '/sbin', '/lib', '/lib64']) {
-    if (!existsSync(path)) continue
-    const info = lstatSync(path)
-    if (info.isSymbolicLink()) args.push('--symlink', readlinkSync(path), path)
-    else if (info.isDirectory()) args.push('--ro-bind', path, path)
-  }
-  args.push('--dir', '/etc')
-  for (const path of ['/etc/ssl', '/etc/pki']) if (existsSync(path)) args.push('--ro-bind', path, path)
-  for (const path of ['/etc/ld.so.cache']) if (existsSync(path)) args.push('--ro-bind', path, path)
-  return args
-}
-
-function projectShellArgv(support, command, projectRoot, runtimeRoot) {
-  if (support.kind === 'seatbelt') return [support.runner, '-p', seatbeltProjectProfile(projectRoot, runtimeRoot), '--', support.bash, '--noprofile', '--norc', '-c', command]
-  return [
-    support.runner, '--die-with-parent', '--new-session', '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts', '--cap-drop', 'ALL', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
-    ...bwrapSystemPathArgs(), '--dir', '/project', '--dir', '/runtime', '--bind', projectRoot, '/project', '--bind', runtimeRoot, '/runtime', '--tmpfs', '/project/.penecho',
-    '--chdir', '/project', '--', support.bash, '--noprofile', '--norc', '-c', command,
-  ]
-}
-
-function killProjectProcess(child) {
-  if (!child?.pid) return
-  try { process.kill(-child.pid, 'SIGKILL') } catch { try { child.kill('SIGKILL') } catch {} }
-}
-
-function runProjectShell(argv, { cwd, env, timeoutMs, signal }) {
-  return new Promise((resolveRun, rejectRun) => {
-    signal?.throwIfAborted()
-    const child = spawn(argv[0], argv.slice(1), { cwd, env, detached:true, stdio:['ignore', 'pipe', 'pipe'] })
-    let stdout = '', stderr = '', stdoutBytes = 0, stderrBytes = 0, stdoutTruncated = false, stderrTruncated = false, timedOut = false, aborted = false
-    const append = (chunk, stream) => {
-      const text = Buffer.from(chunk).toString('utf8'), bytes = Buffer.byteLength(text), current = stream === 'stdout' ? stdoutBytes : stderrBytes, remaining = Math.max(0, 100_000 - current)
-      if (stream === 'stdout') { stdout += text.slice(0, remaining); stdoutBytes += bytes; if (bytes > remaining) stdoutTruncated = true }
-      else { stderr += text.slice(0, remaining); stderrBytes += bytes; if (bytes > remaining) stderrTruncated = true }
-    }
-    child.stdout.on('data', chunk => append(chunk, 'stdout'))
-    child.stderr.on('data', chunk => append(chunk, 'stderr'))
-    child.once('error', error => rejectRun(new Error(`The project bash sandbox is unavailable: ${error.message}`)))
-    const abort = () => { aborted = true; killProjectProcess(child) }
-    signal?.addEventListener('abort', abort, { once:true })
-    const timer = setTimeout(() => { timedOut = true; killProjectProcess(child) }, timeoutMs)
-    timer.unref?.()
-    child.once('close', (exitCode, signalName) => {
-      clearTimeout(timer)
-      signal?.removeEventListener('abort', abort)
-      // A foreground shell can detach background children. Always terminate
-      // the dedicated process group after the requested command settles.
-      killProjectProcess(child)
-      if (aborted) return rejectRun(signal?.reason instanceof Error ? signal.reason : new Error('The project command was cancelled.'))
-      const denied = exitCode !== 0 && /operation not permitted|permission denied|read-only file system/i.test(stderr)
-      resolveRun({ stdout:{ text:stdout, truncated:stdoutTruncated }, stderr:{ text:stderr, truncated:stderrTruncated }, exitCode, signal:signalName, timedOut, timeoutMs, sandbox:{ denied, enforcement:'full' } })
-    })
-  })
-}
-
-function projectBashTool(session) {
-  return defineTool({
-    name:'bash',
-    description:'Run one foreground Bash command in an OS sandbox that exposes the selected project read/write, a private ephemeral runtime, and only system executables required to run commands. Host user files outside the project are not mounted/readable.',
-    parameters:{
-      command:{ type:'string', required:true },
-      timeout_ms:{ type:'number', description:'Optional timeout in milliseconds, capped at 120000.' },
-    },
-    output:textOutput(),
-    async execute(args, exec) {
-      const command = String(args.command || '')
-      assertProjectCommand(command)
-      const approvalReason = criticalProjectCommand(command)
-      if (session.accessMode === 'controlled' && approvalReason) {
-        const decision = await session.rpc('project_approval', {
-          command:boundedText(command, 4_000),
-          reason:approvalReason,
-          projectName:session.project.name,
-        }, exec.callId, exec.signal)
-        if (decision?.allowed !== true) throw new Error('The user did not authorize this command.')
-      }
-      const support = projectShellSupport()
-      if (!support) throw new Error('A fully read/write-confined Bash runner is not available on this PenEcho host.')
-      const runtimeDirectory = session.projectRuntimeDirectory, home = join(runtimeDirectory, 'home'), temporary = join(runtimeDirectory, 'tmp')
-      await mkdir(home, { recursive:true, mode:0o700 })
-      await mkdir(temporary, { recursive:true, mode:0o700 })
-      const canonicalRuntime = await realpath(runtimeDirectory), timeoutMs = Math.max(1_000, Math.min(120_000, Number(args.timeout_ms) || 30_000))
-      const visibleRuntime = support.kind === 'bwrap' ? '/runtime' : canonicalRuntime
-      const env = { PATH:process.platform === 'darwin' ? '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin' : '/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin', HOME:join(visibleRuntime, 'home'), XDG_CONFIG_HOME:join(visibleRuntime, 'home', '.config'), XDG_CACHE_HOME:join(visibleRuntime, 'home', '.cache'), TMPDIR:join(visibleRuntime, 'tmp'), LANG:'C.UTF-8', LC_ALL:'C.UTF-8', TERM:'dumb', NO_COLOR:'1' }
-      assertActiveProjectRoot(session.project.path)
-      return projectBashText(await runProjectShell(projectShellArgv(support, command, session.project.path, canonicalRuntime), { cwd:session.project.path, env, timeoutMs, signal:exec.signal }), session)
-    },
-  })
-}
-
 async function exactSelectedFilePath(session, input) {
   if (session.project?.kind !== 'file') throw new Error('A single-file resource is not selected.')
   const requested = String(input || '').trim()
@@ -971,7 +698,17 @@ function projectTextReaderTool(session, agentCtx) {
     async execute(args, exec) {
       const snapshot = await snapshotProjectReaderFile(session, agentCtx, args.file_path, exec.signal)
       try {
-        if (projectFileReader(snapshot.name) !== 'text') throw new Error('read supports text, source, and configuration files. Load the document or database reader for other formats.')
+        const readerKind = projectFileReader(snapshot.name)
+        if (readerKind !== 'text') {
+          if (session.project.kind !== 'folder' || readerKind || extname(snapshot.name)) throw new Error('read supports text, source, and configuration files. Load the document or database reader for other formats.')
+          // Inspect the complete size-limited snapshot, not a replacement-decoded
+          // prefix: extensionless Git refs and other plain text need no plugin.
+          const bytes = await readFile(snapshot.path)
+          let text
+          try { text = new TextDecoder('utf-8', { fatal:true }).decode(bytes) }
+          catch { throw new Error('read requires valid UTF-8 text; this extensionless file contains invalid bytes.') }
+          if (/[\u0000-\u0008\u000b\u000e-\u001f\u007f-\u009f]/u.test(text)) throw new Error('read requires plain text; this extensionless file contains binary control bytes.')
+        }
         const window = projectReadWindow(args.offset, args.limit), input = createReadStream(snapshot.path, { encoding:'utf8' }), reader = createInterface({ input, crlfDelay:Infinity })
         let lineNumber = 0
         try {
@@ -1088,11 +825,12 @@ function runSqliteReader({ path, query, limit, cwd, signal }) {
     signal?.throwIfAborted()
     const child = spawn(process.execPath, ['--max-old-space-size=64', '--no-warnings', fileURLToPath(new URL('./sqlite-reader-process.mjs', import.meta.url))], {
       cwd,
-      detached:true,
+      detached:process.platform !== 'win32',
       windowsHide:true,
       stdio:['pipe', 'pipe', 'pipe'],
       env:{
         LANG:'C.UTF-8', LC_ALL:'C.UTF-8', NODE_NO_WARNINGS:'1',
+        ...(process.versions?.electron ? { ELECTRON_RUN_AS_NODE:'1' } : {}),
         ...(process.platform === 'win32' ? { SystemRoot:process.env.SystemRoot || 'C:\\Windows', WINDIR:process.env.WINDIR || process.env.SystemRoot || 'C:\\Windows', TEMP:cwd, TMP:cwd } : {}),
       },
     })
@@ -1230,12 +968,13 @@ function projectPluginLoaderTool(session, agentCtx) {
   })
 }
 
-function projectRipgrepExecutable() {
+async function projectRipgrepExecutable() {
+  packagedRipgrepPath ||= (await import('@vscode/ripgrep')).rgPath
   const asarMarker = `${sep}app.asar${sep}`
   const unpacked = packagedRipgrepPath.includes(asarMarker)
     ? packagedRipgrepPath.replace(asarMarker, `${sep}app.asar.unpacked${sep}`)
     : packagedRipgrepPath
-  if (!existsSync(unpacked)) throw new Error('The packaged project search engine is unavailable.')
+  if (!existsSync(unpacked)) throw Object.assign(new Error('The packaged project search engine is unavailable.'), { code:'PROJECT_SEARCH_ENGINE_MISSING' })
   return unpacked
 }
 
@@ -1264,21 +1003,31 @@ function projectSearchFailure(toolName, exitCode, stderr, session) {
   return new Error(`${toolName} search failed (exit ${exitCode})${detail ? `: ${detail}` : '.'}`)
 }
 
-function runProjectRipgrep(session, toolName, argv, signal) {
+function projectSearchStartFailure(toolName, error) {
+  // Preserve actionable error codes without exposing absolute host paths.
+  const code = /^[A-Z][A-Z0-9_]*$/.test(String(error?.code || '')) ? String(error.code) : ''
+  return new Error(`The packaged ${toolName} search engine could not start${code ? ` (${code})` : ''}.`)
+}
+
+async function runProjectRipgrep(session, toolName, argv, signal) {
+  signal?.throwIfAborted()
+  let executable
+  try { executable = await projectRipgrepExecutable() }
+  catch (error) { throw projectSearchStartFailure(toolName, error) }
   return new Promise((resolveSearch, rejectSearch) => {
     signal?.throwIfAborted()
     assertActiveProjectRoot(session.project.path)
     let child
     try {
-      child = spawn(projectRipgrepExecutable(), ['--no-config', ...argv], {
+      child = spawn(executable, ['--no-config', ...argv], {
         cwd:session.project.path,
-        detached:true,
+        detached:process.platform !== 'win32',
         windowsHide:true,
         stdio:['ignore', 'pipe', 'pipe'],
         env:projectSearchEnvironment(session),
       })
-    } catch {
-      rejectSearch(new Error(`The packaged ${toolName} search engine could not start.`))
+    } catch (error) {
+      rejectSearch(projectSearchStartFailure(toolName, error))
       return
     }
     const stdout = [], stderr = []
@@ -1313,7 +1062,7 @@ function runProjectRipgrep(session, toolName, argv, signal) {
     }
     child.stdout.on('data', chunk => append(chunk, stdout))
     child.stderr.on('data', chunk => append(chunk, stderr))
-    child.once('error', () => finish(new Error(`The packaged ${toolName} search engine could not start.`)))
+    child.once('error', error => finish(projectSearchStartFailure(toolName, error)))
     signal?.addEventListener('abort', abort, { once:true })
     if (signal?.aborted) return abort()
     child.once('close', (exitCode, signalName) => {
@@ -1781,7 +1530,7 @@ export function publicSessionEvent(event, session) {
     }
     const resultBlocks=Array.isArray(data.message?.content)?data.message.content.filter(block=>block?.type==='tool-result'&&block.toolCallId===data.message?.source?.callId):[]
     const resultText=messageText(data.message)||resultBlocks.map(block=>messageText(block)).join('\n')
-    const failed=resultBlocks.some(block=>block.isError===true)
+    const failed=data.message?.isError===true || resultBlocks.some(block=>block.isError===true)
     const busyStop=session?.canvasTurnBudget?.stop?.code==='CANVAS_BUSY'?session.canvasTurnBudget.stop:null
     return {
       kind:'tool_result',
@@ -1833,50 +1582,6 @@ export function conversationLogEvent(event) {
   }
 }
 
-class MemorySettings extends SettingsProvider {
-  constructor(ctx) {
-    super(ctx)
-    this.document = {}
-  }
-
-  get writable() { return true }
-  async load() { return this.document }
-  async persist(ns, section) { this.document = { ...this.document, [ns]:section } }
-}
-
-class PenEchoCredentials extends CredentialProvider {
-  constructor(ctx) {
-    super(ctx)
-    this.resolveSecret = () => undefined
-  }
-
-  async resolve(ref) {
-    const value = this.resolveSecret(String(ref))
-    return value ? { value, source:'penecho-connection' } : undefined
-  }
-
-  async describe(ref) {
-    return { configured:Boolean(this.resolveSecret(String(ref))), source:'penecho-connection', writable:false }
-  }
-
-  async set() { throw new Error('PenEcho Agent credentials are read-only.') }
-  async unset() { throw new Error('PenEcho Agent credentials are read-only.') }
-  async readRecord() { return undefined }
-  async describeRecord() { return { configured:false, writable:false } }
-  async listRecords() { return [] }
-  async modifyRecord() { throw new Error('PenEcho Agent credential records are read-only.') }
-  async deleteRecord() { throw new Error('PenEcho Agent credential records are read-only.') }
-}
-
-function providerBaseURL(connection) {
-  const url = new URL(String(connection.apiUrl || ''))
-  const path = url.pathname.replace(/\/+$/, '')
-  const suffix = connection.apiFormat === 'anthropic' ? '/v1/messages' : '/chat/completions'
-  if (path.toLowerCase().endsWith(suffix)) url.pathname = path.slice(0, -suffix.length) || '/'
-  url.hash = ''
-  return url.href.replace(/\/$/, '')
-}
-
 export function requestTraceConnection(connection, selectedModel) {
   const effort = String(connection.effort || '').trim() || DEFAULT_REASONING_EFFORT
   const effortMapping = reasoningEffortMapping({
@@ -1924,30 +1629,7 @@ function canvasAgentConnectionPolicy(connection) {
   })
 }
 
-const CANVAS_HARNESS_REASONING_LEVELS = Object.freeze([
-  ['off', 'none'],
-  ['minimal', 'minimal'],
-  ['low', 'low'],
-  ['medium', 'medium'],
-  ['high', 'high'],
-  ['xhigh', 'xhigh'],
-  ['max', 'max'],
-])
-const CANVAS_AGENT_HARNESS_REASONING_EFFORTS = new Set(CANVAS_HARNESS_REASONING_LEVELS.map(([, effort]) => effort))
-const CANVAS_AGENT_REQUEST_REASONING_EFFORT_MAX_LENGTH = 128
-
-export function resolveCanvasAgentRequestEffort(connection, value = 'config') {
-  if (typeof value !== 'string') throw new Error('PenEcho Agent reasoning effort is invalid.')
-  const selected = value.trim().toLowerCase()
-  if (!selected || selected.length > CANVAS_AGENT_REQUEST_REASONING_EFFORT_MAX_LENGTH || /[\r\n\0]/.test(selected)) throw new Error('PenEcho Agent reasoning effort is invalid.')
-  const configuredEffort = String(connection?.effort || '').trim()
-  return {
-    selected,
-    effective:selected === 'config'
-      ? (configuredEffort && configuredEffort !== 'config' && configuredEffort !== 'default' ? configuredEffort : null)
-      : selected,
-  }
-}
+export { resolveCanvasAgentRequestEffort }
 
 function requestEffortConnection(session, requestEffort) {
   const openCode = additionalApiPresets.isOpenCode(session.connection.apiPreset)
@@ -1963,132 +1645,17 @@ function requestEffortConnection(session, requestEffort) {
   })
 }
 
-function isKimiCodingPlanOpenAiApi(connection) {
-  if (String(connection.apiFormat || '').trim().toLowerCase() !== 'openai') return false
-  try {
-    const url = new URL(String(connection.apiUrl || '')),
-      path = url.pathname.replace(/\/+$/, '').toLowerCase()
-    return url.hostname.toLowerCase() === 'api.kimi.com'
-      && (path === '/coding/v1' || path === '/coding/v1/chat/completions')
-  } catch {
-    return false
-  }
-}
-
-function apiHarnessReasoning(connection) {
-  const model = String(connection.apiModel || '').trim()
-  if (connection.supportsThinking === false || !modelSupportsReasoningEffort(model)) return { reasoningEffort:undefined, reasoningEfforts:false }
-  const mappings = Object.fromEntries(CANVAS_HARNESS_REASONING_LEVELS.map(([level, effort]) => [level, reasoningEffortMapping({
-    provider:'api',
-    apiFormat:connection.apiFormat,
-    apiPreset:connection.apiPreset,
-    apiUrl:connection.apiUrl,
-    model,
-    effort,
-  })]))
-  const requestedEffort = String(connection.effort || '').trim() || DEFAULT_REASONING_EFFORT,
-    requestedLevel = CANVAS_HARNESS_REASONING_LEVELS.find(([, effort]) => effort === requestedEffort)?.[0] || null,
-    selectedMapping = reasoningEffortMapping({
-      provider:'api',
-      apiFormat:connection.apiFormat,
-      apiPreset:connection.apiPreset,
-      apiUrl:connection.apiUrl,
-      model,
-      effort:requestedEffort,
-    })
-  const reasoningEffort = requestedLevel === 'off'
-    ? (selectedMapping.canDisable ? 'off' : 'low')
-    : requestedLevel || 'medium'
-  const reasoningEfforts = {}
-  if (mappings.off.canDisable) reasoningEfforts.off = connection.apiFormat === 'anthropic' ? 'disabled' : (mappings.off.mode === 'reasoning_effort' ? mappings.off.value : null)
-  for (const [level] of CANVAS_HARNESS_REASONING_LEVELS.slice(1)) reasoningEfforts[level] = mappings[level].value || level
-  if (!requestedLevel) reasoningEfforts[reasoningEffort] = selectedMapping.value || requestedEffort
-
-  let compat
-  if (connection.apiFormat === 'anthropic') {
-    if (mappings.medium.adaptiveThinking) compat = { forceAdaptiveThinking:true }
-  } else if (mappings.medium.mode === 'reasoning_effort') {
-    compat = { supportsReasoningEffort:true }
-  } else {
-    compat = { thinkingFormat:'deepseek', supportsReasoningEffort:false }
-  }
-  if (isKimiCodingPlanOpenAiApi(connection)) compat = { ...compat, supportsDeveloperRole:false }
-  // The installed OpenAI-compatible adapter otherwise defaults DeepSeek to
-  // max_completion_tokens, which is not its documented output-limit field.
-  if (connection.apiFormat !== 'anthropic') {
-    let hostname = ''
-    try { hostname = new URL(connection.apiUrl).hostname.toLowerCase().replace(/\.$/, '') } catch {}
-    if (hostname === 'api.deepseek.com' || isGlm53Model(model)) compat = { ...compat, maxTokensField:'max_tokens' }
-  }
-  return { reasoningEffort, reasoningEfforts, ...(compat ? { compat } : {}) }
-}
-
-function harnessRequestReasoningEffort(connection, requestEffort) {
-  if (connection.provider === 'api' && (connection.supportsThinking === false || !modelSupportsReasoningEffort(connection.apiModel))) return undefined
-  if (requestEffort.selected === 'config') {
-    return connection.provider === 'api' ? apiHarnessReasoning(connection).reasoningEffort : undefined
-  }
-  if (connection.provider === 'api') return apiHarnessReasoning({ ...connection, effort:requestEffort.effective }).reasoningEffort
-  return requestEffort.effective === 'none' ? 'off' : requestEffort.effective
-}
-
 function requestTraceForEffort(connection, selectedModel, requestEffort) {
   return requestTraceConnection(requestEffort.selected === 'config' ? connection : { ...connection, effort:requestEffort.effective }, selectedModel)
 }
 
-export function connectionProfile(connection, configuredTimeoutMs) {
-  const digest = hash(connection.id).slice(0, 12)
-  const provider = `penecho-${digest}`
-  const apiKeyEnv = `PENECHO_AI_CONNECTION_${digest.toUpperCase()}`
-  const model = String(connection.apiModel || '').trim()
-  const reasoning = apiHarnessReasoning(connection)
-  const { idleTimeoutMs } = canvasAgentTimeoutLimits(configuredTimeoutMs)
-  return {
-    provider,
-    apiKeyEnv,
-    reasoningEffort:reasoning.reasoningEffort,
-    config:{
-      displayName:connection.name || `PenEcho ${model}`,
-      api:connection.apiFormat === 'anthropic' ? 'anthropic-messages' : 'openai-completions',
-      baseURL:providerBaseURL(connection),
-      ...(additionalApiPresets.isOpenCode(connection.apiPreset) ? { headers:presetRequestHeaders(connection, connection.apiSessionId) } : {}),
-      ...(connection.hosted === true ? {
-        headers:{ 'x-penecho-request-kind':'agent', ...(connection.apiFormat === 'anthropic' && connection.apiKey ? { Authorization:`Bearer ${connection.apiKey}` } : {}) },
-        // An inactivity deadline ends this request. Repeating it five times
-        // hides the failure for 18 minutes; keep transient-error recovery only.
-        retryPolicy:{mode:'normal',maxRetries:5,retryableCodes:['EMPTY_RESPONSE','RATE_LIMIT','SERVER','TRANSPORT']},
-      } : {}),
-      streamIdleTimeoutMs:idleTimeoutMs,
-      defaultInput:['text', 'image'],
-      defaultContextWindow:CANVAS_AGENT_CONTEXT_WINDOW,
-      requestImagePixelBudget:CANVAS_AGENT_REQUEST_IMAGE_MAX_PIXELS,
-      models:[{
-        id:model,
-        name:model,
-        contextWindow:CANVAS_AGENT_CONTEXT_WINDOW,
-        maxTokens:64_000,
-        input:['text', 'image'],
-        reasoningEfforts:reasoning.reasoningEfforts,
-        ...(reasoning.compat ? { compat:reasoning.compat } : {}),
-      }],
-    },
-  }
-}
+export { connectionProfile }
 
 function jsonOutput() {
   return {
     schema:{ type:'json' },
     render(_args, value) {
       return [{ type:'text', text:boundedText(JSON.stringify(value)) }]
-    },
-  }
-}
-
-function textOutput() {
-  return {
-    schema:{ type:'string' },
-    render(_args, value) {
-      return [{ type:'text', text:boundedText(value) }]
     },
   }
 }
@@ -4451,6 +4018,7 @@ export class CanvasHarnessHost {
     this.sessions = new Map()
     this.resumeIndex = new Map()
     this.credentialRefs = new Map()
+    this.piAiProviders = null
     this.cliAdapter = null
     this.cliRegistration = null
     this.cliModule = null
@@ -4473,7 +4041,6 @@ export class CanvasHarnessHost {
   async createContext() {
     const ctx = new Context()
     await mountRuntimePlugin(ctx, 'timer', Timer)
-    await mountRuntimePlugin(ctx, 'penecho-settings', MemorySettings)
     if (this.capabilities.localConnections) {
       await mountRuntimePlugin(ctx, 'penecho-credentials', PenEchoCredentials)
       ctx.credentials.resolveSecret = ref => {
@@ -4481,7 +4048,7 @@ export class CanvasHarnessHost {
         return connectionId ? this.resolveConnection(connectionId)?.apiKey : undefined
       }
     }
-    await mountRuntimePlugin(ctx, 'attachment-local', PenEchoAttachmentStore, { dshHome:join(this.stateDirectory, 'deepseek-harness') })
+    await mountRuntimePlugin(ctx, 'attachment-local', PenEchoAttachmentStore, { dshHome:join(this.stateDirectory, 'deepseek-harness'), ...PENECHO_ATTACHMENT_NORMALIZATION })
     ctx.attachments.requestImageObserver = record => this.traceModelRequestImage(record)
     ctx.attachments.retentionProtected = relative => {
       for (const session of this.sessions.values()) {
@@ -4497,22 +4064,8 @@ export class CanvasHarnessHost {
       tasks:[{ name:'agent-attachments', run:options=>ctx.attachments.cleanupExpiredFiles(options) }],
       logger:record=>this.logger({ type:'canvas-agent-retention-warning', ...record }),
     })
-    await mountRuntimePlugin(ctx, 'llm', LlmRuntime)
-    await mountRuntimePlugin(ctx, 'session', SessionStore)
-    await mountRuntimePlugin(ctx, 'system-prompt', SystemPrompt, { includeHarnessIdentity:false, includeRuntimeContext:true, persona:PERSONA })
-    await mountRuntimePlugin(ctx, 'tools', ToolRuntime, { mode:'native' })
-    await mountRuntimePlugin(ctx, 'agent', AgentRegistry)
-    await mountRuntimePlugin(ctx, 'llm-retry', llmRetry)
-    await mountRuntimePlugin(ctx, 'tool-call-timeout-policy', toolTimeoutPolicy)
-    await mountRuntimePlugin(ctx, 'token-meter', TokenMeter)
-    await mountRuntimePlugin(ctx, 'tool-result-pruner', ToolResultPruner)
-    await mountRuntimePlugin(ctx, 'compaction-basic', BasicCompaction, {
-      auto:true,
-      thresholdRatio:CANVAS_AGENT_COMPACTION_THRESHOLD_RATIO,
-      retainRatio:.16,
-      maxTokens:4096,
-    })
-    if (this.capabilities.localConnections) await mountRuntimePlugin(ctx, 'llm-pi-ai', PiAi, { providers:{} })
+    await mountLoopServices(ctx, { persona:PERSONA })
+    if (this.capabilities.localConnections) this.piAiProviders = await mountPiAi(ctx)
     if (this.capabilities.cli) {
       this.cliModule ||= await import('./cli-adapter.mjs')
       this.callCli ||= this.cliModule.callPenEchoCli
@@ -4520,11 +4073,11 @@ export class CanvasHarnessHost {
     }
     if (this.modelBackend) await this.modelBackend.install(ctx, { host:this })
     if (this.capabilities.hostProjects) {
-      packagedRipgrepPath ||= (await import('@vscode/ripgrep')).rgPath
+      await projectRipgrepExecutable()
       await mountRuntimePlugin(ctx, 'project-fs', ProjectFileSystem, { cwd:this.rootDirectory })
       await mountRuntimePlugin(ctx, 'fs-observation-policy', FsObservationPolicy)
     }
-    await mountRuntimePlugin(ctx, 'agent-loop', AgentLoop, { agents:[], maxParallelToolCalls:4 })
+    await mountAgentLoop(ctx)
     ctx.on('llm/stream', (options,next) => {
       if (!isAgentLoopRequest(options) || options.purpose) return next()
       const session=this.canvasSessionForHarnessSessionId(options.sessionId)
@@ -4562,13 +4115,12 @@ export class CanvasHarnessHost {
   async refreshProviders() {
     const ctx = await this.initialize()
     if (this.modelBackend) return await this.modelBackend.refresh?.(ctx, { host:this }) || {}
-    const providers = {}
-    this.credentialRefs.clear()
+    const providers = {}, credentialRefs = new Map()
     for (const connection of this.listConnections()) {
       if (connection?.provider !== 'api' || !connection.apiKey || !connection.apiModel || !connection.apiUrl) continue
       const profile = connectionProfile(connection, this.modelTimeoutMs(connection.id))
       providers[profile.provider] = profile.config
-      this.credentialRefs.set(profile.apiKeyEnv, connection.id)
+      credentialRefs.set(profile.apiKeyEnv, connection.id)
       providers[profile.provider].apiKeyEnv = profile.apiKeyEnv
     }
     for (const session of this.sessions.values()) {
@@ -4578,9 +4130,16 @@ export class CanvasHarnessHost {
       if (!source?.apiKey) continue
       const profile = connectionProfile({ ...connection, hosted:source.hosted, apiKey:source.apiKey }, this.modelTimeoutMs(session.connectionId))
       providers[profile.provider] = { ...profile.config, apiKeyEnv:profile.apiKeyEnv }
-      this.credentialRefs.set(profile.apiKeyEnv, session.connectionId)
+      credentialRefs.set(profile.apiKeyEnv, session.connectionId)
     }
-    await ctx.settings.replace(SETTINGS_NS, { providers })
+    if (this.piAiProviders) {
+      // Pi's configuration is host-owned and stays in memory. Validate before
+      // publishing; do not mount the upstream settings/profile migration UI.
+      const validated = validatePiProviders(providers)
+      updateVolatile(this.piAiProviders, validated)
+      this.credentialRefs = credentialRefs
+      ctx.emit('loader/volatile-update')
+    }
     this.refreshCliProviders(ctx)
     return providers
   }
@@ -4745,6 +4304,18 @@ export class CanvasHarnessHost {
         agentOptions:{ provider:profile.provider, model:selectedModel },
         setup:async agentCtx => {
           installModelSelection(agentCtx, modelSelection)
+          const streamPositions = new Map()
+          agentCtx.on('agent/assistant-stream', ({ agent, frame }) => {
+            if (String(agent.id) !== String(handle?.agent?.id || session.handle?.agent?.id || '')) return
+            if (frame.type === 'start') streamPositions.set(frame.attemptId, { turn:frame.turn, step:frame.step })
+            else if (frame.type === 'end') streamPositions.delete(frame.attemptId)
+            else if (frame.type === 'chunk') {
+              const position = streamPositions.get(frame.attemptId)
+              if (!position) return
+              const projected = publicSessionEvent({ type:'assistant/chunk', data:{ ...position, chunk:frame.chunk } }, session)
+              if (projected) this.emitPublicEvent(session, projected)
+            }
+          })
           await agentCtx.plugin(PenEchoCanvasPlugin, { session, attachments:ctx.attachments })
           if (this.capabilities.hostProjects || this.fileResources) await agentCtx.plugin(PenEchoTurnFilesPlugin, { session })
           if (this.capabilities.hostProjects) {

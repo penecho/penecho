@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
-import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
+import LocalAttachmentStore, { validateImageFile } from '@deepseek-ai/dsh-attachment-local'
+import { requestImageDimensions } from '@deepseek-ai/dsh-attachment'
 import { utimes, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ManagedFileRetention, attachmentRetention } from './managed-file-retention.mjs'
@@ -14,6 +15,11 @@ const WEBP_METADATA_CHUNKS = new Set(['ICCP','EXIF','XMP '])
 const WEBP_METADATA_FLAGS = 0x20 | 0x08 | 0x04
 const PNG_FALLBACK_VERSION = 'penecho-webp-png-request-v1'
 const PNG_FALLBACK_CACHE_LIMIT = 64
+export const PENECHO_ATTACHMENT_NORMALIZATION = Object.freeze({
+  normalizedImageMaxDimension:2048,
+  normalizedImageMaxPixels:4_194_304,
+  normalizedImageMaxBytes:4_194_304,
+})
 
 function stripWebpMetadata(input) {
   const data=Buffer.from(input)
@@ -102,12 +108,33 @@ function waitForShared(promise, signal) {
 }
 
 export class PenEchoAttachmentStore extends LocalAttachmentStore {
+  constructor(ctx,config={}) {
+    super(ctx,{...PENECHO_ATTACHMENT_NORMALIZATION,...config})
+  }
   pngFallbacks=new Map()
   requestImageObserver=null
   activeOperations=0
   retentionProtected=()=>false
   retention=null
   pendingDeletion=null
+
+  async canonicalPngInput(input) {
+    if (input.mediaType !== 'image/png') return input
+    return this.compression.run(async () => {
+      // Check the original before conversion: it must not disguise a different
+      // format or evade the source-byte, decoded-pixel or dimension limits.
+      await validateImageFile(input,this.imageLimits,this.normalizationPolicy)
+      const metadata=await sharp(input.data,{failOn:'error',limitInputPixels:this.imageLimits.maxImagePixels}).metadata()
+      if ((metadata.pages || 1) > 1) return input
+      const carriesMetadata=metadata.hasProfile || ['exif','xmp','iptc','icc','tifftagPhotoshop','comments','orientation'].some(key=>metadata[key]!==undefined)
+      const fits=(width,height,bytes)=>width*height<=this.normalizationPolicy.maxPixels
+        && Math.max(width,height)<=this.normalizationPolicy.maxDimension && bytes<=this.normalizationPolicy.maxBytes
+      if (metadata.depth==='uchar' && metadata.space==='srgb' && !carriesMetadata && fits(metadata.width,metadata.height,input.data.byteLength)) return input
+      const {data,info}=await sharp(input.data,{failOn:'error',limitInputPixels:this.imageLimits.maxImagePixels})
+        .rotate().toColourspace('srgb').png().toBuffer({resolveWithObject:true})
+      return fits(info.width,info.height,data.byteLength) ? {...input,data} : input
+    })
+  }
 
   async withActiveOperation(operation) {
     this.activeOperations++
@@ -127,9 +154,11 @@ export class PenEchoAttachmentStore extends LocalAttachmentStore {
     }
     return ref
   }
-  async saveImage(input) { return this.withActiveOperation(async()=>this.renewUpload(await super.saveImage(input))) }
+  async saveImage(input) { return this.withActiveOperation(async()=>this.renewUpload(await super.saveImage(await this.canonicalPngInput(input)))) }
   async saveImages(inputs) { return this.withActiveOperation(async()=>{
-    const refs = await super.saveImages(inputs)
+    this.validateImageBatch(inputs)
+    const prepared=await Promise.all(inputs.map(input=>this.canonicalPngInput(input)))
+    const refs = await super.saveImages(prepared)
     for (const ref of refs) await this.renewUpload(ref)
     return refs
   }) }
@@ -156,7 +185,10 @@ export class PenEchoAttachmentStore extends LocalAttachmentStore {
   }
 
   async readImageRequestActive(ref, policy, signal) {
-    const image=await super.readImageRequest(ref,policy,signal)
+    const target=policy.maxPixels
+      ? { ...requestImageDimensions(ref.width,ref.height,policy.maxPixels), maxBytes:policy.maxBytes }
+      : policy
+    const image=await super.readImageRequest(ref,target,signal)
     let output=image
     if (image.mediaType === 'image/jpeg') {
       const key=String(image.variantId)

@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Revenue</title><script src="penecho-slide-charts.js"></script></head><body>
+<div class="slide" data-penecho-slide data-penecho-template="investor" data-penecho-deck="Q3 2026 sales review">
+  <div class="hd"><h1><b>Revenue:</b> Up 22% from Q1 to Q3, to $1,678K in Q3</h1></div>
+  <div class="body">
+    <div class="col wide"><div class="bar">Revenue by quarter</div><div class="cap">Revenue ($K), Q3 highlighted</div><div id="c1" class="chart"></div></div>
+    <div class="col"><div class="bar">Growth</div><div class="cap">Quarter on quarter</div>
+      <div class="tiles">
+        <div class="tile"><b>+9.5%</b><span>Q1 to Q2</span><i>$1,370K to $1,500K</i></div>
+        <div class="tile"><b>+11.9%</b><span>Q2 to Q3</span><i>$1,500K to $1,678K</i></div>
+        <div class="tile"><b>+$308K</b><span>more per quarter</span><i>Q3 against Q1</i></div>
+      </div></div>
+  </div>
+  <div class="ft">Source: sales-2026.xlsx (By region sheet); growth computed<span class="co">Brightline</span><span class="pg">2</span></div>
+</div>
+<script>
+SC.bar('#c1', {categories:['Q1 2026','Q2 2026','Q3 2026'], series:[{name:'Revenue', values:[1370,1500,1678], colors:['#9CC3EE','#9CC3EE','#1F6FD1']}], axis:false, format:'${}K'});
+</script>
+</body></html>

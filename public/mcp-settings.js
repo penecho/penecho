@@ -124,7 +124,7 @@
 
 Use the Authorization HTTP header with Bearer authentication. Save the token in this client's supported secure credential or HTTP header configuration. Preserve all unrelated MCP entries; update a matching penecho-local entry rather than creating duplicates. Enable the MCP server. This fixed-IP connection uses the address above directly and does not require a local discovery connector. Never commit or print the token.
 
-This host uses a private HTTPS CA. Save the following public CA certificate to a local PEM file and configure trust using this client's supported launch or certificate settings. Do not disable TLS certificate validation. NODE_EXTRA_CA_CERTS applies to the actual Node client process; it is not a per-server HTTP setting. A client without private CA support needs a trusted HTTPS entry; report that limitation promptly.
+This host uses a private HTTPS CA, given below. Trust it only through this client's own certificate setting for this one server, with the certificate saved to a local PEM file. Never disable TLS certificate validation. Never make it a setting of the whole client or computer: do not set CODEX_CA_CERTIFICATE, SSL_CERT_FILE, NODE_EXTRA_CA_CERTS or any other environment variable for the user or the system (setx, SetEnvironmentVariable, the registry, launchctl, LaunchAgents, shell profiles), and do not add it to the operating system's certificate store. Once that file moves or is gone, the whole client, its desktop app included, can no longer reach its own service. If this client has no certificate setting for one server (Codex has none), change nothing and tell me to use Automatic discovery in PenEcho's Local MCP settings instead, which needs no certificate setting.
 
 ${status.http.certificatePem}
 
@@ -152,10 +152,11 @@ Reload the client through its supported flow. Verify initialize and tools/list; 
     return {refresh,setStatus,setLanguage:value=>{language=value;render();},setVisible:value=>{visible=value;tokenVisible=false;render();if(visible){setStatus(hostApi()?.status());void refresh();}}};
   }
   const root=document.getElementById('mcpCloudSettings');if(!root)return;
-  let mounted=null,ipMounted=null,active='cloud',localMethod='auto',localStatus=null,connection={enabled:false,connected:false},deviceStatus=null;
+  let mounted=null,ipMounted=null,active='cloud',localMethod='auto',localStatus=null,connection={enabled:false,connected:false};
   const cloud=()=>window.PENECHO_CONFIG?.runtime==='cloud';
   function language(){return document.documentElement.lang||'en';}
-  const localAvailable=()=>!cloud()||window.PENECHO_REMOTE_CLOUD_STATUS?.deviceOnline===true;
+  // Local MCP is set up in PenEcho on a computer; on penecho.ai there is only Cloud MCP.
+  const localAvailable=()=>!cloud();
   function selectLocal(value,{refresh=false}={}) {
     localMethod=value==='ip'&&!cloud()?'ip':'auto';
     const zh=language().startsWith('zh');
@@ -179,7 +180,7 @@ Reload the client through its supported flow. Verify initialize and tools/list; 
     help.hidden=!cloud();
     help.querySelector('h2').textContent=zh?'在本机配置本地 MCP':'Set up local MCP on your computer';
     help.querySelectorAll('p')[0].textContent=zh?'在本机 PenEcho 中打开「设置 → MCP → 本地 MCP」，复制安装提示词给你的编程助手。本地 MCP 和本地模型 API 无需注册或登录。':'Open Settings → MCP → Local MCP in PenEcho on your computer, then copy its installation prompt to your coding assistant. Local MCP and local model APIs work without an account.';
-    help.querySelectorAll('p')[1].textContent=zh?'已有云端 MCP 连接时，在本机开启「云端 MCP」即可操作本地画布，无需再配置一个 MCP。启用 Linked Device 后，本地 MCP 也能与这里打开的云端画布交互。':'With an existing Cloud MCP connection, enable Cloud MCP on your computer to reach its local Canvas without another client configuration. Linked Device also lets your local MCP work with the Cloud Canvas open here.';
+    help.querySelectorAll('p')[1].hidden=true;
     for(const kind of ['cloud','local']) {
       const id=kind==='cloud'?'Cloud':'Local',button=document.getElementById(`mcp${id}Tab`),panel=document.getElementById(`mcp${id}Panel`);
       button.hidden=kind==='local'&&!localAvailable();
@@ -196,15 +197,14 @@ Reload the client through its supported flow. Verify initialize and tools/list; 
     if(!mounted)mounted=window.PenEchoCloudMcp.mount(root,{
       api:host.api,origin:host.origin(),language:language(),runtime:cloud()?'cloud':'local',
       signIn:()=>host.signIn(()=>mounted?.refresh().catch(()=>{})),signInState:host.signInState,connection:()=>connection,
-      enable:async enabled=>{
-        if(!cloud())await host.api('/api/cloud/mcp/access',{method:'POST',body:JSON.stringify({enabled})});
-        if(enabled)window.dispatchEvent(new CustomEvent('penecho:open-cloud-mcp'));
-        else if(cloud())window.dispatchEvent(new CustomEvent('penecho:close-mcp'));
+      // On penecho.ai the open Canvas can be turned on and off for Cloud MCP. A Canvas on a computer uses Local MCP.
+      ...(cloud()?{enable:async enabled=>{
+        window.dispatchEvent(new CustomEvent(enabled?'penecho:open-cloud-mcp':'penecho:close-mcp'));
         window.dispatchEvent(new CustomEvent('penecho:cloud-account-changed'));
-      },
+      }}:{}),
     });
     else mounted.refresh().catch(()=>{});
-    mounted.setLanguage(language());if(deviceStatus)mounted.updateDeviceStatus(deviceStatus);
+    mounted.setLanguage(language());
   }
   for(const kind of ['Cloud','Local'])document.getElementById(`mcp${kind}Tab`).addEventListener('click',()=>select(kind.toLowerCase()));
   for(const kind of ['Auto','Ip'])document.getElementById(`mcp${kind}Tab`).addEventListener('click',()=>selectLocal(kind==='Ip'?'ip':'auto',{refresh:true}));
@@ -218,7 +218,7 @@ Reload the client through its supported flow. Verify initialize and tools/list; 
     event.preventDefault();if(!localAvailable()){select('cloud');document.getElementById('mcpCloudTab').focus();return;}select(event.key==='Home'?'cloud':event.key==='End'?'local':active==='cloud'?'local':'cloud');
     document.getElementById(active==='cloud'?'mcpCloudTab':'mcpLocalTab').focus();
   });
-  window.PenEchoMcpSettings={open,select,setLocalStatus:value=>{localStatus=value;ipMounted?.setLanguage(language());ipMounted?.setStatus(value);},setDeviceStatus:value=>{deviceStatus=value;mounted?.updateDeviceStatus(value);},setConnection:value=>{connection=value;mounted?.updateConnection();}};
+  window.PenEchoMcpSettings={open,select,setLocalStatus:value=>{localStatus=value;ipMounted?.setLanguage(language());ipMounted?.setStatus(value);},setConnection:value=>{connection=value;mounted?.updateConnection();}};
   window.addEventListener('penecho:cloud-account-changed',()=>{if(!document.getElementById('settingsPageMcp').hidden)mounted?.refresh().catch(()=>{});});
   window.addEventListener('penecho:remote-cloud-status',()=>select(active,{refresh:false}));
   // Keep login and credentials fresh when returning from external authorization.

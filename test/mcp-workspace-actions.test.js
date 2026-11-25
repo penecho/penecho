@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 
 const root=path.join(__dirname,".."),studioSource=fs.readFileSync(path.join(root,"src/client/app/studio-navigator.js"),"utf8"),persistenceSource=fs.readFileSync(path.join(root,"src/client/app/persistence.js"),"utf8"),mcpRuntimeSource=fs.readFileSync(path.join(root,"src/client/app/mcp-runtime.js"),"utf8");

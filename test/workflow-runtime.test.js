@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict');
 const {validateWorkflow,workflowHtml}=require('../src/workflow/schema.js');
 const {validateToolArguments}=require('../src/server/mcp/schema.js');

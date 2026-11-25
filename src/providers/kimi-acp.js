@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { prepareAgentEnv } = require("./agent-env.js");
 
 const mapKimiEffort = effort => require("./kimi-cli.js").mapKimiEffort(effort);
 
@@ -92,8 +93,9 @@ class KimiAcpClient {
 
   async _start() {
     await fs.promises.mkdir(this.workDir, { recursive:true, mode:0o700 });
+    const spawnEnv = prepareAgentEnv(this.env, this.launch.env, { platform: process.platform });
     const child = spawn(this.launch.command, [...this.launch.prefixArgs, "acp"], {
-      cwd:this.workDir, env:this.env, stdio:["pipe", "pipe", "pipe"], windowsHide:true, shell:false,
+      cwd:this.workDir, env:spawnEnv, stdio:["pipe", "pipe", "pipe"], windowsHide:true, shell:false,
     });
     this.child = child;
     child.unref();

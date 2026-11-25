@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { isDeepStrictEqual } from 'node:util'
@@ -10,7 +10,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import { canvasAgentConversationContinuity } from './conversation-continuity.mjs'
 import { createCanvasDecisionBatch, MAX_CANVAS_DECISION_TOOLS, CANVAS_MUTATION_TOOLS } from './tool-batch.mjs'
-import PenEchoAttachmentStore from './image-attachments.mjs'
+import PenEchoAttachmentStore, { PENECHO_ATTACHMENT_NORMALIZATION } from './image-attachments.mjs'
 import { NativeActivityDiagnostics } from './native-activity-diagnostics.mjs'
 import { DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS, canvasAgentTimeoutSeconds, createCanvasAgentModelTimeout } from './model-timeout.mjs'
 import {
@@ -49,10 +49,10 @@ import {
 } from './runtime.mjs'
 
 const require = createRequire(import.meta.url)
-const { prepareIsolatedRuntime, resolveCodexLaunch } = require('../../providers/codex-cli.js')
-const { canonicalFile, cliCandidates, managedCliPaths } = require('../../providers/cli-discovery.js')
+const { prepareCodexEnv, prepareIsolatedRuntime, resolveCodexLaunch } = require('../../providers/codex-cli.js')
+const { canonicalFile, cliCandidates } = require('../../providers/cli-discovery.js')
 const { DEFAULT_CANVAS_AGENT_TURN_LIMIT, configuredCanvasAgentTurnLimit } = require('./turn-limit.js')
-const { CODEX_CLI_PINNED_VERSION, assertCodexCliBundle, assertCodexCliVersion, installCli, runProcess } = require('../../providers/cli-installer.js')
+const { assertCodexCliBundle, runProcess } = require('../../providers/cli-installer.js')
 const { fetchPublicResource } = require('../public-fetch.js')
 
 const MAX_PROTOCOL_BYTES = 48 * 1024 * 1024
@@ -63,7 +63,7 @@ const INTERRUPT_REQUEST_TIMEOUT_MS = 5_000
 const MAX_BACKLOG = 500
 const MAX_AGENT_RESPONSE_CHARS = 400_000
 const MAX_NATIVE_PROGRESS_SCAN_CHARS = 512
-const CODEX_CLI_RESOLUTION_CACHE_VERSION = 1
+const CODEX_CLI_RESOLUTION_CACHE_VERSION = 2
 const CODEX_MODEL_IMAGE_REQUEST_POLICY = Object.freeze({ maxPixels:2048 * 2048, maxBytes:5 * 1024 * 1024 })
 const CODEX_DISABLED_FEATURES = Object.freeze([
   'apps', 'auth_elicitation', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'code_mode', 'computer_use',
@@ -198,7 +198,7 @@ function codexCliResolutionFile(stateDirectory) {
 function readCodexCliResolutions(stateDirectory) {
   try {
     const parsed=JSON.parse(readFileSync(codexCliResolutionFile(stateDirectory),'utf8'))
-    if(parsed?.version!==CODEX_CLI_RESOLUTION_CACHE_VERSION||parsed?.pinnedVersion!==CODEX_CLI_PINNED_VERSION||!Array.isArray(parsed.entries))return new Map()
+    if(parsed?.version!==CODEX_CLI_RESOLUTION_CACHE_VERSION||!Array.isArray(parsed.entries))return new Map()
     return new Map(parsed.entries.flatMap(entry=>{
       const key=String(entry?.key||''),executable=String(entry?.executable||'').trim()
       return /^[0-9a-f]{64}$/.test(key)&&executable&&executable.length<=4096?[[key,executable]]:[]
@@ -210,7 +210,7 @@ function writeCodexCliResolutions(stateDirectory, resolutions) {
   const directory=join(stateDirectory,'tools','codex'),file=codexCliResolutionFile(stateDirectory),temporary=`${file}.${process.pid}.tmp`
   mkdirSync(directory,{recursive:true,mode:0o700})
   const entries=[...resolutions].sort(([left],[right])=>left.localeCompare(right)).map(([key,executable])=>({key,executable}))
-  writeFileSync(temporary,`${JSON.stringify({version:CODEX_CLI_RESOLUTION_CACHE_VERSION,pinnedVersion:CODEX_CLI_PINNED_VERSION,entries},null,2)}\n`,{encoding:'utf8',mode:0o600})
+  writeFileSync(temporary,`${JSON.stringify({version:CODEX_CLI_RESOLUTION_CACHE_VERSION,entries},null,2)}\n`,{encoding:'utf8',mode:0o600})
   renameSync(temporary,file)
   try { chmodSync(file,0o600) } catch(error) { if(process.platform!=='win32')throw error }
 }
@@ -273,22 +273,20 @@ function codexConnectionFingerprint(connection) {
 }
 
 function installedCodexCandidates(connection, env, stateDirectory, platform = process.platform) {
-  const configuredPath=String(connection?.cliPath || 'codex').trim() || 'codex', candidates=cliCandidates('codex-cli', {
+  const configuredPath=String(connection?.cliPath || 'codex').trim() || 'codex'
+  return cliCandidates('codex-cli', {
     env,
     platform,
     stateDir:stateDirectory,
     configuredPath,
-  }), privateExecutable=managedCliPaths('codex-cli',{env,platform,stateDir:stateDirectory})[0]
-  return candidates.map(candidate=>canonicalFile(candidate.executable)===canonicalFile(privateExecutable)
-    ? {...candidate,source:'penecho-managed',privateManaged:true}
-    : candidate)
+  })
 }
 
 async function inspectCodexCandidateVersion(candidate, env, cwd, platform = process.platform) {
   assertCodexCliBundle(candidate.executable,platform)
   const launch=resolveCodexLaunch(candidate.executable,env),result=await runProcess(launch.command,[...launch.prefixArgs,'--version'],{
     cwd,
-    env,
+    env:prepareCodexEnv(env,launch.env,{platform}),
     timeoutMs:15_000,
   })
   return String(result.output||result.diagnostic||'').slice(0,200)
@@ -298,7 +296,7 @@ function systemCodexFallbacks(candidates, preferred) {
   const preferredCanonical=preferred?canonicalFile(preferred.executable):'',seen=new Set(),fallbacks=[]
   for(const candidate of candidates){
     const canonical=canonicalFile(candidate.executable)
-    if(candidate.privateManaged||canonical===preferredCanonical||seen.has(canonical))continue
+    if(candidate.privateManaged||candidate.source==='managed'||candidate.source==='penecho-managed'||canonical===preferredCanonical||seen.has(canonical))continue
     seen.add(canonical)
     fallbacks.push(candidate)
   }
@@ -313,6 +311,16 @@ function codexCandidateFailure(failures) {
       : `No compatible installed Codex CLI could start PenEcho Agent.${messages.length ? ` ${messages.at(-1)}` : ''}`)
   error.code=authentication ? 'CODEX_CLI_AUTHENTICATION_REQUIRED' : 'CODEX_CLI_INCOMPATIBLE'
   error.diagnostic=JSON.stringify(failures.map(failure=>({source:failure.source,error:safeError(failure.error)})))
+  return error
+}
+
+// Nothing on this computer could start: say how to install or update Codex, and leave doing it to the person.
+function codexNeedsInstall(failures) {
+  const cause=failures.length?codexCandidateFailure(failures):null
+  if(cause?.code==='CODEX_CLI_AUTHENTICATION_REQUIRED')return cause
+  const error=new Error(`${failures.length?'The Codex on this computer could not start PenEcho Agent. Update it':'Codex is not installed. Install it'}, then try again. macOS or Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh. Windows PowerShell: irm https://chatgpt.com/codex/install.ps1 | iex.${cause?` (${safeError(cause)})`:''}`)
+  error.code=failures.length?'CODEX_CLI_INCOMPATIBLE':'CODEX_CLI_MISSING'
+  if(cause?.diagnostic)error.diagnostic=cause.diagnostic
   return error
 }
 
@@ -455,7 +463,8 @@ export class CodexNativeAppServerProcess {
     await chmod(this.workDir, 0o700).catch(() => {})
     try {
     this.launch = resolveCodexLaunch(this.connection.cliPath, this.env)
-    const childEnv = await this.prepareRuntime(this.workDir, this.env)
+    const runtimeEnv = await this.prepareRuntime(this.workDir, this.env, { launch:this.launch })
+    const childEnv = prepareCodexEnv(runtimeEnv, this.launch.env)
     this.child = this.spawnProcess(this.launch.command, [...this.launch.prefixArgs, ...codexAppServerArgs()], {
       cwd:this.workDir,
       env:childEnv,
@@ -690,7 +699,6 @@ export class CodexNativeHost {
     createAppServer = null,
     resolveCliCandidates = null,
     inspectCliCandidate = null,
-    installManagedCli = null,
     platform = process.platform,
     sessionTtlMs = SESSION_TTL_MS,
     publicFetch = fetchPublicResource,
@@ -714,20 +722,12 @@ export class CodexNativeHost {
     this.createAppServer = createAppServer || (options => new CodexNativeAppServerProcess(options))
     this.resolveCliCandidates = resolveCliCandidates || (connection => installedCodexCandidates(connection,this.env,this.stateDirectory,this.platform))
     this.inspectCliCandidate = inspectCliCandidate || (candidate => inspectCodexCandidateVersion(candidate,this.env,this.stateDirectory,this.platform))
-    this.installManagedCli = installManagedCli || (codexVersion => installCli('codex-cli',{
-      platform:this.platform,
-      home:this.env.USERPROFILE||this.env.HOME||homedir(),
-      stateDir:this.stateDirectory,
-      env:this.env,
-      codexVersion,
-    }))
-    this.managedCliInstalls = new Map()
     this.preferredCliExecutables = readCodexCliResolutions(this.stateDirectory)
     this.sessionTtlMs = Math.max(1_000, Number(sessionTtlMs) || SESSION_TTL_MS)
     this.sessions = new Map()
     this.resumeIndex = new Map()
     this.context = new Context()
-    this.attachments = new PenEchoAttachmentStore(this.context, { dshHome:join(stateDirectory, 'codex-native') })
+    this.attachments = new PenEchoAttachmentStore(this.context, { dshHome:join(stateDirectory, 'codex-native'), ...PENECHO_ATTACHMENT_NORMALIZATION })
     this.attachments.requestImageObserver = record => this.traceModelRequestImage(record)
     this.disposing = null
   }
@@ -1027,23 +1027,6 @@ export class CodexNativeHost {
     }
   }
 
-  ensureManagedCliInstalled(codexVersion = CODEX_CLI_PINNED_VERSION) {
-    const requestedVersion=String(codexVersion||CODEX_CLI_PINNED_VERSION)
-    if (!this.managedCliInstalls.has(requestedVersion)) {
-      const promise=Promise.resolve().then(()=>this.installManagedCli(requestedVersion)).then(result=>{
-        const executable=String(result?.executable||'').trim()
-        if(!executable)throw new Error('PenEcho managed Codex CLI installation did not return an executable.')
-        assertCodexCliVersion(result?.version,requestedVersion)
-        return{...result,executable}
-      },error=>{
-        throw error instanceof Error?error:new Error(safeError(error))
-      })
-      promise.catch(()=>{})
-      this.managedCliInstalls.set(requestedVersion,promise)
-    }
-    return this.managedCliInstalls.get(requestedVersion)
-  }
-
   async ensureStarted(session) {
     if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native PenEcho Agent session is closed.')
     if (session.recoveryPromise) await session.recoveryPromise
@@ -1063,8 +1046,6 @@ export class CodexNativeHost {
       const resolutionKey=codexCliResolutionKey(connection),preferredExecutable=this.preferredCliExecutables.get(resolutionKey),preferred=preferredExecutable
         ? candidates.find(candidate=>canonicalFile(candidate?.executable||'')===canonicalFile(preferredExecutable))||null
         : null
-      const privateExecutable=managedCliPaths('codex-cli',{env:this.env,platform:this.platform,stateDir:this.stateDirectory})[0],hadPrivateManagedCli=candidates.some(candidate=>candidate?.privateManaged)
-        || Boolean(preferredExecutable&&canonicalFile(preferredExecutable)===canonicalFile(privateExecutable))
       if(preferredExecutable&&!preferred)this.forgetPreferredCli(connection)
       const failures=[]
       if (preferred) {
@@ -1074,22 +1055,7 @@ export class CodexNativeHost {
           if(threadId)return threadId
         }
       }
-      this.send(session,'agent_status',{status:'preparing',phase:hadPrivateManagedCli?'repairing':'installing'})
-      this.recordNativeActivity(session.active, 'startup/install')
-      let installed=null
-      try {
-        installed=await this.ensureManagedCliInstalled(CODEX_CLI_PINNED_VERSION)
-        this.logger({type:'codex-native-managed-cli-installed',release:CODEX_CLI_PINNED_VERSION,version:String(installed.version||'').slice(0,64)})
-        session.traceDecisionProtocol?.({kind:'native-managed-cli-installed',release:CODEX_CLI_PINNED_VERSION,version:String(installed.version||'').slice(0,64)})
-      } catch(error) {
-        failures.push({source:'penecho-install-pinned',error})
-        this.logger({type:'codex-native-managed-cli-install-failed',release:CODEX_CLI_PINNED_VERSION,error:safeError(error)})
-        session.traceDecisionProtocol?.({kind:'native-managed-cli-install-failed',release:CODEX_CLI_PINNED_VERSION,error:safeError(error)})
-      }
-      if(installed){
-        const threadId=await this.startCandidate(session,connection,{executable:installed.executable,source:'penecho-installed',privateManaged:true},lifecycle,failures)
-        if(threadId)return threadId
-      }
+      // Use only the person's own installed Codex (CLI or desktop app). PenEcho never retains, installs, or downloads its own Codex copy.
       this.send(session,'agent_status',{status:'preparing',phase:'discovering'})
       session.active?.timeout?.activity()
       for(const candidate of systemCodexFallbacks(candidates,preferred)){
@@ -1098,23 +1064,7 @@ export class CodexNativeHost {
         const threadId=await this.startCandidate(session,connection,compatible,lifecycle,failures)
         if(threadId)return threadId
       }
-      this.send(session,'agent_status',{status:'preparing',phase:'installing'})
-      session.active?.timeout?.activity()
-      let latest=null
-      try{
-        latest=await this.ensureManagedCliInstalled('latest')
-        this.logger({type:'codex-native-managed-cli-installed',release:'latest',version:String(latest.version||'').slice(0,64)})
-        session.traceDecisionProtocol?.({kind:'native-managed-cli-installed',release:'latest',version:String(latest.version||'').slice(0,64)})
-      }catch(error){
-        failures.push({source:'penecho-install-latest',error})
-        this.logger({type:'codex-native-managed-cli-install-failed',release:'latest',error:safeError(error)})
-        session.traceDecisionProtocol?.({kind:'native-managed-cli-install-failed',release:'latest',error:safeError(error)})
-      }
-      if(latest){
-        const threadId=await this.startCandidate(session,connection,{executable:latest.executable,source:'penecho-latest',privateManaged:true},lifecycle,failures)
-        if(threadId)return threadId
-      }
-      throw codexCandidateFailure(failures)
+      throw codexNeedsInstall(failures)
     })()
     session.startPromise = startPromise
     try {

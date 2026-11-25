@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path");
 const SMART = require("../public/smart-suggest.js");
 const source = fs.readFileSync(path.join(__dirname, "../src/client/app/smart-suggestions.js"), "utf8");

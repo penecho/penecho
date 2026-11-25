@@ -1,5 +1,6 @@
+require('./helpers/safety.js');
 const assert=require('node:assert/strict'),test=require('node:test'),fs=require('node:fs'),os=require('node:os'),path=require('node:path')
-const ROOT=path.resolve(__dirname,'..'),{CODEX_CLI_PINNED_VERSION}=require('../src/providers/cli-installer.js')
+const ROOT=path.resolve(__dirname,'..')
 const error={code:'CANVAS_BUSY',message:'A text draft is active.',details:{mutationGuard:'canvas-edit',retry:'after_state_change',mutationState:{revision:4,blockers:['text-draft'],transient:false}}}
 const waitFor=async predicate=>{const end=Date.now()+5000;while(!predicate()){if(Date.now()>end)throw Error('Busy-stop integration timed out.');await new Promise(resolve=>setTimeout(resolve,10))}}
 
@@ -70,7 +71,7 @@ test('native busy stop actually interrupts the upstream turn and reports the cau
   let process,session,browserWrites=0
   const host=new CodexNativeHost({stateDirectory:directory,rootDirectory:ROOT,resolveConnection:()=>connection,resolveProject:async()=>null,
     resolveWebSearch:()=>({apiKey:''}),resolveWidgetCapabilities:()=>({professionalEnabled:false,privatePlugins:[]}),modelTimeoutMs:()=>5000,
-    resolveCliCandidates:()=>[{executable:connection.cliPath,source:'configured'}],inspectCliCandidate:async()=>`codex-cli ${CODEX_CLI_PINNED_VERSION}`,
+    resolveCliCandidates:()=>[{executable:connection.cliPath,source:'configured'}],inspectCliCandidate:async()=>'codex-cli 0.171.0',
     installManagedCli:async()=>{throw Error('Not authorized in fixture')},createAppServer:options=>(process=new FakeNative(options))})
   t.after(async()=>{await host.dispose();fs.rmSync(directory,{recursive:true,force:true})})
   session=await host.connect({clientId:'busy-native-fixture',connectionId:connection.id,binding:{},send(type,payload){

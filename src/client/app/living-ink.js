@@ -5,7 +5,7 @@
   const livingInkCopy = (en, zh) => state.language === "zh" ? zh : en;
   let livingInkDownload = null;
   function livingInkWidgetMessage(widget, message) {
-    if (widget.sourceFormat !== livingInkSourceFormat || widget.pending || widget.mcpEphemeral || state.interactingWidgetId !== widget.id) return;
+    if (widget.sourceFormat !== livingInkSourceFormat || widget.pending || widget.mcpEphemeral || !canvasWidgetInteractive(widget)) return;
     if (message.type === "penecho-living-ink-download") {
       const types={"penecho-figure.svg":"image/svg+xml","penecho-figure.png":"image/png","penecho-ink-lab.html":"text/html","penecho-ink-lab.pptx":"application/vnd.openxmlformats-officedocument.presentationml.presentation"};
       if(types[message.name]!==message.mime || !(message.bytes instanceof ArrayBuffer) || message.bytes.byteLength>16*1024*1024)return;

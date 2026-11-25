@@ -35,6 +35,11 @@ AntV Infographic (npm package "@antv/infographic") is distributed under the
 MIT License. Copyright (c) 2025 AntV. The complete license text is included at
 public/vendor/antv-infographic.LICENSE.
 
+Provider icons in Settings (public/lines/provider-icons/) are unmodified SVG
+files from LobeHub Icons (https://github.com/lobehub/lobe-icons), distributed
+under the MIT License. Copyright (c) 2023 LobeHub. The complete license is
+included in that folder. The logos remain trademarks of their owners.
+
 Host-rendered Widget scenes (public/scene-runtime.js) use three unmodified,
 version-pinned builds, each distributed under the MIT License:
 - anime.js 4.5.0, Copyright (c) 2025 Julian Garnier

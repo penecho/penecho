@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const SMART = require("../public/smart-suggest.js");
 const choice = value => ({ type:"choice", choice:value });
@@ -38,14 +39,15 @@ test("Explain clicks honor PenEchoLLM complexity verdicts for text and graphics 
         buildSelectionImage:() => packed,
         requestAI:(...args) => calls.push(["canvas_ai", ...args]),
         requestSelectionAI:(...args) => calls.push(["canvas_ai", ...args]),
-        assistAgentRun:async id => { calls.push(["penecho_agent", id]); return "submitted"; },
+        projectLinesCanAsk:() => true, assistSaveSidebarTask:async (savedTarget, label) => { calls.push(["sidebar_task", label, savedTarget]); return true; },
         assistClassifyRequest:() => assert.fail("Explain must use its saved verdict without a second classification"),
       };
       vm.createContext(context); vm.runInContext(source.slice(start, end), context);
       await context.executeAssistAction({ id:"explain" }, target);
       assert.equal(calls.length, 1, `${kind}/${Boolean(selection)}/${executor}`);
-      assert.equal(calls[0][0], executor || "canvas_ai");
-      assert.equal(calls[0][1], "explain");
+      assert.equal(calls[0][0], executor === "penecho_agent" ? "sidebar_task" : "canvas_ai");
+      if (executor === "penecho_agent") assert.deepEqual(calls[0].slice(1), ["解释", target]);
+      else assert.equal(calls[0][1], "explain");
       if (executor !== "penecho_agent") {
         assert.equal(calls[0].at(-1).suggestion, "explain");
         if (selection) { assert.equal(calls[0][2], selection); assert.equal(calls[0][3], packed); }

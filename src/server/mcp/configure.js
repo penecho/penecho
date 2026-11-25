@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const crypto = require("node:crypto");
 const path = require("node:path");
 const { cliCandidates } = require("../../providers/cli-discovery.js");
+const { prepareAgentEnv } = require("../../providers/agent-env.js");
 const { resolveCodexLaunch } = require("../../providers/codex-cli.js");
 const { resolveClaudeLaunch } = require("../../providers/claude-cli.js");
 const { McpBridgeError } = require("./schema.js");
@@ -36,9 +37,14 @@ function executeFile(executable, args, options = {}) {
     // Resolve npm shell wrappers to their native/Node entry point, keeping every
     // MCP argument literal instead of passing configuration through a shell.
     const launch = (options.client === "codex" ? resolveCodexLaunch : resolveClaudeLaunch)(executable, options.env);
-    const env = launch.command === process.execPath && launch.prefixArgs.length
-      ? { ...options.env, ELECTRON_RUN_AS_NODE:"1" }
-      : options.env;
+    const extraEnv = {
+      ...(launch.env || {}),
+      ...(launch.command === process.execPath && launch.prefixArgs.length ? { ELECTRON_RUN_AS_NODE:"1" } : {}),
+    };
+    const env = prepareAgentEnv(options.env, extraEnv, {
+      platform:process.platform,
+      sandboxWindowsPath:options.client === "codex",
+    });
     execFile(launch.command, [...launch.prefixArgs, ...args], {
       cwd:options.cwd,
       env,

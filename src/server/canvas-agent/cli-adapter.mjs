@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
-import { CallId, LlmAdapter, LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { ToolCallId as CallId, LlmAdapter, LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS, canvasAgentTimeoutSeconds, createCanvasAgentModelTimeout } from './model-timeout.mjs'
 
 const require = createRequire(import.meta.url)
@@ -187,10 +187,14 @@ async function activeImageDataUrls(messages, attachments, signal) {
 }
 
 export async function serializeCliRequest(options, attachments) {
-  const conversation = options.messages.map(message => ({
+  const system = options.messages.filter(message => message.role === 'system')
+    .flatMap(message => textContent(message.content || []).filter(block => block.type === 'text').map(block => block.text)).join('\n\n')
+  const conversation = options.messages.filter(message => message.role !== 'system').map(message => ({
     role:message.role,
     source:message.source?.kind || 'unknown',
-    content:textContent(Array.isArray(message.content) ? message.content : []),
+    content:message.role === 'tool' && message.toolCallId
+      ? [{ type:'tool_result', toolCallId:String(message.toolCallId), isError:Boolean(message.isError), content:textContent(message.content || []) }]
+      : textContent(Array.isArray(message.content) ? message.content : []),
   }))
   const tools = (options.tools || []).map(tool => ({
     name:tool.name,
@@ -207,7 +211,7 @@ export async function serializeCliRequest(options, attachments) {
   }))
   const activeImages = await activeImageDataUrls(options.messages, attachments, options.signal)
   return {
-    systemPrompt:bounded(`${CLI_PROTOCOL_SYSTEM}\n\n${String(options.system || '')}`),
+    systemPrompt:bounded(`${CLI_PROTOCOL_SYSTEM}\n\n${String(options.system || system)}`),
     prompt,
     atlasImage:activeImages.length > 1 ? activeImages : activeImages[0] || null,
   }

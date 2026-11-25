@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Practice exam: limits and derivatives</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fbfaf7; }
+  .ex { box-sizing: border-box; width: 1200px; height: 750px; padding: 26px 30px; color: #1f2937; font: 15px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  .ex * { box-sizing: border-box; }
+  .top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+  .top h1 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+  .top p { margin: 0; color: #6b7280; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 310px; gap: 16px; }
+  .q { position: relative; display: flex; flex-direction: column; padding: 16px 18px; border: 1px solid #e5e2d9; border-radius: 12px; background: #fff; }
+  .n { display: flex; align-items: center; gap: 8px; color: #6b7280; font-size: 12.5px; font-weight: 600; }
+  .n b { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #1f2937; color: #fff; font-size: 13px; }
+  .lvl { margin-left: auto; display: flex; gap: 3px; }
+  .lvl i { width: 7px; height: 7px; border-radius: 50%; background: #e5e7eb; }
+  .lvl i.on { background: #f59e0b; }
+  .ask { margin: 12px 0 8px; font-size: 16px; }
+  .m { font-family: "Times New Roman", Georgia, serif; font-size: 21px; font-style: italic; white-space: nowrap; }
+  .m .up { font-style: normal; }
+  .lim { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin-right: 4px; font-style: normal; line-height: 1; }
+  .lim small { font-size: 12px; font-style: italic; margin-top: 2px; }
+  .fr { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 3px; line-height: 1.15; }
+  .fr > span:first-child { padding: 0 3px 2px; border-bottom: 1.5px solid currentColor; }
+  .fr > span:last-child { padding: 2px 3px 0; }
+  .space { flex: 1; margin: 4px 0 10px; border-bottom: 1.5px dashed #e5e2d9; display: flex; align-items: flex-end; padding-bottom: 6px; color: #b8b2a3; font-size: 12.5px; }
+  .open { align-self: flex-start; padding: 6px 12px; border: 1px solid #c7d2fe; border-radius: 8px; background: #eef2ff; color: #3730a3; font: 600 13px/1.2 -apple-system, "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+  .sol { position: absolute; inset: 0; display: none; flex-direction: column; padding: 16px 18px; border-radius: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; font-size: 14.5px; }
+  .sol.shown { display: flex; }
+  .sol h3 { margin: 0 0 8px; color: #166534; font-size: 13px; }
+  .sol p { margin: 0 0 7px; }
+  .sol .ans { margin-top: auto; font-weight: 700; color: #166534; }
+  .sol button { position: absolute; right: 12px; top: 12px; border: 0; background: none; color: #166534; font: 600 12.5px/1 -apple-system, system-ui, sans-serif; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="ex">
+  <div class="top"><h1>Practice exam · Limits and derivatives</h1><p>Six questions from Class 1 and Class 2, easiest first. Write your answer under each one, then open its answer.</p></div>
+  <div class="grid">
+    <section class="q"><div class="n"><b>1</b>Limits<span class="lvl"><i class="on"></i><i></i><i></i></span></div>
+      <div class="ask">Find</div><div class="m"><span class="lim">lim<small>x→3</small></span>(2x<sup>2</sup> − 5)</div>
+      <div class="space">your answer</div><button class="open" data-q="1">Show the worked answer</button>
+      <div class="sol" id="s1"><button data-q="1">Hide</button><h3>Worked answer</h3><p>The function is continuous, so plug in: 2 · 3² − 5 = 18 − 5.</p><p class="ans">= 13</p></div></section>
+    <section class="q"><div class="n"><b>2</b>Limits<span class="lvl"><i class="on"></i><i class="on"></i><i></i></span></div>
+      <div class="ask">Find</div><div class="m"><span class="lim">lim<small>x→2</small></span><span class="fr"><span>x<sup>2</sup> − 4</span><span>x − 2</span></span></div>
+      <div class="space">your answer</div><button class="open" data-q="2">Show the worked answer</button>
+      <div class="sol" id="s2"><button data-q="2">Hide</button><h3>Worked answer</h3><p>Plugging in gives 0/0. Factor: x² − 4 = (x − 2)(x + 2), so the fraction is x + 2 for x ≠ 2.</p><p>Then plug in: 2 + 2.</p><p class="ans">= 4</p></div></section>
+    <section class="q"><div class="n"><b>3</b>Limits<span class="lvl"><i class="on"></i><i class="on"></i><i></i></span></div>
+      <div class="ask">Find</div><div class="m"><span class="lim">lim<small>x→0</small></span><span class="fr"><span><span class="up">sin</span> 5x</span><span>x</span></span></div>
+      <div class="space">your answer</div><button class="open" data-q="3">Show the worked answer</button>
+      <div class="sol" id="s3"><button data-q="3">Hide</button><h3>Worked answer</h3><p>Write it as 5 · sin(5x) / (5x). With u = 5x, u → 0 too, and sin u / u → 1.</p><p class="ans">= 5 · 1 = 5</p></div></section>
+    <section class="q"><div class="n"><b>4</b>Derivatives<span class="lvl"><i class="on"></i><i class="on"></i><i></i></span></div>
+      <div class="ask">Find f′(x) for</div><div class="m">f(x) = 4x<sup>3</sup> − 2x + 7</div>
+      <div class="space">your answer</div><button class="open" data-q="4">Show the worked answer</button>
+      <div class="sol" id="s4"><button data-q="4">Hide</button><h3>Worked answer</h3><p>Power rule on each term: (4x³)′ = 12x², (2x)′ = 2, and a constant gives 0.</p><p class="ans">f′(x) = 12x² − 2</p></div></section>
+    <section class="q"><div class="n"><b>5</b>Derivatives<span class="lvl"><i class="on"></i><i class="on"></i><i class="on"></i></span></div>
+      <div class="ask">The tangent line to</div><div class="m">y = x<sup>3</sup> <span class="up">at</span> x = 1</div>
+      <div class="space">your answer</div><button class="open" data-q="5">Show the worked answer</button>
+      <div class="sol" id="s5"><button data-q="5">Hide</button><h3>Worked answer</h3><p>f(1) = 1 and f′(x) = 3x², so f′(1) = 3.</p><p>y = f(1) + f′(1)(x − 1) = 1 + 3(x − 1).</p><p class="ans">y = 3x − 2</p></div></section>
+    <section class="q"><div class="n"><b>6</b>Derivatives<span class="lvl"><i class="on"></i><i class="on"></i><i class="on"></i></span></div>
+      <div class="ask">From the definition, find f′(x) for</div><div class="m">f(x) = <span class="fr"><span>1</span><span>x</span></span></div>
+      <div class="space">your answer</div><button class="open" data-q="6">Show the worked answer</button>
+      <div class="sol" id="s6"><button data-q="6">Hide</button><h3>Worked answer</h3><p>[1/(x+h) − 1/x] / h = [x − (x+h)] / [h · x(x+h)] = −1 / [x(x+h)].</p><p>As h → 0 this goes to −1 / x².</p><p class="ans">f′(x) = −1 / x²</p></div></section>
+  </div>
+</div>
+<script>
+document.addEventListener("click", event => {
+  const button = event.target.closest("[data-q]");
+  if (button) document.getElementById("s" + button.dataset.q).classList.toggle("shown");
+});
+</script>
+</body>
+</html>

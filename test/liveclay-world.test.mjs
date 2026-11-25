@@ -1,3 +1,4 @@
+import './helpers/safety.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fallingState, orbitState, orbitalParents, pendulumState, explicitPhysicsParameters } from '../src/playground/liveclay/shared/dynamics.mjs';

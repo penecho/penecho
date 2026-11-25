@@ -11,7 +11,7 @@ Object.assign(process.env,{NODE_ENV:"test",PENECHO_TEST_OPEN_ACCESS:"1",PENECHO_
 const readStream=fs.createReadStream;
 fs.createReadStream=function(file,...args){
   if(path.resolve(String(file))===path.join(root,"public/app.js"))return Readable.from([fs.readFileSync(file,"utf8").replace(/\}\)\(\);\s*$/,`
-    window.notePresentationTest={state,canvasDocumentsReady,loadCanvasSettings,noteCardInsert,setCanvasMode,closeCanvasAgent,enterWidgetInteraction,setWidgetInteraction,setWidgetMaximized,serializedWidgets,render};
+    window.notePresentationTest={state,canvasDocumentsReady,loadCanvasSettings,noteCardInsert,setCanvasMode,enterWidgetInteraction,setWidgetInteraction,setWidgetMaximized,serializedWidgets,render};
   })();`)]);
   return readStream.call(this,file,...args);
 };
@@ -24,7 +24,7 @@ app.whenReady().then(async()=>{try{
   win.webContents.on("console-message",event=>{if(event.level==="error")report.errors.push(event.message);});
   const js=code=>win.webContents.executeJavaScript(code,true);
   await win.loadURL(`http://127.0.0.1:${server.address().port}`);await until(()=>js("!!window.notePresentationTest"),"startup");
-  await js(`(async()=>{const t=notePresentationTest;await t.canvasDocumentsReady();await t.loadCanvasSettings();document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();t.closeCanvasAgent();t.state.auto=false;t.setCanvasMode('hand');})()`);
+  await js(`(async()=>{const t=notePresentationTest;await t.canvasDocumentsReady();await t.loadCanvasSettings();document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();t.state.auto=false;t.setCanvasMode('hand');})()`);
   const metrics=()=>js(`(()=>{const w=notePresentationTest.state.widgets.find(w=>w.maximized),s=w.shell,f=w.frame,t=w.presentationToolbar;return {
     zoom:w.presentationZoom,autoFit:w.presentationAutoFit,shell:s.getBoundingClientRect().toJSON(),frame:f.getBoundingClientRect().toJSON(),toolbar:t.getBoundingClientRect().toJSON(),
     scrollHeight:s.scrollHeight,clientHeight:s.clientHeight,scrollWidth:s.scrollWidth,clientWidth:s.clientWidth,

@@ -1,0 +1,69 @@
+/* Every colour is a variable, so Dark (theme.js sets data-theme on <html>) only has to change these. */
+:root {
+  --bg: #f8fafc; --side: #f1f5f9; --paper: #ffffff; --line: #e2e8f0; --sep: #f1f5f9;
+  --ink: #0f172a; --ink2: #64748b; --ink3: #94a3b8;
+  --accent: #2563eb; --accent-soft: rgba(37, 99, 235, .14); --accent-bar: rgba(37, 99, 235, .18); --thumb: #eff6ff;
+  --trunk: #0f172a; --elbow: #64748b; --rail: #94a3b8;
+  --ask: #2563eb; --canvas: #e9551f; --done: #16a34a; --ring: #ffffff;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0e131a; --side: #121821; --paper: #161c25; --line: rgba(226, 232, 240, .12); --sep: rgba(226, 232, 240, .07);
+  --ink: #e6e9ef; --ink2: #a9b2c0; --ink3: #8a94a4;
+  --accent: #60a5fa; --accent-soft: rgba(96, 165, 250, .2); --accent-bar: rgba(96, 165, 250, .28); --thumb: rgba(96, 165, 250, .14);
+  --trunk: #e2e8f0; --elbow: #7b8798; --rail: #7b8798;
+  --ask: #60a5fa; --canvas: #f26b38; --done: #22c55e; --ring: #475163;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 250px; min-height: 100vh; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+.side { padding: 20px 14px; border-right: 1px solid var(--line); background: var(--side); }
+.brand { margin: 0 8px 18px; font-size: 17px; font-weight: 700; }
+.project { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 10px; border-radius: 8px; text-align: left; }
+.project i { width: 10px; height: 10px; border-radius: 3px; }
+.project span { margin-left: auto; color: var(--ink3); font-size: 12px; }
+.project.on { background: var(--paper); font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, .06); }
+
+.main { padding: 22px 28px; min-width: 0; }
+.head { display: flex; align-items: baseline; gap: 12px; }
+.head h1 { margin: 0; font-size: 22px; }
+.head span { color: var(--ink2); }
+.theme { margin-left: auto; color: var(--ink2); font-size: 13px; }
+.theme select { margin-left: 6px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); font: inherit; }
+
+.week { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 16px 0; }
+.day { position: relative; display: flex; flex-direction: column; align-items: flex-start; height: 70px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); overflow: hidden; }
+.day b { font-size: 13px; }
+.day span { color: var(--accent); font-size: 20px; font-weight: 650; line-height: 1.2; }
+.day i { position: absolute; right: 12px; bottom: 0; width: 14px; border-radius: 4px 4px 0 0; background: var(--accent-bar); }
+.day.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.day.empty { opacity: .55; }
+
+.lines { position: relative; padding: 4px 0 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.trunk { position: absolute; left: 18px; top: 14px; bottom: 14px; width: 2.5px; border-radius: 2px; background: var(--trunk); }
+.dayhead, .row { display: grid; grid-template-columns: 170px auto; align-items: center; padding-left: 38px; }
+.dayhead { height: 34px; border-top: 1px solid var(--line); font-size: 13px; }
+.dayhead:first-of-type { border-top: 0; }
+.clock { position: relative; height: 34px; color: var(--ink3); font-size: 11px; }
+.clock span { position: absolute; bottom: 6px; transform: translateX(-50%); }
+.row { position: relative; height: 64px; border-top: 1px solid var(--sep); }
+.elbow { position: absolute; left: 20px; top: 14px; width: 13px; height: 10px; border-left: 1.5px solid var(--elbow); border-bottom: 1.5px solid var(--elbow); border-bottom-left-radius: 8px; }
+.title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; }
+.track .rail { stroke: var(--rail); stroke-width: 2; }
+.track .n-ask { fill: var(--paper); stroke: var(--ask); stroke-width: 2.5; }
+.track .n-canvas { fill: var(--canvas); }
+.track .n-done { fill: var(--done); }
+.track .n-tick { fill: none; stroke: #ffffff; stroke-width: 1.8; }
+.track .face circle { stroke: var(--ring); stroke-width: 2; }
+.track .face text { fill: #ffffff; }
+.track .time { fill: var(--ink2); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.files { padding: 22px 18px; border-left: 1px solid var(--line); }
+.files h2 { margin: 6px 0 12px; font-size: 14px; }
+.files ul { margin: 0; padding: 0; list-style: none; }
+.files li { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--sep); }
+.thumb { display: grid; place-items: center; flex: none; width: 38px; height: 30px; border-radius: 6px; background: var(--thumb); color: var(--accent); font-size: 13px; }
+.files b { display: block; font-size: 13px; font-weight: 600; }
+.files em { color: var(--ink2); font-size: 12px; font-style: normal; }

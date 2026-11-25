@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const source = fs.readFileSync("src/client/app/core.js", "utf8").match(/function requestSelectionAI\([^]*?\n  \}/)[0];
 

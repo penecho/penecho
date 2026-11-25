@@ -1,4 +1,25 @@
 .canvas-share-label { display: none; }
+body[data-theme="studio"] {
+  --canvas-tool-hover: color-mix(in srgb, var(--studio-text) 7%, var(--studio-panel));
+  --canvas-tool-selected: color-mix(in srgb, var(--studio-text) 13%, var(--studio-panel));
+}
+body[data-theme="studio"].project-lines-canvas:not(.project-lines-draft) .topbar .project-lines-link {
+  color: var(--studio-text); background: transparent; border-color: transparent;
+}
+body[data-theme="studio"].project-lines-canvas .topbar :is(.project-lines-panel-button, #shareCanvasBtn:not([data-collaborating="true"])) {
+  color: var(--studio-text); background: var(--studio-panel); border: 1px solid var(--studio-line);
+}
+body[data-theme="studio"].project-lines-canvas:not(.project-lines-draft) .topbar .project-lines-link:hover,
+body[data-theme="studio"].project-lines-canvas .topbar :is(.project-lines-panel-button, #shareCanvasBtn:not([data-collaborating="true"])):hover:not(:disabled) {
+  color: var(--studio-text); background: var(--canvas-tool-hover);
+}
+body[data-theme="studio"].project-lines-canvas .topbar :is(.project-lines-panel-button, #shareCanvasBtn:not([data-collaborating="true"]))[aria-expanded="true"] {
+  background: var(--canvas-tool-selected); border-color: var(--studio-muted);
+}
+body[data-theme="studio"] .topbar :is(.project-lines-link, .project-lines-panel-button, #shareCanvasBtn):focus-visible,
+body[data-theme="studio"] #aiToolsSection :is(#aiToolbarRun, #aiModelButton, #aiEffortButton, #auto, .color-orb-trigger):focus-visible {
+  outline: 2px solid var(--studio-text); outline-offset: 2px;
+}
 @media (min-width: 701px) {
   body[data-theme="studio"] .topbar #shareCanvasBtn {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -12,6 +33,18 @@
   body[data-theme="studio"] .topbar #shareCanvasBtn:hover:not(:disabled) { color: #fff; background: var(--pe-accent-strong); border-color: transparent; }
   body[data-theme="studio"] .topbar #shareCanvasBtn:active:not(:disabled) { background: color-mix(in srgb, var(--pe-accent-strong) 80%, #000); }
   body[data-theme="studio"] .topbar #shareCanvasBtn:focus-visible { outline: 2px solid var(--pe-accent); outline-offset: 3px; }
+  /* Collaborate sits beside Share with its name showing, as the outlined companion. */
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    width: auto; height: 28px; min-height: 28px; flex: 0 0 auto; margin-right: 4px;
+    padding: 0 11px; border: 1px solid var(--pe-accent); border-radius: 5px;
+    color: var(--pe-accent-strong); background: transparent; box-shadow: none;
+    font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap;
+  }
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn .canvas-share-label { display: inline; }
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn svg { width: 16px; height: 16px; flex: 0 0 16px; }
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn:hover:not(:disabled) { background: color-mix(in srgb, var(--pe-accent) 8%, transparent); }
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn:focus-visible { outline: 2px solid var(--pe-accent); outline-offset: 3px; }
 }
 
 /* PenEcho Studio shell — presentation layer loaded after every other stylesheet.
@@ -32,8 +65,7 @@
     --pe-shell-dock-h: 44px;
     --pe-shell-left: 0px;
     --pe-shell-right: 0px;
-    /* Space the docked Agent reserves even while a canvas drag briefly hides it,
-       so the bottom corners do not jump during a drag. */
+    /* Space a panel docked on the right reserves, so the bottom corners keep clear of it. */
     --pe-shell-right-reserved: 0px;
     /* The shell measures the actual controls before choosing a second row. */
     --pe-shell-corner-lift: 0px;
@@ -50,12 +82,6 @@
   }
   @media (max-width: 820px) {
     body[data-theme="studio"].studio-navigator-open .shell-geometry { --pe-shell-left: min(360px, calc(100% - 16px)); }
-  }
-  body[data-theme="studio"].studio-agent-docked.canvas-agent-open:not(.canvas-agent-navigation-hidden) .shell-geometry {
-    --pe-shell-right: calc(clamp(360px, var(--pe-shell-agent-width, 390px), 50%) - 4px);
-  }
-  body[data-theme="studio"].studio-agent-docked.canvas-agent-open .shell-geometry {
-    --pe-shell-right-reserved: calc(clamp(360px, var(--pe-shell-agent-width, 390px), 50%) - 4px);
   }
 
   /* Title bar: one row. */
@@ -79,7 +105,7 @@
   body[data-theme="studio"] .topbar .canvas-document-meta { order: -1; margin-left: 2px; padding-left: 10px; }
   body[data-theme="studio"] .topbar #aiStatusArea { order: 0; display: flex; flex: 1 1 0; min-width: 0; justify-content: center; margin: 0; }
   body[data-theme="studio"] .topbar .canvas-agent-toolbar-home { order: 1; margin-left: 0; }
-  body[data-theme="studio"] .topbar .canvas-file-actions { order: 2; margin-left: 4px; padding-left: 8px; }
+  body[data-theme="studio"] .topbar .canvas-file-actions { order: 2; gap: 6px; margin-left: 4px; padding-left: 8px; }
   body[data-theme="studio"] .topbar #cloudAccountBtn { order: 3; }
   body[data-theme="studio"] .topbar #settingsBtn { order: 4; }
 
@@ -135,15 +161,17 @@
   body[data-theme="studio"] .primary-tools > .pen-tool-properties { order: 2; }
   body[data-theme="studio"] .primary-tools > [data-action="undo"] { order: 3; }
   body[data-theme="studio"] .primary-tools > [data-action="redo"] { order: 3; }
-  /* AI controls float beside the AI orb at the bottom right of the canvas.
+  /* The Canvas AI bar floats at the top right of the Canvas, under the title bar; with a line's panel open it sits just left of it.
      The dock has no backdrop filter, so this fixed child uses the viewport. */
   body[data-theme="studio"] .primary-tools > .ai-tools-section {
     position: fixed;
     z-index: 45;
-    top: auto;
+    top: calc(var(--pe-shell-bar-h) + 12px);
     right: calc(var(--pe-shell-right) + 12px);
-    bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-dock-h) - 40px) / 2);
+    bottom: auto;
+    left: auto;
     display: flex;
+    flex-direction: row;
     height: 40px;
     min-height: 40px;
     box-sizing: border-box;
@@ -152,10 +180,10 @@
     margin: 0;
     padding: 0 4px;
     border: 1px solid var(--studio-line);
-    border-radius: 10px;
+    border-radius: 12px;
     background: var(--pe-shell-dock-surface);
     box-shadow: var(--pe-shell-float-shadow);
-    transition: right .22s cubic-bezier(.2,.72,.2,1), bottom .22s cubic-bezier(.2,.72,.2,1);
+    transition: right .22s cubic-bezier(.2,.72,.2,1);
   }
   /* The AI orb sits in the same bottom-right corner, level with the dock. */
   body[data-theme="studio"] #viewport > .ai-embodiment {
@@ -211,18 +239,12 @@
   body[data-theme="studio"] .primary-tools #gridToggle.active:hover { background: var(--studio-accent-softer); }
 
   /* Popovers that belong to dock controls open upward, above the dock. */
-  body[data-theme="studio"] .topbar > :is(#eraserToolMenu, #inkColorPopover, #aiColorPopover).toolbar-anchored-popover {
+  body[data-theme="studio"] .topbar > :is(#eraserToolMenu, #inkColorPopover).toolbar-anchored-popover {
     position: fixed;
     top: auto !important;
     bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px) !important;
   }
-  /* Auto and effort popovers open upward from the bottom-right AI cluster;
-     the runtime still sets their horizontal position. */
-  body[data-theme="studio"] .topbar > :is(#autoDelayPopover, #effortPopover).toolbar-anchored-popover {
-    position: fixed;
-    top: auto !important;
-    bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-dock-h) - 40px) / 2 + 40px + 8px) !important;
-  }
+  /* The Canvas AI bar's popovers (Auto delay, effort, AI colour) open downward from the bar at the top right; the runtime places them. */
 
   /* Bottom-left view cluster: lock and fit share one quiet pill, level with
      the dock (the locked-view hint names the bottom-left lock). */
@@ -339,14 +361,16 @@
   body[data-theme="studio"] .canvas-frame::after { display: none; }
 }
 
+/* Keep Hand and Pen visible at the start of the phone's scrolling toolbar. */
+@media (max-width: 700px) {
+  body[data-theme="studio"] .primary-tools > .mode-tools { order: -1; }
+}
+
 /* Title bar and dock at narrower desktop widths. Labels collapse before
    controls do; every control stays reachable. */
-@media (min-width: 701px) and (max-width: 1240px) {
-  body[data-theme="studio"] .topbar #canvasAgentToggle > span { display: none; }
-  body[data-theme="studio"] .topbar #canvasAgentToggle { padding-inline: 8px; }
-}
+
 @media (min-width: 701px) and (max-width: 1100px) {
-  body[data-theme="studio"] .topbar .canvas-file-actions { gap: 0; padding-left: 6px; }
+  body[data-theme="studio"] .topbar .canvas-file-actions { gap: 4px; padding-left: 6px; }
   body[data-theme="studio"] .primary-tools .mode-tools :is(button[data-pe-button="toolbar"], .icon-button),
   body[data-theme="studio"] .primary-tools > :is([data-action="undo"], [data-action="redo"]),
   body[data-theme="studio"] .primary-tools .view-tools > button { width: 30px; min-width: 30px; height: 30px; min-height: 30px; }
@@ -425,7 +449,6 @@ body[data-theme="studio"] .canvas-welcome[hidden] + .canvas-welcome-actions,
 body[data-theme="studio"].canvas-view-mode .canvas-welcome-actions,
 body[data-theme="studio"] #viewport:has(#textEditorLayer > *) .canvas-welcome-actions,
 html.viewer-mode .canvas-welcome-actions { display: none; }
-body[data-theme="studio"] .canvas-frame.canvas-agent-resizing .canvas-welcome-actions { transition: none; }
 body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) {
   display: inline-flex;
   height: 34px;
@@ -508,7 +531,7 @@ body[data-theme="studio"] .penecho-workbench-dialog > .penecho-workbench-header 
 
 /* Shared S/M/L frame. Keep form submission and each surface's existing focus
    handling; only the body scrolls, so close and action controls stay reachable. */
-body[data-theme="studio"] :is(.new-canvas-dialog, .changelog-dialog, .configuration-panel, .penecho-cloud-dialog:not(.cloud-center), .canvas-agent-project-dialog) {
+body[data-theme="studio"] :is(.new-canvas-dialog, .changelog-dialog, .configuration-panel, .penecho-cloud-dialog:not(.cloud-center)) {
   box-sizing: border-box;
   width: min(560px, calc(var(--penecho-canvas-page-viewport-width, 100vw) - 32px));
   max-width: calc(var(--penecho-canvas-page-viewport-width, 100vw) - 32px);
@@ -530,7 +553,7 @@ body[data-theme="studio"] .new-canvas-dialog > form {
   margin: 0;
   padding: 0;
 }
-body[data-theme="studio"] :is(.new-canvas-dialog > form > header, .changelog-header, .configuration-panel > header, .cloud-dialog-titlebar, .canvas-agent-project-dialog-head) {
+body[data-theme="studio"] :is(.new-canvas-dialog > form > header, .changelog-header, .configuration-panel > header, .cloud-dialog-titlebar) {
   box-sizing: border-box;
   display: flex;
   min-height: 56px;
@@ -568,7 +591,7 @@ body[data-theme="studio"] :is(.new-canvas-actions, .mcp-certificate-actions) {
   border-top: 1px solid var(--studio-line);
   background: var(--studio-panel-raised);
 }
-body[data-theme="studio"] :is(.new-canvas-close, .changelog-close, .settings-close, .canvas-agent-project-close, .cloud-dialog-close) {
+body[data-theme="studio"] :is(.new-canvas-close, .changelog-close, .settings-close, .cloud-dialog-close) {
   width: 28px;
   height: 28px;
   min-width: 28px;
@@ -581,15 +604,17 @@ body[data-theme="studio"] :is(.new-canvas-close, .changelog-close, .settings-clo
   border-radius: 5px;
   background: transparent;
 }
-body[data-theme="studio"] :is(.configuration-panel > header p, .cloud-dialog-heading p, .canvas-agent-project-eyebrow) { display: none; }
-body[data-theme="studio"] .canvas-agent-project-dialog[open] { display: flex; flex-direction: column; }
-body[data-theme="studio"] .canvas-agent-project-dialog-body { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; max-height: none; }
-body[data-theme="studio"] .canvas-agent-resource-group { min-height: 0; }
-body[data-theme="studio"] #canvasAgentProjectDescription { margin: 0; color: var(--pe-ink-2); }
-body[data-theme="studio"] .canvas-agent-project-dialog-head p { display: none; }
-body[data-theme="studio"] :is(.changelog-badge, .tour-badge, .canvas-agent-resource-count, .crafts-sidebar-section h3) { text-transform: none; letter-spacing: normal; }
+body[data-theme="studio"] :is(.configuration-panel > header p, .cloud-dialog-heading p) { display: none; }
+body[data-theme="studio"] :is(.changelog-badge, .tour-badge, .crafts-sidebar-section h3) { text-transform: none; letter-spacing: normal; }
+body[data-theme="studio"] .changelog-research { border-top-color: var(--pe-line); }
+body[data-theme="studio"] :is(.changelog-research h3, .research-choices label, .changelog-research textarea) { color: var(--pe-ink); font-family: var(--pe-font-ui, system-ui); }
+body[data-theme="studio"] :is(.research-choices legend, .research-status) { color: var(--pe-ink-2); font-family: var(--pe-font-ui, system-ui); }
+body[data-theme="studio"] :is(.research-choices label, .changelog-research textarea) { border-color: var(--pe-line); }
+body[data-theme="studio"] .changelog-research textarea { background: var(--pe-surface); }
+body[data-theme="studio"] .research-choices label:has(input:checked) { border-color: var(--pe-accent); background: color-mix(in srgb, var(--pe-accent) 10%, transparent); }
+body[data-theme="studio"] .research-choices label:has(input:focus-visible) { outline-color: var(--pe-accent); }
 :is(#pe-type-contract, body[data-theme="studio"]) .changelog-badge { color: var(--pe-ink); font-size: 17px; font-weight: 600; }
-:is(#pe-type-contract, body[data-theme="studio"]) :is(.tour-badge, .changelog-badge, .text-help-example h3, .plugin-option-section-title, .studio-navigator-section-label, .mcp-eyebrow, .cloud-environment span, .canvas-agent-resource-count, .canvas-agent-error-label) { text-transform: none; letter-spacing: normal; }
+:is(#pe-type-contract, body[data-theme="studio"]) :is(.tour-badge, .changelog-badge, .text-help-example h3, .plugin-option-section-title, .studio-navigator-section-label, .mcp-eyebrow, .cloud-environment span) { text-transform: none; letter-spacing: normal; }
 
 /* Alerts use the question as their title, without a title bar or icon rail. */
 body[data-theme="studio"] .studio-session-delete-dialog {
@@ -620,7 +645,7 @@ body[data-theme="studio"] #historyPanel[data-library-design="reference"] > .hist
   body[data-theme="studio"] :is(.pe-dialog-body, .changelog-scroll) { padding: 16px; }
 }
 @media (pointer: coarse) {
-  body[data-theme="studio"] :is(.new-canvas-close, .changelog-close, .settings-close, .canvas-agent-project-close, .cloud-dialog-close) { width: 44px; height: 44px; min-width: 44px; min-height: 44px; flex-basis: 44px; }
+  body[data-theme="studio"] :is(.new-canvas-close, .changelog-close, .settings-close, .cloud-dialog-close) { width: 44px; height: 44px; min-width: 44px; min-height: 44px; flex-basis: 44px; }
 }
 
 /* Library ↔ Favorites links (studio-shell.js forwards to the existing buttons). */
@@ -659,13 +684,13 @@ body[data-theme="studio"] :is(.penecho-workbench-navigation, .crafts-sidebar, .c
 }
 
 /* Native dialog scrims use the same light veil. */
-body[data-theme="studio"] :is(.new-canvas-dialog, .studio-session-delete-dialog, .canvas-agent-project-dialog)::backdrop {
+body[data-theme="studio"] :is(.new-canvas-dialog, .studio-session-delete-dialog)::backdrop {
   background: rgba(0, 0, 0, .22);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
 @media (prefers-reduced-transparency: reduce) {
-  body[data-theme="studio"] :is(.new-canvas-dialog, .studio-session-delete-dialog, .canvas-agent-project-dialog)::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  body[data-theme="studio"] :is(.new-canvas-dialog, .studio-session-delete-dialog)::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
 /* ------------------------------------------------------------------
@@ -737,15 +762,12 @@ body[data-theme="studio"] .settings-navigation :is(#pe-button-contract, button[a
   background: var(--pe-selected);
 }
 
-/* Recent-work navigator and Agent panel sit on opaque surfaces. */
+/* The Recent-work navigator sits on an opaque surface. */
 body[data-theme="studio"] .studio-navigator {
   background: color-mix(in srgb, var(--studio-titlebar, #f8f9fb) 97%, transparent);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
-
-/* Agent without a connection is waiting for setup, not failing. */
-body[data-theme="studio"] .canvas-agent-panel[data-status="offline"] .canvas-agent-mark { background: #b7791f; box-shadow: 0 0 0 4px rgba(183, 121, 31, .12); }
 
 /* Share Canvas (M dialog). */
 body[data-theme="studio"] .penecho-cloud-overlay:has(> .penecho-live-share-dialog) { align-items: center; padding: 16px; }
@@ -797,29 +819,30 @@ body[data-theme="studio"] .penecho-live-share-dialog button:disabled { opacity: 
    5. Title bar More menu, zoom controls, merged Library, Account & Cloud,
       Share checklist and the object toolbar move grip.
    ------------------------------------------------------------------ */
-.canvas-more-control, .canvas-zoom-controls { display: none; }
+body:not([data-theme="studio"]) .canvas-more-control, .canvas-zoom-controls { display: none; }
+body[data-theme="studio"] .topbar .canvas-more-control { position: relative; order: 3; display: flex; align-items: center; flex: 0 0 auto; }
+body[data-theme="studio"] .topbar #canvasMoreBtn[aria-expanded="true"] { color: var(--studio-text); background: var(--pe-selected, var(--studio-accent-soft)); }
+body[data-theme="studio"] .canvas-more-menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 212px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  gap: 1px;
+  padding: 4px;
+  border: 1px solid var(--studio-line);
+  border-radius: 10px;
+  background: var(--studio-panel, #ffffff);
+  box-shadow: 0 6px 14px rgba(17, 24, 39, .14);
+}
+body[data-theme="studio"] .canvas-more-menu[hidden] { display: none; }
 
 @media (min-width: 701px) {
   /* New, Library, Export and Echo move into More; the originals stay in the DOM. */
   body[data-theme="studio"] .topbar :is(#newCanvasBtn, #echoCanvasBtn, #exportPngBtn, #historyBtn) { display: none; }
-  body[data-theme="studio"] .topbar .canvas-more-control { position: relative; order: 2; display: flex; align-items: center; }
-  body[data-theme="studio"] .topbar #canvasMoreBtn[aria-expanded="true"] { color: var(--studio-text); background: var(--pe-selected, var(--studio-accent-soft)); }
-  body[data-theme="studio"] .canvas-more-menu {
-    position: absolute;
-    z-index: 60;
-    top: calc(100% + 6px);
-    right: 0;
-    display: grid;
-    min-width: 212px;
-    box-sizing: border-box;
-    gap: 1px;
-    padding: 4px;
-    border: 1px solid var(--studio-line);
-    border-radius: 10px;
-    background: var(--studio-panel, #ffffff);
-    box-shadow: 0 6px 14px rgba(17, 24, 39, .14);
-  }
-  body[data-theme="studio"] .canvas-more-menu[hidden] { display: none; }
   body[data-theme="studio"] .canvas-more-menu > :is(#pe-button-contract, button[role="menuitem"]) {
     display: flex;
     width: 100%;
@@ -943,7 +966,6 @@ body[data-theme="studio"] .shell-library-link[aria-current="page"] {
   color: var(--pe-accent-label, var(--studio-accent-strong));
   background: var(--pe-selected);
 }
-body[data-theme="studio"] .history-library-sidebar > .crafts-echoes-link { margin-top: auto; }
 
 /* Settings → Account & Cloud hosts the Cloud account and Link device panels. */
 body[data-theme="studio"] .settings-cloud-host {
@@ -1028,8 +1050,7 @@ body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-
 body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface.has-decisions)::before { left: 42px; }
 body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface):is(:hover, :focus-visible)::before { opacity: .9; }
 
-/* AI cluster (bottom right): one quiet pill — a sparkle label, the Auto
-   toggle with a status dot and the effort menu. */
+/* Canvas AI bar (top right): settings or suggestions grow left of the anchored AI button. */
 @media (min-width: 701px) {
   body[data-theme="studio"] .primary-tools > .ai-tools-section { gap: 2px; padding: 4px; border-radius: 10px; }
   body[data-theme="studio"] .primary-tools > .ai-tools-section > .ai-section-label {
@@ -1081,28 +1102,147 @@ body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-
     opacity: .7;
   }
   body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto).active {
-    color: var(--pe-accent-label, var(--studio-accent-strong));
-    background: var(--pe-selected, var(--studio-accent-soft));
+    color: var(--studio-text);
+    background: var(--canvas-tool-hover);
   }
   body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto).active::before {
     border: 0;
-    background: var(--studio-accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--studio-accent) 22%, transparent);
+    background: var(--pe-success);
+    box-shadow: none;
     opacity: 1;
   }
   body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #aiEffortButton) { gap: 3px; padding: 0 5px; color: var(--studio-text); }
   body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto, #aiEffortButton):is(:hover, [aria-expanded="true"]):not(.active) {
     color: var(--studio-text);
-    background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 6%, transparent));
+    background: var(--canvas-tool-hover);
   }
-  body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto).active:hover { background: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-panel, #ffffff)); }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section #auto.active:is(:hover, [aria-expanded="true"]) { background: var(--canvas-tool-selected); }
   body[data-theme="studio"] .primary-tools > .ai-tools-section > #craftsControl {
     height: 20px;
     margin-left: 4px;
     padding-left: 4px;
     border-left: 1px solid var(--studio-line);
   }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #aiModelControl { order: 1; }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #effortControl { order: 2; }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #autoControl { order: 3; }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > [data-color-control="ai"] { order: 4; }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #craftsControl { order: 5; }
+  /* AI is the bar's one action: filled, so it reads as "run it now". */
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #aiToolbarRun.ai-section-label {
+    order: 6;
+    flex: none;
+    height: 30px;
+    min-height: 30px;
+    margin-left: 4px;
+    padding: 0 11px 0 9px;
+    color: var(--studio-panel);
+    border-radius: 8px;
+    background: var(--studio-text);
+    font-size: 12.5px;
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #aiToolbarRun.ai-section-label:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--studio-text) 85%, var(--studio-panel)); }
 }
+body[data-theme="studio"] #aiModelControl { position: relative; display: flex; align-items: center; min-width: 0; }
+/* Suggestions for new ink sit inside the Canvas AI bar (wide Canvas, set by smart-suggestions.js): they take the place of
+   the model, reasoning, Auto and colour until used or closed. A dot on AI keeps Auto visible. */
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar {
+  position: relative; top: auto; left: auto; order: 1; flex: 0 1 auto; min-width: 0; max-width: none; height: 30px; gap: 2px; padding: 0;
+  border: 0; border-radius: 8px; background: transparent; box-shadow: none; transform: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+  color: var(--studio-text); font-size: 12.5px; animation: none;
+}
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar::before { order: 1; flex: none; width: 1px; height: 20px; margin-left: 2px; background: var(--studio-line); content: ""; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar:is(:not(.visible), .is-request-hidden) { display: none; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar.is-writing { visibility: visible; opacity: .45; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar:has(.assist-llm-info) { flex-wrap: nowrap; }
+body[data-theme="studio"] #aiToolsSection:has(> .assist-bar.in-ai-bar.visible:not(.is-request-hidden)) > :is(#aiModelControl, #effortControl, #autoControl, [data-color-control="ai"], #craftsControl) { display: none; }
+body[data-theme="studio"] #aiToolsSection:has(> .assist-bar.in-ai-bar.visible:not(.is-request-hidden)) > #aiToolbarRun { position: relative; }
+body[data-theme="studio"] #aiToolsSection:has(> .assist-bar.in-ai-bar.visible:not(.is-request-hidden)):has(#auto.active) > #aiToolbarRun::after {
+  position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; box-sizing: border-box; border: 2px solid var(--pe-shell-dock-surface, #fff); border-radius: 50%; background: var(--pe-success, #16a34a); content: "";
+}
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar button { min-height: 28px; height: 28px; padding: 0 9px; gap: 6px; border-radius: 8px; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar button:is(:hover, :focus-visible) { background: var(--canvas-tool-hover, rgba(15, 23, 42, .06)); }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar > .assist-action { max-width: min(150px, var(--assist-action-max-width, 150px)); color: var(--studio-text); font-weight: 600; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar > .assist-action.primary { color: var(--studio-accent-strong, #4338ca); background: var(--studio-accent-soft, #e7e8fb); }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar > .assist-action.primary:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--studio-accent-soft, #e7e8fb) 80%, var(--studio-accent, #4f46e5)); }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar > :is(.assist-close, .assist-more > button) { min-width: 28px; padding: 0 6px; justify-content: center; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar .assist-retry { padding: 0 8px; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar .assist-retry .assist-label { display: none; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar .assist-status { padding: 0 4px; color: var(--studio-muted); font-weight: 600; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar .assist-menu > .assist-ask { display: flex; padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid rgba(15, 23, 42, .08); }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar .assist-menu > .assist-ask > button { flex: 1; justify-content: flex-start; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar .assist-menu > .assist-ask input { flex: 1; width: 220px; min-width: 0; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar .assist-menu button { height: auto; min-height: 30px; justify-content: flex-start; }
+body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar .assist-llm-info {
+  position: absolute; z-index: 2; top: calc(100% + 10px); right: 0; width: 280px; padding: 10px 12px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel, #fff); box-shadow: var(--pe-shell-float-shadow);
+}
+body[data-theme="studio"] .ai-tools-section #aiModelButton {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 200px;
+  height: 28px;
+  min-height: 28px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px 0 8px;
+  color: var(--studio-text);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+body[data-theme="studio"] .ai-tools-section #aiModelButton:is(:hover, [aria-expanded="true"]) { background: var(--canvas-tool-hover); }
+body[data-theme="studio"] .ai-tools-section #aiModelButton.is-empty { color: var(--studio-muted); }
+body[data-theme="studio"] #aiModelLabel { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+body[data-theme="studio"] .ai-model-chevron { width: 12px; height: 12px; flex: 0 0 12px; fill: none; stroke: currentColor; stroke-width: 2; opacity: .6; }
+body[data-theme="studio"] .ai-model-menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 10px);
+  left: -4px;
+  width: max-content;
+  min-width: 240px;
+  max-width: 320px;
+  max-height: min(440px, calc(100vh - 140px));
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid var(--studio-line);
+  border-radius: 12px;
+  background: var(--studio-panel, #ffffff);
+  box-shadow: 0 12px 32px rgba(17, 24, 39, .16);
+}
+body[data-theme="studio"] .ai-model-menu[hidden] { display: none; }
+body[data-theme="studio"] .ai-model-group { padding: 8px 10px 4px 30px; color: var(--studio-muted); font-size: 11.5px; font-weight: 600; }
+body[data-theme="studio"] .ai-model-menu :is(.ai-model-option, .ai-model-settings) {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 12px 0 8px;
+  color: var(--studio-text);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+body[data-theme="studio"] .ai-model-menu :is(.ai-model-option, .ai-model-settings):is(:hover, :focus-visible) { outline: none; background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 6%, transparent)); }
+body[data-theme="studio"] .ai-model-option[aria-checked="true"] { color: var(--pe-accent-label, var(--studio-accent-strong)); font-weight: 600; }
+body[data-theme="studio"] .ai-model-check { display: grid; width: 16px; height: 16px; flex: 0 0 16px; place-items: center; }
+body[data-theme="studio"] .ai-model-check svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+body[data-theme="studio"] .ai-model-none { margin: 0; padding: 10px 12px; color: var(--studio-muted); font-size: 13px; }
+body[data-theme="studio"] .ai-model-menu .ai-model-settings { margin-top: 6px; color: var(--studio-muted); border-top: 1px solid var(--studio-line); border-radius: 0 0 8px 8px; }
+body[data-theme="studio"] .ai-model-menu .ai-model-settings:is(:hover, :focus-visible) { color: var(--studio-text); }
+body[data-theme="studio"] .ai-model-settings svg { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 
 /* Maximized Widget and image presentation: an opaque page with a solid
    header, instead of a blurred glass layer over the canvas. */
@@ -1145,15 +1285,11 @@ body[data-theme="studio"] #viewport .canvas-widget.widget-maximized .canvas-widg
   body[data-theme="studio"] #viewport .canvas-widget.widget-maximized > .widget-presentation-toolbar { padding: 0 8px; }
 }
 
-/* Agent width is mirrored directly to the chrome by studio-shell.js. */
-
-
 /* Anchor the side groups to the canvas edges and keep the drawing dock centered.
    Test the actual clearance before stacking the sides or using two rows. */
 @media (min-width: 701px) {
   body[data-theme="studio"][data-shell-dock-layout] .shell-geometry {
     --pe-shell-view-bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-row-height) - var(--pe-shell-view-height)) / 2);
-    --pe-shell-ai-bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-row-height) - var(--pe-shell-ai-height)) / 2);
   }
   body[data-theme="studio"] .shell-dock-space {
     position: fixed;
@@ -1183,14 +1319,6 @@ body[data-theme="studio"] #viewport .canvas-widget.widget-maximized .canvas-widg
   body[data-theme="studio"][data-shell-dock-layout] .primary-tools :is(.mode-tools, .view-tools) { gap: 2px; }
   body[data-theme="studio"][data-shell-dock-layout] .primary-tools .mode-tools :is(#pe-button-contract, button[data-pe-button="toolbar"]),
   body[data-theme="studio"][data-shell-dock-layout] .primary-tools > :is(#pe-button-contract, button[data-pe-button="toolbar"]) { margin-inline: 0; }
-  body[data-theme="studio"][data-shell-dock-layout] .primary-tools > .ai-tools-section {
-    left: var(--pe-shell-ai-x);
-    right: auto;
-    bottom: var(--pe-shell-ai-bottom);
-    height: auto;
-    min-height: 38px;
-    transition: none;
-  }
   body[data-theme="studio"][data-shell-dock-layout] #viewport > :is(.canvas-navigation-lock, .canvas-fit-contents, .canvas-zoom-controls) {
     position: fixed;
     bottom: var(--pe-shell-view-bottom);
@@ -1218,12 +1346,7 @@ body[data-theme="studio"] #viewport .canvas-widget.widget-maximized .canvas-widg
     border-top-color: transparent;
     border-radius: 0 0 8px 8px;
   }
-  body[data-theme="studio"][data-shell-dock-layout="vertical"] .primary-tools > .ai-tools-section { flex-direction: column; align-items: stretch; }
-  body[data-theme="studio"][data-shell-dock-layout="vertical"] #aiToolbarRun { align-self: stretch; justify-content: center; }
   body[data-theme="studio"][data-shell-dock-layout="rows"] .shell-geometry { --pe-shell-corner-lift: 52px; }
-  body[data-theme="studio"][data-shell-dock-layout] .topbar > :is(#autoDelayPopover, #effortPopover).toolbar-anchored-popover {
-    bottom: calc(var(--pe-shell-ai-bottom) + var(--pe-shell-ai-height, 38px) + 8px) !important;
-  }
   body[data-theme="studio"][data-shell-dock-layout] #viewport > .canvas-navigation-actions {
     position: fixed;
     left: var(--pe-shell-view-x);
@@ -1234,7 +1357,6 @@ body[data-theme="studio"] #viewport .canvas-widget.widget-maximized .canvas-widg
 /* Other themes and mobile keep the original orb as their manual AI action. */
 body:not([data-theme="studio"]) #aiToolbarRun { display: none; }
 @media (max-width: 700px) { #aiToolbarRun { display: none; } }
-
 
 /* Reference canvas shell: sidebars reserve layout space on the canvas plane. */
 body[data-theme="studio"] .canvas-frame {
@@ -1259,21 +1381,6 @@ body[data-theme="studio"]:not(.studio-navigator-open) .canvas-frame > .studio-na
   pointer-events: none;
 }
 body[data-theme="studio"] .studio-navigator-scrim { display: none !important; }
-body[data-theme="studio"] .canvas-frame > .canvas-agent-panel {
-  position: relative; inset: auto; flex: 0 0 var(--studio-agent-width);
-  width: var(--studio-agent-width); min-width: 0; max-width: var(--studio-agent-width);
-  height: auto; min-height: 0; max-height: none; margin: 0;
-  border: 0; border-left: 1px solid var(--studio-line); border-radius: 0;
-  background: var(--studio-panel); box-shadow: none; transform: none; transition: none;
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-}
-body[data-theme="studio"].studio-agent-docked .canvas-frame > .canvas-agent-panel[hidden] { display: flex; }
-body[data-theme="studio"]:not(.canvas-agent-open) .canvas-frame > .canvas-agent-panel {
-  margin-right: calc(-1 * var(--studio-agent-width));
-  transform: none;
-  pointer-events: none;
-}
-body[data-theme="studio"].canvas-agent-navigation-hidden .canvas-frame > .canvas-agent-panel { opacity: 1; visibility: visible; transform: none; border-left-color: var(--studio-line); }
 body[data-theme="studio"] #saveCanvasBtn { display: none; }
 body[data-theme="studio"] #canvasDocumentSaveState { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px; border: 0; border-radius: 5px; background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
 body[data-theme="studio"] #canvasDocumentSaveState:hover { background: var(--studio-toolbar); }
@@ -1325,9 +1432,30 @@ body[data-theme="studio"] .canvas-welcome-actions > button > .welcome-link { mar
 /* Settings uses the existing workbench navigation and working preferences. */
 body[data-theme="studio"] #settingsPanel { width: min(1120px, calc(100vw - 64px)); }
 body[data-theme="studio"] #settingsPageCanvas { padding: 28px 34px; }
-.settings-canvas-heading { margin-bottom: 26px; }
+.settings-canvas-heading { margin-bottom: 18px; }
 .settings-canvas-heading h2 { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
 .settings-canvas-heading p { margin: 0; color: var(--studio-muted); font-size: 15px; line-height: 1.5; }
+.settings-which-ai { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
+:root[data-penecho-guest-ai="true"] .settings-which-ai { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:root[data-penecho-guest-ai="true"] [data-penecho-guest-hide] { display: none !important; }
+.settings-which-card { display: grid; gap: 5px; padding: 12px 14px; text-align: left; border-radius: 10px; border: 1px solid var(--studio-border); background: var(--studio-panel, #fff); color: inherit; cursor: pointer; }
+.settings-which-card:hover { border-color: color-mix(in srgb, var(--pe-accent) 45%, var(--studio-border)); }
+.settings-which-card.active { border-color: var(--pe-accent); background: color-mix(in srgb, var(--pe-accent) 7%, var(--studio-panel, #fff)); }
+.settings-which-card strong { font-size: 14px; font-weight: 600; }
+.settings-which-card span { font-size: 13px; line-height: 1.4; color: var(--studio-muted); }
+.settings-canvas-ai-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 22px; padding: 16px 20px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--pe-accent) 32%, var(--studio-border)); background: color-mix(in srgb, var(--pe-accent) 5%, var(--studio-panel, #fff)); }
+.settings-canvas-ai-copy { min-width: 0; display: grid; gap: 4px; }
+.settings-canvas-ai-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.settings-canvas-ai-top strong { font-size: 16px; font-weight: 600; }
+.settings-canvas-ai-copy p { margin: 0; font-size: 14px; color: var(--studio-muted); line-height: 1.45; }
+.settings-canvas-ai-copy small { font-size: 12.5px; color: var(--studio-muted); }
+.settings-canvas-ai-actions { flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#settingsCanvasAiSelect { min-width: 210px; max-width: 290px; }
+@media (max-width: 720px) {
+  .settings-which-ai, :root[data-penecho-guest-ai="true"] .settings-which-ai { grid-template-columns: 1fr; }
+  .settings-canvas-ai-card { flex-direction: column; align-items: stretch; }
+  #settingsCanvasAiSelect { max-width: none; width: 100%; }
+}
 body[data-theme="studio"] #settingsPageCanvas > .settings-group { margin: 0 0 24px; padding: 0; }
 body[data-theme="studio"] #settingsPageCanvas > .settings-group > h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--studio-muted); }
 body[data-theme="studio"] #settingsPageCanvas > .settings-group > .settings-row { min-height: 68px; padding: 14px 20px; gap: 18px; }
@@ -1346,42 +1474,8 @@ body[data-theme="studio"] .settings-grid-options button[aria-pressed="true"] { c
   body[data-theme="studio"] #settingsPageCanvas > .settings-group > .settings-row { flex-wrap: wrap; padding: 12px; }
 }
 
-/* Agent: a flat panel, inline suggestions and an unobtrusive composer. */
-body[data-theme="studio"] .canvas-agent-head { min-height: 64px; padding: 12px 16px; background: var(--studio-titlebar) !important; border-bottom: 1px solid var(--studio-line); }
-body[data-theme="studio"] .canvas-agent-mark { display: none; }
-body[data-theme="studio"] .canvas-agent-heading strong { font-size: 16px; }
-body[data-theme="studio"] .canvas-agent-heading small { font-size: 13px; }
-body[data-theme="studio"] .canvas-agent-panel[data-prompt-presentation="welcome"][data-prompt-suggestions-open="true"] .canvas-agent-transcript { display: none; }
-body[data-theme="studio"] .canvas-agent-connection-notice { display: flex; flex: 0 0 auto; gap: 12px; margin: 18px 18px 6px; padding: 16px; border-radius: 12px; background: color-mix(in srgb, #a55b09 7%, var(--studio-panel)); }
-body[data-theme="studio"] .canvas-agent-connection-notice[hidden] { display: none; }
-.canvas-agent-connection-notice > svg { width: 20px; height: 20px; flex: 0 0 20px; margin-top: 1px; color: #a55b09; fill: none; stroke: currentColor; stroke-width: 1.7; }
-.canvas-agent-connection-notice strong { font-size: 15px; font-weight: 500; }
-.canvas-agent-connection-notice p { margin: 5px 0 12px; color: var(--studio-muted); font-size: 14px; line-height: 1.5; }
 .connection-notice-actions { display: flex; flex-wrap: wrap; gap: 8px 14px; }
 body[data-theme="studio"] .connection-notice-actions button { padding: 7px 11px; font-size: 13px; border: 1px solid var(--studio-line); border-radius: 6px; background: var(--studio-panel); }
-body[data-theme="studio"] .connection-notice-actions #canvasAgentSignIn { color: var(--studio-accent-strong); border-color: transparent; background: transparent; }
-body[data-theme="studio"] .canvas-agent-prompt-suggestions { padding: 16px 18px; }
-body[data-theme="studio"] .canvas-agent-prompt-categories { display: flex; flex: 0 0 auto; gap: 16px; padding: 0; border: 0; border-bottom: 1px solid var(--studio-line); border-radius: 0; background: transparent; }
-body[data-theme="studio"] .canvas-agent-prompt-categories > button { flex: none; padding: 8px 0 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--studio-muted); font-size: 13px; white-space: nowrap; box-shadow: none; }
-body[data-theme="studio"] .canvas-agent-prompt-categories > button[aria-selected="true"] { color: var(--studio-text); background: transparent; border-bottom-color: var(--studio-accent); }
-body[data-theme="studio"] .canvas-agent-prompt-popup { margin-top: 14px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-body[data-theme="studio"] .canvas-agent-panel[data-prompt-presentation="conversation"] .canvas-agent-prompt-suggestions { padding-block: 8px; }
-body[data-theme="studio"] .canvas-agent-panel[data-prompt-presentation="conversation"] .canvas-agent-prompt-popup { margin-top: 0; }
-body[data-theme="studio"] .canvas-agent-prompt-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; min-height: 58px; margin: 0 0 3px; padding: 10px; border: 0; border-radius: 11px; }
-body[data-theme="studio"] .canvas-agent-prompt-row:hover { background: var(--studio-toolbar); }
-body[data-theme="studio"] .canvas-agent-prompt-row > .canvas-agent-prompt-icon { width: 34px; height: 34px; color: var(--studio-muted); border: 1px solid var(--studio-line); border-radius: 6px; background: var(--studio-panel); }
-body[data-theme="studio"] .canvas-agent-prompt-copy { display: grid; gap: 4px; }
-body[data-theme="studio"] .canvas-agent-prompt-copy > strong { font-size: 14px; line-height: 1.3; font-weight: 500; }
-body[data-theme="studio"] .canvas-agent-prompt-copy > small { font-size: 13px; line-height: 1.4; color: var(--studio-muted); }
-body[data-theme="studio"] .canvas-agent-composer { padding: 12px 18px 18px; }
-body[data-theme="studio"] .canvas-agent-composer-surface { border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); box-shadow: none !important; padding: 9px; }
-body[data-theme="studio"] .canvas-agent-composer-toolbar { display: flex; justify-content: flex-start; gap: 5px; }
-body[data-theme="studio"] :is(#canvasAgentProject, #canvasAgentConnection) { flex: 0 1 auto; max-width: 60%; padding: 5px 9px; border: 0; border-radius: 6px; background: var(--studio-toolbar); color: var(--studio-muted); }
-body[data-theme="studio"] #canvasAgentInput { min-height: 76px; font-size: 14px; line-height: 1.5; padding: 12px 5px; }
-body[data-theme="studio"] .canvas-agent-composer .canvas-agent-tool-actions button:is(.active, [aria-pressed="true"], [aria-expanded="true"], [data-pe-state="selected"]) { background: transparent !important; border-color: transparent !important; box-shadow: none !important; color: var(--studio-accent-strong) !important; }
-body[data-theme="studio"] #canvasAgentTextMode.active { display: none; }
-body[data-theme="studio"] #canvasAgentSend { width: 32px; height: 32px; border-radius: 7px; }
-body[data-theme="studio"] #canvasAgentSend .canvas-agent-action-label { display: none; }
 body[data-theme="studio"] .canvas-auto-paused-notice { position: absolute; z-index: 8; right: 16px; bottom: 18px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px); padding: 12px 16px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); color: var(--studio-muted); box-shadow: var(--pe-shell-float-shadow); font-size: 13px; }
 body[data-theme="studio"] .canvas-auto-paused-notice[hidden] { display: none; }
 .canvas-auto-paused-notice svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; flex-shrink: 0; }
@@ -1435,21 +1529,14 @@ body[data-theme="studio"] .pen-size-popover .range-control { display: flex; gap:
 body[data-theme="studio"] .pen-size-popover input { width: 140px; }
 body[data-theme="studio"] #viewport > .canvas-navigation-hint { display: none; }
 body[data-theme="studio"].canvas-auto-paused #aiStatusArea #status { visibility: hidden; }
-body[data-theme="studio"][data-shell-dock-layout="rows"] .canvas-auto-paused-notice { bottom: calc(var(--pe-shell-dock-bottom) + 52px); }
-body[data-theme="studio"][data-shell-dock-layout="vertical"] .canvas-auto-paused-notice { max-width: 180px; bottom: calc(var(--pe-shell-dock-bottom) + 170px); }
 body[data-theme="studio"] #settingsPanel { height: min(820px, calc(100dvh - 64px)); max-height: calc(100dvh - 64px); }
 body[data-theme="studio"] #settingsPageCanvas > .settings-group { margin-bottom: 20px; }
-body[data-theme="studio"] .canvas-agent-composer-toolbar { border-bottom: 0; padding-bottom: 0; }
-body[data-theme="studio"] #canvasAgentConnection { max-width: 60%; width: auto; }
 @media (max-width: 700px) {
   body[data-theme="studio"] .canvas-welcome { padding-bottom: 100px; }
 }
 
 body[data-theme="studio"] #status[data-status-key="ready"] { visibility: hidden; }
 body[data-theme="studio"] .settings-navigation :is(#pe-button-contract, button[aria-selected="true"]):is(:hover, :focus, :active) { background: var(--studio-accent-soft); }
-body[data-theme="studio"] .canvas-agent-prompt-row .canvas-agent-prompt-icon svg { width: 22px; height: 22px; }
-body[data-theme="studio"] #canvasAgentSend:disabled { color: var(--studio-muted); background: var(--studio-toolbar); }
-body[data-theme="studio"] .canvas-agent-panel .canvas-agent-resize-edge { box-shadow: none; }
 
 body[data-theme="studio"] .selected-widget-material.floating-toolbar-selection { background: var(--studio-panel); }
 body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.interact)[data-pe-button] { color: var(--pe-accent-label, var(--studio-accent-strong)); font-weight: 500; }
@@ -1460,8 +1547,6 @@ body[data-theme="studio"] .canvas-widget-resize-handle.resize-nw { top: -7px; le
 body[data-theme="studio"] .canvas-widget-resize-handle.resize-ne { top: -7px; bottom: auto !important; cursor: nesw-resize; }
 body[data-theme="studio"] .canvas-widget-resize-handle.resize-sw { left: -7px; right: auto !important; cursor: nesw-resize; }
 body[data-theme="studio"] .canvas-widget:not(.object-toolbar-attached) .canvas-widget-resize-handle:is(.resize-nw,.resize-ne,.resize-sw) { display: none; }
-
-body[data-theme="studio"] .canvas-agent-composer-toolbar .canvas-agent-project-control { flex: 0 1 auto; max-width: 40%; }
 
 /* Reference chrome: neutral typography, shared corner control, and joined slides. */
 @media (min-width: 701px) {
@@ -1479,13 +1564,12 @@ body[data-theme="studio"] .canvas-agent-composer-toolbar .canvas-agent-project-c
   }
   body[data-theme="studio"] .topbar #canvasDocumentSaveState { font-size: 12px; font-weight: 400; padding-inline: 6px; }
   body[data-theme="studio"] .topbar .canvas-agent-control { gap: 8px; }
-  body[data-theme="studio"] .topbar :is(#mcpToolbarToggle, #canvasAgentToggle) {
+  body[data-theme="studio"] .topbar :is(#mcpToolbarToggle) {
     display: inline-flex; align-items: center; gap: 6px; height: 28px; min-height: 28px;
     padding: 0 10px; border: 1px solid var(--studio-line); border-radius: 5px;
     color: var(--studio-text); background: var(--studio-panel); font-size: 13px; font-weight: 500; box-shadow: none;
   }
   body[data-theme="studio"] #mcpToolbarStatus { color: var(--studio-muted); font-weight: 400; }
-  body[data-theme="studio"] .topbar #canvasAgentToggle svg { width: 16px; height: 16px; }
   body[data-theme="studio"][data-shell-dock-layout] #viewport > #canvasZoomControls {
     left: var(--pe-shell-view-x); width: max-content; height: 40px; min-height: 40px;
     flex-direction: row; gap: 4px; padding: 3px 8px; border-radius: 10px;
@@ -1502,16 +1586,11 @@ body[data-theme="studio"] .canvas-agent-composer-toolbar .canvas-agent-project-c
   body[data-theme="studio"][data-shell-dock-layout] #viewport > #canvasZoomControls > button:hover { background: var(--pe-hover); color: var(--studio-text); }
   body[data-theme="studio"][data-shell-dock-layout] #viewport > #canvasZoomControls > #canvasNavigationLock.locked { color: var(--studio-accent); background: var(--pe-selected); }
 }
-body[data-theme="studio"] .canvas-frame > .studio-navigator,
-body[data-theme="studio"].studio-agent-docked .canvas-frame > .canvas-agent-panel {
+body[data-theme="studio"] .canvas-frame > .studio-navigator {
   box-sizing: border-box; opacity: 1; visibility: visible;
   transition: none;
 }
 body[data-theme="studio"].studio-navigator-open .canvas-frame > .studio-navigator { display: flex; margin-left: 0; transform: none; }
-body[data-theme="studio"].studio-agent-docked.canvas-agent-open .canvas-frame > .canvas-agent-panel { margin-right: 0; transform: none; }
-body[data-theme="studio"].studio-agent-docked:not(.canvas-agent-open) .canvas-frame > .canvas-agent-panel { border-left-color: var(--studio-line); transform: none; }
-body[data-theme="studio"] .canvas-frame.canvas-agent-resizing > .canvas-agent-panel,
-body[data-theme="studio"] .canvas-frame > .canvas-agent-panel.canvas-agent-no-motion { transition: none; }
 body[data-theme="studio"] .primary-tools > :is([data-action="undo"], [data-action="redo"]) { color: var(--studio-muted); }
 body[data-theme="studio"] .primary-tools > :is([data-action="undo"], [data-action="redo"]):disabled { color: #9ca3af; opacity: 1; background: transparent; cursor: default; }
 body[data-theme="studio"] .canvas-auto-paused-notice { cursor: pointer; text-align: left; font-family: inherit; transition: background .15s, border-color .15s, box-shadow .15s, transform .15s; }
@@ -1520,14 +1599,12 @@ body[data-theme="studio"] .canvas-auto-paused-notice:active { transform: transla
 body[data-theme="studio"] .canvas-auto-paused-notice:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   body[data-theme="studio"] .canvas-frame > .studio-navigator,
-  body[data-theme="studio"].studio-agent-docked .canvas-frame > .canvas-agent-panel,
   body[data-theme="studio"] .canvas-auto-paused-notice { transition: none; }
 }
 
 @media (min-width: 701px) {
   body[data-theme="studio"] .topbar #canvasDocumentName::after { position: static; inset: auto; display: block; border-radius: 0; pointer-events: none; }
   body[data-theme="studio"] .topbar #studioNavigatorToggle svg { width: 18px; height: 18px; flex: 0 0 18px; }
-  body[data-theme="studio"] .topbar :is(#pe-button-contract, .canvas-agent-control) > #canvasAgentToggle[data-pe-button="toolbar"] { height: 28px; min-height: 28px; padding: 0 10px; border-radius: 5px; background: var(--studio-panel); }
   body[data-theme="studio"] #viewport > #canvasZoomControls svg { width: 20px; height: 20px; flex: 0 0 20px; }
   body[data-theme="studio"] .primary-tools > :is(#pe-button-contract, [data-action="undo"], [data-action="redo"])[data-pe-button="toolbar"] { border: 0; background: transparent; box-shadow: none; color: var(--studio-muted); }
   body[data-theme="studio"] .primary-tools > :is(#pe-button-contract, [data-action="undo"], [data-action="redo"])[data-pe-button="toolbar"]:disabled { color: #9ca3af; opacity: 1; }
@@ -1540,8 +1617,6 @@ body[data-theme="studio"] #mcpToolbarToggle .mcp-toolbar-dot { display: block; p
 body[data-theme="studio"] #mcpToolbarToggle[data-state="connected"] .mcp-toolbar-dot { background: #22a468; }
 body[data-theme="studio"] #mcpToolbarToggle:is([data-state="connecting"], [data-state="failed"]) .mcp-toolbar-dot { background: #a55b09; }
 body[data-theme="studio"] #mcpToolbarToggle:is([data-state="connecting"], [data-state="failed"]) #mcpToolbarStatus { color: #a55b09; }
-body[data-theme="studio"] :is(#pe-button-contract, .canvas-agent-composer-toolbar) .canvas-agent-connection-button[data-pe-button] { width: auto; max-width: 60%; padding-inline: 10px; margin: 0; }
-body[data-theme="studio"] .canvas-agent-connection-button > .canvas-agent-connection-label-clip { mask-image: none; -webkit-mask-image: none; padding-inline-end: 20px; }
 
 /* MCP connection details and contextual activity, shared with the title bar. */
 body #mcpToolbarToggle { gap:7px; }
@@ -1629,7 +1704,7 @@ body[data-theme="studio"] #studioNavigator .studio-navigator-head { padding: 14p
 body[data-theme="studio"] #studioNavigator .studio-navigator-search-row { display: flex; align-items: center; gap: 8px; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-search { flex: 1; min-width: 0; height: 36px; margin: 0; border-radius: 8px; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-new { flex: 0 0 36px; width: 36px; height: 36px; min-height: 36px; padding: 8px; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--studio-panel); color: var(--studio-text); }
-body[data-theme="studio"] #studioNavigator .studio-navigator-new svg, body[data-theme="studio"] #studioNavigator .studio-navigator-destinations svg, body[data-theme="studio"] #studioNavigator .studio-navigator-chat-icon svg, body[data-theme="studio"] #studioNavigator .studio-navigator-chat-toggle svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-new svg, body[data-theme="studio"] #studioNavigator .studio-navigator-destinations svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-destinations { display: flex; gap: 4px; margin: 0 0 7px; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-destinations > :is(button,a) { display: flex; justify-content: flex-start; width: auto; min-width: 0; height: 32px; min-height: 32px; align-items: center; gap: 6px; padding: 0 5px; color: var(--studio-muted); border: 0; border-radius: 7px; background: transparent; text-decoration: none; font: 500 12px/1.3 var(--pe-font-ui, system-ui); cursor: pointer; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-destinations > :is(button,a):hover { background: var(--studio-toolbar) !important; }
@@ -1660,19 +1735,6 @@ body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading .stud
 body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading .studio-navigator-item-icon.canvas { width: 42px; height: 32px; flex-basis: 42px; border-radius: 6px; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading.current { background: transparent; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading:hover { background: var(--studio-toolbar); }
-body[data-theme="studio"] #studioNavigator .studio-navigator-group.has-chats > .studio-navigator-group-heading { padding-right: 61px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-toggle { position: absolute; top: 15px; right: 4px; display: flex; align-items: center; gap: 3px; width: 54px; height: 28px; min-height: 28px; padding: 4px; color: var(--studio-muted); border: 0; background: transparent; font-size: 11px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-toggle svg { width: 14px; height: 14px; flex-basis: 14px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-toggle[aria-expanded="true"] .studio-navigator-chevron { transform: rotate(90deg); }
-body[data-theme="studio"] #studioNavigator .studio-navigator-group-conversations { margin: 3px 0 5px 28px; padding-left: 8px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-group-conversations[hidden] { display: none; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-conversation { background: transparent; border: 0; box-shadow: none; gap: 8px; min-height: 34px; padding: 5px 8px; border-radius: 0 7px 7px 0; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-icon { color: var(--studio-muted); line-height: 0; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-icon svg { width: 15px; height: 15px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-time { flex-shrink: 0; font-size: 10px; color: var(--studio-muted); }
-body[data-theme="studio"] #studioNavigator .studio-navigator-conversation-entry:is(:hover,:focus-within) .studio-navigator-chat-time { visibility: hidden; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-conversation-name { font-size: 12px; font-weight: 400; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-conversation.current .studio-navigator-conversation-name { color: var(--studio-accent-strong); font-weight: 600; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-foot { display: block; padding: 8px 12px; background: transparent; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-save-row { display: flex; min-height: 32px; align-items: center; gap: 8px; }
 body[data-theme="studio"] #studioNavigator #studioNavigatorSaveStatus { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; color: var(--studio-muted); font-size: 11px; }
@@ -1692,10 +1754,6 @@ body .studio-navigator-open-canvas.mcp-ai-updating { background:var(--pe-selecte
 
 body[data-theme="studio"] #studioNavigator .studio-navigator-tabs button[aria-selected="true"] { background: var(--studio-panel); box-shadow: 0 1px 3px #1820301a; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-tabs button::after { display: none; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-conversation.current { background: var(--studio-accent-soft); }
-body[data-theme="studio"] #studioNavigator .studio-navigator-session-delete { opacity: 0; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-conversation-entry:is(:hover,:focus-within) .studio-navigator-session-delete { opacity: 1; }
-@media (hover: none) { body[data-theme="studio"] #studioNavigator .studio-navigator-session-delete { opacity: 1; } }
 
 /* Integrated chrome: use the canvas bounds after both sidebars reserve space. */
 body[data-theme="studio"] .canvas-frame,
@@ -1711,16 +1769,12 @@ body[data-theme="studio"] #mcpToolbarToggle > .mcp-status-chevron { display: blo
     flex-direction: column; width: 42px; height: auto; padding: 5px 3px;
   }
   body[data-theme="studio"][data-shell-dock-layout="vertical"] #canvasZoomControls .canvas-view-divider { width: 22px; height: 1px; flex-basis: 1px; margin: 2px 0; }
-  body[data-theme="studio"][data-shell-dock-layout] .canvas-auto-paused-notice {
-    position: fixed; left: var(--pe-shell-ai-x); right: auto;
-    bottom: var(--pe-shell-ai-bottom); max-width: min(300px, var(--pe-shell-canvas-width));
+  /* Auto AI paused takes the Canvas AI bar's place at the top right. */
+  body[data-theme="studio"] .canvas-auto-paused-notice.shell-geometry {
+    position: fixed; left: auto; right: calc(var(--pe-shell-right) + 12px);
+    top: calc(var(--pe-shell-bar-h) + 12px); bottom: auto; max-width: min(300px, calc(var(--pe-shell-canvas-width, 100vw) - 24px));
     min-height: 40px; box-sizing: border-box; padding: 10px 14px;
   }
-  /* Measure its intrinsic width away from the previous dock position. A fixed
-     element near the window edge otherwise shrinks before its new x is set. */
-  body[data-theme="studio"][data-shell-dock-measuring] .canvas-auto-paused-notice { left: 0; }
-  body[data-theme="studio"][data-shell-dock-layout="vertical"] .canvas-auto-paused-notice { max-width: 150px; }
-  body[data-theme="studio"][data-shell-dock-layout="rows"] .canvas-auto-paused-notice { max-width: max(120px, calc(var(--pe-shell-canvas-width) - 204px)); }
   body[data-theme="studio"][data-shell-dock-layout] #viewport > #mcpCanvasNotice {
     position: fixed;
     top: calc(var(--pe-shell-bar-h) + 16px);
@@ -1742,12 +1796,10 @@ body[data-theme="studio"] #mcpToolbarToggle > .mcp-status-chevron { display: blo
     max-width: min(520px, var(--pe-shell-canvas-width));
   }
 }
-/* In two rows, clear the entire height of the upper controls, including a
-   wrapped paused notice; center alignment must never move the dock into it. */
+/* In two rows, the view controls sit above the dock; center alignment must never move the dock into them. */
 @media (min-width: 701px) {
   body[data-theme="studio"][data-shell-dock-layout="rows"] .shell-geometry {
-    --pe-shell-view-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px + (max(var(--pe-shell-view-height), var(--pe-shell-ai-height)) - var(--pe-shell-view-height)) / 2);
-    --pe-shell-ai-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px + (max(var(--pe-shell-view-height), var(--pe-shell-ai-height)) - var(--pe-shell-ai-height)) / 2);
+    --pe-shell-view-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px);
   }
   body[data-theme="studio"][data-shell-dock-layout="rows"] .topbar .tool-group.primary-tools { bottom: var(--pe-shell-dock-bottom); }
 }
@@ -1755,12 +1807,7 @@ body[data-theme="studio"] #mcpToolbarToggle > .mcp-status-chevron { display: blo
 @media (min-width: 701px) {
   body[data-theme="studio"][data-shell-dock-sides="compact"] #viewport > #canvasZoomControls { flex-direction: column; width: 42px; height: auto; padding: 5px 3px; }
   body[data-theme="studio"][data-shell-dock-sides="compact"] #canvasZoomControls .canvas-view-divider { width: 22px; height: 1px; flex-basis: 1px; margin: 2px 0; }
-  body[data-theme="studio"][data-shell-dock-sides="compact"] .primary-tools > .ai-tools-section { flex-direction: column; align-items: stretch; }
-  body[data-theme="studio"][data-shell-dock-sides="compact"] #aiToolbarRun { align-self: stretch; justify-content: center; }
-  body[data-theme="studio"][data-shell-dock-sides="compact"] .canvas-auto-paused-notice { max-width: min(240px, calc(var(--pe-shell-canvas-width) - 58px)); }
 }
-body[data-theme="studio"] #canvasAgentClose { border-color: transparent; background: transparent; box-shadow: none; }
-body[data-theme="studio"] #canvasAgentClose:hover { background: var(--studio-toolbar); }
 
 /* Welcome cards respond to the remaining canvas, including open sidebars. */
 body[data-theme="studio"] .canvas-welcome { container: canvas-welcome / inline-size; }
@@ -1818,16 +1865,6 @@ body[data-theme="studio"] #studioNavigator .studio-navigator-canvas-card .studio
 body[data-theme="studio"] #studioNavigator .studio-navigator-canvas-state { position: absolute; top: 6px; left: 6px; z-index: 2; border-radius: 10px; padding: 2px 5px; background: #686a70; color: white; font: 600 10px/1.25 system-ui; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-canvas-state[data-current="true"] { background: var(--studio-accent); }
 body[data-theme="studio"] #studioNavigator :is(.studio-navigator-canvas-card,.studio-navigator-ai-canvas) :is(.mcp-sidebar-badge,.workspace-update-dot) { display: none; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-new-chat { display: flex; align-items: center; gap: 7px; width: calc(100% - 8px); min-height: 34px; margin: 2px 4px 16px; padding: 5px 10px; border: 1px dashed var(--studio-line); border-radius: 8px; background: transparent; color: var(--studio-text); text-align: left; font: 500 12px/1.3 system-ui; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-card .studio-navigator-conversation { position: relative; padding: 9px 10px; min-height: 74px; border-radius: 8px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-card .studio-navigator-conversation-name { width: calc(100% - 46px); mask-image: none; text-overflow: ellipsis !important; font-weight: 500; font-size: 13px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-card .studio-navigator-chat-time { position: absolute; top: 10px; right: 10px; font-size: 11px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-summary { display: block; overflow: hidden; margin-top: 5px; color: var(--studio-muted); white-space: nowrap; text-overflow: ellipsis; font: 400 12px/1.4 system-ui; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-context { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 5px; color: var(--studio-muted); font: 400 11px/1.3 system-ui; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-context > span:last-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-context .studio-navigator-item-icon { width: 18px; height: 14px; flex-basis: 18px; border-radius: 3px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-context svg { width: 12px; height: 12px; }
-body[data-theme="studio"] #studioNavigator .studio-navigator-chat-card .studio-navigator-session-delete { top: 3px; right: 3px; width: 28px; height: 28px; min-height: 28px; padding: 6px; transform: none; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-mcp-connection { margin: 2px 4px 14px; padding: 11px 12px 0; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-panel); }
 body[data-theme="studio"] #studioNavigator .studio-navigator-mcp-status-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 7px; font-size: 12px; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-mcp-status-heading strong { font-weight: 600; }
@@ -1900,7 +1937,7 @@ body[data-theme="studio"] #studioNavigator .studio-navigator-tabs { margin-top: 
 body[data-theme="studio"] #studioNavigator .studio-navigator-body { padding: 8px 8px 18px; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-date { margin-block: 13px 6px; }
 body[data-theme="studio"] #studioNavigator .studio-navigator-foot { border-top: 1px solid var(--studio-line); background: var(--studio-panel-raised, var(--studio-titlebar)); }
-body[data-theme="studio"] #studioNavigator :is(.studio-navigator-new, .studio-navigator-tabs button, .studio-navigator-open-canvas, .studio-navigator-group-heading, .studio-navigator-conversation, .studio-navigator-mcp-session, .studio-navigator-destinations > *, .studio-navigator-close):focus-visible {
+body[data-theme="studio"] #studioNavigator :is(.studio-navigator-new, .studio-navigator-tabs button, .studio-navigator-open-canvas, .studio-navigator-group-heading, .studio-navigator-mcp-session, .studio-navigator-destinations > *, .studio-navigator-close):focus-visible {
   outline: 2px solid var(--navigator-tint);
   outline-offset: -2px;
 }
@@ -1953,194 +1990,7 @@ body[data-theme="studio"] #studioNavigator .studio-navigator-locations button[ar
 /* Geometry changes belong to chrome, never the entire document tree. */
 body[data-theme="studio"] .shell-geometry { --pe-shell-corner-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-corner-lift)); }
 
-body[data-theme="studio"] .canvas-agent-composer-toolbar .canvas-agent-model-control { flex: 1 1 auto; max-width: 68%; margin-inline-start: auto; }
-body[data-theme="studio"] .canvas-agent-model-split { width: 100%; }
-body[data-theme="studio"] .canvas-agent-model-split { border: 0; background: transparent; }
-body[data-theme="studio"] .canvas-agent-model-split #canvasAgentConnection,
-body[data-theme="studio"] .canvas-agent-model-split #canvasAgentThinkingButton { width: auto; max-width: none; height: 32px; min-height: 32px; margin: 0; border: 0; border-radius: 7px; background: transparent; color: var(--studio-muted); }
-body[data-theme="studio"] .canvas-agent-model-split #canvasAgentConnection { flex: 1 1 auto; width: auto; max-width: none; height: 32px; min-height: 32px; margin: 0; padding-inline: 3px; border-radius: 7px; background: transparent; color: var(--studio-text); }
-body[data-theme="studio"] .canvas-agent-model-split #canvasAgentThinkingButton { flex: 0 0 auto; padding-inline: 8px 3px; }
-body[data-theme="studio"] .canvas-agent-model-split #canvasAgentThinkingButton[aria-disabled="true"] { color: var(--studio-muted); opacity: 1; pointer-events: auto; cursor: help; }
-body[data-theme="studio"] .canvas-agent-model-split :is(#canvasAgentConnection, #canvasAgentThinkingButton):hover { background: var(--studio-toolbar); }
-body[data-theme="studio"] .canvas-agent-model-split .canvas-agent-connection-label-clip { padding: 0; -webkit-mask-image: none; mask-image: none; }
-body[data-theme="studio"] .canvas-agent-thinking-popover { border-color: var(--studio-line); background: var(--studio-panel); }
-body[data-theme="studio"] .canvas-agent-thinking-notice { color: var(--studio-muted); }
-
-/* ---- Agent composer header (2026-09 redesign) ----
-   Ghost text chips instead of a filled project pill; the model and its
-   thinking level sit together on the right; header text aligns with the prompt. */
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar { display: flex; min-height: 28px; align-items: center; justify-content: flex-start; gap: 4px; margin: 0 -3px 0; padding: 0; border: 0; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar > * { margin: 0; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar .canvas-agent-project-control { width: auto; max-width: 52%; flex: 0 0 auto; padding: 0; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar .canvas-agent-model-control { width: auto; max-width: 62%; flex: 0 1 auto; margin-inline-start: auto; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-model-split { width: auto; height: 28px; align-items: center; gap: 2px; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar :is(.canvas-agent-project-button, #canvasAgentConnection, #canvasAgentThinkingButton)[data-pe-button] {
-  display: inline-flex; width: auto; min-width: 0; max-width: 100%; height: 28px; min-height: 28px; align-items: center; gap: 5px; margin: 0; padding: 0 8px;
-  color: var(--studio-muted); border: 0; border-radius: 8px; background: transparent; box-shadow: none;
-  font-size: 13px; font-weight: 400; line-height: 18px; letter-spacing: -.005em;
-  transition: color .14s ease, background-color .14s ease;
-}
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar :is(.canvas-agent-project-button, #canvasAgentConnection, #canvasAgentThinkingButton)[data-pe-button]:is(:hover, :focus-visible, [aria-expanded="true"]) { color: var(--studio-text); background: color-mix(in srgb, var(--studio-text) 6%, transparent); }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar :is(.canvas-agent-project-button, #canvasAgentConnection, #canvasAgentThinkingButton)[data-pe-button]:focus-visible { outline: 2px solid color-mix(in srgb, var(--studio-accent) 45%, transparent); outline-offset: 1px; }
-
-/* Project: text only, a small chevron says it opens a menu. */
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-button :is(.canvas-agent-project-folder-icon, .canvas-agent-project-file-icon) { display: none; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-button > .canvas-agent-project-label-clip { width: auto; font: inherit; -webkit-mask-image: none; mask-image: none; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-content { width: auto; max-width: 100%; flex: 0 1 auto; justify-content: flex-start; gap: 0; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-content > #canvasAgentProjectLabel { min-width: 0; flex: 0 1 auto; overflow: hidden; color: inherit; text-overflow: clip; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-button::after,
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton > .canvas-agent-thinking-chevron { content: ""; position: static; inset: auto; display: block; width: 10px; height: 10px; flex: 0 0 10px; opacity: .7; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-button::after { margin-inline-start: 1px; transform: none; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar #canvasAgentProject[data-pe-button]:is(.has-project, .has-file) { color: var(--studio-text); }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-control.has-resource > .canvas-agent-project-button[data-pe-button] { padding-inline: 8px; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-control.has-resource:is(:hover, :focus-within) > .canvas-agent-project-button::after { opacity: 0; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-control > .canvas-agent-project-clear[data-pe-button] { right: 5px; left: auto; }
-
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-project-button[data-pe-button] #canvasAgentProjectLabel,
-body[data-theme="studio"] #canvasAgentForm #canvasAgentConnection[data-pe-button] #canvasAgentConnectionLabel { color: inherit; }
-
-/* Model and thinking read as one setting: "deepseek-flash  ▂▄▆█ Off". */
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar #canvasAgentConnection[data-pe-button] { flex: 0 1 auto; color: var(--studio-text); }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentConnection .canvas-agent-connection-label-clip { width: auto; max-width: 100%; padding: 0; font: inherit; -webkit-mask-image: none; mask-image: none; }
-body[data-theme="studio"] #canvasAgentForm .canvas-agent-composer-toolbar #canvasAgentThinkingButton[data-pe-button] { flex: 0 0 auto; padding-inline: 7px 6px; font-variant-numeric: tabular-nums; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton > .canvas-agent-thinking-meter { width: 12px; height: 11px; flex: 0 0 12px; gap: 1.5px; color: inherit; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton > .canvas-agent-thinking-meter i { width: 1.875px; border-radius: 1px; background: color-mix(in srgb, currentColor 28%, transparent); }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton > .canvas-agent-thinking-meter i:nth-child(1) { height: 4px; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton > .canvas-agent-thinking-meter i:nth-child(2) { height: 6.5px; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton > .canvas-agent-thinking-meter i:nth-child(3) { height: 9px; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton > .canvas-agent-thinking-meter i:nth-child(4) { height: 11px; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton:is([data-effort="low"]) > .canvas-agent-thinking-meter i:nth-child(-n+1),
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton:is([data-effort="medium"], [data-effort="config"]) > .canvas-agent-thinking-meter i:nth-child(-n+2),
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton[data-effort="high"] > .canvas-agent-thinking-meter i:nth-child(-n+3),
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton[data-effort="max"] > .canvas-agent-thinking-meter i { background: currentColor; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton[data-effort]:not([data-effort="none"]):not([aria-disabled="true"]) > .canvas-agent-thinking-meter { color: var(--studio-accent); }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton > .canvas-agent-thinking-chevron { margin-inline-start: -1px; stroke-width: 2.4; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentThinkingButton[aria-disabled="true"] > .canvas-agent-thinking-chevron { display: none; }
-body[data-theme="studio"] #canvasAgentForm #canvasAgentConnection .canvas-agent-connection-label-clip.is-overflowing { -webkit-mask-image: linear-gradient(to left, transparent 0, #000 18px); mask-image: linear-gradient(to left, transparent 0, #000 18px); }
-
-/* The prompt starts where the header text starts. */
-body[data-theme="studio"] #canvasAgentForm #canvasAgentInput { padding-inline: 5px; }
-
-/* Agent panel polish (2026-10-04): one spacing rhythm (16 px gutter, 4 px steps),
-   quieter chrome and lighter tool rows so the conversation and the prompts lead.
-   Layout and behaviour are unchanged; sizes that shrink are fine-pointer only, so
-   touch keeps its 44 px targets. */
-body[data-theme="studio"] #canvasAgentPanel {
-  --agent-gutter: 16px;
-  --agent-hairline: color-mix(in srgb, var(--studio-line) 72%, transparent);
-  --agent-row-hover: color-mix(in srgb, var(--studio-text) 4%, transparent);
-  --agent-warn: #a55b09;
-}
-
 /* Header: same surface as the panel, a calmer title and a status dot. */
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head { gap: 2px; padding: 9px 10px 9px var(--agent-gutter); background: var(--studio-panel) !important; border-bottom: 1px solid var(--agent-hairline); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-heading { gap: 1px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-heading strong { color: var(--studio-text); font-size: 14.5px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-heading small { color: var(--studio-muted); font-size: 12px; line-height: 1.4; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-heading small::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; background: color-mix(in srgb, var(--studio-muted) 55%, transparent); }
-body[data-theme="studio"] #canvasAgentPanel[data-status="ready"] .canvas-agent-heading small::before { background: #2f9e5b; }
-body[data-theme="studio"] #canvasAgentPanel[data-status="running"] .canvas-agent-heading small::before { background: var(--studio-accent); animation: agent-status-pulse 1.4s ease-in-out infinite; }
-body[data-theme="studio"] #canvasAgentPanel:is([data-status="unavailable"], [data-status="offline"]) .canvas-agent-heading small::before { background: var(--agent-warn); }
-body[data-theme="studio"] #canvasAgentPanel[data-status="error"] .canvas-agent-heading small::before { background: #c2410c; }
-@keyframes agent-status-pulse { 50% { opacity: .35; } }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head button { color: var(--studio-muted); border-color: transparent; background: transparent; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head button:is(:hover, :focus-visible) { color: var(--studio-text); background: var(--agent-row-hover); }
-
-/* No-connection notice: compact, outlined, actions on one baseline. */
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice { gap: 10px; margin: 14px var(--agent-gutter) 2px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--agent-warn) 18%, var(--studio-line)); border-radius: 10px; background: color-mix(in srgb, var(--agent-warn) 4%, var(--studio-panel)); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice[hidden] { display: none; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice > svg { width: 17px; height: 17px; flex-basis: 17px; margin-top: 1px; color: var(--agent-warn); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice strong { display: block; color: var(--studio-text); font-size: 13.5px; font-weight: 600; line-height: 1.35; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice p { margin: 2px 0 10px; font-size: 12.5px; line-height: 1.45; }
-body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions { align-items: center; gap: 6px 4px; }
-body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions button { height: 28px; min-height: 28px; padding: 0 11px; border-radius: 7px; font-size: 12.5px; font-weight: 500; line-height: 26px; }
-body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions button:not(#canvasAgentSignIn) { color: var(--studio-text); border-color: color-mix(in srgb, var(--studio-line) 90%, var(--studio-text)); background: var(--studio-panel); box-shadow: 0 1px 1px rgba(16, 24, 40, .04); }
-body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions button:not(#canvasAgentSignIn):hover { background: var(--studio-toolbar); }
-body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions #canvasAgentSignIn:hover { background: color-mix(in srgb, var(--studio-accent) 8%, transparent); }
-
-/* Prompt tabs and lists share the panel gutter; icons line up with the tab text. */
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-suggestions { padding: 14px var(--agent-gutter) 0; }
-body[data-theme="studio"] #canvasAgentPanel[data-prompt-presentation="conversation"] .canvas-agent-prompt-suggestions { padding-block: 8px 0; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-categories { border-bottom-color: var(--agent-hairline); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-categories > button { padding: 6px 0 10px; border-bottom: 0; font-size: 13px; transition: color .15s ease; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-categories > button:hover { color: var(--studio-text); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-categories > button[aria-selected="true"]::after { border-radius: 2px 2px 0 0; background: var(--studio-accent); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-popup {
-  margin: 8px -8px 0; padding: 0 0 18px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
-}
-body[data-theme="studio"] #canvasAgentPanel[data-prompt-presentation="conversation"] .canvas-agent-prompt-popup { margin-top: 0; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row { align-items: start; gap: 12px; min-height: 0; margin: 0 0 2px; padding: 10px 8px; border-radius: 10px; transition: background-color .12s ease; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row:hover { background: var(--agent-row-hover); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row > .canvas-agent-prompt-icon { width: 32px; height: 32px; margin-top: 1px; color: var(--studio-muted); border-color: var(--agent-hairline); border-radius: 8px; background: var(--studio-panel); box-shadow: 0 1px 1px rgba(16, 24, 40, .03); transition: color .12s ease, border-color .12s ease; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row:is(:hover, :focus-visible) > .canvas-agent-prompt-icon { color: var(--studio-accent-strong); border-color: var(--studio-accent-border); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row .canvas-agent-prompt-icon svg { width: 18px; height: 18px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-copy { gap: 2px; padding-top: 1px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-copy > strong { font-size: 13.5px; font-weight: 500; line-height: 1.35; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-copy > small { font-size: 12.5px; line-height: 1.45; }
-
-/* Ranked suggestions: a soft tint and a pill instead of the side bar. */
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-header { padding: 0 0 6px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-header > strong { font-size: 13.5px; font-weight: 600; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-header > button { width: 28px; min-width: 28px; height: 28px; min-height: 28px; color: var(--studio-muted); border-color: transparent; border-radius: 7px; background: transparent; box-shadow: none; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-header > button:is(:hover, :focus-visible) { color: var(--studio-text); background: var(--agent-row-hover); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-status { margin: 0 0 6px; padding: 4px 8px 8px; border-bottom: 0; font-size: 12px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-suggest[aria-busy="true"] .canvas-agent-suggest-status::after { left: 8px; right: 8px; bottom: 0; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row.canvas-agent-suggest-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row.canvas-agent-suggest-row[data-recommended="true"] { background: color-mix(in srgb, var(--studio-accent) 5%, var(--studio-panel)); box-shadow: none; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row.canvas-agent-suggest-row[data-recommended="true"]:hover { background: color-mix(in srgb, var(--studio-accent) 9%, var(--studio-panel)); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-row[data-recommended="true"] > .canvas-agent-prompt-icon { color: var(--studio-accent-strong); border-color: var(--studio-accent-border); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-row .canvas-agent-prompt-copy > [data-pe-region="title"] { font-weight: 500; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-meta { align-self: start; padding-top: 1px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-badge { padding: 2px 7px; color: var(--studio-accent-strong); border-radius: 999px; background: color-mix(in srgb, var(--studio-accent) 11%, var(--studio-panel)); font-size: 10.5px; font-weight: 600; line-height: 1.35; letter-spacing: .01em; }
-
-/* Conversation: no "You" label, lighter bubbles, tool steps as quiet one-liners. */
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-transcript { gap: 10px; padding: 16px var(--agent-gutter) 12px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user { max-width: 86%; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user .canvas-agent-message-role { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user .canvas-agent-message-body { padding: 8px 12px; color: var(--studio-text); border-color: transparent; border-radius: 14px 14px 4px 14px; background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-panel)); line-height: 1.5; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user + .canvas-agent-message.assistant,
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user + .canvas-agent-tool { margin-top: 2px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.assistant + .canvas-agent-message.user { margin-top: 6px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool { border: 1px solid var(--agent-hairline); border-radius: 8px; background: transparent; transition: background-color .12s ease; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool + .canvas-agent-tool { margin-top: -5px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool:hover,
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool[open] { background: color-mix(in srgb, var(--studio-text) 2.5%, transparent); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-head { padding-inline: 30px 28px; color: var(--studio-muted); font-weight: 400; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-head::before { content: ""; position: absolute; left: 11px; top: 50%; width: 11px; height: 11px; margin-top: -5.5px; border-radius: 50%; background: #2f9e5b; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.running > .canvas-agent-tool-head::before { box-sizing: border-box; width: 10px; height: 10px; margin-top: -5px; border: 1.5px solid var(--studio-accent); border-right-color: transparent; background: transparent; -webkit-mask: none; mask: none; animation: penecho-llm-orbit 1s linear infinite; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.error > .canvas-agent-tool-head::before { width: 7px; height: 7px; margin: -3.5px 0 0 2px; background: #c2410c; -webkit-mask: none; mask: none; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-head::after { right: 12px; width: 6px; height: 6px; opacity: .55; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-intent { color: color-mix(in srgb, var(--studio-text) 55%, var(--studio-muted)); font-size: 12.5px; line-height: 1.35; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.running .canvas-agent-tool-intent { color: var(--studio-text); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.error .canvas-agent-tool-intent { color: #b42318; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-status { color: var(--studio-muted); font-size: 11.5px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool:not(.running):not(.error) .canvas-agent-tool-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-body { padding: 8px 12px 10px 30px; border-top-color: var(--agent-hairline); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-actions { margin-top: -2px; gap: 0; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-action[data-pe-button]:not(.copied, .error, [data-pe-state="selected"]) { color: var(--studio-muted); border-color: transparent; background: transparent; box-shadow: none; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-action[data-pe-button]:not(.copied, .error, [data-pe-state="selected"], :disabled):is(:hover, :focus-visible) { color: var(--studio-text); background: var(--agent-row-hover); }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-action[data-pe-button] svg { width: 15px; height: 15px; }
-
-/* Composer: a soft lift at rest and an accent ring while typing. */
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-composer { padding: 8px 14px 14px; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-composer-surface { padding: 8px; border-color: color-mix(in srgb, var(--studio-line) 92%, transparent); border-radius: 14px; background: var(--studio-panel); box-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 16px -10px rgba(16, 24, 40, .16) !important; transition: border-color .15s ease, box-shadow .15s ease; }
-body[data-theme="studio"] #canvasAgentPanel .canvas-agent-composer-surface:focus-within { border-color: var(--studio-accent-border); box-shadow: 0 0 0 3px color-mix(in srgb, var(--studio-accent) 12%, transparent), 0 1px 2px rgba(16, 24, 40, .05) !important; }
-body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput { min-height: 64px; padding-block: 10px 8px; }
-body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { color: color-mix(in srgb, var(--studio-muted) 82%, transparent); }
-
-@media (pointer: fine) {
-  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head { min-height: 56px; }
-  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head button { width: 30px; min-width: 30px; height: 30px; min-height: 30px; margin: 0; padding: 0; border-radius: 7px; }
-  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head button svg { width: 16px; height: 16px; }
-  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-head { min-height: 30px; padding-block: 5px; }
-  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-action[data-pe-button] { width: 26px; min-width: 26px; height: 26px; min-height: 26px; flex-basis: 26px; border-radius: 6px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  body[data-theme="studio"] #canvasAgentPanel[data-status="running"] .canvas-agent-heading small::before,
-  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.running > .canvas-agent-tool-head::before { animation: none; }
-}
 
 /* ------------------------------------------------------------------
    Companion view (mode=companion)
@@ -2149,11 +1999,11 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
    the agent, so PenEcho's own AI and Agent chrome stays out of the way. The
    full view is the complete Canvas in the same document and tab.
    ------------------------------------------------------------------ */
-.companion-rail, .companion-view-toggle { display: none; }
+.companion-rail, .companion-view-toggle, .companion-brand-link { display: none; }
 .companion-canvas-target[hidden] { display: none !important; }
 .companion-canvas-target { flex: 0 1 auto; max-width: 160px; min-width: 0; height: 28px; padding: 0 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; border-radius: 6px; color: var(--studio-muted); background: transparent; font: 500 11px/1.2 system-ui; cursor: pointer; }
 .companion-canvas-target[data-matches="false"] { color: #96601a; background: #fff5df; }
-.companion-canvas-menu { position: fixed; inset: 92px auto auto 52px; width: min(310px, calc(100vw - 64px)); max-height: calc(100dvh - 112px); box-sizing: border-box; overflow: auto; margin: 0; padding: 14px; color: var(--studio-text, #202333); background: var(--studio-panel, white); border: 1px solid var(--studio-line, #e3e4e8); border-radius: 12px; box-shadow: 0 8px 30px #18223820; font: 13px/1.5 system-ui; }
+.companion-canvas-menu { position: fixed; inset: calc(var(--companion-topbar-h, 76px) + 8px) auto auto 52px; width: min(310px, calc(100vw - 64px)); max-height: calc(100dvh - var(--companion-topbar-h, 76px) - 20px); box-sizing: border-box; overflow: auto; margin: 0; padding: 14px; color: var(--studio-text, #202333); background: var(--studio-panel, white); border: 1px solid var(--studio-line, #e3e4e8); border-radius: 12px; box-shadow: 0 8px 30px #18223820; font: 13px/1.5 system-ui; }
 .companion-canvas-menu p { margin: 6px 0 12px; color: var(--studio-muted, #687082); font-size: 12px; }
 .companion-canvas-row { display: flex; width: 100%; min-height: 44px; align-items: center; gap: 8px; padding: 9px; border: 0; border-radius: 7px; text-align: left; color: inherit; background: transparent; cursor: pointer; font: inherit; }
 .companion-canvas-row:hover, .companion-canvas-row[aria-current] { background: var(--studio-toolbar, #f3f4f6); }
@@ -2177,18 +2027,100 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
 :root[data-penecho-companion="minimal"] .companion-view-compact,
 :root[data-penecho-companion="full"] .companion-view-expand { display: none; }
 
+:root[data-penecho-companion="minimal"] {
+  --companion-row-h: 43px;
+  --companion-tabs-h: 32px;
+  --companion-topbar-h: 44px;
+}
+:root[data-penecho-companion="minimal"]:has(.topbar > .companion-tabs:not([hidden])) {
+  --companion-topbar-h: 76px;
+}
 :root[data-penecho-companion="minimal"] body .topbar {
-  display: block; height: 44px; min-height: 44px; box-sizing: border-box; margin: 0; padding: 0;
+  display: block; height: auto; min-height: 44px; box-sizing: border-box; margin: 0; padding: 0;
   border-bottom: 1px solid var(--studio-hairline, #e8e8ec); background: var(--studio-titlebar, #fafafb);
 }
 :root[data-penecho-companion="minimal"] body .topbar > .top-row {
-  position: relative; display: flex; width: 100%; height: 43px; min-height: 43px; box-sizing: border-box;
+  position: relative; display: flex; width: 100%; height: var(--companion-row-h); min-height: var(--companion-row-h); box-sizing: border-box;
   align-items: center; flex-wrap: nowrap; gap: 6px; padding: 0 8px 0 10px; border: 0; overflow: visible;
 }
 :root[data-penecho-companion="minimal"] body .topbar > .toolbar,
-:root[data-penecho-companion="minimal"] body .topbar :is(.brand, .canvas-file-actions, #cloudAccountBtn, #settingsBtn) { display: none; }
+:root[data-penecho-companion="minimal"] body .topbar :is(.brand, #cloudAccountBtn, #settingsBtn) { display: none; }
+/* Unify MCP status + target into the single topbar pill in minimal companion view; keep the target node in DOM for state/tests. */
+:root[data-penecho-companion="minimal"] body .topbar #companionCanvasTarget { display: none !important; }
+:root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar .header-mcp-pill[data-matches="false"] {
+  border-color: color-mix(in srgb, #d97706 42%, var(--studio-line, #d9dde5));
+  background: #fff5df;
+  color: #96601a;
+}
+:root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar .header-mcp-pill[data-matches="false"] #headerMcpState { color: #96601a; }
+:root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar .header-mcp-pill[data-matches="false"] .mcp-toolbar-dot { background: #d97706; }
+/* Hide duplicate rail + button whenever the tab strip (which owns +) is visible. */
+:root[data-penecho-companion="minimal"]:has(.topbar > .companion-tabs:not([hidden])) #companionCanvasNew { display: none; }
+/* The side panel keeps who is here, the clear-up date, Collaborate and Share; the other file actions live in Full Canvas. */
+:root[data-penecho-companion="minimal"] body .topbar .canvas-file-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; margin: 0; }
+:root[data-penecho-companion="minimal"] body .topbar .canvas-file-actions > :is(#newCanvasBtn, #exportPngBtn, #historyBtn) { display: none; }
+/* With room, Share and Collaborate keep their names, both outlined: Save stays the one filled button. */
+@media (min-width: 701px) {
+  :root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar #shareCanvasBtn { min-width: 0; padding: 0 10px; color: var(--pe-accent-strong); border: 1px solid var(--pe-accent); background: transparent; }
+  :root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar #shareCanvasBtn:hover:not(:disabled) { color: var(--pe-accent-strong); border-color: var(--pe-accent); background: color-mix(in srgb, var(--pe-accent) 8%, transparent); }
+  :root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar #collaborateCanvasBtn { margin-right: 0; padding: 0 10px; }
+}
+/* Open Canvases as tabs under the title row; + opens another. */
+.companion-tabs[hidden] { display: none !important; }
+:root[data-penecho-companion="minimal"] body .topbar > .companion-tabs {
+  display: flex; height: var(--companion-tabs-h); min-height: var(--companion-tabs-h); box-sizing: border-box; align-items: flex-end; gap: 4px; padding: 0 8px;
+  overflow-x: auto; scrollbar-width: none; border-top: 1px solid var(--studio-hairline, #e8e8ec); border-bottom: 0; background: var(--studio-titlebar, #fafafb);
+}
+.companion-tabs::-webkit-scrollbar { display: none; }
+.companion-tab {
+  flex: 0 1 auto; min-width: 44px; max-width: 180px; height: 28px; box-sizing: border-box; margin-bottom: -1px; padding: 0 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  color: var(--studio-muted, #687082); border: 1px solid transparent; border-bottom: 0; border-radius: 7px 7px 0 0; background: transparent;
+  font: 500 12.5px/1 var(--pe-font-ui, system-ui);
+}
+.companion-tab[aria-current="page"] { color: var(--studio-text, #111827); border-color: var(--studio-line, #e3e4e8); background: var(--studio-panel, #ffffff); }
+.companion-tab:hover:not(:disabled):not([aria-current="page"]) { color: var(--studio-text, #111827); background: var(--studio-accent-softer, rgba(79, 70, 229, .06)); }
+.companion-tab:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: -2px; }
+.companion-tab-new { flex: 0 0 28px; min-width: 28px; padding: 0; font-size: 17px; font-weight: 400; }
+.companion-tab[aria-current="page"] { padding-right: 26px; }
+.companion-tab-close {
+  position: relative; flex: 0 0 20px; width: 20px; height: 20px; margin: 0 0 4px -24px; padding: 0; cursor: pointer;
+  color: var(--studio-muted, #687082); border: 0; border-radius: 5px; background: transparent; font: 400 15px/1 var(--pe-font-ui, system-ui);
+}
+.companion-tab-close:hover:not(:disabled) { color: var(--studio-text, #111827); background: var(--studio-toolbar, #f3f4f6); }
+.companion-tab-close:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: -2px; }
+.companion-tab-menu { position: fixed; right: auto; bottom: auto; width: min(260px, calc(100vw - 16px)); max-height: min(360px, calc(100dvh - 96px)); box-sizing: border-box; overflow: auto; margin: 0; padding: 6px; color: var(--studio-text, #202333); background: var(--studio-panel, white); border: 1px solid var(--studio-line, #e3e4e8); border-radius: 10px; box-shadow: 0 8px 30px #18223820; font: 13px/1.5 system-ui; }
+.companion-tab-menu hr { height: 1px; margin: 4px 6px; border: 0; background: var(--studio-line, #e3e4e8); }
+.companion-tab-menu .companion-canvas-row { min-height: 36px; padding: 7px 9px; }
+.companion-tab-menu button:focus-visible { outline: 2px solid var(--studio-accent, #4f46e5); outline-offset: -2px; }
+:root[data-penecho-companion="minimal"] body .topbar .companion-brand-link {
+  display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; order: -2;
+  height: 30px; padding: 0 6px; margin-right: 2px; border-radius: 7px;
+  color: var(--studio-text, #0f172a); font: 650 14.5px/1 var(--pe-font-ui, system-ui);
+  letter-spacing: -0.01em; text-decoration: none; white-space: nowrap;
+}
+:root[data-penecho-companion="minimal"] body .topbar .companion-brand-link:hover {
+  background: var(--studio-toolbar, #f1f3f6);
+}
+:root[data-penecho-companion="minimal"] body .topbar .companion-brand-link:focus-visible {
+  outline: 2px solid var(--pe-accent, #2563eb); outline-offset: 1px;
+}
+:root[data-penecho-companion="minimal"] body .topbar .companion-brand-link img {
+  display: block; width: 22px; height: 22px; flex: 0 0 22px;
+}
+:root[data-penecho-companion="minimal"] body .topbar .companion-brand-link .brand-lines {
+  color: #2563eb;
+}
+@media (max-width: 700px) {
+  :root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar .header-mcp-pill:not([hidden]) #headerMcpState { display: none; }
+}
+@media (max-width: 720px) {
+  :root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar .header-mcp-pill:not([hidden]) #headerMcpState { display: none; }
+}
+:root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar .canvas-document-meta,
 :root[data-penecho-companion="minimal"] body .topbar .canvas-document-meta {
-  display: flex; flex: 1 1 auto; min-width: 0; order: 0; align-items: center; gap: 4px; margin: 0; padding: 0; border: 0;
+  display: flex; flex: 1 1 auto; min-width: 0; order: 0; align-items: center; gap: 4px; margin: 0;
+  padding: 0 0 0 8px; border: 0; border-left: 1px solid var(--studio-line, #e3e4e8);
 }
 :root[data-penecho-companion="minimal"] body .topbar #canvasDocumentName { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; }
 :root[data-penecho-companion="minimal"] body .topbar #canvasDocumentNameLabel { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2204,10 +2136,13 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
 :root[data-penecho-companion="minimal"] body .topbar #saveCanvasLabel { display: inline; }
 :root[data-penecho-companion="minimal"] body .topbar #saveCanvasBtn svg { width: 15px; height: 15px; flex: 0 0 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 :root[data-penecho-companion="minimal"] body .topbar #canvasMoreControl { display: block; flex: 0 0 auto; order: 4; }
-/* Messages float under the title row; the idle status takes no room. */
+/* Messages float cleanly below the real header (44px or 76px) and clear of the open sidebar. */
 :root[data-penecho-companion="minimal"] body .topbar #aiStatusArea {
-  position: absolute; z-index: 44; top: 50px; right: 8px; left: 52px; order: 5;
+  position: fixed; z-index: 44; top: calc(var(--companion-topbar-h, 44px) + 8px); right: 12px; left: 52px; order: 5;
   display: flex; min-width: 0; justify-content: center; gap: 6px; margin: 0; pointer-events: none;
+}
+:root[data-penecho-companion="minimal"] body.studio-navigator-open .topbar #aiStatusArea {
+  left: min(376px, calc(100vw - 12px));
 }
 :root[data-penecho-companion="minimal"] body .topbar #aiStatusArea > * { pointer-events: auto; }
 :root[data-penecho-companion="minimal"] body .topbar #status {
@@ -2248,20 +2183,183 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
 }
 
 /* The recent-work navigator opens over the Canvas, beside the rail. */
-:root[data-penecho-companion="minimal"] body .canvas-frame > .studio-navigator {
+:root[data-penecho-companion="minimal"] body .canvas-frame > .studio-navigator,
+:root[data-penecho-companion="minimal"] body[data-theme="studio"] .canvas-frame > #studioNavigator {
   position: absolute; z-index: 47; top: 0; bottom: 0; left: 44px;
-  width: min(320px, calc(100% - 56px)); min-width: 0; max-width: none; flex: none; margin: 0;
+  width: min(308px, calc(100% - 56px)); min-width: 0; max-width: none; flex: none; margin: 0;
+  transform: none; transition: none;
   box-shadow: var(--pe-shell-float-shadow, 0 6px 14px rgba(17, 24, 39, .14));
 }
+:root[data-penecho-companion="minimal"] body.studio-navigator-open #canvasHint,
+:root[data-penecho-companion="minimal"] body.studio-navigator-open #mcpCanvasNotice {
+  left: min(calc(352px + (100vw - 352px) / 2), calc(100vw - 12px));
+  max-width: calc(100vw - 368px);
+}
+:root[data-penecho-companion="minimal"] body[data-theme="studio"] #studioNavigator .studio-navigator-head { padding: 10px 12px 8px; }
 :root[data-penecho-companion="minimal"] body:not(.studio-navigator-open) .canvas-frame > .studio-navigator { display: none; }
 :root[data-penecho-companion="minimal"] body .canvas-frame::after { left: 44px; right: 0; }
+.companion-rail-projects { margin-top: auto; }
+.companion-rail-projects[hidden] { display: none !important; }
+
+/* ---------- Companion Project Bridge (Popover, Sidebar Card, Modal Dialog) ---------- */
+.project-bridge-popover {
+  position: fixed; inset: calc(var(--companion-topbar-h, 76px) + 6px) auto auto 52px;
+  width: min(328px, calc(100vw - 64px)); max-height: calc(100dvh - var(--companion-topbar-h, 76px) - 20px);
+  box-sizing: border-box; overflow: auto; margin: 0; padding: 12px;
+  color: var(--studio-text, #202333); background: var(--studio-panel, #ffffff);
+  border: 1px solid var(--studio-line, #e3e4e8); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(17, 24, 39, .16); font: 13px/1.45 var(--pe-font-ui, system-ui);
+}
+.project-bridge-popover h3 { margin: 0 0 4px; font-size: 13.5px; font-weight: 620; color: var(--studio-text, #111827); }
+.project-bridge-popover p { margin: 0 0 10px; font-size: 12px; color: var(--studio-muted, #687082); }
+.cpb-list { display: flex; flex-direction: column; gap: 3px; margin: 8px 0; }
+.cpb-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; box-sizing: border-box;
+  padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--studio-text, #202333);
+  font: 500 12.5px/1.3 var(--pe-font-ui, system-ui); text-align: left; text-decoration: none; cursor: pointer;
+}
+.cpb-row:hover, .cpb-row:focus-visible { background: var(--studio-toolbar, #f3f4f6); outline: none; }
+.cpb-row:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: -2px; }
+.cpb-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpb-row-meta { flex: 0 0 auto; font-size: 11px; color: var(--studio-muted, #687082); }
+.cpb-row-badge {
+  flex: 0 0 auto; padding: 1px 6px; border-radius: 999px; font-size: 10.5px; font-weight: 600;
+  color: var(--pe-accent-label, var(--pe-accent, #4f46e5)); background: var(--pe-selected, rgba(79, 70, 229, .1));
+}
+.cpb-sep { height: 1px; margin: 8px 0; border: 0; background: var(--studio-line, #e3e4e8); }
+.cpb-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.cpb-btn-primary, .cpb-btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 12px; border-radius: 7px; font: 550 12.5px/1 var(--pe-font-ui, system-ui);
+  text-decoration: none; cursor: pointer; box-sizing: border-box; white-space: nowrap;
+}
+.cpb-btn-primary { color: #ffffff; background: var(--pe-accent, #4f46e5); border: 1px solid transparent; }
+.cpb-btn-primary:hover:not(:disabled) { background: var(--pe-accent-strong, #4338ca); }
+.cpb-btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+.cpb-btn-secondary { color: var(--studio-text, #202333); background: var(--studio-panel, #ffffff); border: 1px solid var(--studio-line, #d9dde5); }
+.cpb-btn-secondary:hover:not(:disabled) { background: var(--studio-toolbar, #f3f4f6); }
+.cpb-link-muted {
+  color: var(--studio-muted, #687082); font-size: 12px; text-decoration: none; cursor: pointer;
+  background: transparent; border: 0; padding: 2px 0; font-family: inherit;
+}
+.cpb-link-muted:hover { color: var(--studio-text, #111827); text-decoration: underline; }
+.cpb-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--studio-line, #e3e4e8);
+  font-size: 11.5px; color: var(--studio-muted, #687082);
+}
+
+/* Sidebar Projects Bridge card inside #projectLinesSide */
+.cpb-side-card {
+  margin: 4px 4px 10px; padding: 10px 11px; border-radius: 9px;
+  border: 1px solid var(--studio-line, #e3e4e8); background: var(--studio-panel, #ffffff);
+}
+.cpb-side-card h4 { margin: 0 0 4px; font-size: 12.5px; font-weight: 620; color: var(--studio-text, #111827); }
+.cpb-side-card p { margin: 0 0 9px; font-size: 11.5px; line-height: 1.4; color: var(--studio-muted, #687082); }
+.cpb-side-card .cpb-actions { margin-top: 0; }
+.cpb-side-card .cpb-btn-primary, .cpb-side-card .cpb-btn-secondary { height: 28px; padding: 0 10px; font-size: 12px; }
+.cpb-side-footer-actions { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--studio-hairline, #ebecef); }
+
+/* Native top-layer modal dialog for Create / Save to Project */
+.companion-project-dialog {
+  width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow: auto;
+  padding: 18px 20px; border: 1px solid var(--studio-line, #e3e4e8); border-radius: 14px;
+  background: var(--studio-panel, #ffffff); color: var(--studio-text, #202333);
+  box-shadow: 0 20px 50px rgba(17, 24, 39, .24); font: 13px/1.5 var(--pe-font-ui, system-ui);
+}
+.companion-project-dialog::backdrop { background: rgba(17, 24, 39, .36); }
+.cpb-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.cpb-dialog-head h2 { margin: 0; font-size: 15.5px; font-weight: 640; color: var(--studio-text, #111827); }
+.cpb-dialog-close {
+  flex: 0 0 28px; width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--studio-muted, #687082); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.cpb-dialog-close:hover { background: var(--studio-toolbar, #f3f4f6); color: var(--studio-text, #111827); }
+.cpb-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.cpb-field label { font-size: 12px; font-weight: 560; color: var(--studio-text, #202333); }
+.cpb-input, .cpb-select {
+  width: 100%; height: 34px; box-sizing: border-box; padding: 0 10px;
+  border: 1px solid var(--studio-line, #d5d9e2); border-radius: 7px;
+  background: var(--studio-panel, #ffffff); color: var(--studio-text, #111827);
+  font: 13px/1.2 var(--pe-font-ui, system-ui);
+}
+.cpb-input:focus-visible, .cpb-select:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: -1px; }
+.cpb-note {
+  margin: 0 0 12px; padding: 9px 11px; border-radius: 8px;
+  background: var(--studio-titlebar, #f7f8fa); border: 1px solid var(--studio-hairline, #e8e9ee);
+  font-size: 12px; line-height: 1.45; color: var(--studio-muted, #555e70);
+}
+.cpb-check {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px;
+  font-size: 12.5px; line-height: 1.4; color: var(--studio-text, #202333); cursor: pointer;
+}
+.cpb-check input { margin-top: 2px; flex: 0 0 auto; accent-color: var(--pe-accent, #4f46e5); }
+.cpb-error {
+  margin: 0 0 12px; padding: 9px 11px; border-radius: 8px;
+  background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 12px; line-height: 1.4;
+}
+.cpb-warning {
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 12px; line-height: 1.45;
+}
+.cpb-success-box {
+  margin: 0 0 14px; padding: 11px 12px; border-radius: 9px;
+  background: color-mix(in srgb, #16a34a 8%, var(--studio-panel, #ffffff));
+  border: 1px solid color-mix(in srgb, #16a34a 28%, var(--studio-line, #e3e4e8));
+  color: var(--studio-text, #111827); font-size: 12.5px; line-height: 1.45;
+}
+.cpb-dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.cpb-dialog-actions-split { justify-content: space-between; }
 
 /* The rail replaces duplicate navigation; signed-in AI keeps its normal UI. */
 :root[data-penecho-companion="minimal"] body :is(#canvasZoomControls, #canvasNavigationLock, #canvasFitContents, #canvasWelcome, #canvasAgentControl) { display: none !important; }
-:root[data-penecho-guest-ai="true"] body :is(#aiEmbodiment, #auto, #canvasAutoPausedNotice, #assistAgentMini, #smartSuggestLayer, .pen-intel-layer, #smartSuggestToggle) { display: none !important; }
-/* Hidden docked panels must not leak into the compact viewport on interaction. */
-:root[data-penecho-companion="minimal"] body:not(.canvas-agent-open) .canvas-frame > .canvas-agent-panel,
-:root[data-penecho-companion="minimal"] body .canvas-frame > .canvas-agent-panel[hidden] { display: none !important; }
+/* A guest has no Agent and no suggestions; AI itself shows only while PenEcho offers this guest free AI. */
+:root[data-penecho-guest-ai="true"] body :is(#assistAgentMini, #smartSuggestLayer, .pen-intel-layer, #smartSuggestToggle, #settingsPageCanvas .settings-row:has(> #smartSuggestToggle)) { display: none !important; }
+:root[data-penecho-guest-ai="true"]:not([data-penecho-guest-ai-on="true"]) body :is(#aiEmbodiment, #auto, #canvasAutoPausedNotice) { display: none !important; }
+/* A visitor who is not signed in signs in or up at the end of the title row; Sign up is its one filled button. */
+.guest-account-actions[hidden] { display: none !important; }
+body .topbar #guestAccountActions { display: inline-flex; flex: 0 0 auto; order: 5; align-items: center; gap: 4px; margin-left: 2px; }
+body .topbar #guestAccountActions > button {
+  display: inline-flex; align-items: center; height: 28px; min-height: 28px; box-sizing: border-box; margin: 0; padding: 0 10px;
+  border: 1px solid transparent; border-radius: 6px; box-shadow: none; font: 500 12.5px/1 var(--pe-font-ui, system-ui); white-space: nowrap; cursor: pointer;
+}
+body .topbar #guestSignInBtn { color: var(--studio-text, #20242c); background: transparent; }
+body .topbar #guestSignInBtn:hover { background: var(--studio-toolbar, #f3f4f6); }
+body .topbar #guestSignUpBtn { color: #ffffff; background: var(--pe-accent, #4f46e5); }
+body .topbar #guestSignUpBtn:hover { background: var(--pe-accent-strong, #4338ca); }
+body .topbar #guestAccountActions > button:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: 2px; }
+:root[data-penecho-guest-ai="true"] body .topbar :is(#cloudAccountBtn, #saveCanvasBtn) { display: none !important; }
+@media (min-width: 701px) {
+  :root[data-penecho-guest-ai="true"] body[data-theme="studio"] .topbar #shareCanvasBtn { color: var(--pe-accent-strong); border: 1px solid var(--pe-accent); background: transparent; }
+  :root[data-penecho-guest-ai="true"] body[data-theme="studio"] .topbar #shareCanvasBtn:is(:hover, :active):not(:disabled) { color: var(--pe-accent-strong); border-color: var(--pe-accent); background: color-mix(in srgb, var(--pe-accent) 8%, transparent); }
+}
+/* With them in the row, labels give way sooner: the view toggle's first, then Collaborate's and Share's. */
+@media (max-width: 960px) {
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body .topbar #companionViewToggle:not([hidden]) { width: 28px; padding: 0; }
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body .topbar .companion-view-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (min-width: 701px) and (max-width: 800px) {
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body[data-theme="studio"] .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) { width: 28px; min-width: 0; padding: 0; }
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body[data-theme="studio"] .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) .canvas-share-label { display: none; }
+}
+@media (min-width: 701px) and (max-width: 1180px) {
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="full"] body .topbar #companionViewToggle:not([hidden]) { width: 28px; padding: 0; }
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="full"] body .topbar .companion-view-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  :root[data-penecho-guest-ai="true"]:not([data-penecho-companion="minimal"]) body[data-theme="studio"] .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) { width: 28px; min-width: 0; padding: 0; }
+  :root[data-penecho-guest-ai="true"]:not([data-penecho-companion="minimal"]) body[data-theme="studio"] .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) .canvas-share-label { display: none; }
+}
+/* Narrower still, Sign up stands alone (the page it opens signs in too), and on small screens the row wraps. */
+@media (min-width: 701px) and (max-width: 800px) {
+  :root[data-penecho-guest-ai="true"]:not([data-penecho-companion="minimal"]) body .topbar #guestSignInBtn { display: none; }
+}
+@media (max-width: 640px) {
+  :root[data-penecho-guest-ai="true"][data-penecho-companion="minimal"] body .topbar #guestSignInBtn { display: none; }
+}
+@media (max-width: 700px) {
+  :root[data-penecho-guest-ai="true"]:not([data-penecho-companion="minimal"]) body .topbar > .top-row { flex-wrap: wrap; }
+}
 .canvas-hint-signin { margin-left: 8px; padding: 0; border: 0; background: transparent; color: var(--studio-accent, #4f46e5); font: inherit; text-decoration: underline; cursor: pointer; pointer-events: auto; }
 .canvas-hint-signin:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 :root[data-penecho-companion="minimal"] body #canvasHint:has(.canvas-hint-signin) {
@@ -2276,7 +2374,182 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
 :root[data-penecho-companion="minimal"] body main > footer { min-height: 24px; flex-basis: 24px; }
 @media (max-width: 560px) {
   :root[data-penecho-companion="minimal"] body #coords { display: none; }
+  /* A folder project's date stays: it says when the project goes. */
+  :root[data-penecho-companion="minimal"] body .topbar #liveExpiry:not([data-expiry="folder"]) { display: none; }
   :root[data-penecho-companion="minimal"] body .topbar #canvasDocumentSaveLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   :root[data-penecho-companion] body .topbar #companionViewToggle:not([hidden]) { width: 28px; padding: 0; }
   :root[data-penecho-companion] body .topbar .companion-view-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
+/* ---------- Header redesign: breadcrumb, conditional MCP pill, unified Share, cascading More menu ---------- */
+.canvas-command-proxies { display: none !important; }
+.canvas-breadcrumb-parent,
+.canvas-breadcrumb-sep { display: none; }
+.canvas-breadcrumb-parent[hidden],
+.canvas-breadcrumb-sep[hidden] { display: none !important; }
+body[data-theme="studio"] .topbar .canvas-breadcrumb-parent:not([hidden]) {
+  display: inline-flex; align-items: center; max-width: 170px; height: 24px; padding: 0 6px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--studio-muted, #687082);
+  font: 500 13px/1 inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+body[data-theme="studio"] .topbar .canvas-breadcrumb-parent:not([hidden]):hover {
+  color: var(--studio-text, #20242c); background: var(--pe-hover, rgba(31, 36, 45, .06));
+}
+body[data-theme="studio"] .topbar .canvas-breadcrumb-parent:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
+body[data-theme="studio"] .topbar .canvas-breadcrumb-sep:not([hidden]) {
+  display: inline; color: var(--studio-muted, #94a3b8); font-size: 13px; user-select: none; margin-inline: -4px;
+}
+body[data-theme="studio"] .topbar #canvasDocumentSaveState[data-state="saved"] + #saveCanvasBtn { display: none; }
+body[data-theme="studio"] .topbar #mcpToolbarToggle { display: none !important; }
+.header-mcp-pill { display: none; }
+.header-mcp-pill[hidden] { display: none !important; }
+body[data-theme="studio"] .topbar .header-mcp-pill:not([hidden]) {
+  display: inline-flex; align-items: center; gap: 6px; width: auto; min-width: 0; flex: 0 0 auto; height: 28px; min-height: 28px; padding: 0 10px;
+  border: 1px solid var(--studio-line, #d9dde5); border-radius: 99px;
+  background: var(--studio-panel, #ffffff); color: var(--studio-text, #20242c);
+  font-size: 12.5px; font-weight: 550; line-height: 1; white-space: nowrap; cursor: pointer;
+}
+body[data-theme="studio"] .topbar .header-mcp-pill:not([hidden]):hover {
+  background: var(--pe-hover, rgba(31, 36, 45, .05));
+}
+body[data-theme="studio"] .topbar .header-mcp-pill .mcp-toolbar-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--studio-muted, #94a3b8); flex: 0 0 7px;
+}
+body[data-theme="studio"] .topbar .header-mcp-pill[data-state="connected"] {
+  border-color: color-mix(in srgb, #16a34a 38%, var(--studio-line, #d9dde5));
+  background: color-mix(in srgb, #16a34a 9%, var(--studio-panel, #ffffff));
+  color: #15803d;
+}
+body[data-theme="studio"] .topbar .header-mcp-pill[data-state="connected"] .mcp-toolbar-dot { background: #16a34a; }
+body[data-theme="studio"] .topbar .header-mcp-pill[data-state="connecting"] .mcp-toolbar-dot,
+body[data-theme="studio"] .topbar .header-mcp-pill[data-state="retrying"] .mcp-toolbar-dot,
+body[data-theme="studio"] .topbar .header-mcp-pill[data-state="updating"] .mcp-toolbar-dot { background: #d97706; }
+body[data-theme="studio"] .topbar .header-mcp-pill[data-state="failed"] .mcp-toolbar-dot { background: #dc2626; }
+body[data-theme="studio"] .topbar .header-mcp-pill #headerMcpState { color: var(--studio-muted, #687082); font-weight: 450; }
+body[data-theme="studio"] .topbar .header-mcp-pill[data-state="connected"] #headerMcpState { color: #166534; }
+
+body[data-theme="studio"] .topbar .canvas-share-control { position: relative; display: flex; align-items: center; }
+body[data-theme="studio"] .topbar #shareCanvasBtn[data-collaborating="true"] {
+  background: #15803d; color: #fff; border-color: transparent;
+}
+body[data-theme="studio"] .topbar .canvas-more-control { order: 3; }
+body[data-theme="studio"] .topbar .project-lines-panel-button { order: 6; }
+body[data-theme="studio"] .topbar .canvas-more-menu { overflow: visible; }
+body[data-theme="studio"] .canvas-more-panel,
+body[data-theme="studio"] .canvas-more-submenu { display: flex; flex-direction: column; gap: 2px; min-width: 224px; }
+body[data-theme="studio"] .canvas-more-submenu {
+  position: absolute; top: var(--submenu-top, 0px); left: calc(100% + 6px); min-width: 196px; padding: 6px;
+  background: var(--studio-panel, #ffffff); border: 1px solid var(--studio-line, #d9dde5);
+  border-radius: 10px; box-shadow: 0 12px 28px rgba(17, 24, 39, .14); z-index: 3;
+}
+body[data-theme="studio"] .canvas-more-submenu[data-align="left"] { left: auto; right: calc(100% + 6px); }
+body[data-theme="studio"] .canvas-more-submenu[hidden] { display: none; }
+body[data-theme="studio"] :is(.canvas-more-panel, .canvas-more-submenu, .canvas-share-menu) :is(button[role="menuitem"], a[role="menuitem"], .canvas-more-back) {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 6px 10px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--studio-text, #20242c);
+  font: inherit; font-size: 13px; font-weight: 450; text-align: left; text-decoration: none; cursor: pointer;
+}
+body[data-theme="studio"] :is(.canvas-more-panel, .canvas-more-submenu, .canvas-share-menu) :is(button[role="menuitem"], a[role="menuitem"], .canvas-more-back)[hidden] { display: none; }
+body[data-theme="studio"] :is(.canvas-more-panel, .canvas-more-submenu, .canvas-share-menu) :is(button[role="menuitem"], a[role="menuitem"], .canvas-more-back):is(:hover, :focus-visible) {
+  background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 6%, transparent)); outline: none;
+}
+body[data-theme="studio"] :is(.canvas-more-panel, .canvas-more-submenu, .canvas-share-menu) :is(button, a) > svg {
+  width: 16px; height: 16px; flex: 0 0 16px; color: var(--studio-muted); fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+body[data-theme="studio"] .canvas-more-menu .menu-sep { height: 1px; margin: 4px 6px; background: var(--studio-line, #e5e7eb); }
+body[data-theme="studio"] .canvas-more-menu .menu-sep[hidden] { display: none; }
+body[data-theme="studio"] .canvas-more-menu .menu-chev { width: 14px; height: 14px; flex: 0 0 14px; margin-left: auto; color: var(--studio-muted); }
+body[data-theme="studio"] .canvas-more-menu .menu-item-label { flex: 1 1 auto; }
+body[data-theme="studio"] .canvas-more-menu .menu-danger { color: #b91c1c; }
+body[data-theme="studio"] .canvas-more-menu .menu-danger > svg { color: #dc2626; }
+body[data-theme="studio"] .canvas-more-menu .menu-toggle-pill {
+  position: relative; flex: 0 0 32px; width: 32px; height: 18px; margin-left: auto;
+  border-radius: 999px; background: var(--studio-line, #cbd5e1); transition: background .15s;
+}
+body[data-theme="studio"] .canvas-more-menu .menu-toggle-pill span {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .18); transition: transform .15s;
+}
+body[data-theme="studio"] #canvasMoreMcpSwitch[aria-checked="true"] .menu-toggle-pill { background: #16a34a; }
+body[data-theme="studio"] #canvasMoreMcpSwitch[aria-checked="true"] .menu-toggle-pill span { transform: translateX(14px); }
+body[data-theme="studio"] .canvas-share-menu { min-width: 268px; max-width: calc(100vw - 16px); right: 0; left: auto; padding: 6px; }
+/* Each Share row has a title and a line under it: the row grows to hold both instead of the menu-item height. */
+body[data-theme="studio"] #canvasShareMenu > button[role="menuitem"] {
+  display: flex; height: auto; min-height: 44px; padding: 8px 10px;
+  align-items: center; line-height: 1.35; white-space: normal;
+}
+body[data-theme="studio"] .canvas-share-menu .share-menu-copy { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
+body[data-theme="studio"] .canvas-share-menu .share-menu-copy strong { font-size: 13px; font-weight: 560; color: var(--studio-text); }
+body[data-theme="studio"] .canvas-share-menu .share-menu-copy small { font-size: 11.5px; color: var(--studio-muted); line-height: 1.3; white-space: normal; }
+body[data-theme="studio"] .canvas-share-menu .menu-state-pill {
+  flex: 0 0 auto; padding: 2px 7px; border-radius: 99px; font-size: 11px; font-weight: 600;
+  background: color-mix(in srgb, #16a34a 14%, transparent); color: #15803d;
+}
+body[data-theme="studio"] .canvas-share-menu .menu-state-pill[hidden] { display: none; }
+:root[data-penecho-guest-ai="true"] .canvas-more-menu [data-penecho-guest-hide] { display: none !important; }
+body[data-theme="studio"] .canvas-more-back { font-weight: 560 !important; border-bottom: 1px solid var(--studio-line, #e5e7eb); border-radius: 6px 6px 0 0 !important; margin-bottom: 2px; }
+@media (max-width: 740px) {
+  body[data-theme="studio"] .canvas-more-menu[data-submenu-open] > [data-more-panel="root"] { display: none; }
+  body[data-theme="studio"] .canvas-more-submenu { position: static; box-shadow: none; border: 0; padding: 0; min-width: 224px; }
+  body[data-theme="studio"] .topbar #shareCanvasBtn { width: 30px; min-width: 30px; height: 30px; min-height: 30px; padding: 0; }
+  body[data-theme="studio"] .topbar #shareCanvasBtn .canvas-share-label { display: none; }
+  body[data-theme="studio"] .topbar .canvas-breadcrumb-parent,
+  body[data-theme="studio"] .topbar .canvas-breadcrumb-sep { display: none !important; }
+}
+@media (max-width: 700px) {
+  html, body { overflow-x: clip; max-width: 100%; }
+  body[data-theme="studio"] main > footer { overflow: hidden; max-width: 100%; }
+  body[data-theme="studio"] main > footer #tip { overflow: hidden; text-overflow: ellipsis; }
+  body[data-theme="studio"] .topbar > .top-row:not(:has(#batchActions:not([hidden]))) {
+    flex-wrap: nowrap; min-height: 44px; padding-inline: 8px; gap: 4px; min-width: 0;
+  }
+  body[data-theme="studio"] .topbar :is(#newCanvasBtn, #echoCanvasBtn, #exportPngBtn, #historyBtn) { display: none; }
+  body[data-theme="studio"] .topbar .canvas-document-meta {
+    flex: 1 1 auto; min-width: 0; gap: 4px; margin-left: 0; padding-left: 4px; border-left: 0; overflow: hidden;
+  }
+  body[data-theme="studio"] .topbar .canvas-document-name,
+  body[data-theme="studio"] .topbar .canvas-document-name-editor { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+  body[data-theme="studio"] .topbar #canvasDocumentSaveState { flex: 0 0 auto; padding: 4px; }
+  body[data-theme="studio"] .topbar #canvasDocumentSaveLabel { display: none; }
+  body[data-theme="studio"] .topbar #aiStatusArea:not(:has(#batchActions:not([hidden]))):has(#status[data-status-key="ready"]) { display: none; }
+  body[data-theme="studio"] .topbar .canvas-file-actions {
+    gap: 4px; margin-left: auto; padding-left: 0; border-left: 0; flex: 0 0 auto;
+  }
+  body[data-theme="studio"] .topbar .header-mcp-pill:not([hidden]) { padding: 0 7px; height: 26px; min-height: 26px; font-size: 11.5px; }
+  body[data-theme="studio"] .topbar .header-mcp-pill #headerMcpState { display: none; }
+}
+@media (min-width: 741px) and (max-width: 900px) {
+  body[data-theme="studio"] .topbar #shareCanvasBtn { width: 28px; min-width: 28px; padding: 0; }
+  body[data-theme="studio"] .topbar #shareCanvasBtn .canvas-share-label { display: none; }
+  body[data-theme="studio"] .topbar .canvas-breadcrumb-parent { max-width: 110px; }
+}
+
+body:has(:is(.canvas-more-menu, .canvas-share-menu, #mcpStatusPopover):not([hidden])) .canvas-ai-hint { display: none !important; }
+
+/* ---------- No frosted glass ----------
+   A surface that blurs what lies behind it is paid for again on every frame the Canvas under it repaints, and drawing is
+   what has to stay fast. So nothing blurs its background any more: this one block switches it off everywhere, and the
+   surfaces that leaned on the blur to stay readable are solid. The blur rules earlier in the style sheets no longer do
+   anything; take one out only together with the test that names it. */
+*, *::before, *::after, ::backdrop { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+body[data-theme="studio"] { --studio-glass: var(--studio-titlebar); --studio-glass-strong: var(--studio-titlebar); --studio-agent-overlay: var(--studio-panel); }
+body[data-theme="studio"] :is(.eraser-tool-menu, .color-orbit, .effort-popover, .auto-delay-popover) { background: var(--studio-panel, #ffffff); }
+.selected-widget-material, body[data-theme="studio"] .selected-widget-material { background: var(--panel-raised, #ffffff); filter: none; }
+.widget-interaction-status, .canvas-view-actions, .canvas-navigation-actions { background: var(--studio-panel, #ffffff); }
+body[data-theme="studio"] .object-chrome-button.widget-chrome-control { background: var(--studio-panel, #ffffff); }
+:is(#pe-button-contract, .object-toolbar-shell) { background: var(--panel-raised, #ffffff); }
+
+/* Native desktop titlebar drag region and traffic-light / Windows overlay insets for Canvas. */
+html[data-desktop] body[data-theme="studio"] .topbar { -webkit-app-region: drag; }
+html[data-desktop] body[data-theme="studio"] .topbar :is(button, a, input, select, textarea, [role="button"], [role="menuitem"], .canvas-more-menu, .canvas-share-menu, #mcpStatusPopover) { -webkit-app-region: no-drag; }
+/* A popup over the top bar takes its own clicks; only the bar itself moves the window. */
+html[data-desktop] body[data-theme="studio"] :is(.settings-panel, .history-panel, .configuration-panel, .plugin-modal, .penecho-cloud-dialog, .pld, .project-lines-error, .example-coach, dialog, [popover]) { -webkit-app-region: no-drag; }
+html[data-window-scale="90"] { --window-scale: .9; }
+html[data-window-scale="110"] { --window-scale: 1.1; }
+html[data-window-scale="120"] { --window-scale: 1.2; }
+@media (min-width: 701px) {
+  html[data-desktop="darwin"]:not(.is-desktop-fullscreen):not(.project-lines-rail-open):not(.project-lines-in-shell) body[data-theme="studio"] .topbar,
+  html[data-desktop="darwin"]:not(.is-desktop-fullscreen).project-lines-in-shell.shell-rail-hidden body[data-theme="studio"] .topbar,
+  html[data-desktop="darwin"]:not(.is-desktop-fullscreen).project-lines-in-shell body[data-theme="studio"].project-lines-draft .topbar { padding-left: 84px; }
+  html[data-desktop="win32"] body[data-theme="studio"] .topbar { padding-right: calc(138px / var(--window-scale, 1) + 10px); }
 }

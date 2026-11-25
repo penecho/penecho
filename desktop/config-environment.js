@@ -18,4 +18,14 @@ function desktopConfigurationEnvironment(source, stateDir) {
   return env;
 }
 
-module.exports = { DESKTOP_MANAGED_ENV, desktopConfigurationEnvironment };
+// Settings without a value are taken out, so a value of the shell's or the system's does not stand in for them.
+function applyEnvironment(env, target = process.env) {
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined || value === null) delete target[key];
+    else target[key] = String(value);
+  }
+  target.HOST ||= "0.0.0.0";
+  target.PORT ||= "3888";
+}
+
+module.exports = { DESKTOP_MANAGED_ENV, desktopConfigurationEnvironment, applyEnvironment };

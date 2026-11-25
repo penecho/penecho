@@ -1,3 +1,4 @@
+require("./helpers/safety.js");
 const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const { mkdtempSync, readFileSync, rmSync } = require("node:fs");

@@ -6,12 +6,10 @@
   const COPY = {
     en: {
       welcomeActions: "Start with PenEcho",
-      welcomeAgent: "Ask PenEcho Agent",
       welcomeMcp: "Connect your AI via MCP",
     },
     zh: {
       welcomeActions: "开始使用 PenEcho",
-      welcomeAgent: "询问 PenEcho Agent",
       welcomeMcp: "通过 MCP 连接你的 AI",
     },
   };
@@ -34,7 +32,7 @@
 
   function clickExisting(selector) {
     const target = document.querySelector(selector);
-    if (!target || target.disabled || target.closest("[hidden]")) return false;
+    if (!target || target.disabled || target.hidden || (target.closest("[hidden]") && !target.closest("#canvasCommandProxies"))) return false;
     target.click();
     return true;
   }
@@ -47,32 +45,119 @@
     if (rest.length) requestAnimationFrame(() => requestAnimationFrame(() => forward(rest)));
   }
 
-  // Title bar "More" menu: New, Library, Export and Echo forward to the
-  // original buttons, which stay in the DOM for every existing handler.
+  // Title bar "More" menu: nested submenus, keyboard/pointer navigation,
+  // and forwarding to command proxies kept in the DOM for legacy hooks.
   const moreButton = document.querySelector("#canvasMoreBtn");
   const moreMenu = document.querySelector("#canvasMoreMenu");
+  const moreRootPanel = moreMenu?.querySelector('[data-more-panel="root"]');
+  let activeSubmenuName = "";
+  function isGuestMode() {
+    return document.documentElement.dataset.penechoGuestAi === "true";
+  }
+  function isNarrowMoreViewport() {
+    return Boolean(window.matchMedia?.("(max-width: 740px)")?.matches);
+  }
+  function submenuPanel(name) {
+    return name ? moreMenu?.querySelector(`[data-more-submenu="${CSS.escape(name)}"]`) || null : null;
+  }
   function moreItems() {
-    return moreMenu ? [...moreMenu.querySelectorAll('[role="menuitem"]')].filter((item) => !item.hidden && !item.disabled) : [];
+    if (!moreMenu) return [];
+    const activePanel = submenuPanel(activeSubmenuName) || moreRootPanel || moreMenu;
+    const guest = isGuestMode();
+    return [...activePanel.querySelectorAll('[role="menuitem"], [data-more-back]')].filter((item) => !item.hidden && !item.disabled && !(guest && item.hasAttribute("data-penecho-guest-hide")));
   }
   function syncMoreItems() {
-    for (const item of moreMenu?.querySelectorAll("[data-shell-forward]") || []) {
+    if (!moreMenu) return;
+    const guest = isGuestMode();
+    for (const item of moreMenu.querySelectorAll("[data-shell-forward]")) {
       const target = document.querySelector(String(item.dataset.shellForward).split(",")[0]);
       item.hidden = !target || target.hidden;
       item.disabled = Boolean(target?.disabled);
     }
+    const delBtn = moreMenu.querySelector("#moreDeleteCanvasBtn");
+    const sepDanger = moreMenu.querySelector("#moreSepDanger");
+    if (sepDanger && delBtn) sepDanger.hidden = delBtn.hidden || guest;
   }
+  function closeSubmenu({ focusParent = false } = {}) {
+    const prevName = activeSubmenuName;
+    activeSubmenuName = "";
+    if (!moreMenu) return;
+    delete moreMenu.dataset.submenuOpen;
+    for (const sub of moreMenu.querySelectorAll("[data-more-submenu]")) {
+      sub.hidden = true;
+      delete sub.dataset.align;
+    }
+    for (const trigger of moreMenu.querySelectorAll("[data-more-sub]")) {
+      trigger.setAttribute("aria-expanded", "false");
+    }
+    if (focusParent && prevName) {
+      moreMenu.querySelector(`[data-more-sub="${CSS.escape(prevName)}"]`)?.focus({ preventScroll: true });
+    }
+  }
+  function openSubmenu(name, { focus = "" } = {}) {
+    const panel = submenuPanel(name);
+    if (!moreMenu || !panel) return;
+    if (activeSubmenuName && activeSubmenuName !== name) closeSubmenu();
+    syncMoreItems();
+    activeSubmenuName = name;
+    moreMenu.dataset.submenuOpen = name;
+    for (const sub of moreMenu.querySelectorAll("[data-more-submenu]")) {
+      const match = sub === panel;
+      sub.hidden = !match;
+      if (!match) delete sub.dataset.align;
+    }
+    for (const trigger of moreMenu.querySelectorAll("[data-more-sub]")) {
+      trigger.setAttribute("aria-expanded", String(trigger.dataset.moreSub === name));
+    }
+    positionSubmenu();
+    if (focus === "first") {
+      const items = [...panel.querySelectorAll('[role="menuitem"]')].filter((item) => !item.hidden && !item.disabled);
+      items[0]?.focus({ preventScroll: true });
+    }
+  }
+  function positionSubmenu() {
+    const panel = submenuPanel(activeSubmenuName);
+    const trigger = moreMenu?.querySelector(`[data-more-sub="${CSS.escape(activeSubmenuName)}"]`);
+    if (!panel || !trigger) return;
+    const narrow = isNarrowMoreViewport();
+    const backBtn = panel.querySelector("[data-more-back]");
+    if (backBtn) backBtn.hidden = !narrow;
+    panel.style.removeProperty("--submenu-top");
+    if (narrow) {
+      delete panel.dataset.align;
+      return;
+    }
+    const menuRect = moreMenu.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const triggerRect = trigger.getBoundingClientRect();
+    const scale = moreMenu.offsetWidth ? menuRect.width / moreMenu.offsetWidth : 1;
+    panel.dataset.align = menuRect.right + panelRect.width + 6 * scale > window.innerWidth - 8 ? "left" : "right";
+    // Align the first item with its parent row, then lift only enough to fit.
+    const top = Math.max(8, Math.min(triggerRect.top - 7 * scale, window.innerHeight - panelRect.height - 8));
+    panel.style.setProperty("--submenu-top", `${(top - menuRect.top) / scale - (moreMenu.clientTop || 0)}px`);
+  }
+  window.addEventListener("resize", () => { if (moreOpen()) positionSubmenu(); });
   function moreOpen() {
     return Boolean(moreMenu && !moreMenu.hidden);
   }
   function setMoreOpen(open, { focus = "" } = {}) {
     if (!moreMenu || !moreButton) return;
-    if (open) syncMoreItems();
+    if (open) {
+      syncMoreItems();
+      closeSubmenu();
+      window.dispatchEvent(new CustomEvent("penecho:more-opening"));
+    } else {
+      closeSubmenu();
+    }
     moreMenu.hidden = !open;
     moreButton.setAttribute("aria-expanded", String(open));
-    if (open && focus === "first") moreItems()[0]?.focus();
-    else if (open && focus === "last") moreItems().at(-1)?.focus();
-    else if (!open && focus === "button") moreButton.focus();
+    if (open && focus === "first") moreItems()[0]?.focus({ preventScroll: true });
+    else if (open && focus === "last") moreItems().at(-1)?.focus({ preventScroll: true });
+    else if (!open && focus === "button") moreButton.focus({ preventScroll: true });
   }
+  window.addEventListener("penecho:share-opening", () => {
+    if (moreOpen()) setMoreOpen(false);
+  });
   moreButton?.addEventListener("click", () => setMoreOpen(!moreOpen()));
   moreButton?.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -82,18 +167,62 @@
   });
   moreMenu?.addEventListener("keydown", (event) => {
     const items = moreItems(), index = items.indexOf(document.activeElement);
-    if (event.key === "Escape") {
+    const activeSubTrigger = document.activeElement instanceof Element ? document.activeElement.closest("[data-more-sub]") : null;
+    if (event.key === "ArrowRight" && activeSubTrigger) {
+      event.preventDefault();
+      event.stopPropagation();
+      openSubmenu(activeSubTrigger.dataset.moreSub, { focus: "first" });
+    } else if (event.key === "ArrowLeft" && activeSubmenuName) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSubmenu({ focusParent: true });
+    } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
       setMoreOpen(false, { focus:"button" });
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
+      if (!items.length) return;
       const step = event.key === "ArrowDown" ? 1 : -1;
       items[(index + step + items.length) % items.length]?.focus();
     } else if (event.key === "Home" || event.key === "End") {
       event.preventDefault();
       (event.key === "Home" ? items[0] : items.at(-1))?.focus();
     } else if (event.key === "Tab") setMoreOpen(false);
+  });
+  moreRootPanel?.addEventListener("mouseover", (event) => {
+    if (!moreOpen() || isNarrowMoreViewport()) return;
+    if (window.matchMedia && !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    const item = event.target instanceof Element ? event.target.closest('[role="menuitem"]') : null;
+    if (!item || !moreRootPanel.contains(item)) return;
+    const sub = item.dataset.moreSub;
+    if (sub) {
+      if (activeSubmenuName !== sub) openSubmenu(sub);
+    } else if (activeSubmenuName) {
+      closeSubmenu();
+    }
+  });
+  moreMenu?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const backBtn = target.closest("[data-more-back]");
+    if (backBtn) {
+      event.preventDefault();
+      closeSubmenu({ focusParent: true });
+      return;
+    }
+    const subTrigger = target.closest("[data-more-sub]");
+    if (subTrigger) {
+      event.preventDefault();
+      const name = subTrigger.dataset.moreSub;
+      if (isNarrowMoreViewport()) openSubmenu(name, { focus: "first" });
+      else openSubmenu(name, event.detail === 0 ? { focus: "first" } : {});
+      return;
+    }
+    const leaf = target.closest('[role="menuitem"]');
+    if (leaf && leaf.getAttribute("role") !== "menuitemcheckbox" && !leaf.dataset.moreSub && !leaf.dataset.shellForward) {
+      setMoreOpen(false);
+    }
   });
   document.addEventListener("pointerdown", (event) => {
     if (moreOpen() && !moreMenu.contains(event.target) && !moreButton.contains(event.target)) setMoreOpen(false);
@@ -122,15 +251,15 @@
   function syncAIAction() {
     if (!aiRun || !aiOrb) return;
     aiRun.disabled = aiOrb.disabled;
+    const label = aiOrb.getAttribute("aria-label");
+    if (label && aiRun.textContent !== label) aiRun.textContent = label;
     const pauseAction = document.querySelector("#canvasAutoPausedNotice");
     if (pauseAction) {
       pauseAction.disabled = aiOrb.disabled;
-      pauseAction.title = aiOrb.getAttribute("aria-label") || "";
+      pauseAction.title = label || "";
     }
-    for (const name of ["aria-label", "title"]) {
-      const value = aiOrb.getAttribute(name) || aiOrb.getAttribute("aria-label");
-      if (value) aiRun.setAttribute(name, value);
-    }
+    const title = aiOrb.getAttribute("title") || label;
+    if (title) aiRun.title = title;
     aiRun.dataset.busy = String(embodiment?.getAttribute("aria-busy") === "true");
   }
   if (aiOrb && embodiment) {
@@ -158,7 +287,7 @@
   // Reserve the final flex geometry, but keep enough live canvas underneath
   // both moving edges until the slide ends. Translating a final-size viewport
   // exposes a blank strip on opening; animating `left` also lays out every frame.
-  const motionPanels=[document.querySelector("#studioNavigator"),document.querySelector("#canvasAgentPanel")];
+  const motionPanels=[document.querySelector("#studioNavigator")];
   const motionViewport=document.querySelector("#viewport");
   const motionChrome=[".primary-tools","#aiToolsSection","#canvasZoomControls","#canvasAutoPausedNotice","#mcpCanvasNotice","#pageHintSlot"].map(selector=>document.querySelector(selector)).filter(Boolean);
   const motionPausedNotice=document.querySelector("#canvasAutoPausedNotice"),motionAiTools=document.querySelector("#aiToolsSection");
@@ -321,15 +450,15 @@
       // Our own width/row updates notify ResizeObserver again. Reuse the
       // settled arrangement instead of cycling through all three layouts.
       if(force!==true&&lastDockInputs===dockInputs())return;
-      const widthClass=[...document.querySelector(".canvas-frame").classList].find(name=>/^canvas-agent-width-\d+$/.test(name));
-      const agentWidth=widthClass?`${Number(widthClass.split("-").at(-1))*2.5}%`:"390px";
-      for(const target of dockPropertyTargets)if(target.style.getPropertyValue("--pe-shell-agent-width")!==agentWidth)target.style.setProperty("--pe-shell-agent-width",agentWidth);
       const scale = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
       const measure = element => {
         const rect = element.getBoundingClientRect();
         return { left: rect.left / scale, width: rect.width / scale, height: rect.height / scale };
       };
       const viewport = measure(document.querySelector("#viewport"));
+      // The line beside a project's Canvas lies over the right of the viewport (project-lines-bridge.js): the controls keep to what is left of it.
+      const linePanel = document.querySelector("#projectLinesPanel");
+      if (linePanel && !linePanel.hidden && matchMedia("(min-width: 901px)").matches) viewport.width = Math.max(0, viewport.width - measure(linePanel).width);
       space.style.left = `${viewport.left + 16}px`;
       space.style.right = "auto";
       space.style.width = `${Math.max(0, viewport.width - 32)}px`;
@@ -341,47 +470,38 @@
       body.dataset.shellDockLayout = "horizontal";
       const toolsWidth = Math.ceil(measure(dock).width);
       let viewWidth = measure(zoomControls).width;
-      const pauseNotice = document.querySelector("#canvasAutoPausedNotice");
-      const aiSurface = pauseNotice && !pauseNotice.hidden ? pauseNotice : aiTools;
-      let aiWidth = Math.ceil(measure(aiSurface).width);
+      // The Canvas AI bar (and Auto AI paused in its place) floats at the top right, so the bottom row is the view controls and the dock.
       const gap = 8;
       let mode = "horizontal";
-      if (viewWidth + toolsWidth + aiWidth + gap * 2 > available.width) {
+      if (viewWidth + toolsWidth + gap * 2 > available.width) {
         body.dataset.shellDockLayout = "vertical";
         viewWidth = measure(zoomControls).width;
-        aiWidth = Math.ceil(measure(aiSurface).width);
         mode = "vertical";
-        if (viewWidth + toolsWidth + aiWidth + gap * 2 > available.width) {
+        if (viewWidth + toolsWidth + gap * 2 > available.width) {
           mode = "rows";
           body.dataset.shellDockLayout = mode;
           viewWidth = measure(zoomControls).width;
-          aiWidth = Math.ceil(measure(aiSurface).width);
-          if (viewWidth + aiWidth + gap > available.width || (aiSurface === pauseNotice && aiWidth < 180)) {
+          if (viewWidth + gap > available.width) {
             body.dataset.shellDockSides = "compact";
             viewWidth = measure(zoomControls).width;
-            aiWidth = Math.ceil(measure(aiSurface).width);
           }
         }
       }
-      // Prefer the canvas center, then yield to the fixed edge controls before
+      // Prefer the canvas center, then yield to the view controls before
       // adding a second row. All measurements use the actual remaining canvas.
       const centeredX = available.left + Math.max(0, (available.width - toolsWidth) / 2);
       const toolsX = mode === "rows" ? centeredX : Math.max(available.left + viewWidth + gap,
-        Math.min(centeredX, available.left + available.width - aiWidth - gap - toolsWidth));
-      const aiX = available.left + available.width - aiWidth;
+        Math.min(centeredX, available.left + available.width - toolsWidth));
       const viewHeight = measure(zoomControls).height;
-      const aiHeight = measure(aiSurface).height;
       const values = {
         "view-x": available.left,
         "tools-x": toolsX,
         "tools-width": measure(dock).width,
-        "ai-x": aiX,
         "tools-max": available.width,
         "canvas-width": available.width,
-        "notice-bottom": mode === "rows" ? 16 + Math.max(viewHeight, aiHeight) + 44 + 24 : 16 + Math.max(measure(dock).height, viewHeight, aiHeight) + 12,
-        "ai-height": aiHeight,
+        "notice-bottom": mode === "rows" ? 16 + viewHeight + 44 + 24 : 16 + Math.max(measure(dock).height, viewHeight) + 12,
         "view-height": viewHeight,
-        "row-height": Math.max(measure(dock).height, viewHeight, aiHeight),
+        "row-height": Math.max(measure(dock).height, viewHeight),
       };
       for (const target of dockPropertyTargets) for (const [key, value] of Object.entries(values)) {
         const property=`--pe-shell-${key}`,next=`${value}px`;

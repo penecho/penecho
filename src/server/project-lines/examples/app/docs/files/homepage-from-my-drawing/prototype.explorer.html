@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Homepage prototype</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #f8fafc; }
+  .pp { box-sizing: border-box; display: grid; grid-template-columns: 200px minmax(0, 1fr) 220px; width: 1200px; height: 750px; color: #0f172a; font: 14px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  .pp * { box-sizing: border-box; }
+  .pp button { font: inherit; color: inherit; cursor: pointer; }
+  .side { padding: 18px 12px; background: #f1f5f9; border-right: 1px solid #e2e8f0; }
+  .brand { display: flex; align-items: center; gap: 8px; margin: 0 6px 16px; font-size: 16px; font-weight: 700; }
+  .brand i { width: 18px; height: 18px; border-radius: 5px; background: #0f172a; }
+  .label { margin: 0 8px 6px; color: #94a3b8; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  .proj { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 7px; background: none; text-align: left; font-size: 13.5px; }
+  .proj i { width: 9px; height: 9px; border-radius: 3px; }
+  .proj span { margin-left: auto; color: #94a3b8; font-size: 12px; }
+  .proj.on { background: #fff; font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, .07); }
+  .main { min-width: 0; padding: 18px 22px; }
+  .head { display: flex; align-items: baseline; gap: 10px; }
+  .head h1 { margin: 0; font-size: 20px; }
+  .head span { color: #64748b; font-size: 13px; }
+  .week { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 14px 0; }
+  .day { position: relative; display: flex; flex-direction: column; align-items: flex-start; height: 62px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; overflow: hidden; }
+  .day b { font-size: 12.5px; }
+  .day em { color: #2563eb; font-size: 18px; font-style: normal; font-weight: 650; }
+  .day u { position: absolute; right: 10px; bottom: 0; width: 12px; border-radius: 3px 3px 0 0; background: rgba(37, 99, 235, .2); }
+  .day.on { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .14); }
+  .day.none { opacity: .5; }
+  .lines { position: relative; height: 520px; padding: 2px 0; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 11px; background: #fff; }
+  .trunk { position: absolute; left: 16px; top: 12px; bottom: 12px; width: 2.5px; border-radius: 2px; background: #0f172a; }
+  .dh, .row { display: grid; grid-template-columns: 170px auto; align-items: center; padding-left: 34px; }
+  .dh { height: 30px; border-top: 1px solid #e2e8f0; font-size: 12.5px; font-weight: 650; }
+  .dh:first-of-type { border-top: 0; }
+  .clock { position: relative; height: 30px; color: #94a3b8; font-size: 10.5px; font-weight: 400; }
+  .clock span { position: absolute; bottom: 5px; transform: translateX(-50%); }
+  .row { position: relative; height: 50px; border-top: 1px solid #f1f5f9; }
+  .row:hover { background: #f8fafc; }
+  .elbow { position: absolute; left: 18px; top: 10px; width: 12px; height: 10px; border-left: 1.5px solid #64748b; border-bottom: 1.5px solid #64748b; border-bottom-left-radius: 7px; }
+  .row b { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13.5px; }
+  .row svg text { fill: #64748b; font-size: 10px; }
+  .files { padding: 18px 14px; border-left: 1px solid #e2e8f0; }
+  .files h2 { margin: 4px 0 10px; font-size: 13.5px; }
+  .file { display: flex; gap: 9px; align-items: center; padding: 7px 0; border-bottom: 1px solid #f1f5f9; }
+  .thumb { display: grid; place-items: center; flex: none; width: 34px; height: 27px; border-radius: 6px; background: #eff6ff; color: #2563eb; font-size: 12px; }
+  .file b { display: block; font-size: 12.5px; font-weight: 600; }
+  .file em { color: #64748b; font-size: 11.5px; font-style: normal; }
+  .note { margin-top: 14px; padding: 10px 11px; border-radius: 9px; background: #fefce8; color: #713f12; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="pp">
+  <aside class="side"><div class="brand"><i></i>Timeline</div><div class="label">Projects</div><div id="projects"></div></aside>
+  <main class="main">
+    <div class="head"><h1 id="name"></h1><span id="count"></span></div>
+    <div class="week" id="week"></div>
+    <div class="lines" id="lines"></div>
+  </main>
+  <aside class="files"><h2>Latest files</h2><div id="files"></div><div class="note">Prototype: click a day to see only its lines, or a project to switch.</div></aside>
+</div>
+<script>
+const PROJECTS = [["bakery", "Bakery website", "#2563eb"], ["recipes", "Recipe app", "#0d9488"], ["shop", "Online shop", "#d97706"]];
+const LINES = [
+  ["bakery", "Menu page", "Mon", "canvas 09:05, ask 09:12, Cl 09:40, ask 11:02, Cx 11:31, done 14:10"],
+  ["bakery", "Opening hours", "Mon", "ask 10:20, Cx 10:31, done 10:45"],
+  ["bakery", "Order form", "Tue", "ask 09:30, Cl 09:38, ask 09:44, Cl 09:52, ask 15:10, Cx 15:40"],
+  ["bakery", "Photos of the cakes", "Wed", "canvas 13:00, ask 13:05, Cl 13:20, done 16:30"],
+  ["bakery", "Contact page", "Thu", "ask 11:15, Oc 11:24"],
+  ["bakery", "Gift cards", "Fri", "ask 09:20, Cx 09:46, ask 13:30, Cl 13:52"],
+  ["recipes", "Shopping list", "Tue", "canvas 10:00, ask 10:06, Cl 10:30, done 12:00"],
+  ["recipes", "Search by ingredient", "Thu", "ask 14:00, Cx 14:25"],
+  ["shop", "Checkout", "Wed", "ask 09:00, Cx 09:41, ask 11:00, Cx 11:18, done 17:00"],
+];
+const FILES = [["bakery", "gift-card.png", "Gift cards · Fri"], ["bakery", "contact-form.html", "Contact page · Thu"], ["bakery", "cakes.png", "Photos of the cakes · Wed"], ["bakery", "menu-sketch.png", "Menu page · Mon"], ["recipes", "list-sketch.png", "Shopping list · Tue"], ["shop", "checkout-flow.png", "Checkout · Wed"]];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"], FACE = { Cl:"#a8502a", Cx:"#2b303a", Oc:"#3f4754" }, W = 470;
+const x = t => { const [h, m] = t.split(":").map(Number); return Math.round((h * 60 + m - 480) / 600 * W) + 10; };
+let cur = "bakery", day = null;
+function node(kind, t) {
+  const at = x(t);
+  if (FACE[kind]) return `<circle cx="${at}" cy="18" r="9" fill="${FACE[kind]}" stroke="#fff" stroke-width="2"/><text x="${at}" y="21" fill="#fff" style="fill:#fff;font-size:7.5px;font-weight:650" text-anchor="middle">${kind}</text>`;
+  if (kind === "canvas") return `<rect x="${at - 5}" y="13" width="10" height="10" rx="3" fill="#e9551f"/>`;
+  if (kind === "done") return `<circle cx="${at}" cy="18" r="7" fill="#16a34a"/><path d="M${at - 3} 18l2 2 4-4.5" fill="none" stroke="#fff" stroke-width="1.6"/>`;
+  return `<circle cx="${at}" cy="18" r="4.5" fill="#fff" stroke="#2563eb" stroke-width="2.3"/>`;
+}
+function row([, title, , steps]) {
+  const list = steps.split(", ").map(s => s.split(" ")), xs = list.map(([, t]) => x(t));
+  let end = -99;
+  const times = list.map(([, t], i) => { if (xs[i] - 16 < end + 3) return ""; end = xs[i] + 16; return `<text x="${xs[i]}" y="40" text-anchor="middle">${t}</text>`; }).join("");
+  return `<div class="row"><i class="elbow"></i><b>${title}</b><svg width="${W + 20}" height="50"><line x1="${xs[0]}" y1="18" x2="${xs[xs.length - 1]}" y2="18" stroke="#94a3b8" stroke-width="2"/>${list.map(([k, t]) => node(k, t)).join("")}${times}</svg></div>`;
+}
+function draw() {
+  const lines = LINES.filter(l => l[0] === cur), p = PROJECTS.find(q => q[0] === cur);
+  document.getElementById("name").textContent = p[1];
+  document.getElementById("count").textContent = `${lines.length} lines this week`;
+  document.getElementById("projects").innerHTML = PROJECTS.map(([id, name, color]) => `<button class="proj${id === cur ? " on" : ""}" data-p="${id}"><i style="background:${color}"></i>${name}<span>${LINES.filter(l => l[0] === id).length}</span></button>`).join("");
+  document.getElementById("week").innerHTML = DAYS.map(d => { const n = lines.filter(l => l[2] === d).length; return `<button class="day${day === d ? " on" : ""}${n ? "" : " none"}" data-d="${d}"><b>${d}</b><em>${n || ""}</em><u style="height:${n * 8}px"></u></button>`; }).join("");
+  const clock = [9, 12, 15, 18].map(h => `<span style="left:${x(`${h}:00`)}px">${String(h).padStart(2, "0")}:00</span>`).join("");
+  document.getElementById("lines").innerHTML = `<i class="trunk"></i>` + [...DAYS].reverse().filter(d => (!day || d === day) && lines.some(l => l[2] === d)).map(d => `<div class="dh">${d}<div class="clock">${clock}</div></div>${lines.filter(l => l[2] === d).map(row).join("")}`).join("");
+  document.getElementById("files").innerHTML = FILES.filter(f => f[0] === cur).map(([, name, where]) => `<div class="file"><span class="thumb">${name.endsWith(".png") ? "▦" : "‹›"}</span><span><b>${name}</b><em>${where}</em></span></div>`).join("");
+}
+document.addEventListener("click", e => {
+  const p = e.target.closest("[data-p]"), d = e.target.closest("[data-d]");
+  if (p) { cur = p.dataset.p; day = null; draw(); }
+  if (d) { day = day === d.dataset.d ? null : d.dataset.d; draw(); }
+});
+draw();
+</script>
+</body>
+</html>

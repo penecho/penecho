@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { validateDocumentToolArguments } from './document-tools.mjs'
-import { BlockAssembler, CallId } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, ToolCallId as CallId } from '@deepseek-ai/dsh-llm'
 import { MAX_CANVAS_DECISION_TOOLS, registerCanvasDecisionBatch } from './tool-batch.mjs'
 
 export const CANVAS_DECISION_FEEDBACK_TOOL = 'penecho_canvas_decision_feedback'

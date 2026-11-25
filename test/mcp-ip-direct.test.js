@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
@@ -89,6 +90,18 @@ test("real HTTPS fixed-IP and discovery sessions have independent authentication
   assert.equal((await request(status,message("ping"),{session:discovery})).status,200);
   assert.equal((await request(status,message("initialize"),{token:fixed.accessToken})).status,200);
   assert.equal(service.status().certificatePem,status.certificatePem);assert.equal(service.status().accessToken,status.accessToken);assert.equal(disposed.length,2);
+});
+test("a saved fixed-IP port is the listener port, while an ephemeral request stays ephemeral",async t=>{
+  const net=require("node:net");
+  const freePort=async()=>{const s=net.createServer();await new Promise(r=>s.listen(0,"0.0.0.0",r));const p=s.address().port;await new Promise(r=>s.close(r));return p;};
+  const pinned=await freePort(),stateDirectory=directory(t),settings=createIpDirectSettings(stateDirectory);
+  settings.apply({action:"generate-token",revision:settings.get().revision,host:"192.168.50.80",port:pinned});
+  const make=(preferredPort,t)=>{const service=createDirectHttpService({stateDirectory,preferredPort,getHostnames:()=>[],getAddresses:()=>[],announce:()=>({close(){}}),callTool:async()=>({}),disposeOwner(){}});t.after(()=>service.close());return service;};
+  const fixed=make(3922,t),started=await fixed.start();
+  assert.equal(Number(new URL(started.localUrl).port),pinned,"the address clients were given is the one it listens on");
+  await fixed.close();
+  const ephemeral=make(0,t),other=await ephemeral.start();
+  assert.notEqual(Number(new URL(other.localUrl).port),pinned,"an explicit ephemeral instance does not take the fixed port");
 });
 test("changing IP updates the TLS SAN under the same CA and survives a fresh service instance",async t=>{
   const {service,status,stateDirectory}=await fixture(t),port=Number(new URL(status.localUrl).port);

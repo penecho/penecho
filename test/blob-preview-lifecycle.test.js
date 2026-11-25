@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -94,10 +95,10 @@ test("Studio navigator refreshes only the visible history tab", () => {
     renderActive = functionSource(navigator, "renderActiveStudioNavigatorHistory");
 
   assert.match(renderSnapshotLists, /PenEchoStudioNavigator\?\.render\?\.\(\)/);
-  assert.doesNotMatch(renderSnapshotLists, /renderWork|renderCanvases|renderAgent/);
+  assert.doesNotMatch(renderSnapshotLists, /renderWork|renderCanvases/);
   assert.match(refreshSource, /renderActiveStudioNavigatorHistory\(\)/);
-  assert.doesNotMatch(refreshSource, /renderStudioWorkHistory\(\)|renderStudioCanvasHistory\(\)|renderStudioAgentHistory\(\)/);
-  assert.match(renderActive, /studioNavigatorActiveTab==="canvas"[\s\S]*?renderStudioCanvasHistory\(\)[\s\S]*?studioNavigatorActiveTab==="agent"[\s\S]*?renderStudioAgentHistory\(\)[\s\S]*?renderStudioWorkHistory\(\)/);
+  assert.doesNotMatch(refreshSource, /renderStudioWorkHistory\(\)|renderStudioCanvasHistory\(\)/);
+  assert.match(renderActive, /studioNavigatorActiveTab==="mcp"[\s\S]*?renderStudioMcpHistory\(\)[\s\S]*?studioNavigatorActiveTab==="canvas"[\s\S]*?renderStudioCanvasHistory\(\)[\s\S]*?renderStudioWorkHistory\(\)/);
 });
 
 test("Canvas Library creates preview images only while its manager is open", () => {

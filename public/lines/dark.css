@@ -1,0 +1,140 @@
+/* Dark, for the Projects pages only. theme.js sets data-mode on <html>; the Canvas pages never load this file.
+   Most of the look follows the tokens, so they come first. Below them is only what still names a light colour of its own.
+   Pictures, drawings and prototypes stay on white paper, because they were drawn on it. */
+:root[data-mode="dark"] {
+  --bg: #0e131a; --paper: #161c25; --raised: #1a212b; --soft: #222a35; --pressed: #2b3441;
+  --ink: #e6e9ef; --ink2: #a9b2c0; --ink3: #8a94a4;
+  --line: rgba(226, 232, 240, .12); --line2: rgba(226, 232, 240, .22); --hover: rgba(226, 232, 240, .06); --selected: rgba(59, 130, 246, .17);
+  --accent: #3b82f6; --accent2: #2563eb; --accent-label: #93c5fd; --accent-soft: rgba(59, 130, 246, .18); --focus: rgba(96, 165, 250, .5);
+  --l-main: #e2e8f0; --l-branch: #a3b1c4; --l-line: #7b8798; --l-todo: #364152; --l-topic: #2dd4bf;
+  --c-ask: #60a5fa; --c-ask-fill: #16253d; --c-ask-line: #2c4772; --c-ask-text: #bfdbfe; --c-work: #14b8a6; --c-end: #22c55e; --c-end-text: #4ade80; --c-run: #14b8a6; --c-run-label: #2dd4bf; --c-run-soft: rgba(20, 184, 166, .16);
+  --green: #4ade80; --green-soft: rgba(34, 197, 94, .14);
+  --amber: #f3b357; --amber-mark: #e39a2d; --amber-soft: rgba(227, 154, 45, .17);
+  --red: #f87171; --red-soft: rgba(248, 113, 113, .14);
+  --hint-you-label: #5b3e12;
+  --hint-grew: #f9a8d4; --hint-grew-soft: rgba(236, 72, 153, .18); --hint-grew-mark: #f472b6;
+  --mk-ink: #cbd5e1; --mk-line: #64748b;
+  --hint-new: #c4b5fd; --hint-new-soft: rgba(139, 92, 246, .2); --hint-new-mark: #a78bfa; --hint-new-label: #3d2c70;
+  --c-note: #e6e9ef;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, .45);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, .55);
+  --float-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 32px rgba(0, 0, 0, .5);
+  --float-halo: 0 0 28px 18px rgba(22, 28, 37, .92);
+  --scroll-thumb: rgba(226, 232, 240, .2); --scroll-thumb-hover: rgba(226, 232, 240, .38);
+  color-scheme: dark;
+}
+
+/* Words on ink or on main's own colour: ink is light now, so the words go dark. */
+:root[data-mode="dark"] :is(.trunk-label, .tip, .slide.s-title) { color: var(--bg); }
+:root[data-mode="dark"] #toast { color: var(--bg); }
+:root[data-mode="dark"] #toast .link { color: #4338ca; }
+/* Light marks keep dark words. */
+:root[data-mode="dark"] :is(.btn.unsent-go, .run-split .run-main, .run-split .run-pick) { color: #1f1405; background: var(--amber-mark); }
+:root[data-mode="dark"] :is(.run-split .run-pick) { border-left-color: rgba(31, 20, 5, .3); }
+:root[data-mode="dark"] :is(.btn.unsent-go:hover, .run-split .run-main:hover, .run-split .run-pick:hover) { background: #f7c47a; }
+:root[data-mode="dark"] .next-ok { color: #052e16; }
+:root[data-mode="dark"] .line-command-dialog .danger { background: #dc2626; }
+:root[data-mode="dark"] .need.n-error .need-mark { color: #2a0a0a; }
+
+/* Dot grids and hairlines. */
+:root[data-mode="dark"] :is(.sc-board, .pf-canvas) { background-image: radial-gradient(rgba(226, 232, 240, .1) 1px, transparent 1.3px); }
+:root[data-mode="dark"] .fresh-page .start-canvas-btn { background-color: var(--paper); background-image: radial-gradient(rgba(226, 232, 240, .1) 1px, transparent 1px); background-size: 14px 14px; }
+:root[data-mode="dark"] .fresh-page .start-canvas-btn:hover, :root[data-mode="dark"] .fresh-page .start-canvas-btn:focus-visible { background-color: var(--selected); }
+:root[data-mode="dark"] .start-code-btn { background: var(--paper); }
+:root[data-mode="dark"] .new-line-on:hover { border-color: rgba(226, 232, 240, .4); }
+:root[data-mode="dark"] :is(.pv li + li::before, .sd + .sd::before) { background: var(--line2); }
+:root[data-mode="dark"] :is(.lps-day.after::before, .lps.after::before, .lps.is-unsent::before) { border-left-color: #4a5566; }
+:root[data-mode="dark"] :is(.hollow, .sd i) { border-color: #5b6575; }
+:root[data-mode="dark"] .sd i { background: var(--paper); }
+:root[data-mode="dark"] :is(.lps.st-todo .lps-node, .lps.k-end.st-todo .lps-node, .lps.k-work.st-todo .lps-node::before) { box-shadow: inset 0 0 0 2px #5b6575; }
+:root[data-mode="dark"] :is(.lp-work, .lp-end-pending) .nd.st-todo::before { border-color: #5b6575; }
+:root[data-mode="dark"] .lps.is-empty .lps-node { border-color: #5b6575; }
+:root[data-mode="dark"] .lp-tick { border-color: #6b7585; }
+:root[data-mode="dark"] .lp-prog .ring-bg { stroke: rgba(226, 232, 240, .16); }
+:root[data-mode="dark"] .sw-star { color: var(--ink3); }
+:root[data-mode="dark"] li.task.done span { text-decoration-color: rgba(226, 232, 240, .3); }
+:root[data-mode="dark"] .line-command-dialog::backdrop { background: rgba(0, 0, 0, .55); }
+:root[data-mode="dark"] .sw-overlay { background: rgba(0, 0, 0, .45); }
+:root[data-mode="dark"] #lightbox { background: rgba(0, 0, 0, .6); }
+
+/* Fills that were tints of white. */
+:root[data-mode="dark"] :is(.dock, .zoom, .sheet-float .seg) { background: rgba(22, 28, 37, .96); }
+:root[data-mode="dark"] .depth { background: rgba(34, 42, 53, .96); }
+:root[data-mode="dark"] .used-in:hover { background: var(--accent-soft); }
+:root[data-mode="dark"] .cmp-marks { color: var(--red); background: var(--red-soft); }
+:root[data-mode="dark"] :is(.sw-p-map, .pf-body, .pf-opt) { background: var(--paper); }
+:root[data-mode="dark"] .slide { background: var(--paper); }
+:root[data-mode="dark"] .slide.s-title { background: var(--ink); }
+:root[data-mode="dark"] .pf-bar i { background: #4a5566; }
+:root[data-mode="dark"] .need { background: rgba(227, 154, 45, .1); }
+:root[data-mode="dark"] .need.n-error { background: rgba(248, 113, 113, .1); }
+:root[data-mode="dark"] .q-card { background: rgba(227, 154, 45, .07); }
+:root[data-mode="dark"] .q-choice.is-picked .q-opt-dot { color: #0b1220; }
+:root[data-mode="dark"] :is(.lp-ask.is-unsent) { background: rgba(227, 154, 45, .1); }
+:root[data-mode="dark"] .st.is-unsent .st-words.is-yours { background: #2a2216; box-shadow: 0 0 0 4px #2a2216, 0 0 0 5px var(--amber-mark); }
+:root[data-mode="dark"] .lp-work.is-reviewed:not(.on) { background: rgba(34, 197, 94, .06); border-color: rgba(34, 197, 94, .24); border-left-color: var(--c-end); }
+:root[data-mode="dark"] .lp-work.is-reviewed:not(.on):hover { background: rgba(34, 197, 94, .1); border-color: rgba(34, 197, 94, .36); border-left-color: var(--c-end); }
+:root[data-mode="dark"] .shape-notes .file-card:nth-child(4n + 1) .ft-doc { background: #2b2614; }
+:root[data-mode="dark"] .shape-notes .file-card:nth-child(4n + 2) .ft-doc { background: #18233a; }
+:root[data-mode="dark"] .shape-notes .file-card:nth-child(4n + 3) .ft-doc { background: #16281d; }
+:root[data-mode="dark"] .shape-notes .file-card:nth-child(4n + 4) .ft-doc { background: #2e1c17; }
+:root[data-mode="dark"] .fh mark { background: rgba(250, 204, 21, .3); }
+
+/* Code and Markdown source. */
+:root[data-mode="dark"] .src-gut { color: #5b6575; }
+:root[data-mode="dark"] .src-q code { color: #e3c07a; }
+:root[data-mode="dark"] .src-t code { color: #9cc3e6; }
+:root[data-mode="dark"] :is(.src-fence code, .src-codeblock code) { color: #c9a6e8; }
+:root[data-mode="dark"] .src-codeblock { background: rgba(167, 139, 250, .08); }
+:root[data-mode="dark"] .tk-c { color: #f0a377; }
+/* The evidence's three colours, picked for the dark surface (not the light ones flipped). */
+:root[data-mode="dark"] .token-proof-dialog { --tk-earlier: #c9811a; --tk-own: #3b82f6; --tk-out: #149886; }
+:root[data-mode="dark"] :is(.md-p, .md-list, .md-defs, .md-table, .c-body) code { color: #f0a377; }
+
+/* Pictures stay on paper, so a drawing with no background of its own still shows its ink. */
+:root[data-mode="dark"] :is(.pic-preview, .md-fig, .ft-img, .fig-img, .result-pic, .lb-card, .lb-image-viewport, .lps-pics, .lps-drawing, .st-drawing, .cmp-file, .cmp-file-pic, .orch-file-pic, .msg-files, .ar-pic, .ask-img, .dh-slide, .vp-img, #stopCard .sc-p, .canvas-stage-thumb, .at-group-thumbs, .at-row-thumbs, .at-pictures) img { background-color: #fff; }
+:root[data-mode="dark"] .lp-draw-view { background: radial-gradient(circle, rgba(15, 23, 42, .11) 1px, transparent 1.3px) 0 0 / 16px 16px, #fff; }
+
+/* The New project panel and the folder picker. */
+:root[data-mode="dark"] :is(.pls, .pls-gains, .pld-back, .pls-zoom) { --pl-paper: var(--paper); --pl-raised: var(--raised); --pl-ink: var(--ink); --pl-ink2: var(--ink2); --pl-ink3: var(--ink3); --pl-line: var(--line); --pl-line2: var(--line2); --pl-accent: var(--accent); --pl-accent2: var(--accent2); --pl-label: var(--accent-label); --pl-accent-soft: var(--accent-soft); --pl-focus: var(--focus); --pl-red: var(--red);
+  /* The pictures: the rest already follow the Lines tokens. */
+  --pl-art: var(--soft); --pl-wire: var(--l-line); --pl-bar2: var(--pressed); --pl-canvas: #fb8f63; --pl-mark: var(--red); --pl-hit: rgba(250, 204, 21, .5); --pl-note-ink: #fde68a; --pl-file: var(--soft); --pl-cx: #475569;
+  --pl-wash: #1e3a5f; --pl-wash-op: .75; --pl-tc-stroke: #60a5fa; --pl-tc-accent: #2dd4bf; --pl-tc-muted: #64748b; --pl-tc-blue: #3b82f6; --pl-tc-blue-txt: #93c5fd; --pl-tc-coral: #fb923c; --pl-tc-amber: #fbbf24; }
+:root[data-mode="dark"] .pls-ex-ic { background: var(--accent-soft); }
+:root[data-mode="dark"] .pls-ex.k-class .pls-ex-ic { color: #4ade80; background: rgba(34, 197, 94, .14); }
+:root[data-mode="dark"] .pls-ex.k-deck .pls-ex-ic, :root[data-mode="dark"] .ex-card.k-deck .ex-ic { color: #fb8f63; background: rgba(234, 88, 12, .16); }
+:root[data-mode="dark"] .fresh-page .ex-card .ex-ic { color: var(--ink2); background: var(--soft); }
+:root[data-mode="dark"] :is(.pld-btn:hover:not(:disabled), .pld-row:hover, .pld-row:focus-visible) { background: var(--soft); }
+:root[data-mode="dark"] .pld-x:hover { background: var(--hover); }
+:root[data-mode="dark"] .pls-zoom { background: var(--bg); }
+
+/* The Appearance choice in Settings. */
+.set-theme { align-items: center; }
+.seg button[aria-checked="true"] { background: var(--paper); color: var(--ink); box-shadow: var(--shadow-1); }
+:root[data-mode="dark"] .seg button:is([aria-selected="true"], [aria-checked="true"]) { background: var(--pressed); }
+
+/* The agents' faces and bars on the lanes, whose own colours can be as dark as the paper. */
+:root[data-mode="dark"] .dm-bar { box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .28); }
+:root[data-mode="dark"] .hl-track .dm-face .av { box-shadow: 0 0 0 2px var(--lane-bg), inset 0 0 0 1px rgba(226, 232, 240, .28); }
+:root[data-mode="dark"] .pk-img.is-mono { filter: invert(1); }
+/* The Settings window: the page beneath dims as much as it does in Light. */
+:root[data-mode="dark"] .sysm-scrim { background: rgba(0, 0, 0, .55); }
+:root[data-mode="dark"] .lp-panel-backdrop { background: rgba(0, 0, 0, .58); }
+:root[data-mode="dark"] .lp-panel.is-popped { border-color: var(--line2); }
+
+/* The live running-Work band: Soft Mantle Octopus tokens on a clean dark paper backdrop. */
+:root[data-mode="dark"] .lv {
+  --lv-border: rgba(96, 165, 250, .18);
+  --lv-stroke: #7cb4ff; --lv-accent: #2dd4bf; --lv-accent-label: #5eead4; --lv-accent-soft: rgba(45, 212, 191, .18);
+  --lv-think: #60a5fa; --lv-think-3: #67e8f9; --lv-think-soft: rgba(96, 165, 250, .20); --lv-think-bg: #17253a;
+  --lv-aha: #fbbf24; --lv-aha-2: #fcd34d; --lv-aha-soft: rgba(251, 191, 36, .20); --lv-aha-bg: #292214;
+  --lv-leg-idle: rgba(96, 165, 250, .14); --lv-leg-idle-edge: rgba(96, 165, 250, .28);
+  --lv-leg-used: rgba(74, 150, 255, .42); --lv-leg-used-edge: rgba(112, 175, 255, .72);
+  --lv-sucker: rgba(219, 234, 254, .65);
+  --lv-node-bg: rgba(20, 27, 37, .96); --lv-node-border: rgba(96, 165, 250, .26);
+  --lv-node-used-bg: rgba(26, 115, 232, .22); --lv-node-used-border: rgba(96, 165, 250, .68);
+  --lv-glyph: #7e97b8; --lv-glyph-used: #7cb4ff;
+  --lv-wave: rgba(96, 165, 250, .22); --lv-bubble: rgba(112, 175, 255, .52);
+  --lv-sonar: rgba(96, 165, 250, .26); --lv-say-bg: var(--raised); --lv-label-halo: var(--paper);
+}

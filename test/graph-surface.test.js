@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path");
 const SMART=require("../public/smart-suggest.js"),math=SMART.createGraphMath();
 const saved=fs.readFileSync(path.join(__dirname,"fixtures/graph-v2-before-interactions.html"),"utf8");

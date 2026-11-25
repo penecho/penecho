@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 // Recorded PenEchoLLM answers for real drawings (2026-10-04 request logs): a tall
 // caterpillar that stroke geometry reads as text rows and as a note enclosure.
 const test = require("node:test"), assert = require("node:assert/strict");

@@ -3,18 +3,18 @@
 (() => {
   const COPY = {
     en: {
-      localCanvas:"Local Canvas", language:"Language", kicker:"LOCAL ACCESS", checkingTitle:"Checking this PenEcho server", checkingBody:"Confirming how this Canvas is protected.", checking:"Checking access...",
-      setupTitle:"Protect this PenEcho server", setupBody:"Choose how every browser and device may access this running PenEcho instance.", scopeTitle:"Instance-wide protection", scopeBody:"This is not a code for only this browser. Once set, the same code is required by every browser and device that opens this running PenEcho instance. It helps prevent unauthorized people on your local network from accessing the Canvas.", setCode:"Set a 6-digit security code", setCodeHelp:"One shared code will protect this server from every new local-network visitor.", continueOpen:"Continue without a code", continueOpenHelp:"Anyone on this local network may be able to open this Canvas.",
-      forgotLead:"A forgotten code is not a problem.", forgotCode:"Forgot the code?", restartHelp:"Restart PenEcho to clear it. Your Canvas files and settings are not affected.", enterTitle:"Enter your security code", enterBody:"Use the shared code for this running PenEcho server.", createTitle:"Create a security code", createBody:"Choose six digits for every device that opens this PenEcho server. The code is submitted as soon as the sixth digit is entered.", unlockStep:"6-digit code",
-      back:"Back", clear:"Clear", openRiskTitle:"This Canvas will be open on your local network", openRiskBody:"Other people on the same network may be able to open the Canvas, use its configured AI provider, and manage local plugins.", confirmOpen:"Keep open on this LAN",
-      wrong:"That security code is not correct.", tooMany:"Too many attempts. Try again in {seconds} seconds.", failed:"PenEcho could not update local access. Try again.", unavailableTitle:"This PenEcho server is unavailable", unavailableBody:"Check the local connection, then try again.", retry:"Retry",
+      language:"Language", checkingTitle:"Opening PenEcho", checkingBody:"", checking:"One moment…",
+      setupTitle:"Who can open PenEcho?", setupBody:"PenEcho can be opened on other devices on this network, such as a tablet.", setCode:"Set a 6-digit code", setCodeHelp:"Other devices type it once.", continueOpen:"No code", continueOpenHelp:"Anyone on this network can open PenEcho.",
+      forgotCode:"No code at hand?", restartHelp:"Scan the QR code shown beside it.", enterTitle:"Enter the code", enterBody:"On the computer running PenEcho, open Settings (gear at the bottom of the Projects sidebar) → General → Other devices → Open to find the code.", createTitle:"Choose a code", createBody:"Six digits. Other devices type it once.", unlockStep:"6-digit code",
+      back:"Back", clear:"Clear", openRiskTitle:"Open to everyone on this network?", openRiskBody:"Anyone on the same network can open your Canvases and projects and use your AI.", confirmOpen:"Open without a code",
+      wrong:"That code is not right.", tooMany:"Too many tries. Try again in {seconds} seconds.", failed:"That did not work. Try again.", unavailableTitle:"PenEcho is not answering", unavailableBody:"Check that PenEcho is running, then try again.", retry:"Try again",
     },
     zh: {
-      localCanvas:"本地画布", language:"语言", kicker:"本地访问", checkingTitle:"正在检查这台 PenEcho", checkingBody:"正在确认这张画布采用的访问保护方式。", checking:"正在检查访问状态…",
-      setupTitle:"保护这台 PenEcho 服务器", setupBody:"请选择所有浏览器和设备访问当前运行中 PenEcho 实例的方式。", scopeTitle:"实例级保护", scopeBody:"这不是仅针对当前浏览器的安全码。设置后，所有访问当前运行中 PenEcho 实例的浏览器和设备都必须使用同一个安全码，用于防止局域网内未经许可的人访问画布。", setCode:"设置 6 位安全码", setCodeHelp:"这是当前实例共用的安全码，所有新的局域网访问者都需要输入。", continueOpen:"不设置安全码", continueOpenHelp:"同一局域网中的任何设备都可能直接打开这张画布。",
-      forgotLead:"忘记安全码也没关系。", forgotCode:"忘记安全码？", restartHelp:"重新启动 PenEcho 即可清除。画布文件和设置不会受到影响。", enterTitle:"输入安全码", enterBody:"请输入当前运行中 PenEcho 实例共用的安全码。", createTitle:"创建安全码", createBody:"请为所有访问这台 PenEcho 的设备设置 6 位数字。输入第六位后会立即提交。", unlockStep:"6 位安全码",
-      back:"返回", clear:"清除", openRiskTitle:"这张画布将向局域网开放", openRiskBody:"同一网络中的其他人可能可以打开画布、使用已配置的 AI 服务，并管理本地插件。", confirmOpen:"本次在局域网保持开放",
-      wrong:"安全码不正确。", tooMany:"尝试次数过多，请在 {seconds} 秒后重试。", failed:"PenEcho 无法更新本地访问设置，请重试。", unavailableTitle:"无法连接这台 PenEcho", unavailableBody:"请检查本地连接后重试。", retry:"重试",
+      language:"语言", checkingTitle:"正在打开 PenEcho", checkingBody:"", checking:"请稍候…",
+      setupTitle:"谁可以打开 PenEcho？", setupBody:"同一网络中的其他设备（比如平板）也可以打开 PenEcho。", setCode:"设置 6 位安全码", setCodeHelp:"其他设备只需输入一次。", continueOpen:"不设安全码", continueOpenHelp:"同一网络中的任何人都能打开 PenEcho。",
+      forgotCode:"手边没有安全码？", restartHelp:"扫描它旁边显示的二维码即可。", enterTitle:"输入安全码", enterBody:"请在运行 PenEcho 的电脑上打开 Projects 侧栏底部的 Settings（齿轮）→ General → Other devices → Open，查看安全码。", createTitle:"设置安全码", createBody:"六位数字，其他设备只需输入一次。", unlockStep:"6 位安全码",
+      back:"返回", clear:"清除", openRiskTitle:"向此网络中的所有人开放？", openRiskBody:"同一网络中的任何人都能打开你的画布和项目，并使用你的 AI。", confirmOpen:"不设安全码并打开",
+      wrong:"安全码不正确。", tooMany:"尝试次数过多，请在 {seconds} 秒后重试。", failed:"没有成功，请重试。", unavailableTitle:"PenEcho 没有响应", unavailableBody:"请确认 PenEcho 正在运行，然后重试。", retry:"重试",
     },
   };
 
@@ -62,7 +62,7 @@
   }
   function showError(message) { errorBox.textContent=message;errorBox.hidden=false; }
   function renderEntry() {
-    dots.forEach((dot,index)=>dot.classList.toggle("filled",index<entry.length));
+    dots.forEach((dot,index)=>{dot.classList.toggle("filled",index<entry.length);dot.classList.toggle("now",!busy&&index===entry.length);});
   }
   function renderPinCopy() {
     if(pinView.hidden)return;
@@ -74,7 +74,7 @@
   }
   function addDigit(digit) {
     if(busy||Date.now()<cooldownUntil||entry.length>=6)return;
-    entry+=digit;errorBox.hidden=true;renderEntry();
+    entry+=digit;errorBox.hidden=true;pinView.classList.toggle("wrong",false);renderEntry();
     if(entry.length===6)submitPin();
   }
   function removeDigit() { if(!busy&&entry.length){entry=entry.slice(0,-1);renderEntry();} }
@@ -85,16 +85,21 @@
     if(typeof body.accessSessionToken==="string"&&body.accessSessionToken)sessionStorage.setItem("penecho-access-session",body.accessSessionToken);
     return body;
   }
-  function enterCanvas() { window.location.replace("/"); }
+  // The server shows this form in place of /projects.html, at that same address. Going to the same address with a # in it only moves within the page, so it has to reload.
+  function enterCanvas() {
+    if (window.location.pathname === "/projects.html") { window.location.reload(); return; }
+    window.location.replace(window.location.search.includes("linesProject=") ? `/${window.location.search}` : "/");
+  }
   async function submitPin() {
     if(entry.length!==6||busy)return;
     busy=true;renderEntry();
     try {
       if(flow==="setup")await request("/api/local-access/setup-pin",{pin:entry,confirmation:entry});
       else await request("/api/local-access/unlock",{pin:entry});
+      pinView.classList.toggle("ok",true);
       enterCanvas();
     } catch(error) {
-      entry="";
+      entry="";pinView.classList.toggle("wrong",true);
       if(error.status===429&&error.cooldownSeconds)startCooldown(error.cooldownSeconds);
       else showError(error.status===401?text("wrong"):error.message||text("failed"));
     } finally { busy=false;renderEntry(); }
@@ -129,6 +134,8 @@
   retryButton.addEventListener("click",loadStatus);
   $("#accessKeypad").addEventListener("click",event=>{const button=event.target.closest("button");if(!button)return;if(button.dataset.digit)addDigit(button.dataset.digit);if(button.dataset.action==="backspace")removeDigit();if(button.dataset.action==="clear")clearEntry();});
   document.addEventListener("keydown",event=>{if(pinView.hidden)return;if(/^\d$/.test(event.key)){event.preventDefault();addDigit(event.key);}else if(event.key==="Backspace"){event.preventDefault();removeDigit();}else if(event.key==="Delete"){event.preventDefault();clearEntry();}else if(event.key==="Enter"){event.preventDefault();submitPin();}});
+  // A code copied from somewhere is typed for you.
+  document.addEventListener("paste",event=>{if(pinView.hidden)return;const digits=String(event.clipboardData?.getData("text")||"").replace(/\D/g,"").slice(0,6);if(!digits)return;event.preventDefault();clearEntry();for(const digit of digits)addDigit(digit);});
   window.addEventListener?.("storage",event=>{if(event.key==="penecho-theme"||event.key==="penecho-studio-palette")applyAppearance();});
   applyAppearance();applyLanguage();loadStatus();
 })();

@@ -26,7 +26,7 @@ fs.createReadStream = function(file, ...args) {
   if (cloud && name === path.join(root, "public/smart-suggest.js")) return Readable.from([fs.readFileSync(path.resolve(root, "../penecho_cloud/public/canvas/smart-suggest.js"))]);
   if (name === path.join(root, "public/app.js")) return Readable.from([fs.readFileSync(clientFile, "utf8").replace(/\}\)\(\);\s*$/, `
     if (${cloud}) window.PENECHO_CONFIG.runtime = 'cloud';
-    window.greetingTest = { state, smartSuggest, canvasDocumentsReady, cancelSmartSuggest, clearDirtyContributionTracking, addClipboardText, confirmTextEditor, closeChangelog, render };
+    window.greetingTest = { state, smartSuggest, canvasDocumentsReady, cancelSmartSuggest, clearDirtyContributionTracking, addClipboardText, confirmTextEditor, render };
     window.greetingRows = ${JSON.stringify(rows)};
     window.greetingReply = null;
     const originalFetch = window.fetch;
@@ -64,7 +64,6 @@ app.whenReady().then(async () => {
           if (performance.now() > deadline) throw Error('Ranking did not settle');
           await new Promise(resolve => setTimeout(resolve, 20));
         }
-        document.querySelector('#tourSkip')?.click(); t.closeChangelog();
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         if (document.querySelector('.changelog-layer:not([hidden]), .tour-layer:not([hidden])')) throw Error('Onboarding obscures the Canvas');
         if (!a.bar.element.getBoundingClientRect().width) throw Error('Suggestion bar is not visible');

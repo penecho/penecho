@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict");
 const fs=require("node:fs/promises"),os=require("node:os"),path=require("node:path");
 const {NoteLibrary}=require("../src/server/note-library.js"),NOTE=require("../public/note-card.js");

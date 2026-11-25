@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -8,18 +9,17 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Cloud Center exposes concise Projects, Favorites, and Public shares navigation", () => {
+test("Cloud Center exposes concise Projects navigation, with no public feed or Favorites", () => {
   const html = read("public/index.html"), cloud = read("public/cloud-connect.js"), css = read("public/cloud-connect.css"), main = read("src/server/main.js");
   assert.match(html, /id="settingsBtn"/);
   assert.match(html, /id="cloudAccountBtn"/);
   assert.match(html, /id="shareCanvasBtn"/);
 
   assert.match(cloud, /function cloudT\(key, replacements = \{\}\)/);
-  assert.match(cloud, /const definitions = \[\s*\["projects", "cloudProjects"\],\s*\["favorites", "favorites"\],\s*\]/);
+  assert.match(cloud, /const definitions = \[\s*\["projects", "cloudProjects"\],\s*\]/);
   assert.match(cloud, /if \(state\.cloudSection === "favorites"\) return cloudFavoritesPanel\(setRefreshing\)/);
   assert.match(cloud, /\["all", "all"\],\s*\["canvas", "canvases"\],\s*\["widget", "widgets"\]/);
-  assert.match(cloud, /class:"cloud-section-tab cloud-explore-link",\s*href:new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\),\s*target:"_blank",\s*rel:"noopener"/);
-  assert.match(cloud, /text:`\$\{cloudT\("explore"\)\} ↗`/);
+  assert.doesNotMatch(cloud, /cloud-explore-link|\/community\.html|cloudT\("explore"\)/);
   assert.match(cloud, /text:cloudT\(label\)/);
   assert.doesNotMatch(cloud, /text:cloudT\(hint\)/);
   assert.doesNotMatch(cloud, /class:"cloud-panel-heading"[^\n]*cloudT\("cloudProjects"\)/);
@@ -53,7 +53,7 @@ test("Cloud Center exposes concise Projects, Favorites, and Public shares naviga
   assert.match(cloud, /projects\.find\(\(project\) => project\.id === state\.selectedProjectId\)/);
   assert.match(cloud, /base-revision-required/);
 
-  for (const key of ["cloudSubtitle", "signOutHost", "removeThisLink", "publishedDialogTitle", "shareAsLink", "shareAsImage"]) {
+  for (const key of ["cloudSubtitle", "signOutHost", "publishedDialogTitle", "shareAsLink", "shareAsImage"]) {
     assert.match(cloud, new RegExp(`cloudT\\("${key}"`));
   }
   assert.match(cloud, /PUBLICATION_TERMS_VERSION = "2026-08-12"/);
@@ -72,7 +72,9 @@ test("Cloud Center exposes concise Projects, Favorites, and Public shares naviga
   assert.doesNotMatch(cloud, /startCloudStatusWatch|CLOUD_STATUS_POLL_MS|cloudStatusPoll/);
   assert.match(cloud, /cloud-section-refresh-indicator/);
   assert.doesNotMatch(cloud, /refreshCurrentView/);
-  assert.match(cloud, /remote \? Boolean\(remote\.deviceReady\) : Boolean\(state\.status\?\.device\?\.connected && !state\.statusUnavailable\)/);
+  // The Cloud button says signed in or not; the linked device is retired, so it never says "connected".
+  assert.match(cloud, /cloudButton\.dataset\.state = signedIn \? "signed-in" : "signed-out";/);
+  assert.doesNotMatch(cloud, /deviceReady|devicePanel|linkThisDevice|\/api\/cloud\/device\//);
   assert.match(cloud, /const changed = previousIdentity !== accountIdentity\(status\)/);
   assert.match(main, /desktopApp=process\.env\.PENECHO_DESKTOP_APP==="true"/);
   assert.match(css, /\.cloud-section-tab \{[^}]*min-height: 2\.25rem/);

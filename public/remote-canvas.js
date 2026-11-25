@@ -4,7 +4,9 @@
   const isBrowserDraft = Boolean(window.PENECHO_CONFIG?.browserDraftId);
   const canvasMatch = location.pathname.match(/^\/canvas\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
   const communityMatch = location.pathname.match(/^\/canvas\/community\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
-  if (window.PENECHO_CONFIG?.runtime !== "cloud" || (!canvasMatch && !communityMatch && !isBrowserDraft)) return;
+  // A share link that allows editing opens the shared Canvas in this editor.
+  const isLiveShare = Boolean(window.PENECHO_CONFIG?.liveShare?.token) && /^\/canvas\/(?:share|collaborate)\/[0-9a-f-]{36}\/?$/i.test(location.pathname);
+  if (window.PENECHO_CONFIG?.runtime !== "cloud" || (!canvasMatch && !communityMatch && !isBrowserDraft && !isLiveShare)) return;
   const requestedCanvasId = canvasMatch?.[1] || null;
   const requestedCommunityItemId = communityMatch?.[1] || null;
   const isCommunityCraft = Boolean(requestedCommunityItemId);
@@ -114,7 +116,7 @@
     const payload = {
       error:code,
       code,
-      message:state?.message || "Your linked PenEcho host is offline.",
+      message:state?.message || "This works in PenEcho on your computer.",
     };
     if (typeof Response === "function") return new Response(JSON.stringify(payload), { status:409, headers:{ "content-type":"application/json" } });
     return { ok:false, status:409, headers:new Headers({ "content-type":"application/json" }), json:async () => payload };
@@ -159,7 +161,7 @@
     if (["/canvas/api/widget-fetch", "/api/widget-fetch"].includes(sourceUrl.pathname)) return nativeFetch(`/api/v1/widget-fetch${sourceUrl.search}`, { ...options, method, headers, credentials:"same-origin" });
     if (sourceUrl.pathname.startsWith("/api/cloud/") || sourceUrl.pathname === "/api/plugins") return nativeFetch(sourceUrl.pathname + sourceUrl.search, { ...options, method, headers, credentials:"same-origin" });
     const code = bridgeDeviceLinked ? "device_offline" : "linked_device_required";
-    return Promise.resolve(jsonResponse({ error:code, code, message:"This feature needs a linked PenEcho device. Browser editing supports Cloud saves and PenEcho models; local files, CLI tools and private API forwarding stay on your device." }, 409));
+    return Promise.resolve(jsonResponse({ error:code, code, message:"This works in PenEcho on your computer. On penecho.ai you can draw, use PenEcho models and save to Cloud." }, 409));
   }
 
   function notifyWidgetPaintReadyWaiters() {
@@ -170,7 +172,8 @@
   window.addEventListener("message", (event) => {
     if (event.origin !== location.origin || !event.source || !event.data || typeof event.data !== "object") return;
     if (event.data.type === "penecho-widget-host-ready") {
-      widgetPaintReadyFrames.delete(event.source);
+      // Only a newly loaded document starts unpainted; a probe's answer keeps its paint.
+      if (!event.data.probe) widgetPaintReadyFrames.delete(event.source);
       notifyWidgetPaintReadyWaiters();
     } else if (event.data.type === "penecho-widget-capture-ready") {
       widgetPaintReadyFrames.add(event.source);
@@ -230,10 +233,21 @@
     })();
   });
 
-  function nextCanvasPaint() {
+  // Two animation frames let the Canvas paint. A hidden tab runs no frames, so
+  // a short timer settles the wait there, and when the tab hides mid-wait.
+  function nextCanvasPaint(fallbackMs = 250) {
     return new Promise((resolve) => {
-      if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
-      else setTimeout(resolve, 0);
+      let settled = false, frame = 0;
+      const frames = typeof window.requestAnimationFrame === "function";
+      const timer = setTimeout(done, !frames || document.visibilityState === "hidden" ? 0 : fallbackMs);
+      function done() {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (frame) window.cancelAnimationFrame?.(frame);
+        resolve();
+      }
+      if (frames) frame = window.requestAnimationFrame(() => { if (!settled) frame = window.requestAnimationFrame(done); });
     });
   }
 
@@ -246,6 +260,8 @@
     const deadline = Date.now() + timeoutMs;
     await nextCanvasPaint();
     while (true) {
+      // Nobody sees a hidden tab; its Widgets paint once it shows.
+      if (document.visibilityState === "hidden") return;
       const frames = visibleWidgetFrames();
       if (frames.every((frame) => widgetPaintReadyFrames.has(frame.contentWindow))) {
         await nextCanvasPaint();
@@ -258,10 +274,12 @@
         const finish = () => {
           clearTimeout(timer);
           widgetPaintReadyWaiters.delete(finish);
+          document.removeEventListener("visibilitychange", finish);
           resolve();
         };
         const timer = setTimeout(finish, remaining);
         widgetPaintReadyWaiters.add(finish);
+        document.addEventListener("visibilitychange", finish);
       });
     }
   }
@@ -389,29 +407,29 @@
 
   const zh = /^zh\b/i.test(navigator.language || "");
   const copy = zh ? {
-    eyebrow:"私人云端画布", checking:"正在连接你的 PenEcho 主机…", noHost:"连接 PenEcho 主机后即可打开",
-    offline:"已连接的 PenEcho 主机当前离线", failed:"这张画布暂时无法打开",
-    dashboard:"连接设备", back:"返回项目",
-    connected:"受保护的远程连接", unavailable:"请先连接一台 PenEcho 主机。", opening:"主机在线，正在打开云端画布…",
+    eyebrow:"私人云端画布", checking:"正在打开…", noHost:"这张画布在这里打不开",
+    offline:"这张画布在这里打不开", failed:"这张画布暂时无法打开",
+    dashboard:"返回控制台", back:"返回项目",
+    connected:"受保护的远程连接", unavailable:"它在一台电脑上。把它的项目保存到云端，就能在 penecho.ai 打开。", opening:"主机在线，正在打开云端画布…",
     offlineStatus:"离线", onlineStatus:"在线",
   } : {
-    eyebrow:"Private Cloud Canvas", checking:"Connecting to your PenEcho host…", noHost:"Connect one PenEcho host to open this Canvas",
-    offline:"Your linked PenEcho host is offline", failed:"This Canvas could not be opened",
-    dashboard:"Link Device", back:"Back to Projects",
-    connected:"Protected remote connection", unavailable:"No device is linked yet. Install PenEcho, then connect one main computer from Link Device.", opening:"Host online. Opening your Cloud Canvas…",
+    eyebrow:"Private Cloud Canvas", checking:"Opening…", noHost:"This Canvas cannot be opened here",
+    offline:"This Canvas cannot be opened here", failed:"This Canvas could not be opened",
+    dashboard:"Back to the dashboard", back:"Back to Projects",
+    connected:"Protected remote connection", unavailable:"It is on a computer. Keep its project in Cloud to open it on penecho.ai.", opening:"Host online. Opening your Cloud Canvas…",
     offlineStatus:"Offline", onlineStatus:"Online",
   };
   if (isCommunityCraft) Object.assign(copy, zh ? {
-    eyebrow:"公开 Craft", noHost:"连接 PenEcho 主机后即可 Echo 此创作", back:"返回 Echoes",
+    eyebrow:"公开 Craft", noHost:"这个 Craft 在这里打不开", back:"返回 PenEcho",
     failed:"暂时无法继续这个 Craft", opening:"主机在线，正在导入这个 Craft…",
   } : {
-    eyebrow:"Public Craft", noHost:"Connect one PenEcho host to Echo this Craft", back:"Back to Echoes",
+    eyebrow:"Public Craft", noHost:"This Craft cannot be continued here", back:"Back to PenEcho",
     failed:"This Craft could not be continued right now", opening:"Host online. Importing this Craft…",
   });
 
   // The PenEcho brand in the top bar doubles as the way back: the toolbar stays
   // uncluttered and the escape hatch lives where users expect a home control.
-  const brandTarget = isCommunityCraft ? "/community.html" : "/dashboard.html";
+  const brandTarget = isCommunityCraft ? "/" : "/dashboard.html";
   const brand = document.querySelector(".brand");
   if (brand) {
     brand.setAttribute("data-home-link", "true");
@@ -424,7 +442,7 @@
   }
 
   // The gate is a compact status view, not a landing page. The only action it
-  // ever offers is Link Device, revealed solely while no device is linked
+  // ever offers is the way back to the dashboard, revealed solely while the Canvas cannot be opened here
   // (gate.dataset.state === "unlinked"); checking, offline, opening and error
   // states render no actions at all.
   const gate = document.createElement("div");
@@ -460,7 +478,7 @@
   const link = document.createElement("a");
   link.className = "primary";
   link.dataset.action = "link";
-  link.href = "/dashboard.html#devices";
+  link.href = "/dashboard.html";
   link.textContent = copy.dashboard;
   actions.append(link);
 
@@ -508,6 +526,14 @@
       const deadline=Date.now()+15000;
       while(!window.PenEchoBrowserDraft){if(Date.now()>deadline)throw Error("Canvas did not finish loading");await new Promise(resolve=>setTimeout(resolve,50));}
       return window.PenEchoBrowserDraft.open();
+    }
+    if (isLiveShare) {
+      const deadline = Date.now() + 15_000;
+      while (!window.PenEchoLiveCanvas?.openShare) {
+        if (Date.now() >= deadline) throw new Error("PenEcho Canvas did not finish loading.");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return window.PenEchoLiveCanvas.openShare();
     }
     const deadline = Date.now() + 15_000;
     while (isCommunityCraft ? !window.PenEchoCommunityUI?.takeFurther : !window.PenEchoCloudProjects?.openCanvas) {

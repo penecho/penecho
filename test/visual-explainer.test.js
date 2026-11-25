@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -116,20 +117,17 @@ test("Visual Explainer assets use the single current plan, local AntV, fallback 
   assert.equal(read("public/vendor/antv-infographic.LICENSE"),read("node_modules/@antv/infographic/LICENSE"));
 });
 
-test("PenEcho Agent frames a new Visual Explainer in the unobscured viewport beside its panel",()=>{
-  const browser=read("src/client/app/canvas-agent-runtime.js"),frameSource=functionSource(browser,"canvasAgentFrameRegion"),framePlanSource=functionSource(browser,"canvasAgentFramePlan"),state={scale:.24,panX:0,panY:0},viewRect={left:0,top:0,width:1600,height:900},panelRect={left:1200,top:120,right:1580,bottom:880,width:380,height:760},calls={render:0,sync:0};
+test("PenEcho Agent frames a new Visual Explainer in the viewport",()=>{
+  const browser=read("src/client/app/canvas-agent-runtime.js"),frameSource=functionSource(browser,"canvasAgentFrameRegion"),framePlanSource=functionSource(browser,"canvasAgentFramePlan"),state={scale:.24,panX:0,panY:0},viewRect={left:0,top:0,width:1600,height:900},calls={render:0,sync:0};
   const frame=vm.runInNewContext(`(() => { ${framePlanSource} return ${frameSource}; })()`,{
     SIZE:20000,state,
     view:{clientWidth:viewRect.width,clientHeight:viewRect.height,getBoundingClientRect:()=>viewRect},
-    document:{body:{classList:{contains:name=>name==="canvas-agent-open"}}},
-      canvasAgentPanel:{hidden:false,getBoundingClientRect:()=>panelRect},
-    canvasElementLayoutRect:()=>panelRect,
     requestRender:()=>calls.render++,canvasAgentViewFacts:()=>({viewport:{x:0,y:0,w:1,h:1}}),canvasAgentSyncState:()=>calls.sync++,
     canvasAgentExternalRect:region=>({x:region.x,y:region.y,width:region.w,height:region.h}),
   });
   const widget={x:6667,y:8551,w:1200,h:800},result=frame(widget,48),screen={left:state.panX+widget.x*state.scale,top:state.panY+widget.y*state.scale,right:state.panX+(widget.x+widget.w)*state.scale,bottom:state.panY+(widget.y+widget.h)*state.scale};
   assert.ok(state.scale>.9);
-  assert.ok(screen.left>=0&&screen.right<=1188);
+  assert.ok(screen.left>=0&&screen.right<=1600);
   assert.ok(screen.top>=0&&screen.bottom<=900);
   assert.deepEqual(result.viewport,{x:0,y:0,width:1,height:1});
   assert.deepEqual(calls,{render:1,sync:1});

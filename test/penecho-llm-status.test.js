@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 // Assist says who ranked its actions (instant local rules or PenEchoLLM) and
 // shows each tier's daily PenEchoLLM allowance.
 const test = require("node:test");

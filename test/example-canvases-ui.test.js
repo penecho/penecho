@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { parseHTML } = require("linkedom");
+const { parseHTML } = require("./helpers/dom.js");
 const SMART = require("../public/smart-suggest.js");
 const EXAMPLES = require("../public/example-scenarios.js");
 
@@ -42,7 +42,10 @@ test("the empty canvas leads with examples and every entry point opens the same 
   const children = [...welcome.children].map((child) => child.id);
   assert.ok(children.indexOf("canvasWelcomeExamples") >= 0 && children.indexOf("canvasWelcomeExamples") < children.indexOf("canvasWelcomeActions"));
   assert.equal(document.querySelector("#canvasWelcomeExamples").hasAttribute("hidden"), true, "shown only when examples are available");
-  assert.equal(document.querySelector("#canvasWelcomeGoals").getAttribute("data-pe-control"), "segmented");
+  assert.equal(document.querySelector("#canvasWelcomeGoals"), null, "the empty Canvas shows the eight, not a goal picker");
+  assert.equal(document.querySelector("#examplesDialogGoals").getAttribute("data-pe-control"), "segmented");
+  assert.ok(document.querySelector("#canvasWelcomeExampleList + #canvasWelcomeExamplesAll"), "All 20 examples sits under the eight");
+  for (const id of ["exampleSaved", "exampleSavedActions", "exampleSavedClose", "canvasAiHint", "canvasAiHintDone"]) assert.ok(document.querySelector(`#${id}`), id);
   const entries = [...document.querySelectorAll("[data-open-examples]")];
   assert.ok(entries.some((entry) => entry.closest("#canvasMoreMenu")?.id === "canvasMoreMenu" && entry.getAttribute("role") === "menuitem"));
   assert.ok(entries.some((entry) => entry.closest(".studio-navigator-foot")));
@@ -132,34 +135,47 @@ test("a click on an example card opens it, including inside the grouped dialog",
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [["open", "code-bug"]]);
 });
 
-test("examples that need a model ask for one instead of showing a stand-in result", () => {
+test("an AI example with no model ends in its saved result; with a model it asks the model (N1)", () => {
   const ready = functionSource(moduleSource, "exampleModelReady");
   assert.match(ready, /route === "instant"\) return true/);
-  assert.match(ready, /canvasAgentExecutionAvailable\(\)/);
   assert.match(ready, /hasSelectedAiConnection\(\)/);
+  const opening = functionSource(moduleSource, "openExampleCanvas");
+  assert.match(opening, /if \(!live && saved\) await showExampleSavedResult\(scenario, session, saved\);/);
+  assert.match(opening, /else if \(scenario\.route === "agent" && live\) await runExampleOnLine\(scenario, session\);/);
   const started = functionSource(moduleSource, "exampleCanvasesActionStarted");
   assert.ok(started.indexOf("exampleModelReady") < started.indexOf('session.status = "running"'), "no try is recorded without a model");
-  assert.match(started, /openExampleAiSetup\(\);\s*return true;/, "the local photo-only note is never offered as the example's result");
-  const submitted = functionSource(moduleSource, "exampleAgentSubmitted");
-  assert.match(submitted, /preventDefault\(\)[\s\S]*stopImmediatePropagation\(\)[\s\S]*openExampleAiSetup/);
   assert.match(functionSource(moduleSource, "openExampleAiSetup"), /#settingsNavConnections/);
   const { document } = parseHTML(html);
   const setup = document.querySelector("#exampleCoachSetup");
   assert.ok(setup && setup.hasAttribute("hidden") && setup.getAttribute("data-pe-button") === "primary");
 });
 
-test("Agent examples require a selected model even when the execution service is available", () => {
-  let connected = false, available = true;
-  const context = vm.createContext({ hasSelectedAiConnection:() => connected, canvasAgentExecutionAvailable:() => available });
+test("an agent example is ready when an agent is on this computer, not the retired Agent panel", () => {
+  let connected = false;
+  const context = vm.createContext({ hasSelectedAiConnection:() => connected, exampleCanvases:{ agent:null } });
   vm.runInContext(functionSource(moduleSource, "exampleModelReady"), context);
   assert.equal(context.exampleModelReady({ route:"instant" }), true);
   assert.equal(context.exampleModelReady({ route:"ai" }), false);
   assert.equal(context.exampleModelReady({ route:"agent" }), false);
   connected = true;
   assert.equal(context.exampleModelReady({ route:"ai" }), true);
+  assert.equal(context.exampleModelReady({ route:"agent" }), false, "a model is not an agent");
+  context.exampleCanvases.agent = { id:"claude", name:"Claude Code" };
   assert.equal(context.exampleModelReady({ route:"agent" }), true);
-  available = false;
-  assert.equal(context.exampleModelReady({ route:"agent" }), false);
-  assert.equal(context.exampleModelReady({ route:"ai" }), true);
-  assert.equal(context.exampleModelReady({ route:"instant" }), true);
+});
+
+test("each of the eight that needs AI or an agent ships a saved result", () => {
+  for (const scenario of EXAMPLES.first().filter((item) => item.route !== "instant")) {
+    const saved = EXAMPLES.savedResult(scenario.id);
+    assert.ok(saved && fs.existsSync(path.join(ROOT, "public", saved)), `${scenario.id} has ${saved}`);
+    if (saved.endsWith(".json")) {
+      const note = JSON.parse(read(`public/${saved}`));
+      assert.ok(note.en?.title && note.zh?.title && note.en.blocks.length && note.zh.blocks.length, `${saved} has a note in English and Chinese`);
+    } else {
+      const page = read(`public/${saved}`);
+      assert.match(page, /^<!doctype html>\n<html lang="en"/, `${saved} starts as the Canvas expects, so its language can be set`);
+      assert.match(page, /lang === "zh"/, `${saved} has Chinese words`);
+    }
+  }
+  assert.deepEqual(EXAMPLES.first().filter((item) => item.route === "instant").map((item) => EXAMPLES.savedResult(item.id)), ["", "", ""], "the instant three need none");
 });

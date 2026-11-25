@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Water molecule</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; color: #0f172a; font: 24px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 14px; height: 72px; padding: 0 26px; border-bottom: 2px solid #e2e8f0; font-weight: 600; }
+  header em { margin-left: auto; color: #64748b; font-style: normal; font-weight: 500; font-size: 22px; }
+  main { position: relative; flex: 1; min-height: 0; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .legend { position: absolute; left: 26px; bottom: 22px; display: flex; gap: 26px; color: #475569; font-size: 22px; }
+  .legend i { display: inline-block; width: 18px; height: 18px; margin-right: 10px; border-radius: 50%; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header><span data-t="title">Water molecule (H₂O)</span><em data-t="drag">Drag to turn</em></header>
+<main>
+  <canvas id="view" aria-label="A 3D model of a water molecule"></canvas>
+  <div class="legend"><span><i style="background:#e0362a"></i><span data-t="o">Oxygen</span></span><span><i style="background:#cbd5e1"></i><span data-t="h">Hydrogen</span></span><span data-t="angle">Bond angle 104.5°</span></div>
+</main>
+<script>
+(() => {
+  const zh = document.documentElement.lang === "zh";
+  const words = zh ? { title:"水分子（H₂O）", drag:"拖动旋转", o:"氧", h:"氢", angle:"键角 104.5°" } : null;
+  if (words) document.querySelectorAll("[data-t]").forEach(el => { el.textContent = words[el.dataset.t]; });
+  const view = document.getElementById("view"), ctx = view.getContext("2d");
+  // Ångström: the O–H bond is 0.96, the angle 104.5°.
+  const half = 104.5 / 2 * Math.PI / 180, bond = 0.96;
+  const atoms = [
+    { label:"O", p:[0, 0.12, 0], r:0.42, light:"#ff9a8a", dark:"#c62a1e" },
+    { label:"H", p:[-Math.sin(half) * bond, 0.12 - Math.cos(half) * bond, 0], r:0.27, light:"#ffffff", dark:"#aab4c3" },
+    { label:"H", p:[Math.sin(half) * bond, 0.12 - Math.cos(half) * bond, 0], r:0.27, light:"#ffffff", dark:"#aab4c3" },
+  ];
+  let yaw = 0.5, pitch = 0.25, dragging = null;
+  function turn([x, y, z]) {
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
+    return [x1, y * cp - z1 * sp, y * sp + z1 * cp];
+  }
+  function draw() {
+    const dpr = window.devicePixelRatio || 1, w = view.clientWidth, h = view.clientHeight;
+    if (view.width !== Math.round(w * dpr) || view.height !== Math.round(h * dpr)) { view.width = Math.round(w * dpr); view.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const scale = Math.min(w, h) * 0.34, cx = w / 2, cy = h / 2 + scale * 0.1;
+    const placed = atoms.map(atom => { const [x, y, z] = turn(atom.p), k = 3 / (3 + z); return { ...atom, x:cx + x * scale * k, y:cy - y * scale * k, z, k }; });
+    // Bonds first, then the atoms from the back to the front.
+    ctx.lineCap = "round";
+    for (const hydrogen of placed.slice(1)) {
+      ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = scale * 0.11;
+      ctx.beginPath(); ctx.moveTo(placed[0].x, placed[0].y); ctx.lineTo(hydrogen.x, hydrogen.y); ctx.stroke();
+    }
+    // The angle between the bonds.
+    const o = placed[0], a1 = Math.atan2(placed[1].y - o.y, placed[1].x - o.x), a2 = Math.atan2(placed[2].y - o.y, placed[2].x - o.x);
+    ctx.strokeStyle = "#2563eb"; ctx.lineWidth = 3; ctx.setLineDash([8, 8]);
+    ctx.beginPath(); ctx.arc(o.x, o.y, scale * 0.72, Math.min(a1, a2), Math.max(a1, a2)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "#1d4ed8"; ctx.font = "600 26px -apple-system, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("104.5°", o.x, o.y + scale * 0.92);
+    for (const atom of [...placed].sort((a, b) => b.z - a.z)) {
+      const r = atom.r * scale * atom.k, g = ctx.createRadialGradient(atom.x - r * 0.35, atom.y - r * 0.4, r * 0.1, atom.x, atom.y, r);
+      g.addColorStop(0, atom.light); g.addColorStop(1, atom.dark);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(atom.x, atom.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = atom.label === "O" ? "#fff" : "#334155"; ctx.font = `700 ${Math.round(r * 0.8)}px -apple-system, sans-serif`; ctx.textBaseline = "middle";
+      ctx.fillText(atom.label, atom.x, atom.y + 1);
+    }
+  }
+  view.addEventListener("pointerdown", event => { dragging = { x:event.clientX, y:event.clientY }; view.setPointerCapture(event.pointerId); });
+  view.addEventListener("pointermove", event => {
+    if (!dragging) return;
+    yaw += (event.clientX - dragging.x) * 0.01;
+    pitch = Math.max(-1.4, Math.min(1.4, pitch + (event.clientY - dragging.y) * 0.01));
+    dragging = { x:event.clientX, y:event.clientY };
+    draw();
+  });
+  const stop = () => { dragging = null; };
+  view.addEventListener("pointerup", stop);
+  view.addEventListener("pointercancel", stop);
+  new ResizeObserver(draw).observe(view);
+  draw();
+})();
+</script>
+</body>
+</html>

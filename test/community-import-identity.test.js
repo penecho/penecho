@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm"),Module=require("node:module");
 const root=process.env.PENECHO_PROOF_ROOT||path.resolve(__dirname,"..");
 function declaration(file,name){

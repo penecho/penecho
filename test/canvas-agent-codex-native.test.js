@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
@@ -8,7 +9,6 @@ const os = require("node:os");
 const path = require("node:path");
 const sharp = require("sharp");
 const test = require("node:test");
-const { CODEX_CLI_PINNED_VERSION } = require("../src/providers/cli-installer.js");
 
 const ROOT = path.resolve(__dirname, "..");
 const waitFor = async (predicate, timeoutMs = 2000) => {
@@ -228,8 +228,7 @@ async function createNativeHarness(overrides = {}) {
       return process;
     },
     resolveCliCandidates:overrides.resolveCliCandidates || (() => [{ executable:connection.cliPath, source:'configured' }]),
-    inspectCliCandidate:overrides.inspectCliCandidate || (async candidate => String(candidate?.detectedVersion||`codex-cli ${CODEX_CLI_PINNED_VERSION}`)),
-    installManagedCli:overrides.installManagedCli || (async () => { throw new Error("managed CLI installation is disabled in this test"); }),
+    inspectCliCandidate:overrides.inspectCliCandidate || (async candidate => String(candidate?.detectedVersion||'codex-cli 0.171.0')),
     ...(overrides.platform ? { platform:overrides.platform } : {}),
     ...(overrides.sessionTtlMs ? { sessionTtlMs:overrides.sessionTtlMs } : {}),
     ...(overrides.publicFetch ? { publicFetch:overrides.publicFetch } : {}),
@@ -490,23 +489,21 @@ test("Codex Native clears the usage baseline when a replacement thread starts", 
   assert.deepEqual(reports[1].usage,{inputTokens:12,cachedInputTokens:2,cacheWriteInputTokens:1,outputTokens:4});
 });
 
-test(`Codex Native rejects a cached Windows CLI without its host and repairs with pinned ${CODEX_CLI_PINNED_VERSION}`, async t => {
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-resolution-host-test-")),stateDirectory=path.join(directory,"state"),cached="C:\\old\\codex.exe",managed="C:\\PenEcho\\tools\\codex\\bin\\codex.exe",
+test("Codex Native rejects a cached Windows CLI without its host and says how to update Codex, downloading nothing", async t => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-resolution-host-test-")),stateDirectory=path.join(directory,"state"),cached="C:\\old\\codex.exe",
     connection={id:"codex-host-repair",provider:"codex-cli",name:"Codex",cliPath:cached,cliModel:"gpt-test",effort:"medium"},
-    key=createHash("sha256").update(JSON.stringify({provider:connection.provider,cliPath:connection.cliPath})).digest("hex"),resolutionFile=path.join(stateDirectory,"tools","codex","resolution.json"),installCalls=[];
+    key=createHash("sha256").update(JSON.stringify({provider:connection.provider,cliPath:connection.cliPath})).digest("hex"),resolutionFile=path.join(stateDirectory,"tools","codex","resolution.json");
   fs.mkdirSync(path.dirname(resolutionFile),{recursive:true});
-  fs.writeFileSync(resolutionFile,`${JSON.stringify({version:1,pinnedVersion:CODEX_CLI_PINNED_VERSION,entries:[{key,executable:cached}]})}\n`);
+  fs.writeFileSync(resolutionFile,`${JSON.stringify({version:2,entries:[{key,executable:cached}]})}\n`);
   const harness=await createNativeHarness({
     stateDirectory,platform:"win32",connection,
     resolveCliCandidates:()=>[{executable:cached,source:"configured"}],
     inspectCliCandidate:async()=>{throw new Error("Codex CLI bundle is incomplete: codex-code-mode-host.exe was not found beside codex.exe.")},
-    installManagedCli:async version=>{installCalls.push(version);return{executable:managed,version:`codex-cli ${CODEX_CLI_PINNED_VERSION}`}},
   });
   t.after(async()=>{await harness.cleanup();fs.rmSync(directory,{recursive:true,force:true})});
-  const session=await harness.connect();
-  assert.deepEqual(installCalls,[CODEX_CLI_PINNED_VERSION]);
-  assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[managed]);
-  assert.equal(session.cliSource,"penecho-installed");
+  const session=await harness.connect(false);
+  await assert.rejects(()=>harness.host.ensureStarted(session),error=>/Update it, then try again/.test(error.message)&&/codex\/install\.sh/.test(error.message)&&/codex-code-mode-host\.exe/.test(error.message));
+  assert.deepEqual(harness.processes,[]);
   assert.ok(harness.logs.some(event=>event.type==="codex-native-cli-candidate-rejected"&&/codex-code-mode-host\.exe/.test(event.error)));
 });
 
@@ -515,11 +512,10 @@ test("Codex Native uses a valid resolution.json candidate before every fallback"
     connection={id:"codex-resolution-valid",provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},
     key=createHash("sha256").update(JSON.stringify({provider:connection.provider,cliPath:connection.cliPath})).digest("hex"),resolutionFile=path.join(stateDirectory,"tools","codex","resolution.json");
   fs.mkdirSync(path.dirname(resolutionFile),{recursive:true});
-  fs.writeFileSync(resolutionFile,`${JSON.stringify({version:1,pinnedVersion:CODEX_CLI_PINNED_VERSION,entries:[{key,executable:cached}]})}\n`);
+  fs.writeFileSync(resolutionFile,`${JSON.stringify({version:2,entries:[{key,executable:cached}]})}\n`);
   const harness=await createNativeHarness({
     stateDirectory,connection,
     resolveCliCandidates:()=>[{executable:cached,source:"system"}],
-    installManagedCli:async()=>{throw new Error("must not install")},
   });
   t.after(async()=>{await harness.cleanup();fs.rmSync(directory,{recursive:true,force:true})});
   const session=await harness.connect();
@@ -528,27 +524,24 @@ test("Codex Native uses a valid resolution.json candidate before every fallback"
   assert.equal(harness.messages.some(message=>message.type==="agent_status"&&message.payload.status==="preparing"),false);
 });
 
-test("Codex Native invalidates resolution caches from an earlier pin before installing the current pin", async () => {
-  for (const legacyPinnedVersion of [undefined, "0.149.1", "0.157.0"]) {
-    const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-stale-resolution-test-")),stateDirectory=path.join(directory,"state"),cached=path.join(directory,"old","codex"),managed=path.join(directory,"managed","codex"),
+test("Codex Native ignores legacy v1 resolution caches from earlier pinned builds and starts the installed Codex", async () => {
+  for (const legacyPinnedVersion of [undefined, "0.149.1", "0.157.0", "0.166.0"]) {
+    const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-stale-resolution-test-")),stateDirectory=path.join(directory,"state"),stale=path.join(directory,"old","codex"),installed=path.join(directory,"installed","codex"),
       connection={id:`codex-stale-resolution-${legacyPinnedVersion ? "pinned" : "missing"}`,provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},
-      key=createHash("sha256").update(JSON.stringify({provider:connection.provider,cliPath:connection.cliPath})).digest("hex"),resolutionFile=path.join(stateDirectory,"tools","codex","resolution.json"),installCalls=[],inspectCalls=[];
+      key=createHash("sha256").update(JSON.stringify({provider:connection.provider,cliPath:connection.cliPath})).digest("hex"),resolutionFile=path.join(stateDirectory,"tools","codex","resolution.json");
     fs.mkdirSync(path.dirname(resolutionFile),{recursive:true});
-    fs.writeFileSync(resolutionFile,`${JSON.stringify({version:1,...(legacyPinnedVersion===undefined?{}:{pinnedVersion:legacyPinnedVersion}),entries:[{key,executable:cached}]})}\n`);
+    fs.writeFileSync(resolutionFile,`${JSON.stringify({version:1,...(legacyPinnedVersion===undefined?{}:{pinnedVersion:legacyPinnedVersion}),entries:[{key,executable:stale}]})}\n`);
     const harness=await createNativeHarness({
       stateDirectory,connection,
-      resolveCliCandidates:()=>[{executable:cached,source:"configured"}],
-      inspectCliCandidate:async()=>{inspectCalls.push(cached);return"codex-cli 0.149.1"},
-      installManagedCli:async version=>{installCalls.push(version);return{executable:managed,version:`codex-cli ${CODEX_CLI_PINNED_VERSION}`}},
+      resolveCliCandidates:()=>[{executable:installed,source:"configured"}],
     });
     try {
       const session=await harness.connect();
-      assert.deepEqual(installCalls,[CODEX_CLI_PINNED_VERSION],legacyPinnedVersion||"missing pinnedVersion");
-      assert.deepEqual(inspectCalls,[]);
-      assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[managed]);
-      assert.equal(session.cliSource,"penecho-installed");
+      assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[installed],legacyPinnedVersion||"missing pinnedVersion");
+      assert.equal(session.cliSource,"configured");
       const persisted=JSON.parse(fs.readFileSync(resolutionFile,"utf8"));
-      assert.equal(persisted.pinnedVersion,CODEX_CLI_PINNED_VERSION);
+      assert.equal(persisted.version,2);
+      assert.equal("pinnedVersion" in persisted,false);
     } finally {
       await harness.cleanup();
       fs.rmSync(directory,{recursive:true,force:true});
@@ -556,36 +549,25 @@ test("Codex Native invalidates resolution caches from an earlier pin before inst
   }
 });
 
-test("Codex Native persists the current pin and reuses it after host reinitialization", async () => {
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-current-resolution-test-")),stateDirectory=path.join(directory,"state"),managed=path.join(directory,"managed","codex"),
-    connection={id:"codex-current-resolution",provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},resolutionFile=path.join(stateDirectory,"tools","codex","resolution.json"),firstInstallCalls=[],secondInstallCalls=[];
+test("Codex Native persists the Codex that started and reuses it after host reinitialization", async () => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-current-resolution-test-")),stateDirectory=path.join(directory,"state"),installed=path.join(directory,"installed","codex"),other=path.join(directory,"other","codex"),
+    connection={id:"codex-current-resolution",provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},resolutionFile=path.join(stateDirectory,"tools","codex","resolution.json");
   let firstHarness=null,secondHarness=null;
   try {
-    firstHarness=await createNativeHarness({
-      stateDirectory,connection,
-      resolveCliCandidates:()=>[],
-      installManagedCli:async version=>{firstInstallCalls.push(version);return{executable:managed,version:`codex-cli ${CODEX_CLI_PINNED_VERSION}`}},
-    });
+    firstHarness=await createNativeHarness({ stateDirectory,connection, resolveCliCandidates:()=>[{executable:installed,source:"system"}] });
     const firstSession=await firstHarness.connect();
-    assert.equal(firstSession.cliSource,"penecho-installed");
-    assert.deepEqual(firstInstallCalls,[CODEX_CLI_PINNED_VERSION]);
+    assert.equal(firstSession.cliSource,"system");
     const persisted=JSON.parse(fs.readFileSync(resolutionFile,"utf8"));
-    assert.equal(persisted.version,1);
-    assert.equal(persisted.pinnedVersion,CODEX_CLI_PINNED_VERSION);
+    assert.equal(persisted.version,2);
+    assert.equal("pinnedVersion" in persisted,false);
     assert.equal(persisted.entries.length,1);
     await firstHarness.cleanup();
     firstHarness=null;
 
-    secondHarness=await createNativeHarness({
-      stateDirectory,connection,
-      resolveCliCandidates:()=>[{executable:managed,source:"penecho-managed",privateManaged:true}],
-      installManagedCli:async version=>{secondInstallCalls.push(version);throw new Error("current resolution should avoid installation")},
-      inspectCliCandidate:async()=>`codex-cli ${CODEX_CLI_PINNED_VERSION}`,
-    });
-    const secondSession=await secondHarness.connect();
-    assert.equal(secondSession.cliSource,"penecho-managed");
-    assert.deepEqual(secondInstallCalls,[]);
-    assert.deepEqual(secondHarness.processes.map(process=>process.options.connection.cliPath),[managed]);
+    secondHarness=await createNativeHarness({ stateDirectory,connection, resolveCliCandidates:()=>[{executable:other,source:"system"},{executable:installed,source:"system"}] });
+    await secondHarness.connect();
+    assert.deepEqual(secondHarness.processes.map(process=>process.options.connection.cliPath),[installed]);
+    assert.equal(secondHarness.messages.some(message=>message.type==="agent_status"&&message.payload.status==="preparing"),false);
   } finally {
     await firstHarness?.cleanup();
     await secondHarness?.cleanup();
@@ -593,46 +575,25 @@ test("Codex Native persists the current pin and reuses it after host reinitializ
   }
 });
 
-test(`Codex Native installs pinned ${CODEX_CLI_PINNED_VERSION} before inspecting system candidates`, async t => {
+test("Codex Native uses the person's installed Codex and never downloads or falls back to a PenEcho-managed copy", async t => {
   const system="C:\\system\\codex.exe",managed="C:\\PenEcho\\tools\\codex\\bin\\codex.exe",events=[];
   const harness=await createNativeHarness({
-    connection:{id:"codex-pinned-first",provider:"codex-cli",name:"Codex",cliPath:system,cliModel:"gpt-test",effort:"medium"},
-    resolveCliCandidates:()=>[{executable:system,source:"system"}],
+    connection:{id:"codex-system-first",provider:"codex-cli",name:"Codex",cliPath:system,cliModel:"gpt-test",effort:"medium"},
+    resolveCliCandidates:()=>[{executable:managed,source:"penecho-managed",privateManaged:true},{executable:system,source:"system"}],
     inspectCliCandidate:async candidate=>{events.push(`inspect:${candidate.executable}`);return"codex-cli 9.9.9"},
-    installManagedCli:async version=>{events.push(`install:${version}`);return{executable:managed,version:`codex-cli ${CODEX_CLI_PINNED_VERSION}`}},
   });
   t.after(()=>harness.cleanup());
   const session=await harness.connect();
-  assert.deepEqual(events,[`install:${CODEX_CLI_PINNED_VERSION}`]);
-  assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[managed]);
-  assert.equal(session.cliSource,"penecho-installed");
-});
-
-test("Codex Native tries the system only after pinned installation fails", async t => {
-  const system="C:\\system\\codex.exe",installCalls=[];
-  const harness=await createNativeHarness({
-    connection:{id:"codex-system-after-pinned",provider:"codex-cli",name:"Codex",cliPath:system,cliModel:"gpt-test",effort:"medium"},
-    resolveCliCandidates:()=>[{executable:system,source:"system"}],
-    inspectCliCandidate:async()=>"codex-cli 0.180.0",
-    installManagedCli:async version=>{installCalls.push(version);throw new Error("official pinned download failed")},
-  });
-  t.after(()=>harness.cleanup());
-  const session=await harness.connect();
-  assert.deepEqual(installCalls,[CODEX_CLI_PINNED_VERSION]);
+  assert.deepEqual(events,[`inspect:${system}`]);
   assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[system]);
   assert.equal(session.cliSource,"system");
 });
 
-test("Codex Native falls back to latest only after pinned and system both fail", async t => {
-  const system="C:\\system\\codex.exe",latest="C:\\PenEcho\\tools\\codex\\bin\\codex.exe",installCalls=[];
+test("Codex Native asks the person to update their own Codex instead of falling back to a PenEcho-managed copy", async t => {
+  const system="C:\\system\\codex.exe",managed="C:\\PenEcho\\tools\\codex\\bin\\codex.exe";
   const harness=await createNativeHarness({
-    connection:{id:"codex-latest-last",provider:"codex-cli",name:"Codex",cliPath:system,cliModel:"gpt-test",effort:"medium"},
-    resolveCliCandidates:()=>[{executable:system,source:"system"}],
-    installManagedCli:async version=>{
-      installCalls.push(version);
-      if(version===CODEX_CLI_PINNED_VERSION)throw new Error("pinned unavailable");
-      return{executable:latest,version:"codex-cli 0.180.0"};
-    },
+    connection:{id:"codex-no-private-fallback",provider:"codex-cli",name:"Codex",cliPath:system,cliModel:"gpt-test",effort:"medium"},
+    resolveCliCandidates:()=>[{executable:system,source:"system"},{executable:managed,source:"penecho-managed",privateManaged:true}],
     createAppServer:options=>{
       const process=new FakeCodexAppServer(options);
       if(options.connection.cliPath===system)process.requestHandler=async method=>{if(method==="initialize")throw new Error("system incompatible");return{}};
@@ -640,19 +601,34 @@ test("Codex Native falls back to latest only after pinned and system both fail",
     },
   });
   t.after(()=>harness.cleanup());
-  const session=await harness.connect();
-  assert.deepEqual(installCalls,[CODEX_CLI_PINNED_VERSION,"latest"]);
-  assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[system,latest]);
-  assert.equal(session.cliSource,"penecho-latest");
+  const session=await harness.connect(false);
+  await assert.rejects(()=>harness.host.ensureStarted(session),error=>error.code==="CODEX_CLI_INCOMPATIBLE"&&/Update it, then try again/.test(error.message));
+  assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[system]);
 });
 
-test("Codex Native accepts any executable system version after pinned fallback fails", async t => {
+test("Codex Native says how to update Codex when every Codex on the computer fails", async t => {
+  const system="C:\\system\\codex.exe";
+  const harness=await createNativeHarness({
+    connection:{id:"codex-all-fail",provider:"codex-cli",name:"Codex",cliPath:system,cliModel:"gpt-test",effort:"medium"},
+    resolveCliCandidates:()=>[{executable:system,source:"system"}],
+    createAppServer:options=>{
+      const process=new FakeCodexAppServer(options);
+      process.requestHandler=async method=>{if(method==="initialize")throw new Error("system incompatible");return{}};
+      return process;
+    },
+  });
+  t.after(()=>harness.cleanup());
+  const session=await harness.connect(false);
+  await assert.rejects(()=>harness.host.ensureStarted(session),error=>error.code==="CODEX_CLI_INCOMPATIBLE"&&/Update it, then try again/.test(error.message)&&/system incompatible/.test(error.message));
+  assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[system]);
+});
+
+test("Codex Native accepts any executable system version", async t => {
   const system="C:\\system\\codex.exe";
   const harness=await createNativeHarness({
     connection:{id:"codex-system-version",provider:"codex-cli",name:"Codex",cliPath:system,cliModel:"gpt-test",effort:"medium"},
     resolveCliCandidates:()=>[{executable:system,source:"system"}],
     inspectCliCandidate:async()=>"codex-cli 0.180.0",
-    installManagedCli:async()=>{throw new Error("pinned unavailable")},
   });
   t.after(()=>harness.cleanup());
   const session=await harness.connect();
@@ -660,25 +636,27 @@ test("Codex Native accepts any executable system version after pinned fallback f
   assert.equal(harness.logs.some(event=>event.type==="codex-native-cli-candidate-rejected"),false);
 });
 
-test("Codex Native labels replacement of an existing private CLI as repair", async t => {
-  const managed="C:\\PenEcho\\tools\\codex\\bin\\codex.exe";
+test("Codex Native reports a missing Codex with its install command, on every retry", async t => {
   const harness=await createNativeHarness({
-    connection:{id:"codex-private-repair",provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},
-    resolveCliCandidates:()=>[{executable:managed,source:"penecho-managed",privateManaged:true}],
-    installManagedCli:async()=>({executable:managed,version:`codex-cli ${CODEX_CLI_PINNED_VERSION}`}),
+    connection:{id:"codex-missing",provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},
+    resolveCliCandidates:()=>[],
   });
   t.after(()=>harness.cleanup());
-  await harness.connect();
-  assert.ok(harness.messages.some(message=>message.type==="agent_status"&&message.payload.phase==="repairing"));
+  const session=await harness.connect(false);
+  for (let attempt=0;attempt<2;attempt++) {
+    await assert.rejects(()=>harness.host.ensureStarted(session),error=>error.code==="CODEX_CLI_MISSING"&&/Codex is not installed\. Install it, then try again/.test(error.message)&&/install\.ps1/.test(error.message));
+  }
+  assert.deepEqual(harness.processes,[]);
+  assert.ok(harness.messages.some(message=>message.type==="agent_status"&&message.payload.phase==="discovering"));
 });
 
 test("Codex Native CLI preparation does not consume the model response timeout", async t => {
-  const managed="C:\\PenEcho\\tools\\codex\\bin\\codex.exe",
+  const system="C:\\system\\codex.exe",
     harness=await createNativeHarness({
       timeoutMs:20,
-      connection:{id:"codex-slow-private-install",provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},
-      resolveCliCandidates:()=>[],
-      installManagedCli:async()=>{await new Promise(resolve=>setTimeout(resolve,60));return{executable:managed,version:`codex-cli ${CODEX_CLI_PINNED_VERSION}`}},
+      connection:{id:"codex-slow-preparation",provider:"codex-cli",name:"Codex",cliPath:system,cliModel:"gpt-test",effort:"medium"},
+      resolveCliCandidates:()=>[{executable:system,source:"system"}],
+      inspectCliCandidate:async()=>{await new Promise(resolve=>setTimeout(resolve,60));return"codex-cli 0.171.0"},
       createAppServer:options=>{
         const process=new FakeCodexAppServer(options);
         process.requestHandler=async method=>{
@@ -700,22 +678,7 @@ test("Codex Native CLI preparation does not consume the model response timeout",
   t.after(()=>harness.cleanup());
   const session=await harness.connect(false),result=await harness.host.submit(session,"prepare then answer");
   assert.equal(result.output,"ready");
-  assert.equal(session.cliSource,"penecho-installed");
-});
-
-test("Codex Native does not launch duplicate pinned or latest installers across retries", async t => {
-  const installCalls=[];
-  const harness=await createNativeHarness({
-    connection:{id:"codex-install-failure",provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},
-    resolveCliCandidates:()=>[],
-    installManagedCli:async version=>{installCalls.push(version);throw new Error(`official Codex ${version} download failed`)},
-  });
-  t.after(()=>harness.cleanup());
-  const session=await harness.connect(false);
-  await assert.rejects(()=>harness.host.ensureStarted(session),/official Codex latest download failed/);
-  await assert.rejects(()=>harness.host.ensureStarted(session),/official Codex latest download failed/);
-  assert.deepEqual(installCalls,[CODEX_CLI_PINNED_VERSION,"latest"]);
-  assert.equal(harness.logs.filter(event=>event.type==="codex-native-managed-cli-install-failed").length,4);
+  assert.equal(session.cliSource,"system");
 });
 
 test("Codex Native continues saved conversation context exactly once", async t => {

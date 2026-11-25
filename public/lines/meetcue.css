@@ -1,0 +1,328 @@
+/* MeetCue inside the Lines pages. MeetCue keeps its own mark and colour. */
+:root { --meetcue: #6a5cf6; --meetcue-soft: rgba(106, 92, 246, .1); }
+.mglyph { display: inline-block; width: var(--s, 22px); height: var(--s, 22px); flex: none; border-radius: calc(var(--s, 22px) * .24); object-fit: cover; vertical-align: middle; }
+
+/* The rail: MeetCue directly below My Canvases. */
+.rail-meetcue .rail-row, .rail-meetcue:hover .rail-row { padding-right: 8px; }
+
+/* Not signed in, or not connected: PenEcho MeetCue intro & connect page, plus interactive example meetings. */
+.mc-connect-page { max-width: 900px; margin: 0 auto; padding-bottom: 56px; }
+.mc-connect { display: flex; flex-direction: column; gap: 22px; max-width: 820px; margin: 3vh auto 0; padding: 34px 32px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
+.mc-examples { max-width: 820px; margin: 24px auto 0; }
+.mc-examples-head { margin: 0 0 12px; }
+.mc-examples-head h2 { margin: 0 0 4px; font-size: 15px; font-weight: 660; color: var(--ink); }
+.mc-examples-head p { margin: 0; font-size: 13.5px; color: var(--ink2); }
+.mc-ex-tag { display: inline-flex; align-items: center; margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: var(--meetcue-soft); color: var(--meetcue); font-size: 11px; font-weight: 650; vertical-align: middle; }
+.mc-row-gist { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; color: var(--ink2); font-size: 13px; line-height: 1.4; margin-top: 2px; }
+.cmp-mc-ex-head { margin: 8px 0 4px; padding: 6px 2px 0; border-top: 1px solid var(--line); font-size: 11.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--ink3); }
+.mc-connect-hero { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.mc-eyebrow { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--meetcue-soft); color: var(--meetcue); font-size: 12px; font-weight: 650; letter-spacing: .01em; }
+.mc-connect h1 { margin: 4px 0 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; text-wrap: balance; }
+.mc-lead { max-width: 580px; margin: 0; color: var(--ink2); font-size: 14.5px; line-height: 1.55; }
+.mc-connect-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; }
+.mc-connect .btn { height: 40px; padding: 0 18px; font-size: 14px; text-decoration: none; }
+.mc-connect .btn.primary { background: var(--meetcue); border-color: var(--meetcue); color: #fff; }
+.mc-connect .btn.primary:hover { filter: brightness(.95); }
+.mc-connect .btn.ghost-b { color: var(--ink2); }
+.mc-features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; text-align: left; }
+.mc-features li { display: flex; align-items: flex-start; gap: 9px; padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); }
+.mc-features li .ic { flex: none; margin-top: 2px; color: var(--c-end); }
+.mc-features li strong { display: block; margin-bottom: 4px; font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.mc-features li span { display: block; color: var(--ink2); font-size: 12.8px; line-height: 1.45; }
+.mc-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 14px 0 0; border-top: 1px solid var(--line); list-style: none; text-align: left; }
+.mc-steps li strong { display: block; margin-bottom: 3px; font-size: 13px; font-weight: 650; color: var(--ink); }
+.mc-steps li span { display: block; color: var(--ink3); font-size: 12.5px; line-height: 1.45; }
+
+/* The meetings. */
+.mc-page.shelf-page { max-width: 900px; padding-bottom: 48px; }
+.mc-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 14px; }
+.mc-head h1 { display: flex; align-items: center; gap: 10px; margin: 0; }
+.mc-head-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-left: auto; }
+.mc-who { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink3); font-size: 13px; }
+.mc-disconnect { color: var(--ink2); }
+.mc-disconnect:hover { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--line)); }
+/* MeetCue's own page on penecho.ai. */
+.mc-site { display: inline-flex; align-items: center; gap: 2px; color: var(--ink2); font-size: 13.5px; font-weight: 500; text-decoration: none; }
+.mc-site:hover, .mc-site:focus-visible { color: var(--meetcue); text-decoration: underline; }
+.mc-connect .mc-site { margin-top: 4px; }
+.mc-row { min-height: 58px; align-items: center; }
+.mc-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.mc-row .shelf-open { width: 100%; }
+.mc-row .shelf-text small { color: var(--ink3); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-row .shelf-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-row .mc-add { flex: none; max-width: 46%; }
+.mc-add .ic:last-child { margin-left: -2px; color: var(--ink3); }
+.mc-more { margin-top: 12px; }
+/* Cross-project line links on a meeting row and on a meeting's own page. */
+.mc-links { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 10px 10px; }
+.mc-link-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 26px; padding: 0 10px; font-size: 12.5px; color: var(--ink2); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; transition: border-color .12s, color .12s, background .12s; }
+.mc-link-chip:hover, .mc-link-chip:focus-visible { color: var(--ink); border-color: var(--meetcue); background: var(--meetcue-soft); }
+.mc-link-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-proj-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--pc, var(--accent)); }
+.mc-linked-box { margin-top: 16px; padding: 14px 16px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+.mc-linked-box h2, .mc-linked-box h3 { margin: 0 0 10px; font-size: 12.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--ink3); }
+.mc-linked-box .mc-links { padding: 0; }
+.mc-linked-box .mc-link-chip { height: 30px; font-size: 13px; border-radius: 8px; }
+.mc-link-proj { font-weight: 600; color: var(--ink); }
+.mc-link-sep { color: var(--ink3); }
+.mc-link-kind { margin-left: 2px; font-size: 11px; color: var(--ink3); }
+.mc-linked-empty { margin: 0; color: var(--ink3); font-size: 13.5px; }
+/* One line says what is going on, in the list's place. */
+.mc-line { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0; padding: 18px 4px; color: var(--ink2); font-size: 14.5px; }
+
+/* One meeting: redesigned executive briefing layout — title & description at top, full + topic maps, then minutes + actions. */
+.mc-meeting { max-width: 1020px; margin: 0 auto; padding-bottom: 56px; }
+.mc-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; max-width: 980px; margin: 0 auto 14px; }
+.mc-back { display: inline-flex; align-items: center; gap: 4px; height: 32px; margin-left: -8px; padding: 0 10px 0 6px; border-radius: 7px; color: var(--ink2); font-size: 13.5px; font-weight: 550; }
+.mc-back:hover { background: var(--hover); color: var(--ink); }
+.mc-acts { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mc-acts .btn { min-width: 0; }
+.mc-acts .btn.primary { background: var(--meetcue); border-color: var(--meetcue); color: #fff; }
+.mc-acts .btn.primary .ic:last-child { color: rgba(255, 255, 255, .82); }
+.mc-acts .btn.primary:hover { filter: brightness(.95); }
+.mc-delete:hover { color: var(--red); }
+.mc-sheet { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+/* Hero header card: title and description prominently at the top. */
+.mc-hero { padding: 24px 26px 20px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
+.mc-hero-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 10px; }
+.mc-hero-brand { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 650; color: var(--meetcue); }
+.mc-facts { margin: 0; color: var(--ink3); font-size: 13px; font-variant-numeric: tabular-nums; }
+.mc-hero h1 { display: block; margin: 0; font-size: 28px; font-weight: 720; letter-spacing: -.022em; line-height: 1.22; color: var(--ink); text-wrap: balance; }
+.mc-hero-desc { margin: 10px 0 0; max-width: 78ch; color: var(--ink2); font-size: 15.5px; line-height: 1.58; }
+.mc-hero-links { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.mc-hero-links-label { font-size: 11.5px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; color: var(--ink3); flex: none; }
+.mc-hero-links .mc-links { padding: 0; }
+.mc-hero-links .mc-link-chip { height: 28px; font-size: 12.5px; border-radius: 8px; }
+.mc-sheet > .mc-line { margin-top: 0; }
+
+/* Meeting diagrams: whole meeting map + split per-topic cards with segmented filter. */
+.mc-diagrams { display: flex; flex-direction: column; gap: 12px; }
+.mc-diagrams-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.mc-diagrams-bar h2 { margin: 0; font-size: 13px; font-weight: 680; letter-spacing: .03em; text-transform: uppercase; color: var(--ink3); }
+.mc-seg { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--paper); border: 1px solid var(--line); gap: 2px; }
+.mc-seg button { height: 28px; padding: 0 11px; border: 0; border-radius: 6px; background: transparent; color: var(--ink2); font-size: 12.5px; font-weight: 550; cursor: pointer; transition: background .12s, color .12s; }
+.mc-seg button:hover { color: var(--ink); }
+.mc-seg button.on { background: var(--meetcue-soft); color: var(--meetcue); font-weight: 650; }
+.mc-topics-subhead { margin: 4px 0 -2px; font-size: 12px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; color: var(--ink3); }
+.mc-diagram-list { display: grid; gap: 14px; }
+.mc-diagram-card { background: var(--paper); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; }
+.mc-diagram-card.is-whole { border-color: color-mix(in srgb, var(--meetcue) 34%, var(--line)); box-shadow: 0 1px 3px rgba(106, 92, 246, .06); }
+.mc-diagram-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.mc-diagram-head strong { font-size: 14.5px; font-weight: 660; color: var(--ink); }
+.mc-diagram-status { padding: 2px 9px; border-radius: 999px; background: var(--meetcue-soft); color: var(--meetcue); font-size: 11.5px; font-weight: 620; text-transform: capitalize; }
+.mc-diagram-status.is-whole { text-transform: none; }
+/* Canonical MeetCue SVG map stage (exact MeetCue tokens, light + dark themes). */
+.mm-stage {
+  --surface: #ffffff; --surface-2: #f1f3f9; --surface-3: #e9ecf5;
+  --text: #0e1330; --text-2: #4a5170; --muted: #8a90a8;
+  --line: #e6e8f2; --line-strong: #d4d8e8;
+  --accent: #5b5bf6; --accent-strong: #4338ca; --accent-soft: #eceeff;
+  --cue: #7c5cff; --cue-soft: #f1edff;
+  --ok: #12a26b; --ok-soft: #e6f7f0;
+  --warn: #d97706; --warn-soft: #fff4e5;
+  --danger: #e5484d; --danger-soft: #fdecec;
+  --mm-edge: #8a93b0;
+  --mm-frame: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  --mm-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  position: relative; width: 100%; background: var(--surface); overflow: hidden;
+}
+.mm-stage.is-static { padding: 12px; overflow-x: auto; }
+.mm-stage.is-static .mm-svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+.mm-canvas { position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.mm-canvas.dragging { cursor: grabbing; }
+.mm-svg { display: block; font-family: var(--mm-font); }
+.mm-world { transform-origin: 0 0; transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
+.mm-canvas.dragging .mm-world { transition: none; }
+.mm-frame > rect { fill: var(--mm-frame); stroke: var(--line-strong); stroke-width: 1.2; }
+.mm-frame.st-upcoming > rect { stroke-dasharray: 5 4; }
+.mm-frame.st-active > rect { fill: color-mix(in srgb, var(--cue) 6%, var(--surface)); stroke: var(--cue); stroke-width: 1.6; }
+.mm-frame.st-done > rect { stroke: color-mix(in srgb, var(--ok) 55%, var(--line)); fill: color-mix(in srgb, var(--ok) 4%, var(--surface)); }
+.mm-frame.st-parked { opacity: .6; }
+.mm-frame.st-parked > rect { stroke-dasharray: 2 4; }
+.mm-frame-title { font-size: 17px; font-weight: 800; fill: var(--text); }
+.mm-rule { stroke: var(--line-strong); stroke-width: 1.3; }
+.mm-frame > rect.branch { stroke-width: 1.8; }
+.mm-frame.st-active > rect.branch { stroke-width: 2.6; }
+.mm-branch { fill: none; stroke-width: 2.2; }
+.mm-branch-label rect { fill: var(--surface); stroke-width: 1.6; }
+.mm-branch-label text { font-size: 11.5px; font-weight: 700; text-anchor: middle; }
+.mm-root rect { fill: #1d2350; stroke: var(--accent); stroke-width: 2; }
+.mm-root-title { font-size: 15px; font-weight: 700; fill: #fff; }
+.mm-root-line { font-size: 12px; fill: #dfe2ff; }
+.mm-hub rect { fill: var(--cue-soft); stroke-width: 1.6; }
+.mm-hub text { font-size: 13px; font-weight: 700; fill: var(--accent-strong); }
+.mm-mark circle { fill: var(--ok); }
+.mm-mark.ask circle { fill: var(--warn); }
+.mm-mark text { font-size: 9px; font-weight: 800; text-anchor: middle; fill: #fff; }
+.mm-card { font-size: 12px; fill: var(--text); }
+.mm-card.ask { fill: var(--text-2); }
+.mm-frame-index circle { fill: var(--surface-3); }
+.mm-frame-index text { font-size: 11px; font-weight: 700; text-anchor: middle; fill: var(--text-2); }
+.mm-frame.st-active .mm-frame-index circle { fill: var(--cue); }
+.mm-frame.st-done .mm-frame-index circle { fill: var(--ok); }
+.mm-frame.st-active .mm-frame-index text, .mm-frame.st-done .mm-frame-index text { fill: #fff; }
+.mm-frame-status rect { fill: var(--surface); stroke: var(--line); stroke-width: .8; }
+.mm-frame-status text { font-size: 10.5px; font-weight: 600; text-anchor: middle; fill: var(--muted); }
+.mm-frame.st-active .mm-frame-status rect { fill: var(--cue-soft); stroke: none; }
+.mm-frame.st-active .mm-frame-status text { fill: var(--cue); }
+.mm-frame.st-done .mm-frame-status rect { fill: var(--ok-soft); stroke: none; }
+.mm-frame.st-done .mm-frame-status text { fill: var(--ok); }
+.mm-edge path { fill: none; stroke: var(--mm-edge); stroke-width: 1.5; }
+.mm-edge.cross path { stroke-width: 1.3; stroke-linejoin: round; }
+.mm-edge.k-flow path { stroke: var(--accent); }
+.mm-edge.k-depends path { stroke: #8b5cf6; }
+.mm-edge.k-owns path { stroke: #64748b; }
+.mm-edge.k-support path { stroke: var(--ok); }
+.mm-edge.k-conflict path { stroke: var(--danger); stroke-dasharray: 6 4; stroke-width: 1.8; }
+.mm-arrow { fill: var(--mm-edge); }
+.mm-arrow.k-flow { fill: var(--accent); }
+.mm-arrow.k-depends { fill: #8b5cf6; }
+.mm-arrow.k-owns { fill: #64748b; }
+.mm-arrow.k-support { fill: var(--ok); }
+.mm-arrow.k-conflict { fill: var(--danger); }
+.mm-edge-label rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: .8; }
+.mm-edge-label text { font-size: 10.5px; font-weight: 500; text-anchor: middle; fill: var(--text-2); }
+.mm-edge-label.k-conflict text { fill: var(--danger); }
+.mm-edge-label.k-support text { fill: var(--ok); }
+.mm-edge-label.k-flow text { fill: var(--accent-strong); }
+.mm-edge.dim, .mm-edge-label.dim, .mm-node.dim { opacity: .22; }
+.mm-edge, .mm-edge-label, .mm-node { transition: opacity .25s; }
+.mm-node { cursor: pointer; --c: var(--accent); }
+.mm-stage .k-person { --c: #6d5dfc; }
+.mm-stage .k-org { --c: #0284c7; }
+.mm-stage .k-project { --c: #d97706; }
+.mm-stage .k-system { --c: #0d9488; }
+.mm-stage .k-concept { --c: #db2777; }
+.mm-stage .k-metric { --c: #16a34a; }
+.mm-stage .k-place { --c: #7c3aed; }
+.mm-stage .k-time { --c: #64748b; }
+.mm-stage .k-doc { --c: #a16207; }
+.mm-node-box { fill: color-mix(in srgb, var(--c) 6%, var(--surface)); stroke: color-mix(in srgb, var(--c) 70%, var(--surface)); stroke-width: 1.3; }
+.mm-glyph { fill: none; stroke: var(--c); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.mm-label { font-size: 13.5px; font-weight: 600; fill: var(--text); }
+.mm-note { font-size: 11px; fill: var(--text-2); }
+.mm-node.sel .mm-node-box { stroke: var(--c); stroke-width: 2.6; }
+.mm-badge circle { stroke: var(--surface); stroke-width: 1.5; }
+.mm-badge text { font-size: 10px; font-weight: 700; text-anchor: middle; fill: #fff; }
+.mm-badge.open circle { fill: #f59e0b; }
+.mm-badge.done circle { fill: var(--ok); }
+.mm-zoom { position: absolute; right: 10px; top: 10px; z-index: 2; display: flex; flex-direction: column; gap: 6px; }
+.mm-zoom button { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--surface); border: .5px solid var(--line-strong); color: var(--text-2); box-shadow: 0 1px 4px rgba(0, 0, 0, .08); cursor: pointer; transition: color .12s, background .12s, border-color .12s; }
+.mm-zoom button:hover { color: var(--text); background: var(--surface-2); }
+.mm-zoom button.on { color: var(--cue); border-color: color-mix(in srgb, var(--cue) 40%, var(--line-strong)); }
+
+/* Dark theme tokens for MeetCue maps (matches Lines data-mode="dark" and MeetCue dark mode). */
+:root[data-mode="dark"] .mm-stage,
+:root[data-theme="dark"] .mm-stage {
+  --surface: #121933; --surface-2: #19213f; --surface-3: #212a4d;
+  --text: #e9ecfb; --text-2: #b4bad6; --muted: #7c84a6;
+  --line: #232c4d; --line-strong: #313c66;
+  --accent: #8b8bff; --accent-strong: #b3b3ff; --accent-soft: #1f2752;
+  --cue: #a593ff; --cue-soft: #241f4d;
+  --ok: #3ccf91; --ok-soft: #12302a;
+  --warn: #f5a524; --warn-soft: #33270f;
+  --danger: #ff6b6f; --danger-soft: #3a1a22;
+  --mm-edge: #66708f;
+  --mm-frame: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+:root[data-mode="dark"] .mm-node-box,
+:root[data-theme="dark"] .mm-node-box { fill: color-mix(in srgb, var(--c) 16%, var(--surface)); }
+:root[data-mode="dark"] .mm-edge.k-owns path,
+:root[data-theme="dark"] .mm-edge.k-owns path { stroke: #94a3b8; }
+:root[data-mode="dark"] .mm-arrow.k-owns,
+:root[data-theme="dark"] .mm-arrow.k-owns { fill: #94a3b8; }
+:root[data-mode="dark"] .mm-stage .k-person, :root[data-theme="dark"] .mm-stage .k-person { --c: #a29bff; }
+:root[data-mode="dark"] .mm-stage .k-org, :root[data-theme="dark"] .mm-stage .k-org { --c: #38bdf8; }
+:root[data-mode="dark"] .mm-stage .k-project, :root[data-theme="dark"] .mm-stage .k-project { --c: #fbbf24; }
+:root[data-mode="dark"] .mm-stage .k-system, :root[data-theme="dark"] .mm-stage .k-system { --c: #2dd4bf; }
+:root[data-mode="dark"] .mm-stage .k-concept, :root[data-theme="dark"] .mm-stage .k-concept { --c: #f472b6; }
+:root[data-mode="dark"] .mm-stage .k-metric, :root[data-theme="dark"] .mm-stage .k-metric { --c: #4ade80; }
+:root[data-mode="dark"] .mm-stage .k-place, :root[data-theme="dark"] .mm-stage .k-place { --c: #c4b5fd; }
+:root[data-mode="dark"] .mm-stage .k-time, :root[data-theme="dark"] .mm-stage .k-time { --c: #94a3b8; }
+:root[data-mode="dark"] .mm-stage .k-doc, :root[data-theme="dark"] .mm-stage .k-doc { --c: #facc15; }
+:root[data-mode="dark"] .mm-zoom button,
+:root[data-theme="dark"] .mm-zoom button { box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+
+/* Detail body grid: Minutes main column + Action items sidebar column. */
+.mc-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.mc-detail-grid.has-actions { grid-template-columns: minmax(0, 1fr) 300px; }
+.mc-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px 18px; border-bottom: 1px solid var(--line); }
+.mc-card-head h2 { margin: 0; font-size: 13px; font-weight: 680; letter-spacing: .03em; text-transform: uppercase; color: var(--ink3); }
+.mc-count-pill { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--meetcue-soft); color: var(--meetcue); font-size: 12px; font-weight: 700; }
+.mc-minutes-card { background: var(--paper); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; }
+.mc-minutes-card .mc-minutes { margin-top: 0; border: 0; border-radius: 0; background: transparent; }
+.mc-minutes-card .mc-minutes .md.compact { padding: 12px 22px 18px; }
+.mc-minutes { margin-top: 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+.mc-minutes .md.compact { padding: 6px 22px 10px; }
+.mc-actions-card { background: var(--paper); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; position: sticky; top: 16px; }
+.mc-action-list { list-style: none; margin: 0; padding: 10px 14px 14px; display: grid; gap: 10px; }
+.mc-action-list li { display: flex; align-items: flex-start; gap: 9px; padding: 10px 11px; border-radius: 9px; background: var(--bg); border: 1px solid var(--line); }
+.mc-act-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--meetcue); flex: none; margin-top: 6px; }
+.mc-action-list p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--ink); font-weight: 500; }
+.mc-act-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.mc-act-pill { padding: 1px 7px; border-radius: 6px; background: var(--paper); border: 1px solid var(--line); color: var(--ink2); font-size: 11.5px; font-weight: 550; }
+.mc-act-pill.is-due { color: var(--meetcue); border-color: color-mix(in srgb, var(--meetcue) 30%, var(--line)); background: var(--meetcue-soft); }
+
+/* The meeting on a line: MeetCue's mark above a card with the title line, the gist, and its minutes. */
+.mk-meeting { background: var(--meetcue); border-radius: 50%; }
+/* Above the card the mark is MeetCue's own logo, as in the rail. */
+.lp-kl .mk-meeting { width: 18px; height: 18px; border-radius: 5px; background: var(--meetcue) url("meetcue-icon.png") center / cover no-repeat; }
+.lp-meeting { position: relative; padding: 13px 16px 14px 14px; background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--meetcue); border-radius: 11px; scroll-margin-top: 110px; cursor: pointer; transition: border-color .12s, box-shadow .12s, background .12s; }
+.lp-meeting:hover { border-color: var(--line2); border-left-color: var(--meetcue); box-shadow: var(--shadow-1); }
+.lp-meeting.on { border-color: var(--meetcue); border-left-color: var(--meetcue); box-shadow: 0 0 0 3px var(--meetcue-soft); }
+.lp-meeting:hover > .lp-tools { opacity: 1; transform: none; pointer-events: auto; }
+.lp-mc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-right: 4px; }
+.lp-mc-go { flex: none; color: var(--ink3); opacity: 0; transition: opacity .12s, transform .12s; margin-top: 2px; }
+.lp-meeting:hover .lp-mc-go, .lp-meeting.on .lp-mc-go { opacity: 1; color: var(--meetcue); }
+.lp-meeting h4 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 9px; margin: 0; font-size: 14.5px; font-weight: 500; }
+.lp-meeting h4 strong { font-weight: 650; }
+.lp-meeting h4 span:last-child { color: var(--ink3); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* MeetCue's diagrams: small side by side on the card, one under another in its panel. */
+.lp-meeting .lp-mc-pics { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin-top: 10px; }
+.lp-meeting .lp-mc-pics .lp-draw-view { padding: 8px; }
+.lp-meeting .lp-mc-pics .lp-draw-view .pic-preview { height: 140px; }
+.lpp-mc .lp-mc-pics { margin: 12px 0; }
+.lp-meeting .lp-note-words { margin-top: 8px; color: var(--ink); font-size: 15px; line-height: 1.55; }
+.lp-meeting .lp-note-words .md-p { margin: 0 0 .4em; }
+.lp-meeting footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.mc-link-btn { gap: 6px; }
+/* Meeting details in the right panel (#lpPanel). */
+.c-mc { background: var(--meetcue-soft); color: var(--meetcue); }
+.lpp-mc { display: grid; gap: 14px; }
+.lpp-mc .mc-minutes { margin-top: 0; }
+.lpp-mc-gist { color: var(--ink); font-size: 15px; line-height: 1.6; }
+.lpp-mc-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.lpp-mc-actions { padding: 12px 16px; background: var(--paper); border: 1px solid var(--line); border-radius: 11px; }
+.lpp-mc-actions h3 { margin: 0 0 8px; font-size: 12.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--ink3); }
+.lpp-mc-actions ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.lpp-mc-actions li small { display: block; color: var(--ink3); font-size: 12px; margin-top: 2px; }
+.mc-sheet .lpp-mc-actions { margin-top: 16px; }
+.lpp-mc-else { margin-top: 2px; }
+/* Use in MeetCue, on the project's card beside Rename and Archive. */
+.pc-acts { flex-wrap: wrap; }
+/* On the home map and down the side of its line, a meeting is a violet dot. */
+.st.k-meeting .nd::before { inset: 9.5px; background: var(--meetcue); box-shadow: none; }
+.lps.k-meeting .lps-node { width: 18px; height: 18px; background: none; }
+.lps.k-meeting .lps-node svg { display: none; }
+.lps.k-meeting .lps-node::before { content: ""; width: 11px; height: 11px; background: var(--meetcue); border-radius: 50%; }
+.lps.k-meeting .lps-end { padding-top: 0; color: var(--ink); font-size: 13.5px; font-weight: 500; line-height: 1.36; }
+
+@media (hover: none) {
+  .lp-mc-go { display: none; }
+  .lp-mc-head { padding-right: 64px; }
+}
+@media (max-width: 920px) {
+  .mc-detail-grid.has-actions { grid-template-columns: minmax(0, 1fr); }
+  .mc-actions-card { position: static; order: -1; }
+}
+@media (max-width: 760px) {
+  .mc-connect { margin-top: 2vh; padding: 24px 18px; }
+  .mc-hero { padding: 18px 18px 16px; }
+  .mc-hero h1 { font-size: 22px; }
+  .mc-features, .mc-steps { grid-template-columns: 1fr; }
+  .mc-row { flex-wrap: wrap; padding-bottom: 8px; }
+  .mc-row-main { flex-basis: 100%; }
+  .mc-links { padding-left: 14px; }
+  .mc-row .mc-add { max-width: 100%; margin-left: 10px; }
+}

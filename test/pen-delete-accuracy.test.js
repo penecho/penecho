@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const PEN = require("../public/pen-intel.js");
 const record = (id, points, at = 0) => ({ id, points, at, size:4, box:PEN.bounds(points) });

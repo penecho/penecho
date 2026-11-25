@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -443,7 +444,7 @@ test("every built-in plugin uses a directory bundle", () => {
     parsed = builtIns.map(parsePlugin);
   assert.equal(new Set(allParsed.map((plugin) => plugin.id)).size, allParsed.length);
   for (const plugin of parsed) {
-    assert.ok(Buffer.byteLength(plugin.document, "utf8") <= 12000, plugin.id);
+    assert.ok(Buffer.byteLength(plugin.document, "utf8") <= 100000, plugin.id);
     assert.ok(plugin.nameZh, plugin.id);
     assert.ok(plugin.description, plugin.id);
     assert.ok(plugin.descriptionZh, plugin.id);
@@ -574,7 +575,8 @@ test("personal plugin storage is ignored and separated from built-in contracts",
 });
 
 test("plugin parser rejects oversized contracts, unsafe origins, and missing one-shots", () => {
-  assert.throws(() => plugins.parse(`${weather}\n${"x".repeat(12000)}`), /12000 UTF-8 bytes/);
+  assert.equal(plugins.parse(`${weather}\n${"x".repeat(20000)}`).id, "weather");
+  assert.throws(() => plugins.parse(`${weather}\n${"x".repeat(100000)}`), /100000 UTF-8 bytes/);
   assert.throws(() => plugins.parse(weather.replace("https://api.open-meteo.com", "https://*.open-meteo.com")), /invalid or duplicate origin/);
   assert.throws(() => plugins.parse(weather.replace("https://api.open-meteo.com", "https://api.open-meteo.com/v1")), /invalid or duplicate origin/);
   assert.throws(() => plugins.parse(weather.replace("## One-shot example", "## Usage example")), /one-shot example/);

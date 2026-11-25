@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict');
 const {createMcpPowerLease}=require('../desktop/mcp-power.js');
 test('MCP desktop wake lease is optional, renewable and restores throttling on expiry',()=>{

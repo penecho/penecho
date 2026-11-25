@@ -1,0 +1,27 @@
+/* The Lines thread as a panel beside an open Canvas: one line and its box. See embed.js. */
+html.is-embed, html.is-embed body { background: var(--paper); }
+html.is-embed .rail, html.is-embed #projbar, html.is-embed .lp-side, html.is-embed .lp-back, html.is-embed [data-act="toggle-projects"], html.is-embed [data-act="line-side"], html.is-embed .lp-fold { display: none !important; }
+html.is-embed .shell { width: 100%; }
+html.is-embed .lp { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+html.is-embed .lp-head { flex: none; min-height: 44px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--paper); }
+html.is-embed .lp-head h1 { font-size: 15px; font-weight: 650; }
+html.is-embed .lp-main { flex: 1; min-height: 0; padding: 12px 12px 0; background: var(--bg); }
+html.is-embed .lp-sheet { max-width: none; padding: 14px 14px 16px; border-radius: 12px; box-shadow: none; }
+html.is-embed .lp-sheet:empty { display: none; }
+html.is-embed .lp-dock { max-width: none; bottom: 10px; }
+/* The panel is narrow: the box's two buttons fit without their key hints. */
+html.is-embed .lp-dock .cmp-key { display: none; }
+html.is-embed .lp-filters { max-width: none; }
+/* A piece of work opens over the thread, as it does on a phone. */
+html.is-embed .lp-panel { position: absolute; inset: 0; z-index: 12; width: auto; max-width: none; max-height: calc(84vh / var(--penecho-page-scale, 1)); margin: 0; border: 0; border-radius: 16px 16px 0 0; box-shadow: var(--shadow-3); }
+html.is-embed .lpp-expand { display: none; }
+html.is-embed .embed-start { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: auto; padding: 24px 18px; color: var(--ink3); font-size: 14px; text-align: center; }
+html.is-embed .embed-start strong { color: var(--ink2); font-size: 15px; font-weight: 600; }
+
+/* The rail to the left of an open Canvas: this page with only its rail drawn. The frame is as large as the window, so the rail is as wide here as on every other page,
+   and the Canvas page shows only the rail's part of it until a menu or a dialog needs the rest. */
+html.is-rail, html.is-rail body { background: transparent; }
+/* A dark rail still lets the Canvas show through beside it. */
+html.is-rail[data-mode] { color-scheme: light; }
+html.is-rail[data-mode="dark"] body > * { color-scheme: dark; }
+html.is-rail .shell, html.is-rail #dropOverlay, html.is-rail #toast, html.is-rail #growNotes { display: none !important; }

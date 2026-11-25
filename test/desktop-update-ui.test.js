@@ -3,7 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
-const { parseHTML } = require("linkedom");
+const { parseHTML } = require("./helpers/dom.js");
 const { createUpdateManager } = require("../desktop/update-manager.js");
 
 function canvasHarness(platform = "darwin") {

@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const { mapKimiReasoningEffort } = require("./reasoning-effort.js");
+const { prepareAgentEnv, resolveWindowsCmdShim } = require("./agent-env.js");
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 const MAX_PUBLIC_TEXT_PREFIX_CHARS = 16_384;
@@ -59,6 +60,10 @@ function findOnPath(name, env = process.env) {
   return null;
 }
 
+function electronNodeEnv() {
+  return process.versions?.electron ? { env: { ELECTRON_RUN_AS_NODE: "1" } } : {};
+}
+
 function resolveKimiLaunch(configuredPath = "kimi", env = process.env) {
   const requested = String(configuredPath || "kimi").trim();
   if (!requested || requested.includes("\0")) throw new Error("KIMI_CLI_PATH is invalid.");
@@ -68,11 +73,17 @@ function resolveKimiLaunch(configuredPath = "kimi", env = process.env) {
   try { if (!fs.statSync(executable).isFile()) throw new Error(); }
   catch { throw new Error(`Kimi Code CLI path is not a file: ${executable}`); }
   const extension = path.extname(executable).toLowerCase();
-  if ([".js", ".cjs", ".mjs"].includes(extension)) return { command: process.execPath, prefixArgs: [executable] };
+  if ([".js", ".cjs", ".mjs"].includes(extension)) return { command: process.execPath, prefixArgs: [executable], ...electronNodeEnv() };
   if (process.platform === "win32" && [".cmd", ".bat", ".ps1"].includes(extension)) {
     const packageRoot = path.join(path.dirname(executable), "node_modules", "@moonshot-ai", "kimi-code");
     const script = ["dist/cli.js", "bin/kimi.js", "cli.js"].map(relative => path.join(packageRoot, relative)).find(file => fs.existsSync(file));
-    if (script) return { command: process.execPath, prefixArgs: [script] };
+    if (script) return { command: process.execPath, prefixArgs: [script], ...electronNodeEnv() };
+    const shimTarget = resolveWindowsCmdShim(executable, ["kimi.exe", "cli.js", "kimi.js"]);
+    if (shimTarget) {
+      return path.extname(shimTarget).toLowerCase() === ".exe"
+        ? { command: shimTarget, prefixArgs: [] }
+        : { command: process.execPath, prefixArgs: [shimTarget], ...electronNodeEnv() };
+    }
     throw new Error("The Kimi Code shell wrapper cannot be launched safely. Set KIMI_CLI_PATH to kimi.exe or install the official Kimi Code package.");
   }
   return { command: executable, prefixArgs: [] };
@@ -98,7 +109,7 @@ function sanitizeKimiEnv(env = process.env, effort = null) {
   clean.KIMI_CODE_NO_AUTO_UPDATE = "1";
   const mappedEffort = mapKimiEffort(effort);
   if (mappedEffort) clean.KIMI_MODEL_THINKING_EFFORT = mappedEffort;
-  return clean;
+  return prepareAgentEnv(clean, null, { platform: process.platform });
 }
 
 function buildKimiArgs({ model, prompt, agentFile = KIMI_AGENT_FILE, outputFormat = "stream-json" }) {
@@ -244,7 +255,8 @@ function runProcess(launch, args, cwd, env, signal, onText = null, onActivity = 
     if (signal?.aborted) return reject(abortError());
     const streamJson = outputFormat !== "text";
     let child;
-    try { child = spawn(launch.command, [...launch.prefixArgs, ...args], { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: false, detached: process.platform !== "win32" }); }
+    const spawnEnv = prepareAgentEnv(env, launch.env, { platform: process.platform });
+    try { child = spawn(launch.command, [...launch.prefixArgs, ...args], { cwd, env: spawnEnv, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: false, detached: process.platform !== "win32" }); }
     catch (error) { return reject(error); }
     let settled = false, lineBuffer = "", stderr = "", content = "", termination = null,
       publicTextPrefix = "", reportPublicText = typeof onText === "function";
@@ -431,7 +443,7 @@ async function callKimiCli({ executable = "kimi", model = null, effort = null, p
     const client = sharedKimiAcpClient({
       key:`${launch.command}${launch.prefixArgs.join("")}`,
       launch,
-      env:sanitizeKimiEnv(env),
+      env: launch.env ? { ...sanitizeKimiEnv(env), ...launch.env } : sanitizeKimiEnv(env),
       workDir:kimiAcpWorkDir(),
       kimiHome:kimiHomeFromEnv(env),
     });

@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 const root=path.join(__dirname,".."),read=file=>fs.readFileSync(path.join(root,file),"utf8"),SMART=require("../public/smart-suggest.js");
@@ -15,6 +16,7 @@ function fixture() {
     other={id:"other",widgetType:"html_widget",pluginId:"general",html:"older AI result",title:"Older result"},tiles=new Map(),
     state={widgets:[graph,other],history:[],future:[],historyBefore:new Map(),inkBounds:new Map(),widgetHistoryBefore:null,animationHistoryBefore:null,imageHistoryBefore:null,textBoxHistoryBefore:null,userRevision:0,recognitionGeneration:0,interactingWidgetId:graph.id,autoEligible:true,language:"en"},
     context=vm.createContext({state,tiles,MAX_HISTORY:30,MAX_WIDGET_HTML_LENGTH:1000000,TILE:256,SIZE:10000,canvasSnapshotFinalizationDepth:0,
+      canvasWidgetInteractive:widget=>state.mode==='hand'||state.interactingWidgetId===widget.id,
       window:{PENECHO_SMART_SUGGEST:SMART,PenEchoStudioNavigator:{updateDocument(){}}},document:{querySelector:()=>null},
       serializedAnimations:()=>[],imageHistoryState:()=>[],textBoxHistoryState:()=>[],cloneCanvas:value=>value?structuredClone(value):null,
       canvasAgentDidCommitUserCanvasChange:entry=>entry,restoreAnimations(){},restoreImages(){},restoreTextBoxes(){},restorePendingHistoryState(){},clearSharpOverlays(){},requestAnimationLayerRender(){},render(){},requestRender(){},t:()=>"Refine",
@@ -31,6 +33,14 @@ function fixture() {
   const data=()=>SMART.graphDocumentData(state.widgets.find(w=>w.id==="graph").html).data;
   return {context,state,graph,other,tiles,change,ink,data,document};
 }
+
+test("native Hand graph input persists and remains undoable without explicit presentation",()=>{
+ const h=fixture(),before=h.graph.html;
+ h.state.mode='hand';h.state.interactingWidgetId=null;h.change(3,'hand-slider','end');
+ assert.equal(h.data().parameters.a,3);assert.equal(h.state.history.length,1);
+ h.context.undo();assert.equal(h.state.widgets.find(w=>w.id==='graph').html,before);
+ h.state.mode='pen';h.change(4);assert.equal(h.state.widgets.find(w=>w.id==='graph').html,before);
+});
 
 test("hundreds of wheel and slider updates use one Undo entry each and preserve older ink and AI history",()=>{
   const h=fixture(),original=h.graph.html,inkEntry=h.ink("old ink");

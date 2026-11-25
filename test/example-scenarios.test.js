@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -181,4 +182,15 @@ test("coding includes a real code review: a pasted screenshot with a bug to chec
   assert.equal(examples.get("binary-search"), null);
   const pkg = require("../package.json");
   for (const photo of examples.SCENARIOS.filter((item) => item.image)) assert.ok(pkg.files.includes(`public/${photo.image.src}`), photo.image.src);
+});
+
+test("the eight shown first on an empty Canvas, each with its card words and what it needs (N1)", () => {
+  const first = examples.first();
+  assert.deepEqual(first.map((scenario) => scenario.id), ["functions", "surface-3d", "diagram", "kids-homework", "photo-note", "class-3d", "prototype", "work-note"]);
+  assert.deepEqual(first.map((scenario) => scenario.route), ["instant", "instant", "instant", "ai", "ai", "agent", "agent", "ai"]);
+  for (const scenario of first) assert.ok(scenario.card.title.en && scenario.card.title.zh && scenario.card.description.en && scenario.card.description.zh, scenario.id);
+  assert.equal(first[3].card.title.en, "Check homework");
+  assert.equal(first[6].card.title.en, "Wireframe to prototype");
+  assert.equal(examples.savedResult("class-3d"), "examples/results/class-3d.html");
+  assert.equal(examples.savedResult("functions"), "");
 });

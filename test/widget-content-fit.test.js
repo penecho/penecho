@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../src/client/app/canvas-runtime.js'), 'utf8');
 const functions = source.slice(source.indexOf('  let widgetFitRequestSequence'), source.indexOf('  function resizeWidgetBox'));

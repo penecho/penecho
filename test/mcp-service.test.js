@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
@@ -72,6 +73,51 @@ function requestJson(port, target, { method = "POST", headers = {}, body } = {})
     request.on("error", reject);
     request.end(bytes);
   });
+}
+
+// A Canvas browser joined to the service in this process, driven frame by frame:
+// open, send a frame, pull what the service sent back, close.
+function browserChannels(service) {
+  const channels = new Map();
+  const closedError = () => Object.assign(new Error("The browser connection is closed."), {code:"browser_closed"});
+  const drain = channel => ({frames:channel.frames.splice(0), closed:channel.closed});
+  function wake(channel) {
+    if (!channel.waiter) return;
+    const {resolve, timer} = channel.waiter;
+    clearTimeout(timer);
+    channel.waiter = null;
+    resolve(drain(channel));
+  }
+  function end(channel) {
+    if (channel.closed) return;
+    channel.closed = true;
+    channels.delete(channel.id);
+    channel.frames = [];
+    channel.socket.readyState = 3;
+    channel.socket.emit("close");
+    wake(channel);
+  }
+  return async function execute({operation, channelId, frame}) {
+    if (operation === "canvas.mcp.open") {
+      const socket = new EventEmitter(), channel = {id:crypto.randomUUID(), socket, frames:[], closed:false, waiter:null};
+      socket.readyState = 1;
+      socket.close = socket.terminate = () => end(channel);
+      socket.ping = () => socket.emit("pong");
+      socket.send = value => { if (channel.closed) throw closedError(); channel.frames.push(value); wake(channel); };
+      channels.set(channel.id, channel);
+      service.attachBrowser(socket);
+      return {channelId:channel.id};
+    }
+    const channel = channels.get(channelId);
+    if (!channel) {
+      if (operation === "canvas.mcp.close") return {closed:true};
+      throw closedError();
+    }
+    if (operation === "canvas.mcp.close") { end(channel); return {closed:true}; }
+    if (operation === "canvas.mcp.frame") { channel.socket.emit("message", Buffer.from(frame)); return {accepted:!channel.closed}; }
+    if (channel.frames.length) return drain(channel);
+    return new Promise(resolve => { channel.waiter = {resolve, timer:setTimeout(() => wake(channel), 5000)}; });
+  };
 }
 
 async function invokeServiceHttp(service, remoteAddress, target, { method = "POST", headers = {} } = {}) {
@@ -1005,9 +1051,10 @@ test("removed invitation routes and persisted identity never restore a service o
   const service = createMcpService({server:http.createServer(),stateDirectory,authorizeBrowser:() => null});
   try {
     service.register({port:12345});
+    const execute = browserChannels(service);
     for (const url of ["/api/mcp/lan","/api/mcp/lan-client.js"]) assert.equal(await service.handleHttp({url,method:"POST"}, {}), false);
-    const {channelId} = await service.executeRemote({operation:"canvas.mcp.open"});
-    await service.executeRemote({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"hello",canvasId:"canvas",title:"Canvas"})});
+    const {channelId} = await execute({operation:"canvas.mcp.open"});
+    await execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"hello",canvasId:"canvas",title:"Canvas"})});
     assert.equal(service.status().lan, undefined);
     assert.equal(service.status().config, null);
     assert.equal(service.status().http.enabled, false);
@@ -1023,7 +1070,7 @@ test("removed invitation routes and persisted identity never restore a service o
 
 test("open accepts absent storage locators and caches successful creation receipts without weakening locator validation", async () => {
   const service = createMcpService({server:http.createServer(),authorizeBrowser:() => "Forbidden",stateDirectory:tempDirectory()});
-  const execute = service.executeRemote;
+  const execute = browserChannels(service);
   try {
     const {channelId} = await execute({operation:"canvas.mcp.open"});
     await execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"hello",canvasId:"locator-canvas",title:"Canvas"})});
@@ -1052,9 +1099,9 @@ test("open accepts absent storage locators and caches successful creation receip
   } finally { await service.close(); }
 });
 
-test("remote channels register canvases, route tools, replace and revoke pending calls", async () => {
+test("browser connections register canvases, route tools, replace and revoke pending calls", async () => {
   const service = createMcpService({server:http.createServer(),authorizeBrowser:() => "Forbidden",stateDirectory:tempDirectory()});
-  const execute = service.executeRemote;
+  const execute = browserChannels(service);
   const open = async () => {
     const {channelId} = await execute({operation:"canvas.mcp.open"});
     await execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"hello",canvasId:"cloud-canvas",title:"Cloud"})});
@@ -1075,11 +1122,10 @@ test("remote channels register canvases, route tools, replace and revoke pending
     const rejected = assert.rejects(pending,{code:"canvas_disconnected"});
     const replacement = await open();
     await rejected;
-    await assert.rejects(execute({operation:"canvas.mcp.pull",channelId}),{code:"mcp_remote_session"});
+    await assert.rejects(execute({operation:"canvas.mcp.pull",channelId}),{code:"browser_closed"});
     await execute({operation:"canvas.mcp.close",channelId:replacement});
     assert.deepEqual(service.listCanvases(),[]);
   } finally { await service.close(); }
-  await assert.rejects(execute({operation:"canvas.mcp.open"}),{code:"mcp_service_closed"});
 });
 
  test("CLI rejects removed invitation flags before opening a stdio bridge", async () => {
@@ -1146,10 +1192,10 @@ test("1.3.1 browsers without catalog remain discoverable and retain legacy find 
 
 
 test("rename routes exact documents with owner and operation scoped receipts, strict responses and cancellation", async t => {
-  // Remote fixture channels have no native socket handle; retain Node 22 through the deadline assertion.
+  // In-process browser connections have no native socket handle; retain Node 22 through the deadline assertion.
   const keepAlive = setTimeout(() => {}, 10_000); t.after(() => clearTimeout(keepAlive));
   const service = createMcpService({server:http.createServer(),authorizeBrowser:() => "Forbidden",stateDirectory:tempDirectory()});
-  const execute = service.executeRemote;
+  const execute = browserChannels(service);
   const owner = crypto.randomUUID(), otherOwner = crypto.randomUUID();
   let channelId;
   const frame = value => execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify(value)});
@@ -1218,24 +1264,25 @@ test("rename routes exact documents with owner and operation scoped receipts, st
 
 test("legacy browser rename fails with an actionable unsupported error without dispatch", async () => {
   const service = createMcpService({server:http.createServer(),authorizeBrowser:() => "Forbidden",stateDirectory:tempDirectory()});
+  const execute = browserChannels(service);
   try {
-    const {channelId} = await service.executeRemote({operation:"canvas.mcp.open"});
-    await service.executeRemote({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"hello",canvasId:"legacy",title:"Canvas"})});
-    await service.executeRemote({operation:"canvas.mcp.pull",channelId});
+    const {channelId} = await execute({operation:"canvas.mcp.open"});
+    await execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"hello",canvasId:"legacy",title:"Canvas"})});
+    await execute({operation:"canvas.mcp.pull",channelId});
     await assert.rejects(service.callTool(crypto.randomUUID(),"penecho_rename_canvas",{instanceId:service.instanceId,canvasId:"legacy",documentId:"doc",title:"Title",requestId:"r"}),error=>error.code === "unsupported_operation" && /Update PenEcho.*refresh/.test(error.message));
-    await service.executeRemote({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"ping"})});
-    assert.deepEqual((await service.executeRemote({operation:"canvas.mcp.pull",channelId})).frames.map(JSON.parse),[{type:"pong"}]);
+    await execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"ping"})});
+    assert.deepEqual((await execute({operation:"canvas.mcp.pull",channelId})).frames.map(JSON.parse),[{type:"pong"}]);
   } finally {await service.close();}
 });
 
 
 test("settled failed rename receipts are evictable while live requests remain protected", async () => {
   const service = createMcpService({server:http.createServer(),authorizeBrowser:() => "Forbidden",stateDirectory:tempDirectory()});
-  const owner = crypto.randomUUID();
+  const owner = crypto.randomUUID(), execute = browserChannels(service);
   try {
-    const {channelId} = await service.executeRemote({operation:"canvas.mcp.open"});
-    const frame = value => service.executeRemote({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify(value)});
-    const pull = async () => (await service.executeRemote({operation:"canvas.mcp.pull",channelId})).frames.map(JSON.parse);
+    const {channelId} = await execute({operation:"canvas.mcp.open"});
+    const frame = value => execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify(value)});
+    const pull = async () => (await execute({operation:"canvas.mcp.pull",channelId})).frames.map(JSON.parse);
     await frame({type:"hello",canvasId:"capacity",title:"Canvas",documentRename:true,documents:[{documentId:"doc",title:"Original",active:true}]});await pull();
     const args = {instanceId:service.instanceId,canvasId:"capacity",documentId:"doc",title:"Renamed",requestId:"r"};
     for (let index=0;index<40;index++) {

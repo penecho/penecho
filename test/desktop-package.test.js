@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -10,13 +11,14 @@ const sharp = require("sharp");
 const vm = require("node:vm");
 const { kimiPresetUpdates, normalizeSettings, publicSettings } = require("../desktop/settings-contract.js");
 const { readSecret, writeSecret } = require("../desktop/secret-store.js");
-const { CODEX_CLI_PINNED_VERSION, assertCodexCliBundle, codexHostName, inspectCli, installCli, installInvocation, managedCliPath } = require("../desktop/cli-installer.js");
+const { assertCodexCliBundle, canInspectCli, inspectCli, installCli, installInvocation, managedCliPath, runProcess } = require("../desktop/cli-installer.js");
 const { pathExecutables } = require("../src/providers/cli-discovery.js");
 const {
-  RELEASE_API_URL, createUpdateManager, downloadReleaseAsset, expectedAssetName, installDownloadedUpdate, macBundlePath, releaseAsset,
+  RELEASE_API_URL, RELEASES_API_URL, createUpdateManager, downloadReleaseAsset, expectedAssetName, installDownloadedUpdate, macBundlePath, releaseAsset,
 } = require("../desktop/update-manager.js");
 const { isPrivateIpv4, lanHosts, lanUrls } = require("../desktop/network-access.js");
 const { desktopConfigurationEnvironment } = require("../desktop/config-environment.js");
+const { packageName, reopenAfterSilentUpdate } = require("../desktop/windows-update.js");
 const { processIsRunning, waitForSquirrelFirstRunExit } = require("../desktop/squirrel-first-run.js");
 const { parseArgs, resolveConfiguration } = require("../cli.js");
 
@@ -267,7 +269,11 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(main, /Object\.assign\(configuration\.env, kimiPresetUpdates\(configuration\)\)/);
   assert.match(main, /desktopConfigurationEnvironment\(process\.env, paths\.stateDir\)/);
   assert.match(main, /stateDir = app\.getPath\("userData"\)/);
-  assert.match(main, /configuration\.env\.PENECHO_CONFIG_FILE = configuration\.configFile;\s*applyEnvironment\(configuration\);[\s\S]*?server = require\("\.\.\/server\.js"\)/);
+  // The server is never loaded into the window's process: it is started in one of its own, with the settings' environment.
+  assert.match(main, /serverProcess = createServerProcess\(\{[\s\S]*?settings:\(\) => \{[\s\S]*?PENECHO_CONFIG_FILE:configFile[\s\S]*?serverProcess\.start\(\)/);
+  assert.doesNotMatch(main, /applyEnvironment|process\.env\.[A-Z_]+\s*(?:\|\||\?\?)?=/);
+  assert.doesNotMatch(main, /require\("\.\.\/(?:server\.js|src\/server\/(?:main|local-access|canvas-agent\/native-picker-grants)\.js)"\)/);
+  assert.match(fs.readFileSync(path.join(ROOT, "desktop", "server-entry.js"), "utf8"), /applyEnvironment\(env\);[\s\S]*?server = require\("\.\.\/server\.js"\)/);
   assert.match(serverMain, /const CONNECTIONS_FILE = STATE_DIRECTORY\s*\? path\.join\(STATE_DIRECTORY, "connections\.json"\)/);
   assert.match(serverMain, /\/api\/settings\/connections\/inspect-cli/);
   assert.match(serverMain, /status:await inspectConnectionCli\(provider\)/);
@@ -306,7 +312,6 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(main, /CANVAS_AGENT_CLIPBOARD_FILE_COUNT_LIMIT = 5/);
   assert.match(main, /ipcMain\.handle\("penecho:open-project-file"[\s\S]*?fromCanvas\(event\)[\s\S]*?canvasAgentDesktopProjectStore\(\)\.resolve[\s\S]*?shell\.openPath\(project\.path\)/);
   assert.doesNotMatch(main, /penecho:pick-project-directory|properties:\["openDirectory"/);
-  assert.match(main, /issueNativePickerGrant.*require\("\.\.\/src\/server\/canvas-agent\/native-picker-grants\.js"\)/);
   assert.doesNotMatch(canvasPreload, /openSettings/);
   assert.match(canvasPreload, /\["darwin", "win32"\]\.includes\(process\.platform\)/);
   assert.match(canvasPreload, /showWindow:\(\) => invoke\("penecho:update-show-window"\)/);
@@ -334,6 +339,7 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(main, /dispatch:dispatchCanvasCommand/);
   assert.match(serverMain, /canvasAgentAutoOpen:CANVAS_AGENT_AUTO_OPEN/);
   assert.match(forge, /node_modules\/\{sharp,@img,@vscode\}/);
+  assert.match(forge, /src\/server\/project-lines\/\{browser-call,orch-call\}\.js/);
   assert.match(forge, /readPackageJson/);
   assert.match(forge, /const DESKTOP_VERSION = pkg\.config\.desktopVersion/);
   assert.match(forge, /appVersion:DESKTOP_VERSION/);
@@ -381,6 +387,12 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
     assert.equal(ignoredByDesktopPackage(directory),false,`${directory} must be traversed`);
   }
   assert.equal(ignoredByDesktopPackage("/skills/penecho-mcp/SKILL.md"),false,"the PenEcho MCP skill must be packaged");
+  // PE-692: nothing local to this computer goes in a build made from a working folder.
+  for (const local of ["/proto/.edge-profile/Default/History", "/proto/.edge-profile/Default/Cookies", "/proto/index.html", "/local/pe-404/state.json", "/public/lines/.shots/a.png", "/src/.cache/x", "/hand_off.md"]) {
+    assert.equal(ignoredByDesktopPackage(local),true,`${local} must stay out of the package`);
+  }
+  assert.equal(ignoredByDesktopPackage("/node_modules/some-package/.package-lock.json"),false,"node_modules is left to the packager's own pruning");
+  assert.equal(ignoredByDesktopPackage("/public/lines/main.js"),false,"the pages are packaged");
   for (const file of fs.readdirSync(path.join(ROOT,"src","server","mcp"))) {
     assert.equal(ignoredByDesktopPackage(`/src/server/mcp/${file}`),false,`the PenEcho MCP backend must include ${file}`);
   }
@@ -419,8 +431,10 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(desktopReleaseWorkflow, /TimeStamperCertificate/);
   assert.match(main, /credentialProtector = process\.platform === "darwin" \? null : safeStorage/);
   assert.match(main, /readSecret\(paths\.secretFile, credentialProtector\)/);
-  assert.equal(rootPackage.version, "1.4.2");
-  assert.equal(rootPackage.config.desktopVersion, "1.4.2");
+  assert.equal(rootPackage.version, "1.5.0");
+  const manifestPath = path.join(ROOT, ".penecho-build-manifest.json"),
+    buildManifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, "utf8")) : null;
+  assert.equal(rootPackage.config.desktopVersion, buildManifest?.desktopVersionOverride || rootPackage.version);
   assert.ok(rootPackage.files.includes("src/"));
   for (const asset of ["public/access.html", "public/access.css", "public/access.js"]) {
     assert.ok(rootPackage.files.includes(asset), asset);
@@ -429,11 +443,11 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.ok(rootPackage.files.includes("public/penecho-mark.png"));
 });
 
-test("README logo is a compact horizontal WebP: blue pen mark beside the PenEcho wordmark", async () => {
+test("README logo is a compact horizontal WebP: blue nautilus mark beside the PenEcho wordmark", async () => {
   const logo = path.join(ROOT, "public", "penecho-readme-header.webp"),
     metadata = await sharp(logo).metadata(),
     pixels = await sharp(logo).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
-  assert.deepEqual(fs.readFileSync(path.join(ROOT, "build/brand/penecho-logo.png")), fs.readFileSync(path.join(ROOT, "build/brand/penecho-logo-original.png")), "the supplied transparent PNG must remain byte-for-byte unchanged");
+  assert.deepEqual(fs.readFileSync(path.join(ROOT, "build/brand/penecho-logo.png")), fs.readFileSync(path.join(ROOT, "build/brand/penecho-logo-original.png")), "the master lockup must be used byte-for-byte, as scripts/make-brand-master.js wrote it");
   assert.equal(metadata.format, "webp");
   assert.equal(metadata.width, 840);
   assert.equal(metadata.hasAlpha, true);
@@ -441,13 +455,24 @@ test("README logo is a compact horizontal WebP: blue pen mark beside the PenEcho
   assert.equal(pixels.data[3], 0, "outer corner stays transparent");
   const counts = brandPixels(pixels.data);
   assert.ok(counts.transparent > metadata.width * metadata.height * .6);
-  assert.ok(counts.blue > 5000, "blue pen mark and Echo lettering");
+  assert.ok(counts.blue > 5000, "blue mark and Echo lettering");
   assert.ok(counts.ink > 2000, "ink Pen lettering");
   const left = brandPixels(cropPixels(pixels, 0, 0, Math.floor(metadata.width / 4), metadata.height));
-  assert.ok(left.blue > 2000 && left.ink === 0, "the pen mark sits left of the wordmark");
-  const readmes = ["README.md", ...fs.readdirSync(path.join(ROOT, "docs/readme")).filter(file => /^README.*\.md$/.test(file)).map(file => "docs/readme/" + file)];
-  for (const file of readmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /penecho-readme-header\.webp" alt="PenEcho" width="320"/);
-  for (const file of readmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /prefers-color-scheme: dark[\s\S]*?penecho-readme-header-dark\.webp/);
+  assert.ok(left.blue > 2000 && left.ink === 0, "the mark sits left of the wordmark");
+  const rootReadme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+  assert.match(rootReadme, /docs\/assets\/penecho-lines-logo\.svg" alt="PenEcho Lines" width="340"/);
+  assert.match(rootReadme, /prefers-color-scheme: dark[\s\S]*?docs\/assets\/penecho-lines-logo-dark\.svg/);
+  for (const [svgFile, expectedBlue, expectedInk] of [
+    ["docs/assets/penecho-lines-logo.svg", "#2563eb", "#0f172a"],
+    ["docs/assets/penecho-lines-logo-dark.svg", "#7c9aff", "#f8fafc"],
+  ]) {
+    const svg = fs.readFileSync(path.join(ROOT, svgFile), "utf8");
+    assert.ok(svg.includes(expectedBlue) && svg.includes(expectedInk), `${svgFile} must use the brand palette`);
+    assert.ok(svg.includes("PenEcho") && svg.includes("Lines"), `${svgFile} must display the PenEcho Lines lockup`);
+  }
+  const translatedReadmes = fs.readdirSync(path.join(ROOT, "docs/readme")).filter(file => /^README.*\.md$/.test(file)).map(file => "docs/readme/" + file);
+  for (const file of translatedReadmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /penecho-readme-header\.webp" alt="PenEcho" width="320"/);
+  for (const file of translatedReadmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /prefers-color-scheme: dark[\s\S]*?penecho-readme-header-dark\.webp/);
   const dark = await sharp(path.join(ROOT, "public/penecho-readme-header-dark.webp")).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
   assert.equal(dark.info.width, metadata.width);
   assert.equal(dark.info.height, metadata.height);
@@ -459,12 +484,13 @@ test("README logo is a compact horizontal WebP: blue pen mark beside the PenEcho
   assert.equal(favicon.info.height, 256);
   assert.equal(favicon.data[3], 0, "favicon outer corners remain transparent");
   const faviconCounts = brandPixels(favicon.data);
-  assert.equal(faviconCounts.white, 0, "favicon must not have a white tile behind the blue pen");
-  assert.ok(faviconCounts.transparent > favicon.info.width * favicon.info.height * .75, "the pen's surrounding and interior background remains transparent");
-  assert.ok(faviconCounts.blue > 5000, "favicon shows the blue pen mark");
+  assert.equal(faviconCounts.white, 0, "favicon must not have a white tile behind the blue mark");
+  // The nautilus is a filled shape, so it covers more of the square than the pen outline did.
+  assert.ok(faviconCounts.transparent > favicon.info.width * favicon.info.height * .6, "the mark's surrounding background and the lines cut into it remain transparent");
+  assert.ok(faviconCounts.blue > 5000, "favicon shows the blue mark");
 });
 
-// Brand colors: blue #2350E6 (dark mode #7C9AFF), ink #1D1D1F, white tiles.
+// Brand colors: blue #2563EB (dark mode #7C9AFF), ink #1D1D1F, white tiles.
 function brandPixels(data, channels = 4) {
   const counts = { transparent:0, ink:0, blue:0, lightBlue:0, white:0 };
   for (let i = 0; i < data.length; i += channels) {
@@ -496,7 +522,7 @@ function blueBox({ data, info }) {
   return { cx:(x0 + x1) / 2, cy:(y0 + y1) / 2 };
 }
 
-test("Windows installer animation shows the blue pen logo and image-based wordmark", async () => {
+test("Windows installer animation shows the blue nautilus logo and image-based wordmark", async () => {
   const splash = path.join(ROOT, "build", "icons", "penecho-install.gif"),
     metadata = await sharp(splash, { animated:true }).metadata(),
     pixels = await sharp(splash, { animated:true }).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
@@ -508,14 +534,14 @@ test("Windows installer animation shows the blue pen logo and image-based wordma
     const framePixels = pixels.data.subarray(frame * 268 * 167 * 4, (frame + 1) * 268 * 167 * 4);
     assert.deepEqual([...framePixels.subarray(0, 4)], [255, 255, 255, 255]);
     const counts = brandPixels(framePixels);
-    assert.ok(counts.blue > 300, "installer shows the blue pen mark");
+    assert.ok(counts.blue > 300, "installer shows the blue mark");
     const lettering = framePixels.subarray(100 * 268 * 4, 126 * 268 * 4);
     assert.ok(brandPixels(lettering).ink > 80, "PenEcho letters remain visible below the symbol");
     assert.ok(counts.white > 35000, "background remains clean white");
   }
 });
 
-test("desktop icons show the blue pen mark on a white Mac tile and a transparent Windows background", async () => {
+test("desktop icons show the blue nautilus mark on a white Mac tile and a transparent Windows background", async () => {
   const ico = fs.readFileSync(path.join(ROOT, "build/icons/penecho.ico")),
     icns = fs.readFileSync(path.join(ROOT, "build/icons/penecho.icns"));
   assert.equal(ico.readUInt16LE(2), 1);
@@ -539,9 +565,9 @@ test("desktop icons show the blue pen mark on a white Mac tile and a transparent
     assert.equal(pixels.info.width, 1024);
     assert.equal(pixels.info.height, 1024);
     const counts = brandPixels(pixels.data);
-    assert.ok(counts.blue > 20000, "blue pen mark must survive icon generation");
+    assert.ok(counts.blue > 20000, "blue mark must survive icon generation");
     const mark = blueBox(pixels);
-    assert.ok(Math.abs(mark.cx - 512) < 40 && Math.abs(mark.cy - 512) < 40, "pen mark stays centered");
+    assert.ok(Math.abs(mark.cx - 512) < 40 && Math.abs(mark.cy - 512) < 40, "mark stays centered");
     assert.equal(pixels.data[3], 0, "outer corners stay transparent");
   }
   assert.ok(brandPixels(windows.data).transparent > 600000);
@@ -596,7 +622,7 @@ test("desktop Canvas file picker is sender-guarded, single-file, and type-limite
   }
   assert.doesNotMatch(handler, /name:"All files"|extensions:\["\*"\]/);
   assert.match(handler, /if \(result\.canceled \|\| !selectedPath\) return \{ canceled:true \}/);
-  assert.match(handler, /pickerToken:issueNativePickerGrant\(\{ selectedPath, kind:"file" \}\)/);
+  assert.match(handler, /pickerToken:await serverProcess\.request\("picker-grant", \{ selectedPath, kind:"file" \}\)/);
   assert.doesNotMatch(main, /penecho:pick-project-directory|kind:"folder"/);
 });
 
@@ -683,7 +709,7 @@ test("desktop updates resolve published GitHub Releases for each packaged target
   assert.equal(requests.length, 2);
   assert.equal(await manager.download(), true);
   assert.equal(downloads[0].asset.name, "PenEcho-0.7.1-mac-arm64.zip");
-  assert.equal(downloads[0].destination, path.join("/tmp", "penecho-updates", "PenEcho-0.7.1-mac-arm64.zip"));
+  assert.equal(downloads[0].destination, path.join("/tmp", "penecho-update", "PenEcho-0.7.1-mac-arm64.zip"));
   assert.ok(states.some(state => state.status === "downloading" && state.progress === 47.2));
   assert.equal(manager.getState().status, "ready");
   assert.equal(await manager.install(), true);
@@ -800,6 +826,41 @@ test("desktop update checks stay silent when current and reset dismissal on a ne
   assert.ok(firstStates.some(state => state.status === "up-to-date"));
 });
 
+test("desktop updates order beta, rc and final versions and keep previews from stable users", async () => {
+  const release = (version, extra = {}) => {
+    const name = `PenEcho-Setup-${version}-win-x64.exe`;
+    return { tag_name:`v${version}`, prerelease:version.includes("-"), assets:[{ name, browser_download_url:`https://github.com/penecho/penecho/releases/download/v${version}/${name}` }], ...extra };
+  };
+  const offered = async (currentVersion, releases) => {
+    let requested = "";
+    const manager = createUpdateManager({
+      app:{ getVersion:() => currentVersion, getPath:() => "/tmp" }, platform:"win32", arch:"x64", logger:{ warn:() => {} },
+      fetchImpl:async url => {
+        requested = url;
+        return { ok:true, json:async () => url === RELEASES_API_URL ? releases : releases.find(value => !value.prerelease && !value.draft) };
+      },
+    });
+    assert.equal(await manager.check(true), true, manager.getState().error);
+    assert.equal(requested, currentVersion.includes("-") ? RELEASES_API_URL : RELEASE_API_URL);
+    return manager.getState().updateAvailable ? manager.getState().version : "";
+  };
+  const stable = release("1.4.0");
+  assert.equal(await offered("1.5.0-beta.1", [release("1.5.0-beta.2"), stable]), "1.5.0-beta.2");
+  assert.equal(await offered("1.5.0-beta.2", [release("1.5.0-beta.10"), stable]), "1.5.0-beta.10");
+  assert.equal(await offered("1.5.0-beta.10", [release("1.5.0-beta.2"), stable]), "");
+  assert.equal(await offered("1.5.0-beta.2", [release("1.5.0-beta.2"), stable]), "");
+  assert.equal(await offered("1.5.0-beta.10", [release("1.5.0-rc.1"), stable]), "1.5.0-rc.1");
+  assert.equal(await offered("1.5.0-rc.1", [release("1.5.0-beta.11"), stable]), "");
+  assert.equal(await offered("1.5.0-rc.2", [release("1.5.0"), release("1.5.0-rc.3")]), "1.5.0");
+  assert.equal(await offered("1.5.0-beta.1", [stable, release("1.5.0-rc.1"), release("1.5.0-beta.3")]), "1.5.0-rc.1", "the largest version wins, not the newest date");
+  assert.equal(await offered("1.5.0-beta.1", [release("1.5.0-beta.3", { assets:[] }), release("1.5.0-beta.2")]), "1.5.0-beta.2");
+  assert.equal(await offered("1.5.0-beta.1", [release("1.5.0-beta.3", { draft:true }), stable]), "");
+  assert.equal(await offered("1.5.0-beta.1", [{ tag_name:"nightly", name:"9.0.0" }, stable]), "");
+  assert.equal(await offered("1.4.0", [release("1.5.0-beta.2"), stable]), "", "stable users are not offered a preview");
+  assert.equal(await offered("1.3.0", [release("1.5.0-beta.2"), stable]), "1.4.0");
+  assert.equal(await offered("1.5.0", [release("1.5.0"), release("1.6.0-beta.1")]), "");
+});
+
 test("unsigned desktop updater accepts only exact PenEcho release assets", () => {
   const release = {
     version:"0.7.2",
@@ -901,7 +962,7 @@ test("unsigned macOS updater validates the extracted app and schedules an atomic
   }
 });
 
-test("unsigned Windows updater launches the downloaded Squirrel Setup silently", async () => {
+test("Windows updater runs a downloaded Setup so that it opens PenEcho", async () => {
   const calls = [], app = { quit:() => { app.quitCalled = true; } };
   assert.equal(await installDownloadedUpdate({
     app,
@@ -912,35 +973,136 @@ test("unsigned Windows updater launches the downloaded Squirrel Setup silently",
       return { unref:() => {} };
     },
   }), true);
-  assert.deepEqual(calls[0].args, ["--silent"]);
+  assert.deepEqual(calls[0].args, []);
   assert.equal(calls[0].options.detached, true);
-  assert.equal(calls[0].options.windowsHide, true);
   assert.equal(app.quitCalled, true);
 });
 
-test("desktop CLI setup uses official installers without requiring npm", () => {
+test("Windows updater installs the package beside the running version and opens it after closing", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-win-update-")),
+    root = path.join(directory, "penecho"), exe = path.join(root, "app-1.4.0", "PenEcho.exe"),
+    updateExe = path.join(root, "Update.exe"), downloads = path.join(directory, "downloads"),
+    downloadedPath = path.join(downloads, packageName("1.5.0-beta.2")),
+    spawns = [], app = { quits:0, getPath:() => exe, quit() { this.quits += 1; } },
+    run = runCommand => installDownloadedUpdate({
+      app, platform:"win32", version:"1.5.0-beta.2", downloadedPath, runCommand,
+      spawnImpl:(command, args, options) => { spawns.push({ command, args, options }); return { unref:() => {} }; },
+    });
+  try {
+    fs.mkdirSync(path.dirname(exe), { recursive:true });
+    fs.mkdirSync(downloads);
+    fs.writeFileSync(downloadedPath, "package");
+    await assert.rejects(run(async () => ""), /installed with its Setup/);
+    fs.writeFileSync(updateExe, "");
+    await assert.rejects(run(async () => { throw new Error("disk full"); }), /disk full/);
+    await assert.rejects(run(async () => ""), /did not install PenEcho v1\.5\.0-beta\.2/);
+    assert.equal(app.quits, 0, "a failed install leaves PenEcho open");
+    assert.deepEqual(fs.readdirSync(downloads), ["penecho-1.5.0-beta2-full.nupkg"], "and can be tried again");
+    let releases = "";
+    assert.equal(await run(async (command, args) => {
+      assert.equal(command, updateExe);
+      assert.equal(app.quits, 0);
+      releases = fs.readFileSync(path.join(args[0].replace("--update=", ""), "RELEASES"), "utf8");
+      fs.mkdirSync(path.join(root, "app-1.5.0-beta2"));
+      fs.writeFileSync(path.join(root, "app-1.5.0-beta2", "PenEcho.exe"), "");
+    }), true);
+    assert.equal(releases, `${require("node:crypto").createHash("sha1").update("package").digest("hex").toUpperCase()} penecho-1.5.0-beta2-full.nupkg 7`);
+    assert.deepEqual([spawns.length, spawns[0].command, spawns[0].args, spawns[0].options.detached], [1, updateExe, ["--processStartAndWait", "PenEcho.exe"], true]);
+    assert.equal(app.quits, 1);
+    assert.deepEqual(fs.readdirSync(downloads), [], "the download is removed");
+  } finally {
+    fs.rmSync(directory, { recursive:true, force:true });
+  }
+});
+
+test("Windows takes the package when Squirrel sees it as newer, and Setup otherwise", () => {
+  const pick = (version, current, platform = "win32", arch = "x64", names = [packageName(version), `PenEcho-Setup-${version}-win-${arch}.exe`]) =>
+    releaseAsset({ version, assets:names.map(name => ({ name, url:`https://github.com/penecho/penecho/releases/download/v${version}/${name}` })) }, platform, arch, current)?.name;
+  assert.equal(pick("1.4.0", "1.3.0"), "penecho-1.4.0-full.nupkg");
+  assert.equal(pick("1.5.0", "1.5.0-rc.1"), "penecho-1.5.0-full.nupkg");
+  assert.equal(pick("1.5.0-rc.1", "1.5.0-beta.2"), "penecho-1.5.0-rc1-full.nupkg");
+  assert.equal(pick("1.5.0-beta.10", "1.5.0-beta.2"), "PenEcho-Setup-1.5.0-beta.10-win-x64.exe");
+  assert.equal(pick("1.4.0", "1.3.0", "win32", "x64", ["PenEcho-Setup-1.4.0-win-x64.exe"]), "PenEcho-Setup-1.4.0-win-x64.exe");
+  assert.equal(pick("1.4.0", "1.3.0", "win32", "arm64"), "PenEcho-Setup-1.4.0-win-arm64.exe");
+});
+
+test("a check during an install leaves it installing", async () => {
+  let installs = 0, release;
+  const manager = createUpdateManager({
+    app:{ getVersion:() => "1.4.0" }, platform:"win32", arch:"x64", logger:{ warn() {} },
+    fetchImpl:async () => ({ ok:true, json:async () => ({ tag_name:"v1.5.0", assets:[{ name:packageName("1.5.0"), browser_download_url:`https://github.com/penecho/penecho/releases/download/v1.5.0/${packageName("1.5.0")}` }] }) }),
+    downloadImpl:async () => "package.nupkg",
+    installImpl:() => { installs += 1; return new Promise(resolve => { release = resolve; }); },
+  });
+  await manager.check(true);
+  await manager.download();
+  const installing = manager.install();
+  assert.equal(await manager.check(false), true);
+  assert.equal(manager.getState().status, "installing");
+  assert.equal(await manager.install(), false, "and a second click starts nothing");
+  release();
+  await installing;
+  assert.equal(installs, 1);
+});
+
+test("the Windows install event opens PenEcho after an older version's silent Setup", () => {
+  const { EventEmitter } = require("node:events"),
+    child = new EventEmitter();
+  let done = 0, call = null;
+  reopenAfterSilentUpdate({
+    updateExe:"C:\\Users\\O'Neil\\penecho\\Update.exe", exeName:"PenEcho.exe", done:() => { done += 1; },
+    spawnImpl:(command, args, options) => { call = { command, args, options }; return child; },
+  });
+  const decode = value => Buffer.from(value, "base64").toString("utf16le"), script = decode(call.args.at(-1)),
+    watch = decode(script.match(/'-EncodedCommand','([^']+)'/)[1]);
+  assert.match(call.command, /powershell\.exe$/);
+  assert.ok(!call.options.detached, "detached, PowerShell runs nothing");
+  assert.match(watch, /Wait-Process/);
+  assert.match(script, /PenEcho-Setup-\*[\s\S]*penecho-updates/);
+  assert.match(watch, /'C:\\Users\\O''Neil\\penecho\\Update\.exe'/);
+  assert.equal(done, 0);
+  child.emit("exit", 0);
+  assert.equal(done, 1);
+  const main = fs.readFileSync(path.join(ROOT, "desktop", "main.js"), "utf8");
+  assert.match(main, /event === "--squirrel-install"[\s\S]*?reopenAfterSilentUpdate/);
+});
+
+test("desktop CLI setup uses official installers for Kimi, Claude, and standard-location latest Codex", () => {
   const options = { platform:"darwin", home:"/Users/example", stateDir:"/Users/example/Library/Application Support/PenEcho" },
+    winOptions = { platform:"win32", home:"C:\\Users\\example", stateDir:"C:\\Users\\example\\AppData\\Roaming\\PenEcho", env:{ LOCALAPPDATA:"C:\\Users\\example\\AppData\\Local" } },
     resolvedHome = path.resolve(options.home), resolvedStateDir = path.resolve(options.stateDir),
     kimiPath = managedCliPath("kimi-cli", options),
-    codexPath = managedCliPath("codex-cli", options),
     claudePath = managedCliPath("claude-cli", options),
+    codexMacPath = managedCliPath("codex-cli", options),
+    codexWinPath = managedCliPath("codex-cli", winOptions),
     kimi = installInvocation("kimi-cli", "/tmp/kimi.sh", options),
-    codex = installInvocation("codex-cli", "/tmp/codex.sh", options),
-    latestCodex = installInvocation("codex-cli", "/tmp/codex.sh", { ...options, codexVersion:"latest" }),
-    claude = installInvocation("claude-cli", "/tmp/claude.sh", options);
+    claude = installInvocation("claude-cli", "/tmp/claude.sh", options),
+    codexMac = installInvocation("codex-cli", "/tmp/codex.sh", options),
+    codexWin = installInvocation("codex-cli", "C:\\tmp\\codex.ps1", winOptions);
+  // Windows PowerShell 5.1 asks before every Invoke-WebRequest without -UseBasicParsing.
+  for (const provider of ["kimi-cli", "codex-cli", "claude-cli", "pi-cli", "omp-cli", "antigravity-cli"]) {
+    const { args, env } = installInvocation(provider, "C:\\tmp\\a b\\install.ps1", winOptions), command = args[args.indexOf("-Command") + 1];
+    assert.ok(command.startsWith("$PSDefaultParameterValues['Invoke-WebRequest:UseBasicParsing'] = $true;"), provider);
+    assert.equal(env.PENECHO_INSTALLER_SCRIPT, "C:\\tmp\\a b\\install.ps1");
+  }
   assert.equal(kimiPath, path.join(resolvedStateDir, "tools", "kimi", "bin", "kimi"));
-  assert.equal(codexPath, path.join(resolvedStateDir, "tools", "codex", "bin", "codex"));
   assert.equal(claudePath, path.join(resolvedHome, ".local", "bin", "claude"));
+  assert.equal(codexMacPath, path.join(resolvedHome, ".local", "bin", "codex"));
+  assert.equal(codexWinPath, path.join(path.resolve("C:\\Users\\example\\AppData\\Local"), "Programs", "OpenAI", "Codex", "bin", "codex.exe"));
   assert.equal(kimi.command, "/bin/bash");
   assert.equal(kimi.env.KIMI_INSTALL_DIR, path.dirname(path.dirname(kimiPath)));
   assert.equal(kimi.env.KIMI_NO_MODIFY_PATH, "1");
-  assert.equal(codex.command, "/bin/sh");
-  assert.equal(codex.env.CODEX_NON_INTERACTIVE, "1");
-  assert.equal(codex.env.CODEX_RELEASE, CODEX_CLI_PINNED_VERSION);
-  assert.equal(latestCodex.env.CODEX_RELEASE, "latest");
-  assert.equal(codex.env.CODEX_INSTALL_DIR, path.dirname(codexPath));
-  assert.equal(codex.env.CODEX_HOME, path.join(resolvedStateDir,"tools","codex","home"));
   assert.deepEqual(claude.args, ["/tmp/claude.sh", "stable"]);
+  assert.equal(codexMac.command, "/bin/sh");
+  assert.deepEqual(codexMac.args, ["/tmp/codex.sh"]);
+  assert.equal(codexMac.env.CODEX_RELEASE, "latest");
+  assert.equal(codexMac.env.CODEX_NON_INTERACTIVE, "1");
+  assert.equal(codexMac.env.CODEX_HOME, path.join(resolvedHome, ".codex"));
+  assert.equal(codexMac.env.CODEX_INSTALL_DIR, path.dirname(codexMacPath));
+  assert.equal(codexWin.env.CODEX_RELEASE, "latest");
+  assert.equal(codexWin.env.CODEX_NON_INTERACTIVE, "1");
+  assert.equal(codexWin.env.CODEX_HOME, path.join(path.resolve(winOptions.home), ".codex"));
+  assert.equal(codexWin.env.CODEX_INSTALL_DIR, path.dirname(codexWinPath));
 });
 
 test("CLI inspection distinguishes missing, login, ready, and repair states on macOS and Windows", async () => {
@@ -959,8 +1121,8 @@ test("CLI inspection distinguishes missing, login, ready, and repair states on m
   assert.equal(auth.loginCommand, "claude auth login");
   assert.equal(auth.executable, "C:\\Tools\\claude.exe");
 
-  const ready = await inspectCli("codex-cli", { ...options, platform:"darwin", preflight:async () => ({ ok:true, source:"managed", executable:"/tmp/codex", version:"codex 1.2.3" }) });
-  assert.deepEqual({ state:ready.state, source:ready.source, executable:ready.executable, version:ready.version }, { state:"ready", source:"managed", executable:"/tmp/codex", version:"codex 1.2.3" });
+  const ready = await inspectCli("codex-cli", { ...options, platform:"darwin", preflight:async () => ({ ok:true, source:"system", executable:"/tmp/codex", version:"codex 1.2.3" }) });
+  assert.deepEqual({ state:ready.state, source:ready.source, executable:ready.executable, version:ready.version }, { state:"ready", source:"system", executable:"/tmp/codex", version:"codex 1.2.3" });
 
   const repair = await inspectCli("kimi-cli", { ...options, platform:"darwin", preflight:async () => ({ ok:false, issue:"execution", source:"managed", executable:"/tmp/kimi" }) });
   assert.equal(repair.state, "repair_required");
@@ -976,67 +1138,94 @@ test("Windows CLI discovery uses semicolon-separated PATH entries", () => {
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
 });
 
-test("automatic CLI setup validates the official script and installed executable", async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cli-install-test-")), home = path.join(directory, "home"), stateDir = path.join(directory, "state"),
-    expected = managedCliPath("codex-cli", { platform:"darwin", home, stateDir }), calls = [];
+test("automatic Codex CLI setup reuses an existing user Codex/app first and otherwise installs official latest into the standard user path", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-codex-standard-install-test-")),
+    home = path.join(directory, "home"),
+    stateDir = path.join(directory, "state"),
+    appDir = path.join(directory, "Applications");
   try {
-    const result = await installCli("codex-cli", {
+    // 1. Existing official Codex Desktop app on macOS is reused without downloading anything.
+    const appCodex = path.join(appDir, "ChatGPT.app", "Contents", "Resources", "codex-cli", "bin", "codex");
+    fs.mkdirSync(path.dirname(appCodex), { recursive:true });
+    fs.writeFileSync(appCodex, "#!/bin/sh\n", { mode:0o755 });
+    const reused = await installCli("codex-cli", {
       platform:"darwin", home, stateDir,
+      env:{ HOME:home, PATH:"" },
+      appFolders:[appDir],
+      systemDirs:[],
+      fetchImpl:async () => { throw new Error("must not download when official Codex app is installed"); },
+      runner:async (command, args) => {
+        assert.equal(command, appCodex);
+        assert.deepEqual(args, ["--version"]);
+        return { output:"codex-cli 0.172.0" };
+      },
+    });
+    assert.equal(reused.alreadyInstalled, true);
+    assert.equal(reused.executable, appCodex);
+    assert.equal(reused.version, "codex-cli 0.172.0");
+
+    // 2. When no user Codex exists on Windows, installs official latest into %LOCALAPPDATA%\Programs\OpenAI\Codex\bin (never tools\codex).
+    const localAppData = path.join(directory, "LocalAppData");
+    const expectedWin = managedCliPath("codex-cli", { platform:"win32", home, stateDir, env:{ LOCALAPPDATA:localAppData } });
+    let fetchCount = 0;
+    const winInstallOpts = {
+      platform:"win32", home, stateDir,
+      env:{ USERPROFILE:home, LOCALAPPDATA:localAppData, PATH:"", CODEX_CA_CERTIFICATE:path.join(directory, "missing-ca.pem") },
+      windowsAppsRoot:path.join(directory, "empty-winapps"),
+      fetchImpl:async url => {
+        fetchCount += 1;
+        assert.equal(url, "https://chatgpt.com/codex/install.ps1");
+        return new Response("# CODEX_INSTALL_DIR\n", { status:200 });
+      },
+      runner:async (_command, args, options) => {
+        if (args[0] === "--version") return { output:"codex-cli 0.185.0" };
+        assert.equal(options.env.CODEX_RELEASE, "latest");
+        assert.equal(options.env.CODEX_NON_INTERACTIVE, "1");
+        assert.equal(options.env.CODEX_HOME, path.join(home, ".codex"));
+        assert.equal(options.env.CODEX_INSTALL_DIR, path.dirname(expectedWin));
+        assert.equal(options.env.CODEX_CA_CERTIFICATE, undefined, "dangling CA cert must be stripped for installer");
+        await new Promise(resolve => setTimeout(resolve, 20));
+        fs.mkdirSync(path.dirname(expectedWin), { recursive:true });
+        fs.writeFileSync(expectedWin, "MZ");
+        return { output:"installed" };
+      },
+    };
+    const [firstWin, secondWin] = await Promise.all([installCli("codex-cli", winInstallOpts), installCli("codex-cli", winInstallOpts)]);
+    assert.equal(fetchCount, 1, "concurrent Codex installs for the same home+platform are deduplicated");
+    assert.equal(firstWin.alreadyInstalled, false);
+    assert.equal(firstWin.executable, expectedWin);
+    assert.equal(firstWin.version, "codex-cli 0.185.0");
+    assert.deepEqual(secondWin, firstWin);
+    assert.equal(fs.existsSync(path.join(stateDir, "tools", "codex")), false, "never retains a PenEcho-private tools/codex copy");
+    assert.equal(fs.existsSync(path.join(stateDir, "installers", "codex-cli.ps1")), false, "cleans up downloaded installer script");
+
+    // 3. When a legacy broken candidate on PATH fails --version, installs official latest into ~/.local/bin cleanly.
+    const brokenDir = path.join(directory, "broken-bin");
+    const brokenCodex = path.join(brokenDir, "codex");
+    const expectedMac = managedCliPath("codex-cli", { platform:"darwin", home, stateDir });
+    fs.mkdirSync(brokenDir, { recursive:true });
+    fs.writeFileSync(brokenCodex, "#!/bin/sh\n", { mode:0o755 });
+    const repaired = await installCli("codex-cli", {
+      platform:"darwin", home, stateDir,
+      env:{ HOME:home, PATH:brokenDir },
+      appFolders:[],
+      systemDirs:[],
       fetchImpl:async url => {
         assert.equal(url, "https://chatgpt.com/codex/install.sh");
         return new Response("#!/bin/sh\n# CODEX_INSTALL_DIR\n", { status:200 });
       },
       runner:async (command, args, options) => {
-        calls.push({ command, args, env:options.env });
-        if (args[0] === "--version") return { output:`codex-cli ${CODEX_CLI_PINNED_VERSION}` };
-        const staged=path.join(options.env.CODEX_INSTALL_DIR,"codex");
-        fs.mkdirSync(path.dirname(staged), { recursive:true });
-        fs.writeFileSync(staged, "test");
-        fs.writeFileSync(path.join(path.dirname(staged),codexHostName("darwin")),"host");
-        fs.writeFileSync(path.join(path.dirname(staged),"runtime-sidecar"),"sidecar");
+        if (command === brokenCodex) throw new Error("broken binary");
+        if (args[0] === "--version") return { output:"codex-cli 0.185.0" };
+        assert.equal(options.env.CODEX_INSTALL_DIR, path.dirname(expectedMac));
+        fs.mkdirSync(path.dirname(expectedMac), { recursive:true });
+        fs.writeFileSync(expectedMac, "#!/bin/sh\n", { mode:0o755 });
         return { output:"installed" };
       },
     });
-    assert.equal(result.executable, expected);
-    assert.equal(result.version, `codex-cli ${CODEX_CLI_PINNED_VERSION}`);
-    assert.equal(calls.length, 2);
-    assert.equal(calls[0].env.CODEX_HOME,path.join(stateDir,"tools","codex","home"));
-    assert.equal(calls[0].env.CODEX_RELEASE,CODEX_CLI_PINNED_VERSION);
-    assert.notEqual(calls[0].env.CODEX_HOME,path.join(home,".codex"));
-    assert.ok(calls[0].env.CODEX_INSTALL_DIR.startsWith(path.join(stateDir,"installers")));
-    assert.equal(fs.readFileSync(expected,"utf8"),"test");
-    assert.equal(fs.readFileSync(path.join(path.dirname(expected),"codex-code-mode-host"),"utf8"),"host");
-    assert.equal(fs.readFileSync(path.join(path.dirname(expected),"runtime-sidecar"),"utf8"),"sidecar");
-    assert.equal(fs.existsSync(path.join(stateDir, "installers", "codex-cli.sh")), false);
-  } finally { fs.rmSync(directory, { recursive:true, force:true }); }
-});
-
-test("automatic Codex setup keeps the existing managed CLI when the downloaded version is not pinned", async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cli-version-test-")), home = path.join(directory, "home"), stateDir = path.join(directory, "state"),
-    expected = managedCliPath("codex-cli", { platform:"darwin", home, stateDir });
-  try {
-    fs.mkdirSync(path.dirname(expected), { recursive:true });
-    fs.writeFileSync(expected, "known-good");
-    fs.writeFileSync(path.join(path.dirname(expected),"codex-code-mode-host"),"known-good-host");
-    await assert.rejects(()=>installCli("codex-cli", {
-      platform:"darwin", home, stateDir,
-      fetchImpl:async () => new Response("#!/bin/sh\n# CODEX_INSTALL_DIR\n", { status:200 }),
-      runner:async (_command, args, options) => {
-        if (args[0] === "--version") return { output:"codex-cli 0.150.1" };
-        const staged=path.join(options.env.CODEX_INSTALL_DIR,"codex");
-        fs.mkdirSync(path.dirname(staged), { recursive:true });
-        fs.writeFileSync(staged, "unapproved");
-        fs.writeFileSync(path.join(path.dirname(staged),"codex-code-mode-host"),"unapproved-host");
-        return { output:"installed" };
-      },
-    }), error => {
-      assert.equal(error.code,"CODEX_CLI_VERSION_INCOMPATIBLE");
-      assert.equal(error.expectedVersion,CODEX_CLI_PINNED_VERSION);
-      assert.equal(error.actualVersion,"0.150.1");
-      return true;
-    });
-    assert.equal(fs.readFileSync(expected,"utf8"),"known-good");
-    assert.equal(fs.readFileSync(path.join(path.dirname(expected),"codex-code-mode-host"),"utf8"),"known-good-host");
+    assert.equal(repaired.alreadyInstalled, false);
+    assert.equal(repaired.executable, expectedMac);
+    assert.equal(repaired.version, "codex-cli 0.185.0");
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
 });
 
@@ -1047,50 +1236,6 @@ test("Codex bundle validation requires the platform host beside the CLI", () => 
     assert.throws(()=>assertCodexCliBundle(executable,"win32"),/codex-code-mode-host\.exe was not found beside codex\.exe/);
     fs.writeFileSync(host,"host");
     assert.deepEqual(assertCodexCliBundle(executable,"win32"),{executable:path.resolve(executable),hostExecutable:host});
-  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
-});
-
-test("automatic Windows Codex setup publishes the host and sidecars with codex.exe", async () => {
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-win-codex-install-test-")),home=path.join(directory,"home"),stateDir=path.join(directory,"state"),
-    executable=managedCliPath("codex-cli",{platform:"win32",home,stateDir}),bin=path.dirname(executable);
-  try {
-    const result=await installCli("codex-cli",{
-      platform:"win32",home,stateDir,
-      fetchImpl:async()=>new Response("# CODEX_INSTALL_DIR\n",{status:200}),
-      runner:async(_command,args,options)=>{
-        if(args[0]==="--version")return{output:`codex-cli ${CODEX_CLI_PINNED_VERSION}`};
-        fs.mkdirSync(options.env.CODEX_INSTALL_DIR,{recursive:true});
-        fs.writeFileSync(path.join(options.env.CODEX_INSTALL_DIR,"codex.exe"),"codex");
-        fs.writeFileSync(path.join(options.env.CODEX_INSTALL_DIR,"codex-code-mode-host.exe"),"host");
-        fs.writeFileSync(path.join(options.env.CODEX_INSTALL_DIR,"codex-command-runner.exe"),"sidecar");
-        return{output:"installed"};
-      },
-    });
-    assert.equal(result.executable,executable);
-    assert.equal(result.hostExecutable,path.join(bin,"codex-code-mode-host.exe"));
-    assert.equal(fs.readFileSync(path.join(bin,"codex-code-mode-host.exe"),"utf8"),"host");
-    assert.equal(fs.readFileSync(path.join(bin,"codex-command-runner.exe"),"utf8"),"sidecar");
-  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
-});
-
-test("automatic Codex setup keeps the old bundle when the staged host is missing", async () => {
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-codex-missing-host-install-test-")),home=path.join(directory,"home"),stateDir=path.join(directory,"state"),
-    executable=managedCliPath("codex-cli",{platform:"darwin",home,stateDir}),host=path.join(path.dirname(executable),"codex-code-mode-host");
-  try {
-    fs.mkdirSync(path.dirname(executable),{recursive:true});
-    fs.writeFileSync(executable,"old-codex");
-    fs.writeFileSync(host,"old-host");
-    await assert.rejects(()=>installCli("codex-cli",{
-      platform:"darwin",home,stateDir,
-      fetchImpl:async()=>new Response("# CODEX_INSTALL_DIR\n",{status:200}),
-      runner:async(_command,_args,options)=>{
-        fs.mkdirSync(options.env.CODEX_INSTALL_DIR,{recursive:true});
-        fs.writeFileSync(path.join(options.env.CODEX_INSTALL_DIR,"codex"),"new-codex");
-        return{output:"installed"};
-      },
-    }),/codex-code-mode-host was not found beside codex/);
-    assert.equal(fs.readFileSync(executable,"utf8"),"old-codex");
-    assert.equal(fs.readFileSync(host,"utf8"),"old-host");
   } finally { fs.rmSync(directory,{recursive:true,force:true}); }
 });
 
@@ -1120,5 +1265,475 @@ test("automatic Kimi CLI setup validates the official installer and managed exec
     assert.equal(calls[0].command, "/bin/bash");
     assert.equal(calls[0].env.KIMI_NO_MODIFY_PATH, "1");
     assert.equal(fs.existsSync(path.join(stateDir, "installers", "kimi-cli.sh")), false);
+
+    // Windows Kimi installer uses $KimiBinaryBase (camelCase), which must pass validation.
+    const expectedWin = managedCliPath("kimi-cli", { platform:"win32", home, stateDir });
+    const winResult = await installCli("kimi-cli", {
+      platform:"win32", home, stateDir,
+      fetchImpl:async url => {
+        assert.equal(url, "https://code.kimi.com/kimi-code/install.ps1");
+        return new Response("$KimiBinaryBase = 'https://code.kimi.com/kimi-code/binaries'\n", { status:200 });
+      },
+      runner:async (_command, args) => {
+        if (args[0] === "--version") return { output:"2.7.3" };
+        fs.mkdirSync(path.dirname(expectedWin), { recursive:true });
+        fs.writeFileSync(expectedWin, "MZ");
+        return { output:"installed" };
+      },
+    });
+    assert.equal(winResult.executable, expectedWin);
+    assert.equal(winResult.version, "2.7.3");
+  } finally { fs.rmSync(directory, { recursive:true, force:true }); }
+});
+
+test("automatic CLI setup supports OpenCode, Pi, omp, Antigravity, and dsh", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-all-agents-install-")),
+    home = path.join(directory, "home"),
+    stateDir = path.join(directory, "state");
+  fs.mkdirSync(home, { recursive:true });
+  fs.mkdirSync(stateDir, { recursive:true });
+  try {
+    assert.equal(canInspectCli("kimi-cli"), true);
+    assert.equal(canInspectCli("codex-cli"), true);
+    assert.equal(canInspectCli("claude-cli"), true);
+    for (const provider of ["opencode-cli", "pi-cli", "omp-cli", "antigravity-cli", "dsh-cli"]) {
+      assert.equal(canInspectCli(provider), false);
+    }
+
+    // OpenCode macOS (v2 script)
+    const expectedOpenCode = managedCliPath("opencode-cli", { platform:"darwin", home, stateDir });
+    const oc = await installCli("opencode-cli", {
+      platform:"darwin", home, stateDir,
+      fetchImpl:async url => {
+        assert.equal(url, "https://opencode.ai/v2/install");
+        return new Response("#!/usr/bin/env bash\nAPP=opencode\n", { status:200 });
+      },
+      runner:async (command, args) => {
+        if (args[0] === "--version") return { output:"2.4.1" };
+        assert.equal(command, "/bin/bash");
+        fs.mkdirSync(path.dirname(expectedOpenCode), { recursive:true });
+        fs.writeFileSync(expectedOpenCode, "#!/bin/sh\n", { mode:0o755 });
+        return { output:"installed" };
+      },
+    });
+    assert.equal(oc.executable, expectedOpenCode);
+    assert.equal(oc.version, "2.4.1");
+
+    // Pi macOS (places launcher in ~/.pi/agent/bin/pi or ~/.local/bin/pi)
+    const piBin = path.join(home, ".local", "bin", "pi");
+    const pi = await installCli("pi-cli", {
+      platform:"darwin", home, stateDir,
+      fetchImpl:async url => {
+        assert.equal(url, "https://pi.dev/install.sh");
+        return new Response('#!/bin/sh\nPI_PACKAGE="@earendil-works/pi-coding-agent"\n', { status:200 });
+      },
+      runner:async (_command, args) => {
+        if (args[0] === "--version") return { output:"0.90.0" };
+        fs.mkdirSync(path.dirname(piBin), { recursive:true });
+        fs.writeFileSync(piBin, "#!/bin/sh\n", { mode:0o755 });
+        return { output:"installed" };
+      },
+    });
+    assert.equal(pi.executable, piBin);
+
+    // omp macOS (falls back to omp.sh --binary and PI_INSTALL_DIR=~/.local/bin when GitHub Releases is unavailable)
+    const expectedOmp = managedCliPath("omp-cli", { platform:"darwin", home, stateDir });
+    const omp = await installCli("omp-cli", {
+      platform:"darwin", home, stateDir,
+      ompRetryDelayMs:0,
+      fetchImpl:async url => {
+        if (url === "https://omp.sh/install") return new Response('#!/bin/sh\nREPO="can1357/oh-my-pi"\n', { status:200 });
+        return new Response("unavailable", { status:503 });
+      },
+      runner:async (command, args, options) => {
+        if (args[0] === "--version") return { output:"18.9.0" };
+        assert.equal(command, "/bin/sh");
+        assert.equal(args[1], "--binary");
+        assert.equal(options.env.PI_INSTALL_DIR, path.dirname(expectedOmp));
+        fs.mkdirSync(path.dirname(expectedOmp), { recursive:true });
+        fs.writeFileSync(expectedOmp, "#!/bin/sh\n", { mode:0o755 });
+        return { output:"installed" };
+      },
+    });
+    assert.equal(omp.executable, expectedOmp);
+
+    // Antigravity macOS
+    const expectedAgy = managedCliPath("antigravity-cli", { platform:"darwin", home, stateDir });
+    const agy = await installCli("antigravity-cli", {
+      platform:"darwin", home, stateDir,
+      fetchImpl:async url => {
+        assert.equal(url, "https://antigravity.google/cli/install.sh");
+        return new Response('#!/bin/bash\nDOWNLOAD_BASE_URL="https://antigravity-cli-auto-updater"\n', { status:200 });
+      },
+      runner:async (_command, args) => {
+        if (args[0] === "--version") return { output:"2.30.0" };
+        fs.mkdirSync(path.dirname(expectedAgy), { recursive:true });
+        fs.writeFileSync(expectedAgy, "#!/bin/sh\n", { mode:0o755 });
+        return { output:"installed" };
+      },
+    });
+    assert.equal(agy.executable, expectedAgy);
+
+    // dsh via npm (--prefix ~/.local)
+    const fakeNpm = path.join(directory, "fake-npm");
+    fs.writeFileSync(fakeNpm, "#!/bin/sh\n", { mode:0o755 });
+    const expectedDsh = managedCliPath("dsh-cli", { platform:"darwin", home, stateDir });
+    const dsh = await installCli("dsh-cli", {
+      platform:"darwin", home, stateDir,
+      npmExecutable:fakeNpm,
+      runner:async (command, args) => {
+        if (args[0] === "--version") return { output:"0.2.2" };
+        assert.equal(command, fakeNpm);
+        assert.deepEqual(args, ["install", "-g", "--prefix", path.join(home, ".local"), "@deepseek-ai/dsh@latest"]);
+        fs.mkdirSync(path.dirname(expectedDsh), { recursive:true });
+        fs.writeFileSync(expectedDsh, "#!/bin/sh\n", { mode:0o755 });
+        return { output:"added 1 package" };
+      },
+    });
+    assert.equal(dsh.executable, expectedDsh);
+    assert.equal(dsh.version, "0.2.2");
+  } finally { fs.rmSync(directory, { recursive:true, force:true }); }
+});
+
+test("browser-call.js and orch-call.js resolve to app.asar.unpacked when packaged and match forge asar.unpack", async () => {
+  const { resolveUnpackedAsarPath:resolveBrowser } = require("../src/server/project-lines/browser-call.js");
+  const { resolveUnpackedAsarPath:resolveOrch } = require("../src/server/project-lines/orch-call.js");
+  for (const resolveHelper of [resolveBrowser, resolveOrch]) {
+    const macAsar = "/Applications/PenEcho.app/Contents/Resources/app.asar/src/server/project-lines/browser-call.js";
+    const macUnpacked = "/Applications/PenEcho.app/Contents/Resources/app.asar.unpacked/src/server/project-lines/browser-call.js";
+    assert.equal(resolveHelper(macAsar, candidate => candidate === macUnpacked), macUnpacked);
+    assert.equal(resolveHelper(macAsar, () => false), macAsar);
+    const winAsar = "C:\\Users\\msi\\AppData\\Local\\penecho\\app-1.5.0\\resources\\app.asar\\src\\server\\project-lines\\browser-call.js";
+    const winUnpacked = "C:\\Users\\msi\\AppData\\Local\\penecho\\app-1.5.0\\resources\\app.asar.unpacked\\src\\server\\project-lines\\browser-call.js";
+    assert.equal(resolveHelper(winAsar, candidate => candidate === winUnpacked), winUnpacked);
+    const devPath = "/Users/dev/penecho/src/server/project-lines/browser-call.js";
+    assert.equal(resolveHelper(devPath, () => true), devPath);
+  }
+  const asarDir = path.join(ROOT, "tools", "electron", "node_modules", "@electron", "asar");
+  if (fs.existsSync(asarDir)) {
+    const asar = require(asarDir);
+    const forgeConfig = require("../forge.config.js");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-asar-unpack-"));
+    try {
+      const stage = path.join(tmp, "app"), archive = path.join(tmp, "app.asar");
+      for (const rel of [
+        "src/server/project-lines/browser-call.js",
+        "src/server/project-lines/orch-call.js",
+        "src/server/project-lines/service.js",
+        "node_modules/@vscode/ripgrep/bin/rg",
+      ]) {
+        const dest = path.join(stage, rel);
+        fs.mkdirSync(path.dirname(dest), { recursive:true });
+        fs.writeFileSync(dest, rel.endsWith(".js") ? "module.exports = {};\n" : "bin");
+      }
+      await asar.createPackageWithOptions(stage, archive, { unpack:forgeConfig.packagerConfig.asar.unpack });
+      assert.equal(fs.existsSync(path.join(tmp, "app.asar.unpacked", "src/server/project-lines/browser-call.js")), true);
+      assert.equal(fs.existsSync(path.join(tmp, "app.asar.unpacked", "src/server/project-lines/orch-call.js")), true);
+      assert.equal(fs.existsSync(path.join(tmp, "app.asar.unpacked", "node_modules/@vscode/ripgrep/bin/rg")), true);
+      assert.equal(fs.existsSync(path.join(tmp, "app.asar.unpacked", "src/server/project-lines/service.js")), false);
+    } finally { fs.rmSync(tmp, { recursive:true, force:true }); }
+  }
+});
+
+test("Windows dsh retries only npm mirror transport failures against the official registry", async t => {
+  const { EventEmitter } = require("node:events");
+  const { PassThrough } = require("node:stream");
+  const mirrorUrl = "https://cdn.npmmirror.com/packages/%40mixmark-io/domino/2.2.0/domino-2.2.0.tgz";
+  const npmFailure = (code, url = mirrorUrl) => `npm error code ${code}\nnpm error network request to ${url} failed, reason: socket hang up\n`;
+  const mirrorError = npmFailure("ECONNRESET");
+  const cases = [
+    { name:"configured registry works" },
+    { name:"mirror reset is recovered even when outside the displayed output", firstError:mirrorError + "npm error details\n".repeat(120), retries:true },
+    { name:"official retry failure is surfaced and stops", firstError:mirrorError, retries:true, retryError:"npm error code E404" },
+    { name:"non-network errors are surfaced directly", firstError:npmFailure("EACCES") },
+    { name:"other registry failures are surfaced directly", firstError:npmFailure("ECONNRESET", "https://cdn.npmmirror.com.example.org/package.tgz") },
+    { name:"version check failures do not trigger reinstall", versionError:mirrorError },
+  ];
+  for (const scenario of cases) await t.test(scenario.name, async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho dsh install-"));
+    const home = path.join(dir, "home"), stateDir = path.join(dir, "state");
+    const env = { APPDATA:path.join(home, "AppData", "Roaming"), npm_config_registry:"https://registry.npmmirror.com/" };
+    const executable = managedCliPath("dsh-cli", { platform:"win32", home, stateDir, env });
+    const installs = [];
+    let versionChecks = 0, retryCache;
+    try {
+      const install = installCli("dsh-cli", {
+        platform:"win32", home, stateDir, env, npmExecutable:path.join(dir, "npm.cmd"),
+        runner:(command, args, options) => runProcess(command, args, {
+          ...options,
+          spawnImpl(_command, childArgs, childOptions) {
+            assert.equal(childOptions.windowsVerbatimArguments, true);
+            assert.equal(childOptions.env.npm_config_registry, env.npm_config_registry);
+            const line = childArgs[3];
+            const child = Object.assign(new EventEmitter(), { stdout:new PassThrough(), stderr:new PassThrough() });
+            queueMicrotask(() => {
+              let error;
+              if (line.includes("--version")) {
+                versionChecks++;
+                error = scenario.versionError;
+                if (!error) child.stdout.end("0.2.2\n");
+              } else {
+                installs.push(line);
+                if (installs.length === 1) error = scenario.firstError;
+                else {
+                  retryCache = / --cache (?:"([^"]+)"|(\S+))"$/.exec(line)?.slice(1).find(Boolean);
+                  error = scenario.retryError;
+                }
+                if (!error) fs.writeFileSync(executable, "@echo off\n");
+              }
+              if (error) child.stderr.end(error);
+              child.emit("close", error ? 1 : 0);
+            });
+            return child;
+          },
+        }),
+      });
+      if (scenario.retryError) await assert.rejects(install, /official npm registry also failed:\nnpm error code E404/);
+      else if (scenario.versionError || (scenario.firstError && !scenario.retries)) await assert.rejects(install, /npm error code/);
+      else assert.deepEqual(await install, { provider:"dsh-cli", executable, version:"0.2.2", label:"dsh" });
+
+      assert.equal(installs.length, scenario.retries ? 2 : 1);
+      assert.equal(installs[0].endsWith(`--prefix "${path.dirname(executable)}" @deepseek-ai/dsh@latest"`), true);
+      assert.doesNotMatch(installs[0], /--registry|--cache/);
+      if (scenario.retries) {
+        assert.ok(installs[1].startsWith(`${installs[0].slice(0, -1)} --registry=https://registry.npmjs.org/ --@deepseek-ai:registry=https://registry.npmjs.org/ --cache `));
+        assert.ok(retryCache);
+        assert.equal(fs.existsSync(retryCache), false);
+      }
+      assert.equal(versionChecks, scenario.retryError || (scenario.firstError && !scenario.retries) ? 0 : 1);
+    } finally { fs.rmSync(dir, { recursive:true, force:true }); }
+  });
+});
+
+test("Windows Pi install checks the launcher before registering its folder on user PATH", async () => {
+  const { EventEmitter } = require("node:events");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-pi-win-install-")),
+    home = path.join(directory, "home"),
+    stateDir = path.join(directory, "state");
+  fs.mkdirSync(home, { recursive:true });
+  fs.mkdirSync(stateDir, { recursive:true });
+  try {
+    const expectedPi = managedCliPath("pi-cli", { platform:"win32", home, stateDir });
+    const piBinDir = path.dirname(expectedPi);
+    const scriptPath = path.join(stateDir, "installers", "pi-cli.ps1");
+    const calls = [];
+    const result = await installCli("pi-cli", {
+      platform:"win32",
+      home,
+      stateDir,
+      env:{
+        USERPROFILE:home,
+        LOCALAPPDATA:path.join(directory, "LocalAppData"),
+        APPDATA:path.join(directory, "Roaming"),
+        COMSPEC:"C:\\Windows\\System32\\cmd.exe",
+        Path:`C:\\Windows\\System32;${piBinDir.toUpperCase()}`,
+      },
+      fetchImpl:async url => {
+        assert.equal(url, "https://pi.dev/install.ps1");
+        return new Response('$PiPackage = "@earendil-works/pi-coding-agent"\n', { status:200 });
+      },
+      runner:async (command, args, options) => {
+        calls.push({ command, args, options });
+        if (calls.length === 1) {
+          assert.match(command, /powershell\.exe$/i);
+          assert.equal(options.env.PENECHO_INSTALLER_SCRIPT, scriptPath);
+          assert.equal(args.includes("-NonInteractive"), true);
+          assert.equal(args.includes("-Command"), true);
+          assert.equal(args.includes("-File"), false);
+          assert.match(args[args.indexOf("-Command") + 1], /function Read-Host \{ 'n' \};\s*\.\s*\$env:PENECHO_INSTALLER_SCRIPT/);
+          const pathEntries = String(options.env.Path || options.env.PATH || "").split(";");
+          assert.equal(pathEntries[0], piBinDir, "prepends Pi managed bin directory so Test-InstalledPiIsFirstOnPath passes");
+          assert.equal(pathEntries.filter(entry => entry.toLowerCase() === piBinDir.toLowerCase()).length, 1, "deduplicates Pi bin dir case-insensitively");
+          fs.mkdirSync(piBinDir, { recursive:true });
+          fs.writeFileSync(expectedPi, "@echo off\r\n");
+          return { output:"Managed Pi install complete" };
+        }
+        if (calls.length === 2) {
+          assert.equal(command, "C:\\Windows\\System32\\cmd.exe");
+          assert.deepEqual(args.slice(0, 3), ["/d", "/s", "/c"]);
+          assert.match(args[3], /--version/);
+          assert.equal(options.windowsVerbatimArguments, true, "Windows .cmd checks must pass windowsVerbatimArguments");
+          return { output:"1.6.0" };
+        }
+        assert.equal(command, calls[0].command);
+        assert.deepEqual(args.slice(0, 4), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+        assert.equal(options.env.PENECHO_PI_BIN_DIR, piBinDir);
+        const update = Buffer.from(args[4], "base64").toString("utf16le");
+        assert.match(update, /CurrentUser\.CreateSubKey\('Environment'\)/);
+        assert.match(update, /DoNotExpandEnvironmentNames/);
+        assert.match(update, /SetValue\('Path', \$newPath, \$kind\)/);
+        assert.match(update, /SendMessageTimeout/);
+        return { output:"" };
+      },
+    });
+    assert.equal(calls.length, 3);
+    assert.equal(result.executable, expectedPi);
+    assert.equal(result.version, "1.6.0");
+    assert.equal(fs.existsSync(scriptPath), false, "cleans up downloaded Windows Pi installer script");
+
+    const spawnCalls = [];
+    const fakeSpawn = (command, args, spawnOptions) => {
+      spawnCalls.push({ command, args, spawnOptions });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from("1.6.0\n"));
+        child.emit("close", 0, null);
+      });
+      return child;
+    };
+    await runProcess("cmd.exe", ["/d", "/s", "/c", '"pi.cmd --version"'], { spawnImpl:fakeSpawn, windowsVerbatimArguments:true });
+    await runProcess("powershell.exe", ["-NoLogo"], { spawnImpl:fakeSpawn });
+    assert.equal(spawnCalls[0].spawnOptions.windowsVerbatimArguments, true);
+    assert.equal("windowsVerbatimArguments" in spawnCalls[1].spawnOptions, false);
+  } finally { fs.rmSync(directory, { recursive:true, force:true }); }
+});
+
+test("omp CLI setup downloads verified GitHub Releases binaries with Range resume and falls back to omp.sh", async () => {
+  const crypto = require("node:crypto");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-omp-gh-install-")),
+    home = path.join(directory, "home"),
+    stateDir = path.join(directory, "state");
+  fs.mkdirSync(home, { recursive:true });
+  fs.mkdirSync(stateDir, { recursive:true });
+  try {
+    // 1. macOS arm64: resolves tag via HEAD redirect, verifies SHA256SUMS.txt, writes executable without invoking omp.sh.
+    const macBinary = Buffer.from("#!/bin/sh\necho 19.2.0\n", "utf8");
+    const macSha = crypto.createHash("sha256").update(macBinary).digest("hex");
+    const expectedMac = managedCliPath("omp-cli", { platform:"darwin", home, stateDir });
+    const macUrls = [];
+    const macResult = await installCli("omp-cli", {
+      platform:"darwin",
+      arch:"arm64",
+      home,
+      stateDir,
+      ompRetryDelayMs:0,
+      fetchImpl:async (url, init = {}) => {
+        macUrls.push(`${init.method || "GET"} ${url}`);
+        if (url === "https://github.com/can1357/oh-my-pi/releases/latest") {
+          assert.equal(init.method, "HEAD");
+          return { ok:true, status:200, url:"https://github.com/can1357/oh-my-pi/releases/tag/v19.2.0", headers:new Headers() };
+        }
+        if (url === "https://github.com/can1357/oh-my-pi/releases/download/v19.2.0/SHA256SUMS.txt") {
+          return new Response(`${macSha}  omp-darwin-arm64\n${"0".repeat(64)}  omp-darwin-x64\n`, { status:200 });
+        }
+        if (url === "https://github.com/can1357/oh-my-pi/releases/download/v19.2.0/omp-darwin-arm64") {
+          return new Response(macBinary, { status:200, headers:{ "content-length":String(macBinary.length) } });
+        }
+        assert.fail(`unexpected URL: ${url}`);
+      },
+      runner:async (command, args) => {
+        assert.equal(command, expectedMac);
+        assert.deepEqual(args, ["--version"]);
+        return { output:"19.2.0" };
+      },
+    });
+    assert.equal(macResult.executable, expectedMac);
+    assert.equal(macResult.version, "19.2.0");
+    assert.deepEqual(fs.readFileSync(expectedMac), macBinary);
+    assert.equal((fs.statSync(expectedMac).mode & 0o111) !== 0, true, "installed macOS omp binary is executable");
+    assert.equal(macUrls.some(entry => entry.includes("omp.sh")), false, "never hits slow omp.sh when GitHub Releases succeeds");
+
+    // 2. Windows x64: falls back to GitHub API when HEAD lacks a tag URL, resumes via Range after mid-stream error.
+    const localAppData = path.join(directory, "LocalAppData");
+    const winBinary = Buffer.concat([Buffer.from("MZ"), Buffer.alloc(4096, 0x41), Buffer.alloc(4096, 0x42)]);
+    const winSha = crypto.createHash("sha256").update(winBinary).digest("hex");
+    const expectedWin = managedCliPath("omp-cli", { platform:"win32", home, stateDir, env:{ LOCALAPPDATA:localAppData } });
+    const splitAt = 2048;
+    const rangeHeaders = [];
+    let downloadCalls = 0;
+    const winResult = await installCli("omp-cli", {
+      platform:"win32",
+      arch:"x64",
+      home,
+      stateDir,
+      env:{ USERPROFILE:home, LOCALAPPDATA:localAppData },
+      ompRetryDelayMs:0,
+      fetchImpl:async (url, init = {}) => {
+        if (url === "https://github.com/can1357/oh-my-pi/releases/latest") {
+          return { ok:true, status:200, url, headers:new Headers() };
+        }
+        if (url === "https://api.github.com/repos/can1357/oh-my-pi/releases/latest") {
+          return new Response(JSON.stringify({ tag_name:"v19.2.0" }), { status:200, headers:{ "content-type":"application/json" } });
+        }
+        if (url === "https://github.com/can1357/oh-my-pi/releases/download/v19.2.0/SHA256SUMS.txt") {
+          return new Response(`${winSha}  omp-windows-x64.exe\n`, { status:200 });
+        }
+        if (url === "https://github.com/can1357/oh-my-pi/releases/download/v19.2.0/omp-windows-x64.exe") {
+          downloadCalls += 1;
+          const range = init.headers?.Range || "";
+          rangeHeaders.push(range);
+          if (downloadCalls === 1) {
+            let sent = false;
+            const stream = new ReadableStream({
+              pull(controller) {
+                if (!sent) {
+                  sent = true;
+                  controller.enqueue(winBinary.subarray(0, splitAt));
+                } else {
+                  controller.error(new Error("HTTP/2 stream 1 was not closed cleanly: INTERNAL_ERROR"));
+                }
+              },
+            });
+            return new Response(stream, { status:200, headers:{ "content-length":String(winBinary.length) } });
+          }
+          assert.equal(range, `bytes=${splitAt}-`);
+          const rest = winBinary.subarray(splitAt);
+          return new Response(rest, {
+            status:206,
+            headers:{
+              "content-length":String(rest.length),
+              "content-range":`bytes ${splitAt}-${winBinary.length - 1}/${winBinary.length}`,
+            },
+          });
+        }
+        assert.fail(`unexpected URL: ${url}`);
+      },
+      runner:async (command, args) => {
+        assert.equal(command, expectedWin);
+        assert.deepEqual(args, ["--version"]);
+        return { output:"19.2.0" };
+      },
+    });
+    assert.equal(winResult.executable, expectedWin);
+    assert.equal(winResult.version, "19.2.0");
+    assert.deepEqual(rangeHeaders, ["", `bytes=${splitAt}-`]);
+    assert.deepEqual(fs.readFileSync(expectedWin), winBinary);
+
+    // 3. Checksum mismatch rejects corrupt GitHub binary, cleans partial files, and surfaces both errors when omp.sh also fails.
+    const badHome = path.join(directory, "bad-home");
+    fs.mkdirSync(badHome, { recursive:true });
+    await assert.rejects(installCli("omp-cli", {
+      platform:"darwin",
+      arch:"arm64",
+      home:badHome,
+      stateDir,
+      ompMaxAttempts:2,
+      ompRetryDelayMs:0,
+      fetchImpl:async url => {
+        if (url === "https://github.com/can1357/oh-my-pi/releases/latest") {
+          return { ok:true, status:200, url:"https://github.com/can1357/oh-my-pi/releases/tag/v19.2.0", headers:new Headers() };
+        }
+        if (url === "https://github.com/can1357/oh-my-pi/releases/download/v19.2.0/SHA256SUMS.txt") {
+          return new Response(`${"a".repeat(64)}  omp-darwin-arm64\n`, { status:200 });
+        }
+        if (url === "https://github.com/can1357/oh-my-pi/releases/download/v19.2.0/omp-darwin-arm64") {
+          return new Response(Buffer.from("corrupt"), { status:200, headers:{ "content-length":"7" } });
+        }
+        if (url === "https://omp.sh/install") {
+          return new Response('#!/bin/sh\nREPO="can1357/oh-my-pi"\n', { status:200 });
+        }
+        assert.fail(`unexpected URL: ${url}`);
+      },
+      runner:async () => { throw new Error("curl: (92) HTTP/2 stream 1 was not closed cleanly: INTERNAL_ERROR (err 2)"); },
+    }), /GitHub Releases download failed \(Checksum mismatch[\s\S]*Official installer fallback also failed:\ncurl: \(92\)/);
+    const badBinDir = path.join(badHome, ".local", "bin");
+    assert.deepEqual(fs.existsSync(badBinDir) ? fs.readdirSync(badBinDir) : [], [], "leaves no partial or corrupt omp binary behind");
+
+    // 4. Desktop main IPC tracks CLI installs per provider so installing omp does not block Kimi.
+    const desktopMain = fs.readFileSync(path.join(ROOT, "desktop", "main.js"), "utf8");
+    assert.match(desktopMain, /cliOperations = new Set\(\)/);
+    assert.match(desktopMain, /if \(cliOperations\.has\(key\)\)/);
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
 });

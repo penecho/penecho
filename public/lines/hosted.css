@@ -1,0 +1,90 @@
+/* These pages on penecho.ai, in a frame of the dashboard there, to the right of its rail. See hosted.js: what is not drawn there is listed in that file, not here. */
+html.is-hosted, html.is-hosted body { background: var(--bg); }
+/* The bar starts with the project's pages: the dashboard's rail has the projects. */
+html.is-hosted .projbar { padding-left: var(--pad-r); }
+/* Cloud project rows have no pin. Only the New line button needs an action slot. */
+@media (min-width: 1101px) {
+  html.is-hosted .rail-project .rail-row { padding-right: 8px; }
+  html.is-hosted:not(.is-read) .rail-project .rail-row:has(+ .rail-add) { padding-right: 28px; }
+  html.is-hosted .rail-project .rail-add { right: 5px; opacity: 1; }
+  /* Shared with you: the ⋯ shows on hover, like the app's own row actions. */
+  html.is-hosted .rail-shared .rail-row { padding-right: 28px; }
+  html.is-hosted .rail-shared .rail-add { opacity: 0; }
+  html.is-hosted .rail-shared .rail-item:hover .rail-add, html.is-hosted .rail-shared .rail-add:focus-visible { opacity: 1; }
+}
+/* An empty project starts with the box and Canvas card: Sync from code is for a computer. */
+html.is-hosted .start-two { display: grid; grid-template-columns: minmax(0, 1fr); }
+html.is-hosted.is-read .start-two { display: none; }
+
+/* When the computer last synced this project (cloud.js syncedTag). */
+html.is-hosted .bar-synced { display: inline-flex; align-items: center; gap: 5px; margin-right: 6px; color: var(--ink3); font-size: 12.5px; white-space: nowrap; }
+html.is-hosted .bar-synced svg { flex: none; }
+@media (max-width: 720px) { html.is-hosted .bar-synced { display: none; } }
+
+/* Delete a project from PenEcho Cloud (hosted.js): a red action, and Delete stays off until the name is typed. */
+html.is-hosted .btn.danger { border-color: #dc2626; color: #b91c1c; background: transparent; }
+html.is-hosted .btn.danger:hover:not(:disabled) { background: #fef2f2; }
+html.is-hosted .line-command-dialog .btn.danger { background: #dc2626; color: #fff; }
+html.is-hosted .line-command-dialog .btn.danger:hover:not(:disabled) { background: #b91c1c; }
+html.is-hosted .btn.danger:disabled { opacity: .45; cursor: not-allowed; }
+html.is-hosted .line-command-dialog form > p:not(.command-error) { margin: 0 0 12px; color: var(--muted, #475569); line-height: 1.45; }
+:root[data-theme="dark"] html.is-hosted .btn.danger, html.is-hosted[data-theme="dark"] .btn.danger { color: #fca5a5; border-color: #f87171; }
+
+/* A shared link saves notes only: Add picture and Draw look like the main box's chips, beside one blue pill that saves. */
+html.is-shared .send-split .send-btn.has-word { border-radius: 999px; }
+.composer[data-shared-note] .cmp-bar { gap: 4px; flex-wrap: nowrap; min-width: 0; margin-left: -4px; }
+.composer[data-shared-note] .guest-tools { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.composer[data-shared-note] .guest-media { display: inline-flex; align-items: center; gap: 6px; height: 30px; min-height: 30px; padding: 0 10px 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--ink2); font-size: 13px; font-weight: 560; white-space: nowrap; box-shadow: none; transition: color .12s, background .12s; }
+.composer[data-shared-note] .guest-media svg { color: var(--ink3); }
+.composer[data-shared-note] .guest-media:is(:hover, :focus-visible) { color: var(--ink); background: var(--hover); }
+.composer[data-shared-note] .guest-media:is(:hover, :focus-visible) svg { color: inherit; }
+.composer[data-shared-note] .send-btn.is-note { flex: none; height: 34px; margin-left: auto; white-space: nowrap; color: #fff; background: var(--accent); }
+.composer[data-shared-note] .send-btn.is-note:hover { background: var(--accent2); }
+/* The bar stays one row, as the Line's box does: a narrow box first drops the Enter key, then the words beside the two icons. */
+@container cmpbox (max-width: 380px) {
+  .composer[data-shared-note] .send-btn .cmp-key { display: none; }
+  .composer[data-shared-note] .send-btn.has-word { padding-right: 14px; }
+}
+@container cmpbox (max-width: 320px) {
+  .composer[data-shared-note] .guest-media { justify-content: center; width: 32px; padding: 0; }
+  .composer[data-shared-note] .guest-media > span { display: none; }
+}
+.guest-drawing { width: min(720px, calc(var(--lines-viewport-width, 100vw) - 24px)); padding: 16px; }
+.guest-drawing .sheet-wrap { height: min(calc(50dvh / var(--penecho-page-scale, 1)), 440px); min-height: 0; border: 1px solid var(--line); border-radius: 8px; }
+.guest-drawing footer { margin-top: 14px; }
+.guest-drawing [data-undo] { margin-right: auto; }
+
+/* A page shown in place of its picture (hosted.js hostedLivePage): drawn at the picture's size and scaled to the card. */
+.pic-live { position: relative; display: block; width: 100%; overflow: hidden; background: #fff; }
+.pic-live iframe { position: absolute; left: 0; top: 0; width: 1200px; height: 750px; border: 0; transform-origin: 0 0; pointer-events: none; }
+
+/* Post-conversion onboarding strip shown when landing from MCP companion (?from=mcp). */
+html.is-hosted .mcp-handoff-strip {
+  margin: 0 0 18px; padding: 14px 16px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent, #4f46e5) 22%, var(--line, #e3e4e8));
+  background: color-mix(in srgb, var(--accent, #4f46e5) 4%, var(--panel, #ffffff));
+}
+html.is-hosted .mcp-handoff-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+html.is-hosted .mcp-handoff-head strong { display: block; font-size: 14.5px; font-weight: 640; color: var(--ink, #111827); }
+html.is-hosted .mcp-handoff-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--ink2, #4b5563); }
+html.is-hosted .mcp-handoff-head-right { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+html.is-hosted .mcp-handoff-back { font-size: 12.5px; font-weight: 560; color: var(--accent, #4f46e5); text-decoration: none; white-space: nowrap; }
+html.is-hosted .mcp-handoff-back small { font-weight: 450; color: var(--ink3, #6b7280); }
+html.is-hosted .mcp-handoff-back:hover { text-decoration: underline; }
+html.is-hosted .mcp-handoff-close {
+  width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--ink3, #6b7280); font-size: 17px; line-height: 1; cursor: pointer;
+}
+html.is-hosted .mcp-handoff-close:hover { background: var(--hover, rgba(17, 24, 39, .06)); color: var(--ink, #111827); }
+html.is-hosted .mcp-handoff-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+html.is-hosted .mcp-handoff-step {
+  padding: 10px 12px; border-radius: 8px; background: var(--panel, #ffffff);
+  border: 1px solid var(--line, #e5e7eb); font-size: 12px; line-height: 1.45; color: var(--ink2, #4b5563);
+}
+html.is-hosted .mcp-handoff-step b { display: block; margin-bottom: 3px; font-size: 12.5px; font-weight: 600; color: var(--ink, #111827); }
+html.is-hosted .mcp-handoff-step a { color: var(--accent, #4f46e5); text-decoration: none; font-weight: 560; }
+html.is-hosted .mcp-handoff-step a:hover { text-decoration: underline; }
+@media (max-width: 720px) {
+  html.is-hosted .mcp-handoff-steps { grid-template-columns: minmax(0, 1fr); }
+  html.is-hosted .mcp-handoff-head-right { flex-wrap: wrap; justify-content: flex-end; }
+}

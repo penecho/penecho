@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 // Sketch illustration styles: one maintained English policy per style and background
 // mode, shared by Canvas AI, the Agent route and Widget Refine, chosen in Settings.
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
@@ -62,7 +63,7 @@ test("Settings offer both choices and every executor reads them", () => {
     assert.ok(select, id);
     assert.deepEqual([...select[0].matchAll(/<option value="([^"]+)"/g)].map(match => match[1]), values);
   }
-  for (const key of ["illustrationStyle", "illustrationStyleStorybook", "illustrationStyle3d", "illustrationBackground", "illustrationBackgroundAuto", "illustrationBackgroundNone", "settingsIllustrationStyleHelp", "settingsIllustrationBackgroundHelp", "canvasAgentPromptIllustrate3d"]) {
+  for (const key of ["illustrationStyle", "illustrationStyleStorybook", "illustrationStyle3d", "illustrationBackground", "illustrationBackgroundAuto", "illustrationBackgroundNone", "settingsIllustrationStyleHelp", "settingsIllustrationBackgroundHelp"]) {
     assert.match(core, new RegExp(`(^|\\s)${key}:`, 'm'), `en ${key}`);
     assert.match(zh, new RegExp(`(^|\\s)${key}:`, 'm'), `zh ${key}`);
   }

@@ -1,6 +1,8 @@
 "use strict";
 const nerdamer = require("nerdamer/all.js");
 const PptxGenJS = require("pptxgenjs");
+// The same JSZip PptxGenJS uses: Download PPT adds each chart's picture as its fallback (src/shared/slides-pptx.js).
+const JSZip = require("jszip");
 
 // This input contract deliberately stays within small classroom expressions.
 // Heavy symbolic work is additionally isolated in a terminable browser worker.
@@ -31,6 +33,6 @@ function dataset(text) {
   const lines=String(text).trim().split(/\r?\n/);if(lines.length>50)throw Error("Use at most 50 rows");
   return lines.filter(Boolean).map((line,index)=>{const parts=line.trim().split(/[,\t]/);if(parts.length!==2||!parts[0].trim()||!parts[1].trim()||!Number.isFinite(Number(parts[1])))throw Error("Expected label,value on row "+(index+1));return {label:parts[0].trim().slice(0,40),value:Number(parts[1])};});
 }
-const api={nerdamer,PptxGenJS,expression,calculate,compile,dataset};
+const api={nerdamer,PptxGenJS,JSZip,expression,calculate,compile,dataset};
 if(typeof globalThis!=="undefined")globalThis.PENECHO_INK_TOOLS=api;
 module.exports=api;

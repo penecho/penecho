@@ -1,0 +1,128 @@
+/* PenEcho Cloud inside the Lines pages (cloud.js). The account row's own styles are with the rail in lines.css. */
+
+/* The rail: a small cloud on a project kept in Cloud, and the projects that are only there. */
+.rail-cloud { display: inline-grid; place-items: center; flex: none; color: var(--ink3); transition: color .25s ease; }
+.rail-cloud.recent { color: #4f8772; }
+.rail-cloud.stuck { color: #d97706; }
+:root[data-mode="dark"] .rail-cloud.recent:not(.stuck) { color: #6ca18d; }
+@media (min-width: 1101px) { .rail-away .rail-row, .rail-away:hover .rail-row { padding-right: 8px; } }
+.rail-account span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.rail-account .acct-plan { flex: none; margin-left: 0; }
+
+/* One banner for everything Cloud has to say: a project that is only there, a file with two versions, an Ask with no credits. */
+.cloud-banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border: 1px solid rgba(217, 138, 31, .4); border-radius: 12px; background: #fff8ec; color: var(--amber); font-size: 14px; line-height: 1.4; }
+.cloud-banner > svg { flex: none; }
+.cloud-banner > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cloud-banner > span strong { font-weight: 620; }
+.cloud-banner .btn { flex: none; color: var(--ink); }
+.cloud-banner .btn.primary { color: #fff; }
+.cloud-banner.is-row { padding: 6px 8px 6px 12px; border-radius: 10px; }
+.cloud-banner.is-row + .cloud-banner.is-row { margin-top: 6px; }
+:root[data-mode="dark"] .cloud-banner { background: rgba(227, 154, 45, .1); }
+#cloudConflicts:empty, .lp-cloud:empty { display: none; }
+.lp-cloud { flex: none; width: 100%; max-width: 780px; margin: 0 auto 10px; }
+
+/* A project that is only in Cloud. */
+.cloud-page h1 { display: flex; align-items: center; gap: 10px; }
+.cloud-page h1 span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cloud-page .btn .spin { width: 11px; height: 11px; }
+.cloud-facts { margin: 12px 2px 0; color: var(--ink3); font-size: 13px; }
+
+.set-row.project-cloud-settings { display: block; }
+.project-cloud-settings h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; }
+.project-cloud-settings h2 svg { flex: none; color: var(--ink2); }
+.project-cloud-body { margin-top: 8px; }
+.project-cloud-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 9px 0; }
+.project-cloud-row + .project-cloud-row { border-top: 1px solid var(--line); }
+.project-cloud-row > div:first-child { flex: 1 1 230px; min-width: 0; }
+.project-cloud-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.project-cloud-row .btn, .project-cloud-body > .btn { min-height: 34px; }
+.project-cloud-body > .btn { margin-top: 8px; }
+.project-cloud-body .btn:disabled { opacity: .6; cursor: default; }
+.project-cloud-body .project-cloud-feedback { margin: 8px 0 2px; }
+.project-cloud-body .project-cloud-error { color: var(--red); overflow-wrap: anywhere; }
+.project-cloud-body .project-cloud-note { margin-top: 3px; color: var(--ink3); font-size: 12.5px; }
+.cloud-sync-seg button:disabled { opacity: .6; cursor: default; }
+.keep-range { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.keep-range-label { display: block; margin-bottom: 6px; color: var(--ink2); font-size: 12.5px; font-weight: 600; }
+.keep-range .cloud-sync-seg { display: flex; width: 100%; }
+.menu.cloud-pop .keep-range .cloud-sync-seg button { flex: 1; width: auto; height: 28px; padding: 0 8px; justify-content: center; text-align: center; font-size: 12.5px; color: var(--ink2); background: transparent; }
+.menu.cloud-pop .keep-range .cloud-sync-seg button span { flex: none; }
+.menu.cloud-pop .keep-range .cloud-sync-seg button:hover { background: var(--soft); }
+.menu.cloud-pop .keep-range .cloud-sync-seg button[aria-checked="true"] { background: var(--paper); color: var(--ink); box-shadow: var(--shadow-1); }
+.menu.cloud-pop .keep-range .cloud-sync-seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+:root[data-mode="dark"] .menu.cloud-pop .keep-range .cloud-sync-seg button[aria-checked="true"] { background: var(--pressed); }
+.keep-range-note { margin: 6px 0 0; color: var(--ink3); font-size: 12px; line-height: 1.4; }
+.share-range { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+.share-range-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+.share-range-head strong { font-size: 13.5px; font-weight: 620; }
+.share-range-note { margin: 6px 0 0; color: var(--ink3); font-size: 12.5px; line-height: 1.4; }
+@media (pointer: coarse) { .project-cloud-settings .btn, .cloud-sync-seg button { min-height: 44px; } }
+
+/* Keep in Cloud menu and popover under Share in the project bar. */
+.bar-share-caret { display: inline-flex; margin-left: -2px; color: var(--ink3); }
+.menu.cloud-pop { width: min(320px, calc(var(--lines-viewport-width, 100vw) - 16px)); max-width: none; padding: 14px; }
+.cloud-pop strong { font-size: 14.5px; font-weight: 620; }
+.keep-head { display: flex; align-items: center; gap: 10px; }
+.keep-head strong { flex: 1; min-width: 0; }
+.keep-state { display: flex; align-items: center; gap: 7px; margin: 4px 0 0; color: var(--ink2); font-size: 13.5px; line-height: 1.4; }
+.keep-state.is-bad { color: var(--red); }
+.keep-notice { flex-wrap: wrap; overflow-wrap: anywhere; color: var(--hint-you); }
+.keep-notice span { color: var(--ink3); font-size: 12.5px; }
+.keep-state .spin { width: 11px; height: 11px; color: var(--c-run-label); }
+.keep-pct { margin-left: auto; color: var(--ink); font-weight: 620; font-variant-numeric: tabular-nums; }
+.keep-bar { position: relative; height: 4px; margin-top: 8px; overflow: hidden; border-radius: 2px; background: var(--line); }
+.keep-bar i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
+.keep-bar.is-waiting i { width: 30%; animation: keep-wait 1.4s ease-in-out infinite; }
+@keyframes keep-wait { from { left: -30%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .keep-bar.is-waiting i { animation: none; left: 0; opacity: .5; } .keep-bar i { transition: none; } }
+.menu.cloud-pop .btn { display: inline-flex; width: auto; height: 31px; margin-top: 12px; padding: 0 10px; justify-content: center; font-size: 13.5px; }
+.menu.cloud-pop .btn:hover, .menu.cloud-pop .btn:focus-visible { background: var(--soft); }
+.menu.cloud-pop .btn.primary:hover, .menu.cloud-pop .btn.primary:focus-visible { background: var(--accent2); }
+.menu.cloud-pop .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.menu.cloud-pop .switch { position: relative; display: block; flex: none; width: 34px; height: 20px; padding: 0; border-radius: 999px; background: var(--line2); transition: background .12s; }
+.menu.cloud-pop .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, .25); transition: left .12s; }
+.menu.cloud-pop .switch.on { background: var(--accent); }
+.menu.cloud-pop .switch.on::after { left: 16px; }
+.menu.cloud-pop .switch:hover { background: var(--ink3); }
+.menu.cloud-pop .switch.on:hover { background: var(--accent2); }
+.menu.cloud-pop .switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.menu.cloud-pop .switch:disabled { opacity: .6; }
+
+/* Two versions of a file, side by side. */
+.line-command-dialog.cloud-compare { width: min(1080px, calc(var(--lines-viewport-width, 100vw) - 32px)); }
+.cloud-compare h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.compare-cols section { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.compare-cols header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px 7px 12px; border-bottom: 1px solid var(--line); background: var(--raised); font-size: 14px; }
+.compare-cols pre { height: min(calc(52vh / var(--penecho-page-scale, 1)), 520px); margin: 0; padding: 12px; overflow: auto; background: var(--paper); color: var(--ink); font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.compare-cols pre:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.cloud-compare footer { margin-top: 16px; }
+
+/* An Ask that is held: its line is working somewhere else, or there are no credits. */
+.held-wait { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(217, 138, 31, .35); color: var(--ink2); font-size: 14px; line-height: 1.4; }
+.held-wait span { flex: 1; min-width: 0; }
+.held-wait .spin { width: 13px; height: 13px; color: var(--c-run); }
+.held-wait .btn { flex: none; }
+.held-computer > svg { flex: none; color: var(--ink3); }
+.held-computer strong { margin-right: 4px; color: var(--ink); font-weight: 650; }
+.held-credits { margin-top: 10px; background: var(--paper); }
+:root[data-mode="dark"] .held-credits { background: var(--paper); }
+
+/* Run with: the balance under PenEcho's own agent. */
+.menu button.has-note { height: 46px; }
+.menu button.has-note span small { display: block; overflow: hidden; color: var(--ink3); font-size: 12.5px; font-weight: 400; text-overflow: ellipsis; }
+
+/* With Keep in Cloud in the bar, the drawing-skill button gives up its words sooner, so the last tab is not cut. */
+@media (max-width: 1100px) { .rail-cloud { display: none; } }
+@media (max-width: 760px) {
+  .compare-cols { grid-template-columns: minmax(0, 1fr); }
+  .compare-cols pre { height: calc(26vh / var(--penecho-page-scale, 1)); }
+  .cloud-banner { flex-wrap: wrap; }
+  .cloud-banner > span { flex-basis: calc(100% - 40px); }
+}
+
+/* Taking a project out of Cloud deletes its copy there: it asks first. */
+.cloud-pop .keep-ask { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.cloud-pop .btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
+.cloud-pop .btn.danger:hover { background: #b91c1c; }

@@ -1,36 +1,34 @@
-# DeepSeek Harness MIT backports
+# DeepSeek Harness MIT test-visible bundles
 
 These generated modules retain the **MIT** license in `LICENSE`, including local
 adaptations. They are not relicensed under the repository's AGPL-only default.
-They import the existing locked dependencies and introduce no new dependencies.
+They import the project's exact locked production dependencies.
 
 Baseline: published `@deepseek-ai/dsh-agent-loop` and `@deepseek-ai/dsh-llm-pi-ai`
-**0.1.1-rc.2**. The generator verifies the SHA-256 of each published bundle.
+**0.2.1-rc.5**. The generator verifies the SHA-256 of each published bundle.
 
-Upstream examined on 2026-09-09:
-https://github.com/deepseek-ai/deepseek-harness/tree/5dda764ed
-(`0.1.5-alpha.1`, MIT). The full upgrade includes Session V3 and is not substituted
-for the current session implementation.
+The generated files add named internal exports for behavioral regression tests.
+They do not modify upstream production behavior. Runtime imports retain their
+existing paths so desktop packaging and the Cloud synchronization allow-list
+continue to include the reviewed modules.
 
-Backports:
+The previous 0.1.1-rc.2 behavioral patches are retired:
 
-- https://github.com/deepseek-ai/deepseek-harness/commit/73edce1ae7ad0cbf8813d4d65b288317a16a7f5c
-  Reuse identities of messages completely frozen by this agent. Every new message
-  and header is still deeply frozen. Weak references do not retain discarded
-  history. This is a Harness-owned traversal optimization, not a context cache.
-- https://github.com/deepseek-ai/deepseek-harness/commit/7bab91d247e4a7a2e84c68e1883359f5dc718e6a
-  Retain requested model identity separately from Anthropic's resolved model in
-  replay. Preserve native signatures and resolved model when reconstructing
-  history; avoid incorrectly degrading replay when a provider resolves an alias.
+- The upstream loop now tracks fully frozen message identities in a WeakSet.
+  New messages are still deeply frozen; retained messages are not walked again.
+- The selected Pi stack keeps the requested alias in `model` and the provider's
+  resolved identity in `responseModel`. Thinking-signature replay compares the
+  requested identity. Restoring the resolved identity into `model`, as the old
+  adaptation did, would break this new contract.
 
-The changes are adapted to the published 0.1.1-rc.2 bundle, not copied wholesale
-from the newer agent or session APIs. Named internal exports permit behavioral
-regression tests. Runtime imports these two modules directly; installed packages
-remain unchanged.
+Provider configuration remains owned by PenEcho in memory through the upstream
+volatile configuration protocol. No upstream settings/profile UI or legacy
+settings migration is mounted. The internal session-projection service required
+by the new loop is mounted without upstream session persistence.
 
 Generate: `node scripts/build-harness-backports.cjs`
 
 Verify: `node scripts/build-harness-backports.cjs --check`
 
-Review and remove these local backports when adopting an upstream version that
-contains both fixes. Never regenerate against a changed package without review.
+Review source, API contracts, and hashes before adopting another version. Never
+regenerate against a changed package without that review.

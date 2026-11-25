@@ -81,7 +81,7 @@ html.viewer-live-share .viewer-topbar { z-index: 600; }
   width: 1.15em;
   height: 1.15em;
   margin-right: .3em;
-  background: #2350e6;
+  background: #2563eb;
   -webkit-mask: url("penecho-mark.png") center / contain no-repeat;
   mask: url("penecho-mark.png") center / contain no-repeat;
 }

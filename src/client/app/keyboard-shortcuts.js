@@ -3,7 +3,6 @@
     ...(window.penechoDesktop ? [{ id:"new-canvas", group:"workspace", labelKey:"newCanvasTitle", descriptionKey:"shortcutNewCanvasHelp", defaultChord:"Mod+n" }] : []),
     { id:"pen-tool", group:"essential", labelKey:"pen", descriptionKey:"shortcutPenHelp", defaultChord:"p" },
     { id:"search-work", group:"essential", labelKey:"shortcutSearchWork", descriptionKey:"shortcutSearchWorkHelp", defaultChord:"Mod+k" },
-    { id:"focus-agent", group:"essential", labelKey:"shortcutFocusAgent", descriptionKey:"shortcutFocusAgentHelp", defaultChord:"Tab" },
     { id:"save-canvas", group:"essential", labelKey:"saveCanvas", descriptionKey:"shortcutSaveCanvasHelp", defaultChord:"Mod+s" },
     { id:"undo", group:"essential", labelKey:"undo", descriptionKey:"shortcutUndoHelp", defaultChord:"Mod+z" },
     { id:"redo", group:"essential", labelKey:"redo", descriptionKey:"shortcutRedoHelp", defaultChord:"Mod+Shift+z" },
@@ -36,10 +35,12 @@
     try {
       const saved = JSON.parse(localStorage.getItem(KEYBOARD_SHORTCUT_STORAGE_KEY) || "null");
       if (!saved || typeof saved !== "object" || Array.isArray(saved)) return bindings;
+      // What was saved for a command that no longer exists holds no key.
+      const known = new Set(KEYBOARD_SHORTCUT_COMMANDS.map((command) => command.id)),
+        taken = Object.entries(saved).filter(([id]) => known.has(id)).map(([, chord]) => chord);
       // Migrate the previous default while retaining explicitly customized bindings.
-      if (!("search-work" in saved) && saved["focus-agent"] === "Mod+k") saved["focus-agent"] = "Tab";
-      if (!("search-work" in saved) && Object.values(saved).includes("Mod+k")) bindings["search-work"] = "";
-      if (typeof window !== "undefined" && window.penechoDesktop && !("new-canvas" in saved) && Object.values(saved).includes("Mod+n")) bindings["new-canvas"] = "";
+      if (!("search-work" in saved) && taken.includes("Mod+k")) bindings["search-work"] = "";
+      if (typeof window !== "undefined" && window.penechoDesktop && !("new-canvas" in saved) && taken.includes("Mod+n")) bindings["new-canvas"] = "";
       for (const command of KEYBOARD_SHORTCUT_COMMANDS) {
         if (Object.prototype.hasOwnProperty.call(saved, command.id) && typeof saved[command.id] === "string") bindings[command.id] = saved[command.id];
       }
@@ -122,9 +123,6 @@
     window.dispatchEvent(new CustomEvent("penecho:shortcutschange"));
     const penShortcut = document.querySelector('[data-welcome-shortcut="pen"]');
     if (penShortcut) { penShortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["pen-tool"] || ""); penShortcut.hidden = !keyboardShortcutBindings["pen-tool"]; }
-    const shortcut = document.querySelector('[data-welcome-shortcut="focusAgent"]');
-    // On the empty canvas, Mod+K opens the Agent directly from the welcome card.
-    if (shortcut) { shortcut.textContent = keyboardShortcutDisplay("Mod+k"); shortcut.hidden = false; }
     const search = document.querySelector("#studioNavigatorSearchShortcut");
     if (search) { search.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["search-work"] || ""); search.hidden = !keyboardShortcutBindings["search-work"]; }
     const container = document.querySelector("#settingsShortcutList");
@@ -262,7 +260,7 @@
   function keyboardShortcutCanvasContext(event, chord) {
     return !event.defaultPrevented && !event.isComposing && !state.interactingWidgetId
       && !keyboardShortcutBlockingSurfaceOpen() && !keyboardShortcutLocalSurface(event.target)
-      && !keyboardShortcutTextEditingTarget(event.target) && !canvasAgentPanel.contains(event.target)
+      && !keyboardShortcutTextEditingTarget(event.target)
       && !keyboardShortcutControlOwnsKey(event, chord);
   }
   window.addEventListener("pointerdown", keyboardShortcutPointerDown, true);
@@ -272,18 +270,15 @@
     if ((event.key === "Tab" && event.shiftKey) || ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter", " ", "Escape"].includes(event.key)) keyboardShortcutPointerControl = null;
   }, true);
   function keyboardShortcutBlockingSurfaceOpen() {
-    return Boolean(settings.open || settings.configurationMode || document.querySelector("dialog[open]") || document.querySelector(".plugin-modal-layer:not([hidden]), .changelog-layer:not([hidden]), .tour-layer:not([hidden]), .history-panel.open"));
+    return Boolean(settings.open || settings.configurationMode || document.querySelector("dialog[open]") || document.querySelector(".plugin-modal-layer:not([hidden]), .history-panel.open"));
   }
   function keyboardShortcutCanRun(command, event, chord) {
     if (!command || event.defaultPrevented || event.isComposing || event.repeat) return false;
-    // Tab is the global Agent toggle, including pointer focus and its composer.
-    if (command.id === "focus-agent" && chord === "Tab" && !keyboardShortcutBlockingSurfaceOpen()) return canvasAgentAvailable();
     if (state.interactingWidgetId) return false;
     if (command.id === "open-settings" && settings.open) return true;
     if (keyboardShortcutBlockingSurfaceOpen()) return false;
     if (keyboardShortcutLocalSurface(event.target)) return false;
     if (keyboardShortcutTextEditingTarget(event.target)) return command.id === "save-canvas" || command.id === "search-work";
-    if (command.id === "focus-agent" && (!canvasAgentAvailable() || canvasAgentPanel.contains(event.target))) return false;
     if (keyboardShortcutControlOwnsKey(event, chord)) return false;
     return true;
   }
@@ -291,12 +286,6 @@
     if (commandId === "new-canvas") { document.querySelector("#newCanvasBtn")?.click(); return true; }
     if (commandId === "search-work") { window.PenEchoStudioNavigator?.focusSearch(); return true; }
     if (commandId === "pen-tool") { setCanvasMode("pen"); return true; }
-    if (commandId === "focus-agent") {
-      const opening = canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open");
-      if (opening) openCanvasAgent({ focus:false, animate:true });
-      else closeCanvasAgent({ focus:false });
-      return true;
-    }
     if (commandId === "save-canvas") { void saveCurrentCanvas(); return true; }
     if (commandId === "undo" || commandId === "redo") { document.querySelector(`[data-action="${commandId}"]`)?.click(); return true; }
     if (commandId === "canvas-library") { openHistoryPanel(); return true; }
@@ -329,8 +318,7 @@
     }
     const chord = keyboardShortcutChordFromEvent(event);
     if (!chord) return;
-    const welcomeAgentShortcut = chord === "Mod+k" && !document.querySelector("#canvasWelcome")?.hidden;
-    const command = chord === "Tab" || welcomeAgentShortcut ? keyboardShortcutCommand("focus-agent") : KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
+    const command = KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
     if (!keyboardShortcutCanRun(command, event, chord)) return;
     event.preventDefault();
     event.stopImmediatePropagation();

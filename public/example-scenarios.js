@@ -165,7 +165,7 @@
       tip: { en: "Notes keep the original photo and are saved to the Library under Notes & cards.", zh: "笔记会保留原始照片，并保存在资料库的“笔记与卡片”中。" },
       learned: { en: "A photo of the board becomes notes you can search and review.", zh: "一张板书照片就能变成可搜索、可复习的笔记。" },
       // A lecture blackboard (QED: e⁻μ⁻ scattering). Re-encoded without metadata.
-      image: { src: "examples/qed-blackboard.jpg", name: "qed-blackboard.jpg", width: 1321, height: 1400 },
+      image: { src: "examples/qed-blackboard.jpg", preview: "examples/qed-blackboard-preview.jpg", name: "qed-blackboard.jpg", width: 1321, height: 1400 },
       strokes: () => [],
     },
     {
@@ -263,7 +263,7 @@
       tip: { en: "Paste any screenshot, or copy code onto the canvas and tap Check.", zh: "任何截图都可以贴进来，也可以把代码粘贴到画布上再点击“检查”。" },
       learned: { en: "Paste what you are looking at; PenEcho reviews it right where it is.", zh: "把眼前的内容贴进来，PenEcho 就地帮你检查。" },
       // An editor screenshot of average(): `i <= scores.length` reads past the end, so it returns NaN.
-      image: { src: "examples/average-bug.jpg", name: "average-bug.jpg", width: 1000, height: 547 },
+      image: { src: "examples/average-bug.jpg", preview: "examples/average-bug-preview.jpg", name: "average-bug.jpg", width: 1000, height: 547 },
       strokes: () => [],
     },
     {
@@ -508,6 +508,29 @@
 
   const BY_ID = new Map(SCENARIOS.map((scenario, index) => [scenario.id, { scenario, index }]));
 
+  // The eight shown first on an empty Canvas: the ones that finish best, each ending in a result with or without AI.
+  // Their card words are shorter than the examples dialog's. An example that needs AI or an agent ships its own saved
+  // result, shown at once when neither is here (public/examples/results).
+  const FIRST = Object.freeze([
+    { id: "functions", title: { en: "Graph a function", zh: "绘制函数图像" }, description: { en: "Write f(x), get a live graph.", zh: "写下 f(x)，得到实时图像。" } },
+    { id: "surface-3d", title: { en: "See it in 3D", zh: "立体查看" }, description: { en: "A formula in x and y becomes a surface.", zh: "含 x 和 y 的公式变成曲面。" } },
+    { id: "diagram", title: { en: "Sketch to diagram", zh: "草图变图表" }, description: { en: "Rough boxes become a clean diagram.", zh: "粗略的方框变成整洁的图表。" } },
+    { id: "kids-homework", title: { en: "Check homework", zh: "检查作业" }, description: { en: "Three sums, one slip, marked and fixed.", zh: "三道算术题错了一道，标出并改正。" }, saved: "examples/results/kids-homework.html" },
+    { id: "photo-note", title: { en: "Photo to study notes", zh: "照片变学习笔记" }, description: { en: "A board photo becomes organized notes.", zh: "板书照片变成整理好的笔记。" }, saved: "examples/results/photo-note.json" },
+    { id: "class-3d", title: { en: "Show a class in 3D", zh: "给学生看立体模型" }, description: { en: "A sketched molecule becomes a 3D model.", zh: "分子草图变成三维模型。" }, saved: "examples/results/class-3d.html" },
+    { id: "prototype", title: { en: "Wireframe to prototype", zh: "线框图变原型" }, description: { en: "A drawn screen becomes a page that works.", zh: "画出的界面变成能用的页面。" }, saved: "examples/results/prototype.html" },
+    { id: "work-note", title: { en: "Meeting notes to a work note", zh: "会议记录变工作笔记" }, description: { en: "Messy notes become decisions and tasks.", zh: "凌乱的记录变成决定和待办。" }, saved: "examples/results/work-note.json" },
+  ].map((card) => Object.freeze(card)));
+  const FIRST_BY_ID = new Map(FIRST.map((card) => [card.id, card]));
+
+  // The eight, each with its card words and saved result.
+  function first() {
+    return FIRST.map((card) => ({ ...BY_ID.get(card.id).scenario, card }));
+  }
+  function savedResult(id) {
+    return FIRST_BY_ID.get(id)?.saved || "";
+  }
+
   function get(id) {
     return BY_ID.get(id)?.scenario || null;
   }
@@ -603,5 +626,5 @@
     return { ...parseProgress(progress), goal: normalizeGoal(goal), goalAsked: true };
   }
 
-  return { SCHEMA, GOALS, SCENARIOS, get, next, localized, strokes, architectureDocument, ordered, welcome, parseProgress, serializeProgress, markTried, setGoal };
+  return { SCHEMA, GOALS, SCENARIOS, FIRST, get, next, localized, strokes, architectureDocument, ordered, welcome, first, savedResult, parseProgress, serializeProgress, markTried, setGoal };
 });

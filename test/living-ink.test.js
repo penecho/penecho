@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),vm=require("node:vm"),fs=require("node:fs"),path=require("node:path");
 const M=require("../public/living-ink-model.js"),UI=require("../public/living-ink.js"),tools=require("../src/client/ink-lab-tools.js");
 const p=(x,y)=>({x,y});
@@ -71,13 +72,14 @@ test("PptxGenJS produces a valid PowerPoint package with editable title and spea
 });
 test("Canvas source includes local bridge with interaction and source guards",()=>{
   const root=path.resolve(__dirname,".."),source=fs.readFileSync(path.join(root,"src/client/app/living-ink.js"),"utf8"),host=fs.readFileSync(path.join(root,"public/widget-host.js"),"utf8");
-  assert.match(source,/widget\.sourceFormat !== livingInkSourceFormat/);assert.match(source,/state\.interactingWidgetId !== widget\.id/);assert.match(source,/recordWidgetsBefore\(\)/);assert.match(source,/saveUserCanvasChange\(\)/);assert.match(host,/event\.source !== inner\.contentWindow/);assert.match(host,/widgetState\.interactive && Number\.isInteger\(message\.revision\)/);
+  assert.match(source,/widget\.sourceFormat !== livingInkSourceFormat/);assert.match(source,/!canvasWidgetInteractive\(widget\)/);assert.match(source,/recordWidgetsBefore\(\)/);assert.match(source,/saveUserCanvasChange\(\)/);assert.match(host,/event\.source !== inner\.contentWindow/);assert.match(host,/widgetState\.interactive && Number\.isInteger\(message\.revision\)/);
 });
 test("scene edits commit atomically through Canvas history and reject inactive or malformed messages",()=>{
   const source=fs.readFileSync(path.join(__dirname,"../src/client/app/living-ink.js"),"utf8"),
     fn=source.slice(source.indexOf("  function livingInkWidgetMessage("));
   const before=UI.createHtml(M.preset("objects")),replies=[],saved=[],widget={id:"widget-1",sourceFormat:"penecho-living-ink",html:before,contentVersion:0,frame:{contentWindow:{postMessage:m=>replies.push(m)}}};
   const context={livingInkSourceFormat:"penecho-living-ink",livingInkModel:M,livingInkRuntime:UI,state:{interactingWidgetId:"widget-1",language:"en",userRevision:0},
+    canvasWidgetInteractive:widget=>context.state.mode==='hand'||context.state.interactingWidgetId===widget.id,
     location:{origin:"http://localhost"},recordWidgetsBefore:()=>saved.push(widget.html),saveUserCanvasChange(){},requestRender(){},setStatus(){},livingInkCopy:en=>en};
   vm.createContext(context);vm.runInContext(fn,context);
   const doc=M.preset("objects");M.translate(doc,[doc.entities[0].id],30,40);
@@ -87,4 +89,6 @@ test("scene edits commit atomically through Canvas history and reject inactive o
   context.livingInkWidgetMessage(widget,{type:"penecho-living-ink-change",revision:2,document:doc});
   assert.equal(widget.html,committed);assert.equal(saved.length,1);assert.equal(replies.at(-1).ok,false);
   context.state.interactingWidgetId=null;context.livingInkWidgetMessage(widget,{type:"penecho-living-ink-change",revision:3,document:M.empty()});assert.equal(widget.html,committed);
+  context.state.mode='hand';context.livingInkWidgetMessage(widget,{type:"penecho-living-ink-change",revision:4,document:M.empty()});
+  assert.deepEqual(UI.extractScene(widget.html),M.empty());assert.equal(saved.length,2,'native Hand edits are saved');
 });

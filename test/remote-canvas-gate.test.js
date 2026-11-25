@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -48,16 +49,19 @@ function flatten(root) {
   return out;
 }
 
-function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther, saveEcho, currentCanvasId, widgetFrames = [], nativeReads = false, fetchResponse, statusTimeout, readyState = "complete", cookie = "", runtime = "cloud", browserDraftId } = {}) {
+function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther, saveEcho, currentCanvasId, widgetFrames = [], nativeReads = false, fetchResponse, statusTimeout, readyState = "complete", cookie = "", runtime = "cloud", browserDraftId, visibility = "visible", frames = "every", now } = {}) {
   const topRow = new FakeElement("div");
   topRow.className = "top-row";
   const brand = new FakeElement("div");
   brand.className = "brand";
   topRow.append(brand);
   const documentListeners = new Map();
+  let visibilityState = visibility, framesRun = 0;
   const document = {
     readyState,
-    addEventListener:(type, handler) => documentListeners.set(type, handler),
+    get visibilityState() { return visibilityState; },
+    addEventListener:(type, handler) => { if (!documentListeners.has(type)) documentListeners.set(type, new Set()); documentListeners.get(type).add(handler); },
+    removeEventListener:(type, handler) => documentListeners.get(type)?.delete(handler),
     baseURI,
     get cookie() { return typeof cookie === "function" ? cookie() : cookie; },
     body:new FakeElement("body"),
@@ -111,7 +115,8 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseU
     windowListeners.get(type).add(handler);
   };
   windowObject.removeEventListener = (type, handler) => windowListeners.get(type)?.delete(handler);
-  windowObject.requestAnimationFrame = (callback) => setImmediate(() => callback(Date.now()));
+  // "none": a hidden tab's frames never run; "once": the tab hides after one.
+  windowObject.requestAnimationFrame = (callback) => frames === "none" || frames === "once" && framesRun++ ? 0 : setImmediate(() => callback(Date.now()));
   windowObject.dispatchEvent = (event) => {
     for (const handler of windowListeners.get(event.type) || []) handler(event);
     return true;
@@ -131,12 +136,13 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseU
   };
   const context = {
     window:windowObject, document, location, navigator:{ language },
-    URL, URLSearchParams, Headers, Request, Response, CustomEvent, crypto:webcrypto, Date, console, AbortController, setTimeout:statusTimeout || setTimeout, clearTimeout,
+    URL, URLSearchParams, Headers, Request, Response, CustomEvent, crypto:webcrypto, Date:now ? class extends Date { static now() { return now(); } } : Date, console, AbortController, setTimeout:statusTimeout || setTimeout, clearTimeout,
   };
   vm.runInNewContext(gateScript, context, { filename:"public/remote-canvas.js" });
   const gate = document.body.children[0];
   return { gate, brand, window:windowObject, redirects, replacements, routeUpdates, fetchCalls, opened, taken, saveEchoCalls,
-    finishScripts:() => { document.readyState = "interactive"; documentListeners.get("DOMContentLoaded")?.(); },
+    finishScripts:() => { document.readyState = "interactive"; for (const handler of documentListeners.get("DOMContentLoaded") || []) handler(); },
+    setVisibility:(state) => { visibilityState = state; for (const handler of [...(documentListeners.get("visibilitychange") || [])]) handler(); },
     back:topRow.children[0],
     title:flatten(gate).find((el) => el.id === "remoteCanvasTitle"),
     detail:flatten(gate).find((el) => el.className === "remote-canvas-detail"),
@@ -337,14 +343,15 @@ const actionRevealStates = (action) => {
   return states;
 };
 
-test("Remote Canvas gate only ever contains a single Link Device action", () => {
+test("Remote Canvas gate only ever contains a single action, the way back to the dashboard", () => {
   const run = boot();
   assert.equal(run.gate.className, "remote-canvas-gate");
   assert.deepEqual(run.actions.map((el) => el.dataset.action), ["link"]);
   const [link] = run.actions;
   assert.equal(link.tagName, "A");
-  assert.equal(link.href, "/dashboard.html#devices");
-  assert.equal(link.textContent, "Link Device");
+  assert.equal(link.href, "/dashboard.html");
+  assert.equal(link.textContent, "Back to the dashboard");
+  assert.doesNotMatch(gateScript, /Link Device|#devices|No device is linked/);
   assert.equal(link.listeners.size, 0);
   assert.doesNotMatch(gateScript, /data-action=["']retry["']/i);
   assert.doesNotMatch(gateScript, /downloads\.html|remote-canvas-flow|innerHTML/);
@@ -363,12 +370,12 @@ test("Remote Canvas brand doubles as the way back to the console", () => {
   assert.equal(project.redirects[0], "/dashboard.html");
 
   const community = boot({ pathname:`/canvas/community/${COMMUNITY_ID}` });
-  assert.equal(community.brand.title, "Back to Echoes");
+  assert.equal(community.brand.title, "Back to PenEcho");
   community.brand.listeners.get("click")({ });
-  assert.equal(community.redirects[0], "/community.html");
+  assert.equal(community.redirects[0], "/");
 
   const zhCommunity = boot({ pathname:`/canvas/community/${COMMUNITY_ID}`, language:"zh-CN" });
-  assert.equal(zhCommunity.brand.getAttribute("aria-label"), "返回 Echoes");
+  assert.equal(zhCommunity.brand.getAttribute("aria-label"), "返回 PenEcho");
   assert.doesNotMatch(gateScript, /remote-canvas-back/);
 });
 
@@ -391,13 +398,13 @@ test("Remote Canvas gate reveals Link Device only in the unlinked state and reve
     assert.doesNotMatch(gateCss, new RegExp(`\\.remote-canvas-gate\\[data-state="${state}"\\] \\.remote-canvas-actions`));
 });
 
-test("Remote Canvas gate without a linked device shows the unlinked state with Link Device as the only action", async () => {
+test("Remote Canvas gate for a Canvas that cannot be opened here says so, with the way back as the only action", async () => {
   const run = boot({ respond:() => ({ device:null }) });
   assert.equal(run.gate.dataset.state, "checking");
   await flush();
   assert.equal(run.gate.dataset.state, "unlinked");
-  assert.equal(run.title.textContent, "Connect one PenEcho host to open this Canvas");
-  assert.equal(run.detail.textContent, "No device is linked yet. Install PenEcho, then connect one main computer from Link Device.");
+  assert.equal(run.title.textContent, "This Canvas cannot be opened here");
+  assert.equal(run.detail.textContent, "It is on a computer. Keep its project in Cloud to open it on penecho.ai.");
   assert.equal(run.gate.hidden, false);
   assert.deepEqual(run.actions.map((el) => el.dataset.action), ["link"]);
 });
@@ -408,7 +415,7 @@ test("Remote Canvas gate shows no actions while checking and none once a linked 
   assert.deepEqual(actionRevealStates("link").filter((state) => state === offline.gate.dataset.state), []);
   await flush();
   assert.equal(offline.gate.dataset.state, "offline");
-  assert.equal(offline.title.textContent, "Your linked PenEcho host is offline");
+  assert.equal(offline.title.textContent, "This Canvas cannot be opened here");
   assert.equal(offline.detail.textContent, "My PenEcho · darwin 25.3.0 · Offline");
   assert.equal(offline.gate.hidden, false);
   assert.deepEqual(offline.actions.map((el) => el.dataset.action), ["link"]);
@@ -454,6 +461,49 @@ test("Cloud Canvas stays covered until every visible Widget reports rendered con
   assert.equal(run.gate.hidden, true);
 });
 
+// A hidden tab runs no animation frames, and its Widgets do not paint.
+const settle = async () => { await flush(); await new Promise((resolve) => setTimeout(resolve, 20)); await flush(); };
+
+test("a hidden tab opens its Cloud Canvas without animation frames or Widget paints", async () => {
+  const run = boot({ nativeReads:true, visibility:"hidden", frames:"none", widgetFrames:[{ contentWindow:{} }] });
+  await settle();
+  assert.equal(run.gate.hidden, true);
+});
+
+test("a tab that hides between paint frames still opens", async () => {
+  const run = boot({ nativeReads:true, frames:"once" });
+  await flush();
+  run.setVisibility("hidden");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await flush();
+  assert.equal(run.gate.hidden, true, "the paint wait falls back to its timer");
+});
+
+test("a tab hidden while its Widgets paint stops waiting for them", async () => {
+  const run = boot({ nativeReads:true, widgetFrames:[{ contentWindow:{} }] });
+  await settle();
+  assert.equal(run.gate.hidden, false, "a visible tab waits for its Widgets");
+  run.setVisibility("hidden");
+  await settle();
+  assert.equal(run.gate.hidden, true);
+});
+
+test("Widget paints that never arrive stop the wait at its deadline", async () => {
+  let offset = 0;
+  const run = boot({ nativeReads:true, widgetFrames:[{ contentWindow:{} }], now:() => Date.now() + offset,
+    // Only the Widget wait (up to its 15 s deadline) runs on the fast clock.
+    statusTimeout:(callback, ms, ...args) => { const fast = ms >= 10_000 && ms <= 15_000; return setTimeout(() => { if (fast) offset += ms; callback(...args); }, fast ? 0 : ms); } });
+  await settle();
+  assert.equal(run.gate.hidden, true);
+  assert.ok(offset > 14_000 && offset <= 15_000, `waited ${offset} ms of a 15 s deadline`);
+});
+
+test("a hidden tab that cannot load its Canvas shows why instead of spinning", async () => {
+  const run = boot({ nativeReads:true, visibility:"hidden", frames:"none", openCanvas:async () => { throw new Error("This Canvas is no longer shared."); } });
+  await settle();
+  assert.deepEqual([run.gate.hidden, run.gate.dataset.state, run.detail.textContent], [false, "error", "This Canvas is no longer shared."]);
+});
+
 test("Remote public Echo uses the linked-host bridge without redirecting to a guessed LAN origin", async () => {
   const run = boot({
     pathname:`/canvas/community/${COMMUNITY_ID}`,
@@ -483,9 +533,9 @@ test("Remote Canvas gate keeps the zh copy path", async () => {
   const zh = boot({ language:"zh-CN", respond:() => ({ device:null }) });
   await flush();
   assert.equal(zh.gate.dataset.state, "unlinked");
-  assert.equal(zh.title.textContent, "连接 PenEcho 主机后即可打开");
-  assert.equal(zh.detail.textContent, "请先连接一台 PenEcho 主机。");
-  assert.deepEqual(zh.actions.map((el) => el.textContent), ["连接设备"]);
+  assert.equal(zh.title.textContent, "这张画布在这里打不开");
+  assert.equal(zh.detail.textContent, "它在一台电脑上。把它的项目保存到云端，就能在 penecho.ai 打开。");
+  assert.deepEqual(zh.actions.map((el) => el.textContent), ["返回控制台"]);
 
   const offline = boot({ language:"zh-CN", respond:() => ({ device:{ name:"我的 PenEcho", platform:"macOS", online:false } }) });
   await flush();

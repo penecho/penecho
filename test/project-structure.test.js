@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -23,6 +24,7 @@ test("the browser application preserves its ordered source dependencies", () => 
     "src/shared/sketch-puppet.js",
     "src/shared/illustration-style.js",
     "src/client/app/client-activity.js",
+    "src/client/app/pdf-document.js",
     "src/client/app/core.js",
     "src/client/app/canvas-runtime.js",
     "src/client/app/visual-explainer.js",
@@ -34,8 +36,13 @@ test("the browser application preserves its ordered source dependencies", () => 
     "src/client/app/mcp-troubleshoot.js",
     "src/client/app/mcp-runtime.js",
     "src/client/app/document-identity.js",
+    "src/client/app/canvas-merge.js",
     "src/client/app/canvas-documents.js",
+    "src/client/app/project-lines-bridge.js",
     "src/client/app/companion-canvases.js",
+    "src/client/app/folder-project.js",
+    "src/client/app/companion-project-bridge.js",
+    "src/client/app/live-canvas.js",
     "src/client/app/studio-navigator.js",
     "src/client/app/keyboard-shortcuts.js",
     "src/client/app/canvas-navigation.js",
@@ -43,13 +50,14 @@ test("the browser application preserves its ordered source dependencies", () => 
     "src/client/app/desktop-menu.js",
     "src/client/app/assist-agent.js",
     "src/client/app/smart-suggestions.js",
-    "src/client/app/agent-suggest.js",
     "src/client/app/widget-assist.js",
     "src/client/app/pen-intelligence.js",
     "src/client/app/canvas-index.js",
     "src/client/app/note-cards.js",
     "src/client/app/example-canvases.js",
     "src/client/app/living-ink.js",
+    "src/shared/slides-pptx.js",
+    "src/client/app/slides-export.js",
     "src/client/app/ui-bootstrap.js",
   ]);
   for (const source of SOURCES) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
@@ -83,7 +91,7 @@ test("desktop packaging unpacks the bundled project-search executable", () => {
   const forge = fs.readFileSync(path.join(ROOT, "forge.config.js"), "utf8");
   const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   assert.equal(packageJson.dependencies["@vscode/ripgrep"], "1.18.0");
-  assert.match(forge, /asar:\{ unpack:"\*\*\/node_modules\/\{sharp,@img,@vscode\}\/\*\*\/\*" \}/);
+  assert.match(forge, /asar:\{ unpack:"\*\*\/\{node_modules\/\{sharp,@img,@vscode\}\/\*\*\/\*,src\/server\/project-lines\/\{browser-call,orch-call\}\.js\}" \}/);
 });
 
 test("the npm package includes the generated Live Clay runtime and its build inputs", () => {

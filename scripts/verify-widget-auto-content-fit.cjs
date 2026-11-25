@@ -15,7 +15,7 @@ fs.createReadStream=function(file,...args){
     canvasAgentAssertToolExecution=()=>{};
     // The isolated local service serves the reviewed mirror at the root.
     if (${cloud}) canvasAssetUrl=name=>new URL(name,location.origin+'/').href;
-    window.autoFitTest={state,canvasDocumentsReady,loadCanvasSettings,canvasAgentCreate,canvasAgentReplaceWidget,canvasAgentHash,widgetEditContext,mcpExecute,mcpPresentationSize,mcpRevealRegion,restoreWidgets,serializedWidgets,widgetRecord,render,setCanvasMode,closeCanvasAgent,undo,redo};
+    window.autoFitTest={state,canvasDocumentsReady,loadCanvasSettings,canvasAgentCreate,canvasAgentReplaceWidget,canvasAgentHash,widgetEditContext,mcpExecute,mcpPresentationSize,mcpRevealRegion,restoreWidgets,serializedWidgets,widgetRecord,render,setCanvasMode,undo,redo};
   })();`)]);
   if(cloud&&["widget-host.js","widget-host.html"].includes(relative))return readStream.call(this,path.join(assetRoot,relative),...args);
   return readStream.call(this,file,...args);
@@ -30,7 +30,7 @@ app.whenReady().then(async()=>{try{
   win.webContents.on("console-message",(_event,level,message)=>{if(level>=3)report.errors.push(message);});
   const js=code=>win.webContents.executeJavaScript(code,true);
   await win.loadURL(`http://127.0.0.1:${server.address().port}`);await until(()=>js("!!window.autoFitTest"),"startup");
-  await js(`(async()=>{const t=autoFitTest;await t.canvasDocumentsReady();await t.loadCanvasSettings();document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();t.closeCanvasAgent();if(document.querySelector('#studioNavigatorToggle')?.getAttribute('aria-expanded')==='true')document.querySelector('#studioNavigatorToggle').click();t.state.auto=false;t.state.scale=1;t.state.panX=0;t.state.panY=0;t.setCanvasMode('pen');${cloud?"window.PENECHO_CONFIG.runtime='cloud';":""}})()`);
+  await js(`(async()=>{const t=autoFitTest;await t.canvasDocumentsReady();await t.loadCanvasSettings();document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();if(document.querySelector('#studioNavigatorToggle')?.getAttribute('aria-expanded')==='true')document.querySelector('#studioNavigatorToggle').click();t.state.auto=false;t.state.scale=1;t.state.panX=0;t.state.panY=0;t.setCanvasMode('pen');${cloud?"window.PENECHO_CONFIG.runtime='cloud';":""}})()`);
   const geometry=id=>js(`(()=>{const w=autoFitTest.state.widgets.find(w=>w.id===${JSON.stringify(id)});return {id:w.id,w:w.w,h:w.h,contentW:w.contentW,contentH:w.contentH,fitContentAxes:w.fitContentAxes,hasRequest:!!w.contentFitRequest,hasAutomatic:!!w.autoContentHeight};})()`);
   const settle=id=>until(()=>js(`(()=>{const w=autoFitTest.state.widgets.find(w=>w.id===${JSON.stringify(id)});return w.mcpDocumentLoaded&&!w.autoContentHeight&&!w.contentFitRequest;})()`),`fit ${id}`);
   const metrics=async name=>{

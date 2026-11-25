@@ -1,0 +1,14 @@
+/* The project and its expanded lines are one reorderable unit. Use the existing rail colors and dimensions. */
+.rail-project { flex: none; min-width: 0; }
+.rail-project .rail-row[data-p] { user-select: none; -webkit-user-select: none; }
+.rail-project.is-reordering, .rail-line-unit.is-reordering, .rail-line-item.is-reordering { opacity: .4; }
+.project-order-ghost { position: fixed; z-index: 1001; pointer-events: none; opacity: .95; background: var(--paper); border-radius: 8px; box-shadow: var(--shadow-2); }
+.project-order-ghost.rail-line-item::before, .project-order-ghost.rail-line-item::after { display: none; }
+.project-order-mark { position: fixed; z-index: 1002; height: 3px; pointer-events: none; border-radius: 2px; background: var(--accent); }
+.project-order-mark[hidden] { display: none; }
+body.project-reordering, body.project-reordering * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+body.project-reordering.is-invalid-drop, body.project-reordering.is-invalid-drop * { cursor: not-allowed !important; }
+.is-invalid-drop .project-order-ghost { opacity: .55; }
+@media (max-width: 1100px) {
+  .rail-project .rail-row[data-p] { cursor: grab; }
+}

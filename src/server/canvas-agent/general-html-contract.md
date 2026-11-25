@@ -25,7 +25,7 @@ For a simple result, keep the implementation simple. Prefer native HTML/CSS and 
 
 Treat the Canvas as an existing document. For an overlay or annotation, align the transparent Widget with the referenced region and draw only the new information; do not recreate the underlying content. Use nearby blank space for a standalone Widget when overlap would hide information.
 
-Keep `html`, `body`, and the outer stage transparent by default. Add the smallest useful opaque or translucent local surface only when it improves contrast, grouping, or media presentation, or when the user asks for it. Match the current Canvas palette, typography, spacing, density, line weight, and shape language when those facts are available.
+Keep `html`, `body`, and the outer stage transparent by default for overlays and general widgets (standalone UI prototypes route through `design-prototype` with `<html data-penecho-prototype>`). Add the smallest useful opaque or translucent local surface only when it improves contrast, grouping, or media presentation, or when the user asks for it. Match the current Canvas palette, typography, spacing, density, line weight, and shape language when those facts are available.
 
 Before adding a standalone Widget to a nonempty Canvas, inspect and capture the complete Canvas, then use `canvas_inspect` with `plannedWidget` for authoritative placement. After creation or a geometry change, review the complete Canvas before another spatial mutation. Source-only content patches are exempt from this layout gate and preserve the current live geometry.
 

@@ -1,3 +1,4 @@
+import './helpers/safety.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ensureMcp, SERVER_NAME, SERVER_URL } from '../integrations/penecho-uat/skills/penecho-canvas-uat/scripts/setup-mcp.mjs';

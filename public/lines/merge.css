@@ -1,0 +1,69 @@
+/* A line's Topic beside the line, and two Topics side by side to merge them (merge.js). */
+
+/* The line's Topic: in the right panel while no Work is open, or under the line where there is no room for the panel. */
+.sim { display: flex; flex-direction: column; min-height: 0; }
+.lp-panel .sim-all { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 14px 12px 16px; }
+.sim h2 { margin: 2px 4px 12px; font-size: 16px; font-weight: 660; }
+/* The line's Topic (PE-457, PE-459): its name opens its file, its counts beside it, its goal and what is left. */
+.sim-head { display: flex; align-items: center; gap: 10px; margin: 2px 4px 8px; }
+.sim-head h2 { flex: 1; min-width: 0; margin: 0; }
+.sim-left { margin: 0 4px 14px; }
+.sim-left ol { margin: 0; padding-left: 20px; color: var(--ink); font-size: 13px; line-height: 1.45; }
+.sim-left li + li { margin-top: 3px; }
+.sim-left h3 { margin: 0 0 6px; color: var(--ink2); font-size: 13px; font-weight: 640; }
+.sim-goal { margin: 0 4px 12px; color: var(--ink2); font-size: 13px; line-height: 1.45; }
+/* Two Topics side by side: the goal, then each line. */
+.mg-col > header .tp-n { margin-left: auto; }
+.mg-goal { margin: 0 0 14px; color: var(--ink2); font-size: 13.5px; line-height: 1.45; }
+.mg-tline { display: flex; flex-direction: column; gap: 4px; padding: 8px 0 8px 12px; border-left: 3px solid var(--mc); }
+.mg-tline + .mg-tline { margin-top: 6px; }
+.mg-tline strong { font-size: 14px; font-weight: 620; line-height: 1.35; overflow-wrap: anywhere; }
+.mg-tline .sim-foot { min-height: 0; }
+.sim-foot { display: flex; align-items: center; gap: 10px; min-height: 31px; }
+.sim-foot time { color: var(--ink3); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A small track: the line's last nodes, joined. */
+.sim-track { position: relative; display: flex; align-items: center; gap: 9px; min-width: 0; }
+.sim-track::before { content: ""; position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; margin-top: -1px; background: var(--l-line); }
+.sim-track i { position: relative; flex: none; width: 10px; height: 10px; background: var(--paper); border: 2px solid var(--c-ask); border-radius: 50%; box-sizing: border-box; }
+.sim-track i.k-work { background: var(--c-work); border: 0; border-radius: 2px; transform: rotate(45deg) scale(.85); }
+.sim-track i.k-note, .sim-track i.k-meeting { border-color: var(--ink3); }
+.sim-track i.k-canvas { background: var(--c-canvas, #8b5cf6); border: 0; border-radius: 3px; }
+.sim-track i.is-unsent { border-style: dashed; border-color: var(--amber-mark); }
+/* Under the line's track, in its own column, when the right panel has no room. */
+.lp-topic-side:empty { display: none; }
+.lp-topic-side { flex: 0 1 auto; max-height: 55%; min-height: 0; overflow: hidden auto; border-top: 1px solid var(--line); }
+.lp-topic-side .sim { padding: 12px 10px 14px; }
+.lp-topic-side .sim h2 { margin: 2px 4px 10px; font-size: 14.5px; }
+.folded .lp-topic-side { display: none; }
+.lp-topic:empty { display: none; }
+.lp-topic { flex: none; width: 100%; max-width: 780px; margin: 0 auto 8px; }
+.lp-topic .sim { padding: 14px 12px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
+
+/* A node merged in from another line: edged in that line's colour. */
+.lp-sheet [data-from] { border-left: 4px solid var(--from); }
+.lp-sheet .lp-note[data-from], .lp-sheet .lp-drawing[data-from] { padding-left: 12px; }
+.lp-sheet .lp-meeting[data-from] { border-left-color: var(--from); }
+
+/* Two Topics side by side, over the page, each scrolling on its own. */
+#lightbox:has(> .mg) { padding: 18px; }
+.mg { display: flex; flex-direction: column; width: min(1240px, 100%); height: min(860px, 100%); background: var(--bg); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-3); }
+.mg-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px; background: var(--line); }
+.mg-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+.mg-col > header { display: flex; align-items: center; gap: 10px; flex: none; min-height: 52px; padding: 8px 18px; background: var(--paper); border-bottom: 1px solid var(--line); box-shadow: inset 0 3px 0 var(--mc); }
+.mg-col > header i { flex: none; width: 12px; height: 12px; background: var(--mc); border-radius: 3px; }
+.mg-col > header h3 { min-width: 0; margin: 0; overflow: hidden; font-size: 16px; font-weight: 660; text-overflow: ellipsis; white-space: nowrap; }
+.mg-track { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 14px 18px 24px; }
+.mg-bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex: none; padding: 12px 16px; background: var(--paper); border-top: 1px solid var(--line); }
+.mg-say { flex: 1; min-width: 0; margin: 0; color: var(--ink2); font-size: 13.5px; }
+.mg-bar .btn.primary[disabled] { opacity: .5; cursor: default; }
+/* A phone: one Topic above the other. */
+@media (max-width: 760px) {
+  #lightbox:has(> .mg) { padding: 0; }
+  .mg { width: 100%; height: 100%; border-radius: 0; }
+  .mg-cols { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .mg-col > header { min-height: 44px; padding: 6px 14px; }
+  .mg-track { padding: 10px 14px 16px; }
+  .mg-bar { flex-wrap: wrap; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+  .mg-say { flex-basis: 100%; }
+  .mg-bar .btn { flex: 1; min-height: 42px; }
+}

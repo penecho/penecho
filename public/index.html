@@ -22,7 +22,11 @@
     crossorigin="anonymous"></script>
   <link rel="stylesheet" href="playground.css">
   <link rel="stylesheet" href="example-canvases.css">
+  <link rel="stylesheet" href="project-lines-entry.css">
   <link rel="stylesheet" href="studio-shell.css">
+  <link rel="stylesheet" href="lines/opening.css">
+  <script src="lines/opening.js"></script>
+  <script src="project-lines-cover.js"></script>
 </head>
 <body data-theme="studio" data-studio-palette="indigo" data-canvas-mode="pen">
   <main>
@@ -33,7 +37,13 @@
             <h1><span>Pen</span><strong>Echo</strong></h1>
           </div>
         </div>
+        <a id="companionBrandLink" class="companion-brand-link" href="/" target="_blank" rel="noopener" aria-label="PenEcho Lines" title="PenEcho Lines">
+          <img src="penecho-favicon.png" width="22" height="22" alt="">
+          <span>PenEcho <span class="brand-lines">Lines</span></span>
+        </a>
         <div id="canvasDocumentMeta" class="canvas-document-meta">
+          <button id="canvasBreadcrumbParent" class="canvas-breadcrumb-parent" type="button" data-pe-button="ghost" data-pe-density="compact" hidden></button>
+          <span id="canvasBreadcrumbSep" class="canvas-breadcrumb-sep" aria-hidden="true" hidden>/</span>
           <button id="canvasDocumentName" class="canvas-document-name" type="button" data-i18n-aria="canvasRenameCurrent" aria-label="Rename current canvas" data-pe-button="ghost" data-pe-density="compact"><span id="canvasDocumentNameLabel" data-i18n="canvasUntitledName">Untitled canvas</span></button>
           <span id="canvasDocumentNameEditor" class="canvas-document-name-editor" hidden>
             <input id="canvasDocumentNameInput" class="canvas-document-name-input" type="text" maxlength="48" autocomplete="off" data-i18n-placeholder="canvasNamePlaceholder" placeholder="Canvas name" data-i18n-aria="canvasNamePlaceholder" aria-label="Canvas name" hidden>
@@ -58,49 +68,109 @@
           </div>
         </div>
         <span id="canvasFileActions" class="canvas-file-actions">
-          <button id="newCanvasBtn" class="icon-button utility-icon" type="button" data-i18n-aria="newCanvas" aria-label="New canvas" data-i18n-title="newCanvas" title="New canvas" data-pe-button="toolbar" data-pe-density="compact">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M9 14h6M12 11v6"/></svg>
+          <span id="liveParticipants" class="live-participants" hidden></span>
+          <button id="headerMcpPill" class="header-mcp-pill" type="button" data-state="off" aria-expanded="false" aria-controls="mcpStatusPopover" data-pe-button="secondary" data-pe-density="compact" hidden>
+            <i class="mcp-toolbar-dot" aria-hidden="true"></i><span id="headerMcpName">MCP</span><span id="headerMcpState">Off</span>
           </button>
-          <button id="shareCanvasBtn" class="icon-button utility-icon cloud-share-canvas" type="button" data-i18n-aria="shareCanvasCloud" aria-label="Share Canvas to PenEcho Cloud" data-i18n-title="shareCanvasCloud" title="Share Canvas to PenEcho Cloud" data-pe-button="toolbar" data-pe-density="compact">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg>
-            <span class="canvas-share-label" data-i18n="shareCanvasAction">Share</span>
-          </button>
-          <button id="exportPngBtn" class="icon-button utility-icon" type="button" data-i18n-aria="exportPng" aria-label="Export PNG" data-i18n-title="exportPng" title="Export PNG" data-pe-button="toolbar" data-pe-density="compact">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>
-          </button>
-          <button id="historyBtn" class="icon-button" type="button" data-i18n-aria="history" aria-label="Local history" data-i18n-title="history" title="Local history" aria-expanded="false" aria-controls="historyPanel" data-pe-button="toolbar" data-pe-density="compact">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="M8 5V3h8v2M8 10h8M8 14h6"/></svg>
-          </button>
+          <div id="canvasShareControl" class="canvas-share-control">
+            <button id="shareCanvasBtn" class="icon-button utility-icon cloud-share-canvas" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="canvasShareMenu" data-i18n-aria="shareCanvasCloud" aria-label="Share" data-i18n-title="shareCanvasCloud" title="Share" data-pe-button="toolbar" data-pe-density="compact">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg>
+              <span class="canvas-share-label" data-i18n="shareCanvasAction">Share</span>
+            </button>
+            <div id="canvasShareMenu" class="canvas-more-menu canvas-share-menu" role="menu" data-i18n-aria="shareCanvasAction" aria-label="Share" data-pe-surface="menu" data-pe-list="menu" hidden>
+              <button id="shareDrawTogetherBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.5A4.5 4.5 0 0 1 21 19"/></svg>
+                <span class="share-menu-copy"><strong data-i18n="shareDrawTogether">Draw together</strong><small data-i18n="shareDrawTogetherDesc">Anyone with the link can draw with you live</small></span>
+                <span id="shareDrawTogetherState" class="menu-state-pill" hidden>Live</span>
+              </button>
+              <button id="shareViewLinkBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+                <span class="share-menu-copy"><strong data-i18n="shareViewLink">View link</strong><small data-i18n="shareViewLinkDesc">Read-only snapshot link in PenEcho Cloud</small></span>
+                <span id="shareViewLinkState" class="menu-state-pill" hidden>Shared</span>
+              </button>
+            </div>
+          </div>
         </span>
         <div id="canvasMoreControl" class="canvas-more-control">
           <button id="canvasMoreBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="canvasMoreMenu" data-i18n-aria="canvasMoreActions" aria-label="More canvas actions" data-i18n-title="canvasMoreActions" title="More canvas actions" data-pe-button="toolbar" data-pe-density="compact">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
           </button>
           <div id="canvasMoreMenu" class="canvas-more-menu" role="menu" data-i18n-aria="canvasMoreActions" aria-label="More canvas actions" data-pe-surface="menu" data-pe-list="menu" hidden>
-            <button type="button" role="menuitem" data-shell-forward="#newCanvasBtn" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M9 14h6M12 11v6"/></svg><span data-i18n="historyNewCanvas">New Canvas</span></button>
-            <button type="button" role="menuitem" data-shell-forward="#historyBtn" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="M8 5V3h8v2M8 10h8M8 14h6"/></svg><span data-i18n="historyTitle">Canvas Library</span></button>
-            <button type="button" role="menuitem" data-shell-forward="#historyNotesNav" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4.5"/></svg><span data-i18n="libraryNotes">Notes &amp; cards</span></button>
-            <button type="button" role="menuitem" data-open-examples data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg><span data-example-label="examples">Examples</span></button>
-            <button type="button" role="menuitem" data-shell-forward="#exportPngBtn" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg><span data-i18n="exportPng">Export PNG</span></button>
-            <button type="button" role="menuitem" data-shell-forward="#clipboardCopyBtn" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h6M9 14h6M9 18h4"/></svg><span data-i18n="clipboardPasteLabel">Paste</span></button>
-            <button type="button" role="menuitem" data-shell-forward="#fullscreenBtn" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg><span data-i18n="fullscreen">Fullscreen</span></button>
+            <div class="canvas-more-panel" data-more-panel="root">
+              <button id="moreNewCanvasBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M9 14h6M12 11v6"/></svg><span data-i18n="historyNewCanvas">New Canvas</span></button>
+              <button id="moreRenameCanvasBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg><span data-i18n="renameCanvasAction">Rename</span></button>
+              <button id="moreSaveToProjectBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15M3.5 10h6"/></svg><span id="moreSaveToProjectLabel">Save to a Project…</span></button>
+              <a id="moreOpenProjectsLink" role="menuitem" data-pe-button="menu-item" data-pe-density="standard" href="/dashboard.html" target="_blank" rel="noopener" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3Z"/></svg><span id="moreOpenProjectsLabel">Open PenEcho Projects ↗</span></a>
+              <button id="moreMoveCanvasBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4"/><path d="M20 16H5M9 12l-4 4 4 4"/></svg><span id="moreMoveCanvasLabel" data-i18n="moveCanvasAction">Move its line to…</span></button>
+              <button id="moreOpenFolderBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span data-i18n="openFolderFinderAction">Open folder in Finder</span></button>
+              <div id="moreSepPrimary" class="menu-sep" role="separator"></div>
+              <button id="moreDownloadTrigger" type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-more-sub="download" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg><span data-i18n="downloadMenuAction">Download</span><svg class="menu-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+              <button type="button" role="menuitem" data-shell-forward="#fullscreenBtn" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg><span data-i18n="presentAction">Present</span></button>
+              <button type="button" role="menuitem" data-open-examples data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg><span data-example-label="examples">Examples</span></button>
+              <div class="menu-sep" role="separator"></div>
+              <button id="canvasMoreMcpSwitch" type="button" role="menuitemcheckbox" aria-checked="false" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="6" rx="1"/><rect x="2.5" y="15.5" width="6" height="6" rx="1"/><rect x="15.5" y="15.5" width="6" height="6" rx="1"/><path d="M12 8.5v3.5M5.5 15.5V12h13v3.5"/></svg><span class="menu-item-label" data-i18n="mcpDrawHereAction">MCP can draw here</span><span class="menu-toggle-pill" aria-hidden="true"><span></span></span></button>
+              <button id="canvasMoreSettingsBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/></svg><span data-i18n="canvasSettingsAction">Canvas settings</span></button>
+              <button id="moreHelpTrigger" type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-more-sub="help" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7M12 17h.01"/></svg><span data-i18n="helpMenu">Help</span><svg class="menu-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+              <div id="moreSepDanger" class="menu-sep" role="separator" data-penecho-guest-hide></div>
+              <button id="moreDeleteCanvasBtn" type="button" role="menuitem" class="menu-danger" data-penecho-guest-hide data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></svg><span data-i18n="deleteCanvasAction">Delete</span></button>
+            </div>
+            <div class="canvas-more-submenu" role="menu" data-more-submenu="download" data-i18n-aria="downloadMenuAction" aria-label="Download" hidden>
+              <button type="button" class="canvas-more-back" data-more-back data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span data-i18n="backLabel">Back</span></button>
+              <button type="button" role="menuitem" data-shell-forward="#exportPngBtn" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m4 17 5-4 3.5 3 3-2.5 4.5 3.5"/></svg><span data-i18n="pngImageAction">PNG image</span></button>
+              <button id="exportPdfBtn" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M12 10v7M9 14l3 3 3-3"/></svg><span data-i18n="downloadPdf">Download PDF</span></button>
+            </div>
+            <div class="canvas-more-submenu" role="menu" data-more-submenu="help" data-i18n-aria="helpMenu" aria-label="Help" hidden>
+              <button type="button" class="canvas-more-back" data-more-back data-pe-button="menu-item" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span data-i18n="backLabel">Back</span></button>
+              <button type="button" role="menuitem" data-more-help="shortcuts" data-pe-button="menu-item" data-pe-density="standard"><span data-i18n="helpShortcuts">Keyboard shortcuts</span></button>
+              <a role="menuitem" data-more-help="feedback" data-pe-button="menu-item" data-pe-density="standard" href="https://github.com/penecho/penecho/issues" target="_blank" rel="noopener noreferrer"><span data-i18n="helpFeedback">Send feedback</span></a>
+            </div>
           </div>
         </div>
         <button id="companionCanvasTarget" type="button" class="companion-canvas-target" popovertarget="companionCanvasMenu" hidden>MCP</button>
-        <button id="companionViewToggle" class="companion-view-toggle" type="button" aria-label="Show full Canvas" title="Show full Canvas" data-pe-button="secondary" data-pe-density="compact" hidden>
-          <svg class="companion-view-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>
-          <svg class="companion-view-compact" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5"/></svg>
-          <span id="companionViewLabel" class="companion-view-label">Full Canvas</span>
-        </button>
-        <button id="cloudAccountBtn" class="cloud-account-button" type="button" aria-label="PenEcho Cloud" title="PenEcho Cloud" aria-expanded="false" data-pe-button="secondary" data-pe-density="compact">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5h10.5a4 4 0 0 0 .4-8A6.2 6.2 0 0 0 6 9.2 4.7 4.7 0 0 0 7 18.5Z"/></svg>
-          <span class="cloud-account-label">Cloud</span>
-          <span class="cloud-account-dot" aria-hidden="true"></span>
-        </button>
-        <button id="settingsBtn" class="icon-button utility-icon" type="button" data-i18n-aria="settingsTitle" aria-label="Settings" data-i18n-title="settingsTitle" title="Settings" aria-expanded="false" aria-controls="settingsPanel" data-pe-button="toolbar" data-pe-density="compact">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/></svg>
-        </button>
+        <div id="canvasCommandProxies" class="canvas-command-proxies" hidden aria-hidden="true">
+          <button id="newCanvasBtn" class="icon-button utility-icon" type="button" data-i18n-aria="newCanvas" aria-label="New canvas" data-i18n-title="newCanvas" title="New canvas" data-pe-button="toolbar" data-pe-density="compact">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M9 14h6M12 11v6"/></svg>
+          </button>
+          <button id="collaborateCanvasBtn" class="icon-button utility-icon cloud-collaborate-canvas" type="button" data-i18n-aria="collaborateCanvas" aria-label="Collaborate live" data-i18n-title="collaborateCanvas" title="Collaborate live" data-pe-button="toolbar" data-pe-density="compact">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.5A4.5 4.5 0 0 1 21 19"/></svg>
+            <span class="canvas-share-label" data-i18n="collaborateCanvasAction">Collaborate</span>
+          </button>
+          <button id="exportPngBtn" class="icon-button utility-icon" type="button" data-i18n-aria="exportPng" aria-label="Export PNG" data-i18n-title="exportPng" title="Export PNG" data-pe-button="toolbar" data-pe-density="compact">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>
+          </button>
+          <button id="historyBtn" data-library-entry class="icon-button" type="button" data-i18n-aria="history" aria-label="Local history" data-i18n-title="history" title="Local history" aria-expanded="false" aria-controls="historyPanel" data-pe-button="toolbar" data-pe-density="compact">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="M8 5V3h8v2M8 10h8M8 14h6"/></svg>
+          </button>
+          <button id="companionViewToggle" class="companion-view-toggle" type="button" aria-label="Show full Canvas" title="Show full Canvas" data-pe-button="secondary" data-pe-density="compact" hidden>
+            <svg class="companion-view-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>
+            <svg class="companion-view-compact" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5"/></svg>
+            <span id="companionViewLabel" class="companion-view-label">Full Canvas</span>
+          </button>
+          <button id="cloudAccountBtn" class="cloud-account-button" type="button" aria-label="PenEcho Cloud" title="PenEcho Cloud" aria-expanded="false" data-pe-button="secondary" data-pe-density="compact">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5h10.5a4 4 0 0 0 .4-8A6.2 6.2 0 0 0 6 9.2 4.7 4.7 0 0 0 7 18.5Z"/></svg>
+            <span class="cloud-account-label">Cloud</span>
+            <span class="cloud-account-dot" aria-hidden="true"></span>
+          </button>
+          <div id="helpMenuControl" class="help-menu-control">
+            <button id="helpMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="helpMenu" data-i18n-aria="helpMenu" aria-label="Help" data-i18n-title="helpMenu" title="Help" data-pe-button="toolbar" data-pe-density="compact">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7M12 17h.01"/></svg>
+            </button>
+            <div id="helpMenu" class="help-menu" role="menu" data-i18n-aria="helpMenu" aria-label="Help" hidden>
+              <button type="button" role="menuitem" data-help="shortcuts" data-pe-button="menu-item" data-pe-density="standard"><span data-i18n="helpShortcuts">Keyboard shortcuts</span></button>
+              <a role="menuitem" data-help="feedback" data-pe-button="menu-item" data-pe-density="standard" href="https://github.com/penecho/penecho/issues" target="_blank" rel="noopener noreferrer"><span data-i18n="helpFeedback">Send feedback</span></a>
+            </div>
+          </div>
+          <button id="settingsBtn" class="icon-button utility-icon" type="button" data-i18n-aria="settingsTitle" aria-label="Settings" data-i18n-title="settingsTitle" title="Settings" aria-expanded="false" aria-controls="settingsPanel" data-pe-button="toolbar" data-pe-density="compact">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/></svg>
+          </button>
+        </div>
+        <a class="project-lines-link" href="/projects.html" data-project-lines-link><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3Z"/></svg><span data-project-lines-label>Projects</span></a>
+        <span id="guestAccountActions" class="guest-account-actions" hidden>
+          <button id="guestSignInBtn" type="button" data-i18n="guestSignIn" data-pe-button="ghost" data-pe-density="compact">Sign in</button>
+          <button id="guestSignUpBtn" type="button" data-i18n="guestSignUp" data-pe-button="primary" data-pe-density="compact">Sign up</button>
+        </span>
       </header>
+      <nav id="companionTabs" class="companion-tabs" aria-label="Canvases" hidden></nav>
 
       <nav class="toolbar" data-i18n-aria="boardTools" aria-label="Board tools">
         <button id="studioNavigatorToggle" aria-describedby="studioWorkspaceUpdateHint" class="studio-navigator-toggle" type="button" aria-expanded="false" aria-controls="studioNavigator" data-i18n-aria="studioNavigatorOpen" aria-label="Open recent work" data-i18n-title="studioNavigatorOpen" title="Open recent work" data-pe-button="toolbar" data-pe-density="compact">
@@ -110,7 +180,10 @@
         <span class="toolbar-leading-divider" aria-hidden="true"></span>
         <div class="tool-group primary-tools">
           <div id="aiToolsSection" class="ai-tools-section" role="group" data-i18n-aria="aiTools" aria-label="AI tools">
-            <button id="aiToolbarRun" class="ai-section-label" type="button" data-shell-forward="#aiOrb" data-i18n-aria="triggerAutoAI" aria-label="Run Auto AI now" data-i18n-title="triggerAutoAI" title="Run Auto AI now">AI</button>
+          <div id="aiModelControl" class="ai-model-control">
+            <button id="aiModelButton" class="ai-model-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="aiModelMenu" title="Model for Canvas AI" data-pe-button="secondary" data-pe-density="compact"><span id="aiModelLabel">Choose a model</span><svg class="ai-model-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button>
+            <div id="aiModelMenu" class="ai-model-menu" role="menu" data-i18n-aria="aiModelPick" aria-label="Model for Canvas AI" hidden></div>
+          </div>
           <div id="autoControl" class="auto-control">
             <button id="auto" type="button" aria-pressed="false" aria-expanded="false" aria-controls="autoDelayPopover" data-i18n-aria="autoAI" aria-label="Auto AI" data-i18n-title="autoAI" title="Auto AI" data-pe-button="secondary" data-pe-density="compact"><span id="autoLabel">Manual AI</span></button>
             <div id="autoDelayPopover" class="auto-delay-popover" hidden>
@@ -171,6 +244,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg>
             </button>
           </div>
+            <button id="aiToolbarRun" class="ai-section-label" type="button" data-shell-forward="#aiOrb" title="Run AI">Run AI</button>
           </div>
           <div class="mode-tools">
             <button id="canvasViewBtn" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="enterCanvasViewMode" aria-label="View canvas" data-i18n-title="enterCanvasViewMode" title="View canvas" data-pe-button="toolbar" data-pe-density="compact">
@@ -268,10 +342,6 @@
               <i class="mcp-toolbar-dot" aria-hidden="true"></i><span id="mcpToolbarName">MCP</span><span id="mcpToolbarStatus">Off</span><svg class="mcp-status-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
             </button>
             <button id="playgroundToggle" class="canvas-agent-trigger" data-pe-button="toolbar" data-pe-density="compact" type="button" aria-expanded="false" aria-controls="playgroundPanel" title="Playground" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9c0-5 12-6 14 0s-2 11-7 10S3 15 5 9Z"/></svg><span>Playground</span></button>
-            <button id="canvasAgentToggle" class="canvas-agent-trigger" data-pe-button="toolbar" data-pe-density="compact" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentPanel" data-i18n-aria="openCanvasAgent" aria-label="Open PenEcho Agent" data-i18n-title="canvasAgent" title="PenEcho Agent">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 2-2Z"/></svg>
-              <span data-i18n="canvasAgentShort">Agent</span>
-            </button>
           </div>
         </span>
       </nav>
@@ -297,7 +367,6 @@
         <aside class="history-library-sidebar penecho-workbench-navigation" data-pe-region="navigator" data-i18n-aria="historyLibraryNavigation" aria-label="Canvas Library navigation">
           <div class="shell-library-links history-sidebar-section">
             <button id="historyRecentNav" class="shell-library-link" type="button" aria-current="false" data-pe-button="menu-item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg><span data-i18n="historyRecent">Recent</span></button>
-            <button id="historyFavoritesNav" class="shell-library-link" type="button" aria-current="false" aria-controls="historyFavoritesView" data-pe-button="menu-item"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg><span data-i18n="libraryFavorites">Favorites</span><small id="historyFavoritesCount" class="history-favorites-count" hidden></small></button>
             <button id="historyCanvasNav" class="shell-library-link" type="button" aria-current="page" aria-controls="historyList" data-pe-button="menu-item"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="m7 15 3-4 3 3 2-2 2 3"/></svg><span data-i18n="libraryCanvas">Canvas</span></button>
             <div class="shell-library-divider" role="separator" aria-orientation="horizontal"></div>
             <button id="historyNotesNav" class="shell-library-link" type="button" aria-current="false" aria-controls="historyNotesView" data-pe-button="menu-item"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4.5"/></svg><span data-i18n="libraryNotes">Notes &amp; cards</span><small id="historyNotesCount" class="history-favorites-count" hidden></small></button>
@@ -488,12 +557,12 @@
     </dialog>
 
     <section class="canvas-frame">
+      <div id="projectLinesContextStrip" class="project-lines-context-strip" role="region" aria-label="Line attachment" hidden></div>
       <!-- Companion rail (mode=companion): presentation-only forwarders to the
            existing tool controls; studio-shell.js mirrors their state. -->
       <nav id="companionRail" class="companion-rail" aria-label="Canvas tools" hidden>
         <button id="companionCanvasNew" type="button" class="companion-rail-button" aria-label="New canvas" title="New canvas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
         <button id="companionCanvasSwitch" type="button" class="companion-rail-button" popovertarget="companionCanvasMenu" aria-label="Switch canvas" title="Switch canvas"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="14" height="14" rx="2"/><path d="M17 7V3H3v14h4"/></svg></button>
-        <button type="button" class="companion-rail-button" data-shell-forward="#canvasAgentToggle" data-shell-mirror="#canvasAgentToggle" aria-label="PenEcho Agent" title="PenEcho Agent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/></svg></button>
         <button type="button" class="companion-rail-button" data-shell-forward="#studioNavigatorToggle" data-shell-mirror="#studioNavigatorToggle" aria-label="Open recent work" title="Open recent work"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
         <button id="companionRailMcp" type="button" class="companion-rail-button companion-rail-mcp" data-shell-mirror="#mcpToolbarToggle" aria-haspopup="dialog" aria-controls="mcpStatusPopover" aria-label="MCP status" title="MCP status"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="6" rx="1"/><rect x="2.5" y="15.5" width="6" height="6" rx="1"/><rect x="15.5" y="15.5" width="6" height="6" rx="1"/><path d="M12 8.5v3.5M5.5 15.5V12h13v3.5"/></svg><i class="companion-rail-dot" aria-hidden="true"></i></button>
         <span class="companion-rail-divider" aria-hidden="true"></span>
@@ -504,6 +573,7 @@
         <button type="button" class="companion-rail-button" data-shell-forward="#canvasUndoBtn" data-shell-mirror="#canvasUndoBtn" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4-5 5 5 5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
         <button type="button" class="companion-rail-button" data-shell-forward="#canvasRedoBtn" data-shell-mirror="#canvasRedoBtn" aria-label="Redo" title="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-5 5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
         <button type="button" class="companion-rail-button" data-shell-forward="#canvasFitContents" data-shell-mirror="#canvasFitContents" aria-label="Fit all content" title="Fit all content"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/></svg></button>
+        <button id="companionRailProjects" type="button" class="companion-rail-button companion-rail-projects" aria-label="PenEcho Projects" title="PenEcho Projects" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15M3.5 10h6"/></svg></button>
       </nav>
       <section id="companionCanvasMenu" class="companion-canvas-menu" popover="auto" role="dialog" aria-labelledby="companionCanvasMenuTitle">
         <strong id="companionCanvasMenuTitle">Canvases</strong>
@@ -511,6 +581,9 @@
         <div id="companionCanvasList"></div>
         <p id="companionCanvasError" role="status" hidden></p>
       </section>
+      <section id="projectBridgePopover" class="project-bridge-popover" popover="auto" role="dialog" aria-labelledby="projectBridgePopoverTitle"></section>
+      <dialog id="companionProjectModal" class="companion-project-dialog" aria-labelledby="companionProjectModalTitle"></dialog>
+      <div id="companionTabMenu" class="companion-tab-menu" popover="auto"></div>
       <div class="frame-corner corner-left" aria-hidden="true"></div>
       <div class="frame-corner corner-right" aria-hidden="true"></div>
       <div id="studioNavigatorScrim" class="studio-navigator-scrim" aria-hidden="true" hidden></div>
@@ -529,11 +602,14 @@
           <div class="studio-navigator-tabs" data-pe-control="tab" role="tablist" data-i18n-aria="studioNavigatorTitle" aria-label="Recent work">
             <button id="studioNavigatorAllTab" type="button" role="tab" aria-selected="true" aria-controls="studioNavigatorAllPanel" data-studio-navigator-tab="all" data-i18n="studioNavigatorAll">All</button>
             <button id="studioNavigatorCanvasTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorCanvasPanel" data-studio-navigator-tab="canvas" data-i18n="studioNavigatorCanvases">Canvases</button>
-            <button id="studioNavigatorAgentTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorAgentPanel" data-studio-navigator-tab="agent" data-i18n="studioNavigatorAgents">Agent</button>
             <button id="studioNavigatorMcpTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorMcpPanel" data-studio-navigator-tab="mcp" tabindex="-1">MCP</button>
           </div>
         </header>
         <div class="studio-navigator-body">
+          <section id="projectLinesSide" class="project-lines-side" aria-labelledby="projectLinesSideTitle" hidden>
+            <div class="project-lines-side-head"><h3 id="projectLinesSideTitle" class="studio-navigator-section-label" data-project-lines-side-title>Projects</h3><a href="/projects.html" data-project-lines-side-all>All</a></div>
+            <div data-project-lines-side-list></div>
+          </section>
           <section id="studioNavigatorOpenSection" class="studio-navigator-open-section" aria-labelledby="studioNavigatorOpenTitle">
             <div class="studio-navigator-open-heading"><h3 id="studioNavigatorOpenTitle" class="studio-navigator-section-label" data-i18n="studioNavigatorOpened">Open</h3><button id="studioNavigatorOpenToggle" type="button" aria-expanded="true" aria-controls="studioNavigatorOpenList" aria-label="Collapse open canvases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button></div>
           <div id="canvasWorkspace" class="canvas-workspace" hidden>
@@ -563,10 +639,6 @@
             </div><div class="studio-navigator-ai-heading"><h3 id="studioNavigatorAiTitle" class="studio-navigator-section-label"></h3><span id="studioNavigatorMcpMenuHost"></span></div>
             <div id="studioMcpRecentList" class="studio-navigator-list"></div>
           </section>
-          <section id="studioNavigatorAgentPanel" class="studio-navigator-panel" role="tabpanel" aria-labelledby="studioNavigatorAgentTab" hidden>
-            <button id="studioNavigatorNewChat" class="studio-navigator-new-chat" type="button"><span aria-hidden="true">＋</span><span data-i18n="studioNavigatorNewChat">New chat on this canvas</span></button>
-            <div id="studioAgentRecentList" class="studio-navigator-list"></div>
-          </section>
           <section id="studioNavigatorCanvasPanel" class="studio-navigator-panel" role="tabpanel" aria-labelledby="studioNavigatorCanvasTab" hidden>
             <div id="studioNavigatorLocations" class="studio-navigator-locations" role="group" data-i18n-aria="studioNavigatorLocation" aria-label="Canvas location"></div><label class="studio-navigator-sort"><select id="studioNavigatorSort" data-i18n-aria="studioNavigatorSort" aria-label="Sort canvases"><option value="modified" data-i18n="studioNavigatorLastModified">Last modified</option><option value="created" data-i18n="studioNavigatorNewest">Newest first</option><option value="name" data-i18n="studioNavigatorName">Name</option></select></label>
             <div id="studioCanvasRecentList" class="studio-navigator-list"></div>
@@ -574,9 +646,8 @@
         </div>
         <footer class="studio-navigator-foot">
           <nav class="studio-navigator-destinations" data-i18n-aria="studioNavigatorTitle" aria-label="Recent work">
-            <button id="studioNavigatorManage" type="button" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg><span data-i18n="studioNavigatorLibraryShort">Library</span></button>
-            <button type="button" data-shell-forward="#historyBtn,#historyFavoritesNav" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg><span data-i18n="libraryFavorites">Favorites</span></button>
-            <button type="button" data-shell-forward="#historyNotesNav" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4.5"/></svg><span data-i18n="libraryNotes">Notes &amp; cards</span></button>
+            <button id="studioNavigatorManage" data-library-entry type="button" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg><span data-i18n="studioNavigatorLibraryShort">Library</span></button>
+            <button type="button" data-library-entry data-shell-forward="#historyNotesNav" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4.5"/></svg><span data-i18n="libraryNotes">Notes &amp; cards</span></button>
             <button id="studioNavigatorExamples" type="button" data-open-examples data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg><span data-example-label="examples">Examples</span><small id="studioNavigatorExamplesProgress" class="example-nav-progress"></small></button>
           </nav>
           <span id="canvasWorkspaceStatus" role="status" aria-live="polite"></span>
@@ -585,21 +656,6 @@
           </div>
         </footer>
       </aside>
-      <dialog id="studioSessionDeleteDialog" class="studio-session-delete-dialog" aria-labelledby="studioSessionDeleteTitle" aria-describedby="studioSessionDeleteDescription">
-        <form method="dialog">
-          <div class="studio-session-delete-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
-          </div>
-          <div class="studio-session-delete-copy">
-            <h2 id="studioSessionDeleteTitle" data-i18n="studioNavigatorDeleteSessionTitle">Delete session?</h2>
-            <p id="studioSessionDeleteDescription">This session will be permanently deleted.</p>
-          </div>
-          <div class="studio-session-delete-actions">
-            <button id="studioSessionDeleteCancel" type="submit" value="cancel" data-i18n="cancel" data-pe-button="secondary" data-pe-density="standard">Cancel</button>
-            <button id="studioSessionDeleteConfirm" class="danger" type="button" data-i18n="studioNavigatorDeleteSessionAction" data-pe-button="danger-primary" data-pe-density="standard">Delete</button>
-          </div>
-        </form>
-      </dialog>
       <section id="viewport" data-i18n-aria="canvas" aria-label="Zoomable handwritten AI canvas">
         <div id="canvasViewActions" class="canvas-view-actions" role="toolbar" data-i18n-aria="canvasViewModeActions" aria-label="View mode actions" hidden>
           <button id="canvasViewHand" type="button" data-i18n-aria="canvasViewHand" aria-label="Move canvas" data-i18n-title="canvasViewHand" title="Move canvas" aria-pressed="true" data-pe-button="toolbar" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12V5a2 2 0 0 1 4 0v6-8a2 2 0 0 1 4 0v8-5a2 2 0 0 1 4 0v8c0 5-3 7-7 7-3 0-5-2-6-4l-3-5a2 2 0 0 1 3-2l1 2"/></svg></button>
@@ -650,25 +706,17 @@
         </div>
 
         <div id="canvasWelcome" class="canvas-welcome" hidden>
-          <strong data-i18n="canvasWelcomeTitle">Start with a sketch, or ask AI</strong>
-          <span data-i18n="canvasWelcomeBody">Write anywhere on the canvas. PenEcho Agent or your own AI assistant turns it into diagrams, notes and working widgets.</span>
-          <div id="canvasWelcomeExamples" class="canvas-welcome-examples" role="group" aria-labelledby="canvasWelcomeExamplesTitle" hidden>
-            <div class="canvas-welcome-examples-head">
-              <span id="canvasWelcomeExamplesTitle">New here? Pick a goal, then try an example</span>
-              <span id="canvasWelcomeExamplesProgress" class="canvas-welcome-examples-progress"></span>
-              <button id="canvasWelcomeExamplesAll" type="button" data-pe-button="ghost" data-pe-density="compact">All examples</button>
-            </div>
-            <div id="canvasWelcomeGoals" class="example-goals" role="group" data-pe-control="segmented" aria-label="What would you like to do first?"></div>
+          <strong data-i18n="canvasWelcomeTitle">Start with a sketch, or try one of these</strong>
+          <span data-i18n="canvasWelcomeBody">Write or draw anywhere. Select your work and choose Run AI.</span>
+          <section id="projectLinesEntry" aria-label="Projects" hidden></section>
+          <div id="canvasWelcomeExamples" class="canvas-welcome-examples" role="group" data-i18n-aria="canvasWelcomeTitle" aria-label="Start with a sketch, or try one of these" hidden>
             <div id="canvasWelcomeExampleList" class="canvas-welcome-example-list"></div>
+            <button id="canvasWelcomeExamplesAll" class="canvas-welcome-examples-all" type="button">All 20 examples</button>
           </div>
           <div id="canvasWelcomeActions" class="canvas-welcome-actions" role="group" data-shell-aria="welcomeActions" aria-label="Start with PenEcho">
             <button id="canvasWelcomeDraw" type="button" data-shell-forward="#penToolBtn">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
               <strong data-i18n="canvasWelcomeDraw">Draw by hand</strong><span data-i18n="canvasWelcomeDrawBody">Ink, text and images. Choose a suggestion or ask AI.</span><kbd data-welcome-shortcut="pen">P</kbd>
-            </button>
-            <button id="canvasWelcomeAgent" type="button" data-shell-forward="#canvasAgentToggle">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v13H9l-4 4V4Z"/></svg>
-              <strong data-i18n="canvasWelcomeAgent">Ask PenEcho Agent</strong><span data-i18n="canvasWelcomeAgentBody">Describe a diagram, plan, prototype or quiz.</span><kbd data-welcome-shortcut="focusAgent">Tab</kbd>
             </button>
             <button id="canvasWelcomeMcp" type="button" data-shell-forward="#mcpToolbarToggle">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M5 16v-4h14v4"/></svg>
@@ -715,236 +763,13 @@
           <span class="orb-particle particle-one" aria-hidden="true"></span>
           <span class="orb-particle particle-two" aria-hidden="true"></span>
           <span class="orb-particle particle-three" aria-hidden="true"></span>
-          <button id="aiOrb" class="ai-orb" type="button" data-i18n-aria="triggerAutoAI" aria-label="Run Auto AI now">
+          <button id="aiOrb" class="ai-orb" type="button" data-i18n-aria="triggerAutoAI" aria-label="Run AI">
             <span class="arcane-crystal" aria-hidden="true"></span>
             <span class="reactor-core" aria-hidden="true"></span>
             <svg class="einstein-portrait" viewBox="0 0 80 80" aria-hidden="true"><path class="einstein-hair" d="M18 39C7 33 13 21 22 23 16 13 29 10 34 16 39 7 52 11 54 18 64 12 72 22 65 30 77 35 69 48 61 46L57 34H23Z"/><path class="einstein-face" d="M22 31c0-11 35-12 36 0v15c0 11-7 20-18 20S22 57 22 46Z"/><path class="einstein-eye" d="M28 42h8m8 0h8"/><path class="einstein-moustache" d="M27 51c5-4 10-2 13 2 3-4 8-6 13-2-4 8-10 9-13 5-4 4-10 3-13-5Z"/><path class="einstein-coat" d="M18 76c3-11 11-15 22-15s19 4 22 15Z"/></svg>
             <span class="ai-stop-icon" aria-hidden="true"></span>
           </button>
         </div>
-        <canvas id="canvasAgentWidgetPickerLayer" class="canvas-agent-widget-picker-layer" width="1" height="1" aria-hidden="true" hidden></canvas>
-        <span id="canvasAgentHome" hidden></span>
-        <section id="canvasAgentPanel" class="canvas-agent-panel" role="dialog" data-i18n-aria="canvasAgent" aria-label="PenEcho Agent" aria-hidden="true" hidden inert>
-          <div id="canvasAgentResizeTop" class="canvas-agent-resize-edge top" role="separator" aria-orientation="horizontal" aria-controls="canvasAgentPanel" aria-valuemin="320" tabindex="0" data-edge="top" data-i18n-aria="canvasAgentResizeTop" aria-label="Resize PenEcho Agent from the top edge"></div>
-          <div id="canvasAgentResizeLeft" class="canvas-agent-resize-edge left" role="separator" aria-orientation="vertical" aria-controls="canvasAgentPanel" aria-valuemin="360" tabindex="0" data-edge="left" data-i18n-aria="canvasAgentResizeLeft" aria-label="Resize PenEcho Agent from the left edge"></div>
-          <div id="canvasAgentResizeRight" class="canvas-agent-resize-edge right" role="separator" aria-orientation="vertical" aria-controls="canvasAgentPanel" aria-valuemin="360" tabindex="0" data-edge="right" data-i18n-aria="canvasAgentResizeRight" aria-label="Resize PenEcho Agent from the right edge"></div>
-          <header id="canvasAgentHead" class="canvas-agent-head" data-i18n-title="canvasAgentMove" title="Drag to move PenEcho Agent">
-            <div class="canvas-agent-identity penecho-workbench-identity">
-              <span class="canvas-agent-mark" aria-hidden="true"></span>
-              <div class="canvas-agent-heading penecho-workbench-heading"><strong data-i18n="canvasAgent">PenEcho Agent</strong><small id="canvasAgentStatus" data-i18n="canvasAgentReadyConnect">Ready to connect</small></div>
-            </div>
-            <button id="canvasAgentHistory" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentHistoryPopover" data-i18n-title="canvasAgentHistory" title="Sessions on this Canvas" data-i18n-aria="canvasAgentHistory" aria-label="Sessions on this Canvas" data-pe-button="toolbar" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5M4 4v4.5h4.5"/><path d="M12 8v4l2.5 1.5"/></svg></button>
-            <button id="canvasAgentNew" type="button" data-i18n-title="newCanvasAgentConversation" title="New PenEcho Agent conversation" data-i18n-aria="newCanvasAgentConversation" aria-label="New PenEcho Agent conversation" data-pe-button="toolbar" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-            <button id="canvasAgentClose" type="button" data-i18n-title="closeCanvasAgent" title="Close PenEcho Agent" data-i18n-aria="closeCanvasAgent" aria-label="Close PenEcho Agent" data-pe-button="icon" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-          </header>
-          <dialog id="canvasAgentProjectPopover" class="canvas-agent-project-dialog" aria-labelledby="canvasAgentProjectTitle" aria-describedby="canvasAgentProjectDescription canvasAgentProjectBoundary">
-            <header class="canvas-agent-project-dialog-head">
-              <div>
-                <span class="canvas-agent-project-eyebrow" data-i18n="canvasAgentWorkspace">Workspace</span>
-                <h2 id="canvasAgentProjectTitle" data-i18n="canvasAgentProjectManager">Project manager</h2>
-              </div>
-              <button id="canvasAgentProjectClose" class="canvas-agent-project-close" type="button" data-i18n-aria="canvasAgentProjectClose" aria-label="Close project manager" data-pe-button="icon" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-            </header>
-            <div class="canvas-agent-project-dialog-body">
-                <p id="canvasAgentProjectDescription" data-i18n="canvasAgentProjectManagerDescription">Projects are folders. Files are added from the PenEcho Agent composer.</p>
-
-              <p id="canvasAgentProjectBoundary" class="canvas-agent-project-boundary">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 2.8 8.1 7 10 4.2-1.9 7-5.4 7-10V6z"/><path d="m9.5 12 1.7 1.7 3.6-3.9"/></svg>
-                <span data-i18n="canvasAgentProjectBoundary">This version supports read access only. For file safety, modifying files is not supported.</span>
-              </p>
-              <section class="canvas-agent-resource-group canvas-agent-project-group" aria-labelledby="canvasAgentProjectsTitle">
-                <header>
-                  <div>
-                    <span class="canvas-agent-resource-heading-icon folder" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9.5h17"/></svg></span>
-                    <span><strong id="canvasAgentProjectsTitle" data-i18n="canvasAgentProjects">Projects</strong><small data-i18n="canvasAgentProjectsDescription">A project is a folder the Agent can read while working.</small></span>
-                  </div>
-                  <button id="canvasAgentProjectCreate" class="canvas-agent-project-create" type="button" aria-expanded="false" aria-controls="canvasAgentProjectRoots" data-pe-button="secondary" data-pe-density="compact"><span aria-hidden="true">+</span><span data-i18n="canvasAgentNewProject">New project</span></button>
-                </header>
-                <div class="canvas-agent-resource-count"><span id="canvasAgentProjectCount">0</span><span data-i18n="canvasAgentProjectFolders">project folders</span></div>
-                <div id="canvasAgentProjectList" class="canvas-agent-project-list"></div>
-                <section id="canvasAgentProjectRoots" class="canvas-agent-project-roots" hidden>
-                  <header><button id="canvasAgentProjectRootBack" type="button" data-i18n-aria="canvasAgentRootBack" aria-label="Back" hidden data-pe-button="toolbar" data-pe-density="compact">←</button><strong id="canvasAgentProjectRootPath" data-i18n="canvasAgentServerFolders">Choose a project folder</strong></header>
-                  <small data-i18n="canvasAgentServerFoldersDetail">Select a host folder to register it as a read-only project.</small>
-                  <div id="canvasAgentProjectRootList" class="canvas-agent-project-root-list"></div>
-                  <section id="canvasAgentProjectRootApproval" class="canvas-agent-project-root-approval" role="alertdialog" aria-modal="false" data-i18n-aria="canvasAgentRootApprovalTitle" aria-label="Approve private folder access" hidden>
-                    <strong data-i18n="canvasAgentRootApprovalTitle">Approve private folder access?</strong>
-                    <small id="canvasAgentProjectRootApprovalDetail"></small>
-                    <div><button id="canvasAgentProjectRootApprovalReject" type="button" data-i18n="canvasAgentRootApprovalReject" data-pe-button="secondary" data-pe-density="compact">Cancel</button><button id="canvasAgentProjectRootApprovalAllow" type="button" data-i18n="canvasAgentRootApprovalAllow" data-pe-button="primary" data-pe-density="compact">Allow once</button></div>
-                  </section>
-                  <button id="canvasAgentProjectRootSelect" class="canvas-agent-project-root-select" type="button" data-i18n="canvasAgentRootSelect" hidden data-pe-button="primary" data-pe-density="compact">Use this folder</button>
-                  <small id="canvasAgentProjectRootTruncated" class="canvas-agent-project-root-truncated" data-i18n="canvasAgentRootTruncated" hidden>Some folders are not shown.</small>
-                </section>
-              </section>
-              <section class="canvas-agent-resource-group canvas-agent-file-group" aria-labelledby="canvasAgentFilesTitle">
-                <header>
-                  <div>
-                    <span class="canvas-agent-resource-heading-icon file" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg></span>
-                    <span><strong id="canvasAgentFilesTitle" data-i18n="canvasAgentFiles">Files</strong><small data-i18n="canvasAgentFilesDescription">Files already used with PenEcho Agent appear here.</small></span>
-                  </div>
-                </header>
-                <div class="canvas-agent-resource-count"><span id="canvasAgentFileCount">0</span><span data-i18n="canvasAgentKnownFiles">known files</span></div>
-                <div id="canvasAgentFileList" class="canvas-agent-project-list"></div>
-                <p class="canvas-agent-file-add-hint"><span class="canvas-agent-file-add-symbol" aria-hidden="true">+</span><span data-i18n="canvasAgentFilesAddHint">Add a file from the chat composer, or paste it with Ctrl/Cmd+V.</span></p>
-              </section>
-            </div>
-            <p id="canvasAgentProjectError" class="canvas-agent-project-error" role="alert" hidden></p>
-          </dialog>
-          <dialog id="canvasAgentProjectRemoveDialog" class="studio-session-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="canvasAgentProjectRemoveTitle" aria-describedby="canvasAgentProjectRemoveDescription" data-pe-surface="alert" data-pe-size="s" data-pe-layout="single" data-pe-presentation="modal" data-pe-material="opaque" data-pe-state="default">
-            <form method="dialog">
-              <div class="studio-session-delete-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
-              </div>
-              <div class="studio-session-delete-copy">
-                <h2 id="canvasAgentProjectRemoveTitle" data-i18n="canvasAgentRemoveProjectTitle">Remove resource?</h2>
-                <p id="canvasAgentProjectRemoveDescription"></p>
-              </div>
-              <div class="studio-session-delete-actions">
-                <button id="canvasAgentProjectRemoveCancel" type="submit" value="cancel" data-i18n="cancel" data-pe-button="secondary" data-pe-density="standard">Cancel</button>
-                <button id="canvasAgentProjectRemoveConfirm" class="danger" type="button" data-i18n="canvasAgentRemoveProject" data-pe-button="danger-primary" data-pe-density="standard">Remove resource</button>
-              </div>
-            </form>
-          </dialog>
-          <div id="canvasAgentHistoryPopover" class="canvas-agent-history-popover" role="dialog" aria-labelledby="canvasAgentHistoryPopoverTitle" hidden>
-            <header><strong id="canvasAgentHistoryPopoverTitle" data-i18n="canvasAgentHistory">Sessions on this Canvas</strong></header>
-            <div id="canvasAgentHistoryList" class="canvas-agent-history-list"></div>
-            <footer><button id="canvasAgentHistoryManage" type="button" data-i18n="canvasAgentHistoryManageAll" data-pe-button="secondary" data-pe-density="compact">View all recent work</button></footer>
-          </div>
-          <div id="canvasAgentHistoryView" class="canvas-agent-history-view" hidden>
-            <span data-i18n="canvasAgentHistoryViewing">Viewing saved conversation</span>
-            <button id="canvasAgentHistoryReturn" type="button" data-i18n="canvasAgentHistoryReturn" data-pe-button="ghost" data-pe-density="compact">Back to current conversation</button>
-          </div>
-          <aside id="canvasAgentConnectionNotice" class="canvas-agent-connection-notice" hidden>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16h.01"/></svg>
-            <div><strong data-i18n="canvasAgentConnectionTitle">No AI connection yet</strong><p data-i18n="canvasAgentConnectionHelp">Use PenEcho Cloud models, or add your own API key.</p><div class="connection-notice-actions"><button type="button" data-shell-forward="#canvasAgentConnection" data-i18n="canvasAgentAddConnection">Add connection</button><button id="canvasAgentSignIn" type="button" data-i18n="canvasAgentSignIn">Sign in to Cloud</button></div></div>
-          </aside>
-          <div class="canvas-agent-conversation">
-            <div id="canvasAgentTranscript" class="canvas-agent-transcript" tabindex="-1" role="log" aria-live="polite" aria-relevant="additions text">
-              <div class="canvas-agent-empty"><strong data-i18n="canvasAgentEmptyTitle">Turn your ideas into professional diagrams.</strong><span data-i18n="canvasAgentEmptyBody">Describe your content and include a diagram type, such as architecture diagram, sequence diagram, or workflow diagram. Agent will draw it on Canvas.</span></div>
-            </div>
-            <section id="canvasAgentPromptSuggestions" class="canvas-agent-prompt-suggestions" role="region" data-i18n-aria="canvasAgentPromptSuggestions" aria-label="Suggested prompts" data-pe-container="surface" data-pe-state="expanded" hidden>
-              <div id="canvasAgentPromptCategories" class="canvas-agent-prompt-categories" role="tablist" data-pe-control="tab" data-pe-behavior="product" data-i18n-aria="canvasAgentPromptCategories" aria-label="Prompt categories">
-                <button id="canvasAgentPromptNotesTab" type="button" role="tab" aria-selected="true" aria-controls="canvasAgentPromptNotesList" tabindex="0" data-prompt-category="notes" data-pe-state="selected" data-i18n="canvasAgentPromptCategoryNotes">Notes</button>
-                <button id="canvasAgentPromptFilesTab" type="button" role="tab" aria-selected="false" aria-controls="canvasAgentPromptFilesList" tabindex="-1" data-prompt-category="files" data-pe-state="default" data-i18n="canvasAgentPromptCategoryFiles">Files &amp; Projects</button>
-                <button id="canvasAgentPromptCreateTab" type="button" role="tab" aria-selected="false" aria-controls="canvasAgentPromptCreateList" tabindex="-1" data-prompt-category="create" data-pe-state="default" data-i18n="canvasAgentPromptCategoryCreate">Diagrams &amp; More</button>
-              </div>
-              <header id="canvasAgentSuggestHeader" class="canvas-agent-suggest-header" hidden>
-                <strong id="canvasAgentSuggestTitle" data-i18n="canvasAgentPromptCategorySuggest">Suggest</strong>
-                <button id="canvasAgentSuggestClose" type="button" data-pe-button="icon" data-pe-density="compact" data-i18n-title="canvasAgentPromptLess" title="Hide suggested prompts" data-i18n-aria="canvasAgentPromptLess" aria-label="Hide suggested prompts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
-              </header>
-              <div id="canvasAgentPromptPopup" class="canvas-agent-prompt-popup" data-pe-list="icon-copy" data-pe-material="opaque">
-                <section id="canvasAgentPromptNotesList" class="canvas-agent-prompt-group" role="tabpanel" aria-labelledby="canvasAgentPromptNotesTab" data-prompt-category="notes" data-pe-region="group"></section>
-                <section id="canvasAgentPromptFilesList" class="canvas-agent-prompt-group" role="tabpanel" aria-labelledby="canvasAgentPromptFilesTab" data-prompt-category="files" data-pe-region="group" hidden></section>
-                <section id="canvasAgentPromptCreateList" class="canvas-agent-prompt-group" role="tabpanel" aria-labelledby="canvasAgentPromptCreateTab" data-prompt-category="create" data-pe-region="group" hidden></section>
-                <section id="canvasAgentPromptSuggestList" class="canvas-agent-prompt-group canvas-agent-prompt-suggest" aria-labelledby="canvasAgentSuggestTitle" aria-busy="false" hidden data-pe-region="group">
-                  <div id="canvasAgentSuggestStatus" class="canvas-agent-suggest-status" role="status" aria-live="polite"></div>
-                  <div id="canvasAgentSuggestItems" class="canvas-agent-suggest-items"></div>
-                </section>
-              </div>
-            </section>
-          </div>
-          <div id="canvasAgentSelection" class="canvas-agent-selection" data-i18n-aria="canvasAgentReferences" aria-label="Referenced canvas objects" hidden></div>
-          <div id="canvasAgentAttachments" class="canvas-agent-attachments" data-i18n-aria="canvasAgentAttachments" aria-label="Attachments" hidden></div>
-          <section id="canvasAgentApproval" class="canvas-agent-approval" role="alertdialog" aria-modal="false" data-i18n-aria="canvasAgentApproval" aria-label="Authorize project command" hidden>
-            <strong data-i18n="canvasAgentApprovalTitle">Authorize critical command?</strong>
-            <span id="canvasAgentApprovalReason"></span>
-            <pre id="canvasAgentApprovalCommand"></pre>
-            <div><button id="canvasAgentApprovalReject" type="button" data-i18n="canvasAgentApprovalReject" data-pe-button="secondary" data-pe-density="compact">Reject</button><button id="canvasAgentApprovalAllow" type="button" data-i18n="canvasAgentApprovalAllow" data-pe-button="primary" data-pe-density="compact">Allow once</button></div>
-          </section>
-          <form id="canvasAgentForm" class="canvas-agent-composer">
-            <span id="canvasAgentSuggestLoading" class="canvas-agent-suggest-loading" role="status" data-i18n="canvasAgentSuggestLoading" hidden>PenEchoLLM is reading your Canvas, files, and project…</span>
-            <div class="canvas-agent-composer-surface">
-              <div class="canvas-agent-composer-toolbar" data-pe-region="toolbar">
-                <div id="canvasAgentProjectControl" class="canvas-agent-project-control">
-                  <button id="canvasAgentProject" class="canvas-agent-project-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentProjectPopover" data-i18n-title="canvasAgentProject" title="Manage projects and files" data-i18n-aria="canvasAgentProject" aria-label="Manage projects and files" data-pe-button="toolbar" data-pe-density="compact">
-                    <span class="canvas-agent-project-label-clip"><span class="canvas-agent-project-content">
-                      <svg class="canvas-agent-project-folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9.5h17"/></svg>
-                      <svg class="canvas-agent-project-file-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
-                      <span id="canvasAgentProjectLabel" data-i18n="canvasAgentNoProject">No project</span>
-                    </span></span>
-                  </button>
-                  <button id="canvasAgentProjectClear" class="canvas-agent-project-clear" type="button" aria-label="Clear selected resource" title="Clear selected resource" hidden data-pe-button="icon" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
-                </div>
-                <div id="canvasAgentModelControl" class="canvas-agent-model-control">
-                  <div class="canvas-agent-model-split">
-                    <button id="canvasAgentConnection" class="canvas-agent-connection-button" type="button" aria-haspopup="dialog" aria-controls="settingsPanel" data-i18n-title="canvasAgentChooseConnection" title="Choose AI connection" data-i18n-aria="canvasAgentChooseConnection" aria-label="Choose AI connection" data-pe-button="ghost" data-pe-density="compact">
-                      <span class="canvas-agent-connection-label-clip"><span id="canvasAgentConnectionLabel" data-i18n="canvasAgentModel">AI model</span></span>
-                    </button>
-                    <button id="canvasAgentThinkingButton" class="canvas-agent-thinking-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentThinkingPopover" data-i18n-aria="canvasAgentThinking" aria-label="Thinking" data-pe-button="ghost" data-pe-density="compact">
-                      <span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="canvasAgentThinkingLabel">Med</span>
-                      <svg class="canvas-agent-thinking-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg>
-                    </button>
-                  </div>
-                  <section id="canvasAgentThinkingPopover" class="canvas-agent-thinking-popover" role="dialog" aria-labelledby="canvasAgentThinkingTitle" hidden>
-                    <header><strong id="canvasAgentThinkingTitle" data-i18n="canvasAgentThinking">Thinking</strong><span id="canvasAgentThinkingModel"></span></header>
-                    <div id="canvasAgentThinkingOptions" class="canvas-agent-thinking-options" role="listbox" data-i18n-aria="canvasAgentThinking" aria-label="Thinking">
-                      <button type="button" role="option" data-effort="none" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="canvasAgentThinkingOff">Off</strong><small data-i18n="canvasAgentThinkingOffHelp">Answer directly, no extra reasoning</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
-                      <button type="button" role="option" data-effort="low" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="effortLow">Low</strong><small data-i18n="canvasAgentThinkingLowHelp">Quick edits and short questions</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
-                      <button type="button" role="option" data-effort="medium" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="effortMedium">Medium</strong><small data-i18n="canvasAgentThinkingMediumHelp">Balanced — good for most canvas work</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
-                      <button type="button" role="option" data-effort="high" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="effortHigh">High</strong><small data-i18n="canvasAgentThinkingHighHelp">Complex diagrams, maths, handwriting</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
-                      <button type="button" role="option" data-effort="max" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="effortMaximum">Max</strong><small data-i18n="canvasAgentThinkingMaxHelp">Hardest problems; slowest, uses most credits</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
-                      <button type="button" role="option" data-effort="config" aria-selected="false" class="canvas-agent-thinking-default"><span data-i18n="canvasAgentThinkingDefault">Model default</span><small data-i18n="canvasAgentThinkingDefaultHelp">from connection settings</small><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
-                    </div>
-                    <div class="canvas-agent-thinking-custom"><label for="canvasAgentThinkingCustom" data-i18n="canvasAgentThinkingCustom">Custom</label><input id="canvasAgentThinkingCustom" type="text" maxlength="128" autocomplete="off" autocapitalize="none" spellcheck="false" data-i18n-placeholder="canvasAgentThinkingCustomPlaceholder" placeholder="e.g. xhigh, 8000 tokens"></div>
-                    <p data-i18n="canvasAgentThinkingFootnote">Also used by Auto AI on the canvas. Higher levels are slower and use more credits.</p>
-                  </section>
-                </div>
-              </div>
-              <textarea id="canvasAgentInput" rows="1" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Try: draw a professional architecture, sequence, or workflow diagram." data-i18n-aria="canvasAgentMessage" aria-label="Message PenEcho Agent"></textarea>
-              <p id="canvasAgentThinkingNotice" class="canvas-agent-thinking-notice" role="status" hidden><span id="canvasAgentThinkingNoticeText"></span></p>
-              <div id="canvasAgentInkInput" class="canvas-agent-ink-input" hidden>
-                <canvas id="canvasAgentInkCanvas" width="1200" height="1040" tabindex="0" data-i18n-aria="canvasAgentHandwrite" aria-label="Handwrite a PenEcho Agent message"></canvas>
-                <button id="canvasAgentClearInk" class="canvas-agent-clear-ink" type="button" data-i18n="canvasAgentClearInk" data-pe-button="ghost" data-pe-density="compact">Clear</button>
-              </div>
-              <section id="canvasAgentReferencePicker" class="canvas-agent-reference-picker" role="dialog" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" aria-describedby="canvasAgentReferenceHelp" hidden>
-                <header class="canvas-agent-reference-head">
-                  <span class="canvas-agent-reference-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5h14v11H5z"/><path d="M9 10h6M12 7v6"/></svg><strong data-i18n="canvasAgentReferenceWidget">Reference a Widget</strong></span>
-                  <span id="canvasAgentReferenceNote" class="canvas-agent-reference-note"></span>
-                  <button id="canvasAgentReferenceCollapse" class="canvas-agent-reference-collapse" type="button" data-i18n-aria="canvasAgentReferenceCollapse" aria-label="Collapse Widget picker" data-i18n-title="canvasAgentReferenceCollapse" title="Collapse Widget picker" data-pe-button="toolbar" data-pe-density="compact">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
-                  </button>
-                </header>
-                <p id="canvasAgentReferenceHelp" class="canvas-agent-reference-help" data-i18n="canvasAgentReferenceHelp">Choose one from the list, or click it directly on the canvas.</p>
-                <label class="canvas-agent-reference-search-field">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/></svg>
-                  <input id="canvasAgentReferenceSearch" type="search" data-i18n-placeholder="canvasAgentReferenceSearch" placeholder="Search canvas Widgets" data-i18n-aria="canvasAgentReferenceSearch" aria-label="Search canvas Widgets">
-                </label>
-                <div id="canvasAgentReferenceList" class="canvas-agent-reference-list" role="listbox" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Canvas Widgets"></div>
-              </section>
-              <footer class="canvas-agent-composer-actions">
-                <div class="canvas-agent-tool-actions">
-                  <button id="canvasAgentAttach" class="canvas-agent-attach" type="button" data-i18n-aria="canvasAgentAttach" aria-label="Attach files and images" data-i18n-title="canvasAgentAttachTitle" title="Attach up to five files and images" data-pe-button="toolbar" data-pe-density="compact">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>
-                    <span id="canvasAgentAttachmentCount" class="canvas-agent-attachment-count" hidden>0</span>
-                  </button>
-                  <button id="canvasAgentReference" class="canvas-agent-reference" type="button" aria-expanded="false" aria-controls="canvasAgentReferencePicker" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" data-i18n-title="canvasAgentReferenceWidgetTitle" title="Pick a Widget to reference" data-pe-button="toolbar" data-pe-density="compact">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
-                  </button>
-                  <button id="canvasAgentTextMode" class="canvas-agent-input-mode active" type="button" aria-pressed="true" data-i18n-aria="canvasAgentType" aria-label="Type with keyboard" data-i18n-title="canvasAgentType" title="Type with keyboard" data-pe-button="toolbar" data-pe-density="compact">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M12 6v12M8 18h8"/></svg>
-                  </button>
-                  <button id="canvasAgentInkMode" class="canvas-agent-input-mode" type="button" aria-pressed="false" data-i18n-aria="canvasAgentHandwrite" aria-label="Write by hand" data-i18n-title="canvasAgentHandwrite" title="Write by hand" data-pe-button="toolbar" data-pe-density="compact">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
-                  </button>
-                  <button id="canvasAgentSearch" class="canvas-agent-search" type="button" aria-pressed="false" aria-disabled="true" data-i18n-aria="canvasAgentSearchUnavailable" aria-label="Internet search is unavailable in this build" data-tooltip="Internet search is unavailable in this build" data-pe-button="toolbar" data-pe-density="compact">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3c-2.4 2.5-3.6 5.5-3.6 9S9.6 18.5 12 21"/></svg>
-                  </button>
-                  <input id="canvasAgentFileInput" type="file" multiple hidden>
-                </div>
-                <div class="canvas-agent-primary-actions">
-                  <button id="canvasAgentStop" class="canvas-agent-stop" type="button" data-i18n-aria="canvasAgentStop" aria-label="Stop" data-i18n-title="canvasAgentStop" title="Stop" hidden>
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
-                    <span class="canvas-agent-action-label" data-i18n="canvasAgentStop">Stop</span>
-                  </button>
-                  <button id="canvasAgentSend" class="canvas-agent-send" type="submit" data-i18n-aria="canvasAgentSend" aria-label="Send" data-i18n-title="canvasAgentSend" title="Send">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></svg>
-                    <span class="canvas-agent-action-label" data-i18n="canvasAgentSend">Send</span>
-                  </button>
-                </div>
-              </footer>
-            </div>
-          </form>
-          <div id="canvasAgentResizeBottom" class="canvas-agent-resize-edge bottom" role="separator" aria-orientation="horizontal" aria-controls="canvasAgentPanel" aria-valuemin="320" tabindex="0" data-edge="bottom" data-i18n-aria="canvasAgentResizeBottom" aria-label="Resize PenEcho Agent from the bottom edge"></div>
-        </section>
       </section>
     </section>
 
@@ -986,11 +811,6 @@
             </button>
           </div>
         </section>
-        <a id="craftsEchoesLink" class="crafts-echoes-link" href="https://penecho.ai/community.html" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>
-          <span class="crafts-echoes-label" data-crafts-echoes-label data-i18n="browseEchoes">Browse Echoes</span>
-          <svg class="crafts-echoes-external" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8"/><path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
-        </a>
       </aside>
       <section class="crafts-workspace">
         <header class="crafts-head" data-pe-region="toolbar">
@@ -1092,7 +912,7 @@
           </label>
           <div class="plugin-editor-meta">
             <span id="pluginDocumentHint" data-i18n="pluginDocumentHint">Prefer Improve with AI before saving. The final document needs frontmatter and an exact One-shot example.</span>
-            <output id="pluginDocumentBytes" for="pluginDocumentEditor">0 / 12000 bytes</output>
+            <output id="pluginDocumentBytes" for="pluginDocumentEditor">0 / 100000 bytes</output>
           </div>
           <label class="plugin-editor-field" for="pluginStylesEditor">
             <span data-i18n="pluginStylesLabel">Plugin CSS (optional)</span>
@@ -1229,12 +1049,12 @@
             </div>
           </div>
           <div class="settings-appearance-block settings-scale-block">
-            <div class="settings-field-heading"><strong data-i18n="settingsInterfaceScale">Interface scale</strong><small data-i18n="settingsInterfaceScaleHelp">Scale the application text and controls.</small></div>
-            <div id="pageScaleOptions" class="page-scale-options settings-segmented" data-pe-control="segmented" role="radiogroup" data-i18n-aria="settingsInterfaceScale" aria-label="Interface scale">
+            <div class="settings-field-heading"><strong data-i18n="settingsInterfaceScale">Page zoom</strong><small data-i18n="settingsInterfaceScaleHelp">Adjust the size of the page.</small></div>
+            <div id="pageScaleOptions" class="page-scale-options settings-segmented" data-pe-control="segmented" role="radiogroup" data-i18n-aria="settingsInterfaceScale" aria-label="Page zoom">
               <button type="button" role="radio" data-page-scale="0.9" aria-checked="false" data-pe-button="segment" data-pe-density="segment">90%</button>
               <button type="button" role="radio" data-page-scale="1" aria-checked="true" data-pe-button="segment" data-pe-density="segment">100%</button>
               <button type="button" role="radio" data-page-scale="1.1" aria-checked="false" data-pe-button="segment" data-pe-density="segment">110%</button>
-              <button type="button" role="radio" data-page-scale="1.25" aria-checked="false" data-pe-button="segment" data-pe-density="segment">125%</button>
+              <button type="button" role="radio" data-page-scale="1.2" aria-checked="false" data-pe-button="segment" data-pe-density="segment">120%</button>
             </div>
           </div>
             </section>
@@ -1261,8 +1081,7 @@
               <div class="settings-connections-heading"><h4 id="settingsLocalConnectionsHeading" data-i18n="settingsLocalConnections">Local connections</h4><button id="settingsOpenApi" type="button" data-i18n="settingsManage" data-pe-button="secondary" data-pe-density="compact">Manage</button></div>
               <div id="settingsConnectionQuickList" class="settings-connection-quick-list"></div>
               <p id="settingsLocalConnectionsEmpty" class="settings-help" data-i18n="settingsLocalConnectionsEmpty" hidden>No local connections yet. Choose Manage to add one.</p>
-              <p id="settingsHostedBrowserNotice" class="settings-help" data-i18n="settingsHostedBrowserNotice" hidden>Use PenEcho models to edit this Canvas and save to Cloud. Your own connections, local files and device settings need a linked device.</p>
-              <a id="settingsHostedLinkDevice" href="/dashboard.html#devices" target="_blank" rel="noopener noreferrer" data-i18n="settingsHostedLinkDevice" data-pe-button="ghost" data-pe-density="compact" hidden>Link a device ↗</a>
+              <p id="settingsHostedBrowserNotice" class="settings-help" data-i18n="settingsHostedBrowserNotice" hidden>Use PenEcho models to edit this Canvas and save to Cloud. Your own connections and local files are in PenEcho on your computer.</p>
             </section>
             <section class="settings-connections-group" aria-labelledby="settingsCapabilitiesHeading">
               <div class="settings-connections-heading"><h4 id="settingsCapabilitiesHeading" data-i18n="settingsCapabilities">Capabilities</h4></div>
@@ -1558,6 +1377,22 @@
         </form>
           <section id="settingsPageCanvas" class="settings-page" role="tabpanel" aria-labelledby="settingsNavCanvas" data-settings-page="canvas" hidden>
             <header class="settings-canvas-heading"><h2 data-i18n="settingsNavCanvas">Canvas</h2><p data-i18n="settingsCanvasDescription">How ink, AI and navigation behave on every canvas.</p></header>
+            <div id="settingsCanvasWhichAi" class="settings-which-ai" aria-label="How PenEcho uses AI">
+              <button type="button" class="settings-which-card active" data-settings-page-jump="canvas" data-pe-hit="choice" aria-pressed="true"><strong data-i18n="settingsWhichCanvasTitle">Canvas AI</strong><span data-i18n="settingsWhichCanvasDesc">Get answers beside your ink when you circle it or choose Run AI.</span></button>
+              <button type="button" class="settings-which-card" data-settings-page-jump="mcp" data-pe-hit="choice" aria-pressed="false"><strong data-i18n="settingsWhichAppsTitle">MCP</strong><span data-i18n="settingsWhichAppsDesc">Claude, ChatGPT, or Codex drawing on your Canvases via MCP.</span></button>
+              <button type="button" class="settings-which-card" data-settings-page-jump="connections" data-pe-hit="choice" data-penecho-guest-hide aria-pressed="false"><strong data-i18n="settingsWhichAgentsTitle">Agents</strong><span data-i18n="settingsWhichAgentsDesc">Working agents that pick up Tasks &amp; Asks on your Lines.</span></button>
+            </div>
+            <section id="settingsCanvasAiBox" class="settings-canvas-ai-card" aria-labelledby="settingsCanvasAiTitle">
+              <div class="settings-canvas-ai-copy">
+                <div class="settings-canvas-ai-top"><strong id="settingsCanvasAiTitle" data-i18n="settingsCanvasAiTitle">Canvas AI model</strong><span id="settingsCanvasAiModelTag" class="settings-saved-badge" hidden></span></div>
+                <p data-i18n="settingsCanvasAiExplain">Get answers on the Canvas as you draw. Choose Run AI, circle ink, or use Auto AI.</p>
+                <small id="settingsCanvasAiStatus"></small>
+              </div>
+              <div class="settings-canvas-ai-actions">
+                <select id="settingsCanvasAiSelect" data-pe-control="select" data-i18n-aria="settingsCanvasAiSelectLabel" aria-label="Model for Canvas AI"></select>
+                <a id="settingsCanvasAiSignIn" class="settings-canvas-ai-link" href="https://penecho.ai/auth.html" target="_blank" rel="noopener noreferrer" data-i18n="settingsCloudSetupLink" data-pe-button="secondary" data-pe-density="compact" hidden>Sign in</a>
+              </div>
+            </section>
             <section class="settings-group" aria-labelledby="settingsAiHeading"><h3 id="settingsAiHeading" data-i18n="settingsCanvasAI">AI on the canvas</h3>
 <div class="settings-row"><div class="settings-row-copy"><span id="settingsAutoLabel" data-i18n="autoAI">Auto AI</span><small data-i18n="settingsAutoHelp">Respond to your handwriting after you pause.</small></div><div class="settings-row-controls"><select id="settingsCanvasAutoDelay" data-i18n-aria="autoDelay" aria-label="Auto AI delay"><option value="0">0 s</option><option value="1">1 s</option><option value="2">2 s</option><option value="3">3 s</option><option value="5">5 s</option><option value="10">10 s</option></select><button id="settingsAutoToggle" class="settings-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settingsAutoLabel" data-pe-control="switch"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div></div>
 <div class="settings-row"><div class="settings-row-copy"><span id="smartSuggestToggleLabel" data-i18n="settingsSmartSuggest">Automatic suggestions</span><small id="smartSuggestToggleHelp" data-i18n="settingsSmartSuggestHelp">Suggest actions beside new ink and in widget toolbars. When off, select ink or open Refine to ask for help.</small></div><button id="smartSuggestToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="smartSuggestToggleLabel" aria-describedby="smartSuggestToggleHelp" data-pe-control="switch"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div>
@@ -1580,7 +1415,7 @@
             </select></div>
 <div class="settings-row"><div class="settings-row-copy"><span id="summonToggleLabel" data-i18n="settingsSummonSection">Thinking indicator</span><small data-i18n="settingsThinkingHelp">Show a quiet pulse while AI is working.</small></div><button id="summonToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="summonToggleLabel" data-pe-control="switch"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div>
 <div class="settings-row"><div class="settings-row-copy"><span id="settingsCanvasHintsLabel" data-i18n="settingsCanvasHints">Tool and shortcut hints</span><small id="settingsCanvasHintsHelp" data-i18n="settingsCanvasHintsHelp">Show tool tips and keyboard shortcuts at the bottom of the canvas.</small></div><button id="settingsCanvasHintsToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="settingsCanvasHintsLabel" aria-describedby="settingsCanvasHintsHelp" data-pe-control="switch"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div>
-<div class="settings-row"><div class="settings-row-copy"><span id="settingsCanvasAgentAutoOpenLabel" data-i18n="settingsCanvasAgentAutoOpen">Open PenEcho Agent with each canvas</span><small data-i18n="settingsAgentAutoOpenHelp">Auto AI pauses while the Agent panel is open.</small></div><button id="settingsCanvasAgentAutoOpenToggle" class="settings-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settingsCanvasAgentAutoOpenLabel" data-pe-control="switch"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div></section><section class="settings-group" aria-labelledby="settingsDisplayHeading"><h3 id="settingsDisplayHeading" data-i18n="settingsDisplay">Display and navigation</h3><div class="settings-row"><div class="settings-row-copy"><span id="settingsWheelZoomLabel" data-i18n="canvasWheelZoom">Scroll to zoom</span><small data-i18n="settingsWheelHelp">Off: scroll pans; pinch or ⌘ + scroll zooms.</small></div><button id="settingsWheelZoom" class="settings-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settingsWheelZoomLabel" data-i18n-title="canvasWheelZoomHelp" title="Off: scroll to pan; pinch or Ctrl/Cmd + scroll to zoom. Turning this on also changes trackpad scrolling." data-pe-control="switch"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div>
+</section><section class="settings-group" aria-labelledby="settingsDisplayHeading"><h3 id="settingsDisplayHeading" data-i18n="settingsDisplay">Display and navigation</h3><div class="settings-row"><div class="settings-row-copy"><span id="settingsWheelZoomLabel" data-i18n="canvasWheelZoom">Scroll to zoom</span><small data-i18n="settingsWheelHelp">Off: scroll pans; pinch or ⌘ + scroll zooms.</small></div><button id="settingsWheelZoom" class="settings-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settingsWheelZoomLabel" data-i18n-title="canvasWheelZoomHelp" title="Off: scroll to pan; pinch or Ctrl/Cmd + scroll to zoom. Turning this on also changes trackpad scrolling." data-pe-control="switch"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div>
 <div class="settings-row"><div class="settings-row-copy"><span id="settingsGridLabel" data-i18n="grid">Canvas grid</span><small data-i18n="settingsGridHelp">Choose the background for your canvas.</small></div><div id="settingsGridStyle" class="settings-grid-options" role="group" aria-labelledby="settingsGridLabel"><button type="button" data-grid-style="none" aria-pressed="false" data-i18n="gridNone">None</button><button type="button" data-grid-style="dots" aria-pressed="false" data-i18n="gridDots">Dots</button><button type="button" data-grid-style="lines" aria-pressed="false" data-i18n="gridLines">Lines</button></div></div>
 <div class="settings-row"><div class="settings-row-copy"><span id="settingsWidgetShadowLabel" data-i18n="settingsWidgetShadow">Widget and image shadows</span><small data-i18n="settingsWidgetShadowHelp">Lift widgets off the canvas with a soft shadow.</small></div><button id="settingsWidgetShadowToggle" class="settings-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settingsWidgetShadowLabel" data-pe-control="switch"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div></section></section>
           <section id="settingsPageShortcuts" class="settings-page settings-shortcuts-page" role="tabpanel" aria-labelledby="settingsNavShortcuts" data-settings-page="shortcuts" hidden>
@@ -1600,10 +1435,6 @@
           <section id="settingsPageAbout" class="settings-page" role="tabpanel" aria-labelledby="settingsNavAbout" data-settings-page="about" hidden>
             <section class="settings-group" aria-labelledby="settingsHelpHeading">
           <h3 id="settingsHelpHeading" data-i18n="settingsHelpSection">Help &amp; about</h3>
-          <div class="settings-actions">
-            <button id="settingsTourBtn" type="button" data-i18n="tourReplay" data-pe-button="secondary" data-pe-density="standard">Feature tour</button>
-            <button id="settingsChangelogBtn" type="button" data-i18n="settingsChangelog" data-pe-button="secondary" data-pe-density="standard">What's new</button>
-          </div>
           <div class="settings-links">
             <a href="https://github.com/penecho/penecho/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="settingsDownloadMac">Download for macOS</a>
             <a href="https://github.com/penecho/penecho/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="settingsDownloadWin">Download for Windows</a>
@@ -1652,6 +1483,15 @@
       <button id="exampleCoachSetup" type="button" data-pe-button="primary" data-pe-density="compact" hidden>Set up AI</button>
     </div>
   </section>
+  <section id="canvasAiHint" class="canvas-ai-hint" role="status" hidden>
+    <span data-i18n="aiHint">Draw anywhere. Then select what you drew and choose Run AI.</span>
+    <button id="canvasAiHintDone" type="button" data-i18n="aiHintDone">Got it</button>
+  </section>
+  <section id="exampleSaved" class="example-saved" role="status" aria-live="polite" hidden>
+    <p><strong id="exampleSavedTitle">This is the example's saved result.</strong> <span id="exampleSavedBody">To make your own from a sketch:</span></p>
+    <div id="exampleSavedActions" class="example-saved-actions"></div>
+    <button id="exampleSavedClose" type="button" aria-label="Close" title="Close" data-pe-button="icon" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </section>
   <section id="exampleDone" class="example-done" role="status" aria-live="polite" hidden>
     <div class="example-done-copy"><strong id="exampleDoneTitle"></strong><span id="exampleDoneBody"></span></div>
     <div class="example-done-actions">
@@ -1660,51 +1500,6 @@
       <button id="exampleDoneClose" type="button" aria-label="Close" title="Close" data-pe-button="icon" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
   </section>
-  <div id="tourLayer" class="tour-layer" hidden aria-hidden="true">
-    <div id="tourHighlight" class="tour-highlight" aria-hidden="true"></div>
-    <section id="tourCard" class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tourTitle" aria-describedby="tourBody" tabindex="-1">
-      <span id="tourArrow" class="tour-arrow" aria-hidden="true"></span>
-      <div class="tour-card-scroll">
-        <header class="tour-card-header">
-          <span class="tour-badge" data-i18n="tourBadge">Quick tour</span>
-          <span id="tourProgress" class="tour-progress" aria-live="polite"></span>
-          <button id="tourSkip" class="tour-skip" type="button" data-i18n="tourSkip" data-pe-button="ghost" data-pe-density="compact">Skip tour</button>
-        </header>
-        <div id="tourProgressTrack" class="tour-progress-track" role="progressbar" data-i18n-aria="tourProgress" aria-label="Tour progress" aria-valuemin="1" aria-valuemax="10" aria-valuenow="1"><span id="tourProgressBar"></span></div>
-        <h2 id="tourTitle" tabindex="-1"></h2>
-        <p id="tourBody"></p>
-        <footer class="tour-actions">
-          <button id="tourBack" type="button" data-i18n="tourBack" data-pe-button="secondary" data-pe-density="standard">Back</button>
-          <button id="tourNext" class="tour-primary" type="button" data-i18n="tourNext" data-pe-button="primary" data-pe-density="standard">Next</button>
-        </footer>
-      </div>
-    </section>
-  </div>
-  <div id="changelogLayer" class="changelog-layer" hidden aria-hidden="true">
-    <section id="changelogDialog" class="changelog-dialog" role="dialog" aria-modal="true" data-i18n-aria="changelogDialog" aria-label="PenEcho release notes" aria-labelledby="changelogTitle" tabindex="-1">
-      <header class="changelog-header">
-        <div class="changelog-heading">
-          <span class="changelog-badge" data-i18n="changelogBadge">What's new</span>
-          <span class="changelog-version">1.4.0</span>
-        </div>
-        <button id="changelogClose" class="changelog-close" type="button" data-i18n-aria="changelogClose" aria-label="Close release notes" data-i18n-title="changelogClose" title="Close release notes" data-pe-button="icon" data-pe-density="compact">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
-        </button>
-      </header>
-      <div class="changelog-scroll">
-        <h2 id="changelogTitle" data-i18n="changelogTitle">Smarter help, reusable notes</h2>
-        <section class="changelog-release">
-          <ul>
-            <li data-i18n="changelogAssist">Smart Assist suggests useful next steps for handwriting, text and images, with quick actions and your own follow-up questions.</li>
-            <li data-i18n="changelogLasso">Circle handwriting, images or part of a Widget to solve, visualize, animate or organize just the selected content.</li>
-            <li data-i18n="changelogNotesCards">Turn canvas content into reusable notes and knowledge cards. Browse, search and bring saved notes into other canvases.</li>
-            <li data-i18n="changelogWidgetRefine">Refine Widgets with written feedback and contextual actions, with clearer controls and better content fitting.</li>
-            <li data-i18n="changelogCanvasPolish">Improved pen gestures, stroke deletion, navigation and collaboration with Agent and MCP make working on the canvas smoother.</li>
-          </ul>
-        </section>
-      </div>
-    </section>
-  </div>
   <script src="remote-canvas.js"></script>
   <script src="mcp-cloud-transport.js"></script>
   <script src="locales/zh.js"></script>
@@ -1720,6 +1515,7 @@
   <script src="living-ink.js"></script>
   <script src="example-ink.js"></script>
   <script src="example-scenarios.js"></script>
+  <script src="live-ops.js"></script>
   <script src="smart-suggest.js"></script>
   <script src="pen-intel.js"></script>
   <script src="note-card.js"></script>
@@ -1728,6 +1524,7 @@
   <script src="cloud-mcp.js"></script>
   <script src="cloud-connect.js"></script>
   <script src="mcp-settings.js"></script>
+  <script src="lines/start.js"></script>
   <script src="viewer-fetch.js" defer></script>
   <script src="viewer.js" defer></script>
   <script src="studio-shell.js" defer></script>

@@ -1,7 +1,7 @@
 "use strict";
 
-const readline = require("readline/promises");
 const { spawn } = require("child_process");
+const { readStartupAnswer } = require("./startup-prompt.js");
 const PACKAGE_JSON = require("../../package.json");
 
 const UPDATE_CHECK_TIMEOUT_MS = 30000;
@@ -81,14 +81,8 @@ function updateCheckErrorMessage(error) {
 async function confirmUpdate(message, options = {}) {
   if (typeof options.confirmUpdate === "function") return Boolean(await options.confirmUpdate(message, true));
   if (typeof options.ui?.confirm === "function") return Boolean(await options.ui.confirm(message, true));
-  const input = options.input || process.stdin, output = options.output || process.stdout,
-    prompt = readline.createInterface({ input, output });
-  try {
-    const answer = String(await prompt.question(`${message} [Y/n] `)).trim();
-    return !/^(?:n|no)$/i.test(answer);
-  } finally {
-    prompt.close();
-  }
+  const answer = await readStartupAnswer(message, options);
+  return answer !== null && !/^(?:n|no)$/i.test(answer);
 }
 
 function commandInvocation(command, args, options = {}) {

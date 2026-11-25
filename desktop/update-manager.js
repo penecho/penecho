@@ -5,6 +5,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFile, spawn } = require("node:child_process");
+const { compareVersions } = require("../src/cli/update.js");
+const { installWindowsPackage, packageIsNewer, packageName } = require("./windows-update.js");
 
 const UPDATE_OWNER = "penecho";
 const UPDATE_REPOSITORY = "penecho";
@@ -12,26 +14,44 @@ const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FIRST_CHECK_DELAY_MS = 20 * 1000;
 const RELEASE_REQUEST_TIMEOUT_MS = 15 * 1000;
 const RELEASE_API_URL = `https://api.github.com/repos/${UPDATE_OWNER}/${UPDATE_REPOSITORY}/releases/latest`;
+// GitHub leaves pre-releases out of /latest, so a beta or rc reads the list instead.
+const RELEASES_API_URL = `https://api.github.com/repos/${UPDATE_OWNER}/${UPDATE_REPOSITORY}/releases?per_page=30`;
 
-function parsedVersion(value) {
-  const match = String(value || "").trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
-  if (!match) return null;
-  return { numbers:match.slice(1, 4).map(Number), prerelease:Boolean(match[4]) };
-}
-
-function compareVersions(left, right) {
-  const a = parsedVersion(left), b = parsedVersion(right);
-  if (!a || !b) throw new Error("The release service returned an invalid PenEcho version.");
-  for (let index = 0; index < 3; index++) {
-    if (a.numbers[index] !== b.numbers[index]) return a.numbers[index] > b.numbers[index] ? 1 : -1;
-  }
-  if (a.prerelease === b.prerelease) return 0;
-  return a.prerelease ? -1 : 1;
+function isPrerelease(version) {
+  return /^v?\d+\.\d+\.\d+-/.test(String(version || "").trim());
 }
 
 function releaseVersion(value) {
   const match = String(value || "").trim().match(/^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/);
   return match ? match[1] : "";
+}
+
+function releaseDetails(value) {
+  const version = releaseVersion(value?.tag_name || value?.name);
+  if (!version) throw new Error("GitHub Releases returned an invalid version.");
+  return {
+    version,
+    title:String(value?.name || `PenEcho ${version}`).trim().slice(0, 200),
+    notes:String(value?.body || "").trim().slice(0, 8000),
+    publishedAt:String(value?.published_at || "").trim(),
+    releaseUrl:String(value?.html_url || "").trim(),
+    assets:Array.isArray(value?.assets) ? value.assets.map(asset => ({
+      name:String(asset?.name || ""),
+      url:String(asset?.browser_download_url || ""),
+      size:Number(asset?.size) || 0,
+      digest:String(asset?.digest || ""),
+    })) : [],
+  };
+}
+
+// The list is ordered by date, not by version. A release this computer can install wins over a newer one it cannot.
+function newestRelease(values, platform, arch, currentVersion) {
+  const releases = (Array.isArray(values) ? values : [])
+    .filter(value => value && !value.draft && releaseVersion(value.tag_name))
+    .map(releaseDetails)
+    .sort((left, right) => compareVersions(right.version, left.version));
+  if (!releases.length) throw new Error("GitHub Releases returned an invalid version.");
+  return releases.find(release => releaseAsset(release, platform, arch, currentVersion)) || releases[0];
 }
 
 function expectedAssetName(platform, arch, version) {
@@ -40,10 +60,12 @@ function expectedAssetName(platform, arch, version) {
   return "";
 }
 
-function releaseAsset(release, platform = process.platform, arch = process.arch) {
+// On Windows the package goes in beside the running version; Setup, which replaces it, is for a release without one.
+function releaseAsset(release, platform = process.platform, arch = process.arch, currentVersion = "") {
   const expected = expectedAssetName(platform, arch, release?.version);
   if (!expected) return null;
-  const asset = release?.assets?.find(candidate => candidate.name === expected);
+  const packaged = platform === "win32" && arch === "x64" && currentVersion && packageIsNewer(release.version, currentVersion) ? packageName(release.version) : "",
+    asset = packaged && release?.assets?.find(candidate => candidate.name === packaged) || release?.assets?.find(candidate => candidate.name === expected);
   if (!asset || !asset.url) return null;
   let url;
   try { url = new URL(asset.url); } catch { return null; }
@@ -120,7 +142,7 @@ function macBundlePath(executable) {
 
 function runFile(command, args) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { encoding:"utf8", maxBuffer:1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(command, args, { encoding:"utf8", maxBuffer:1024 * 1024, windowsHide:true }, (error, stdout, stderr) => {
       if (error) {
         error.message = `${error.message}${stderr ? `: ${String(stderr).trim()}` : ""}`;
         reject(error);
@@ -194,7 +216,9 @@ async function installMacUpdate(options) {
 }
 
 async function installWindowsUpdate(options) {
-  const child = (options.spawnImpl || spawn)(options.downloadedPath, ["--silent"], {
+  if (options.downloadedPath.endsWith(".nupkg")) return installWindowsPackage({ ...options, runCommand:options.runCommand || runFile });
+  // Not --silent: a silent Setup does not open PenEcho when it is done.
+  const child = (options.spawnImpl || spawn)(options.downloadedPath, [], {
     detached:true,
     stdio:"ignore",
     windowsHide:true,
@@ -219,7 +243,8 @@ function createUpdateManager(options) {
     arch = options.arch || process.arch,
     currentVersion = String(options.currentVersion || app.getVersion()),
     supported = Boolean(expectedAssetName(platform, arch, currentVersion)),
-    updateDirectory = options.updateDirectory || path.join(app.getPath?.("temp") || os.tmpdir(), "penecho-updates");
+    // Not penecho-updates: a Setup run from there is taken for an older version's silent one (windows-update.js).
+    updateDirectory = options.updateDirectory || path.join(app.getPath?.("temp") || os.tmpdir(), "penecho-update");
   let checkingMetadata = false,
     updateAvailable = false,
     downloadActive = false,
@@ -259,32 +284,20 @@ function createUpdateManager(options) {
       timer = setTimeout(() => controller.abort(), timeoutMs);
     timer.unref?.();
     try {
-      const response = await fetchImpl(RELEASE_API_URL, {
-        headers:{
-          Accept:"application/vnd.github+json",
-          "User-Agent":`PenEcho/${currentVersion}`,
-          "X-GitHub-Api-Version":"2022-11-28",
-        },
-        redirect:"follow",
-        signal:controller.signal,
-      });
+      const prerelease = isPrerelease(currentVersion),
+        response = await fetchImpl(prerelease ? RELEASES_API_URL : RELEASE_API_URL, {
+          headers:{
+            Accept:"application/vnd.github+json",
+            "User-Agent":`PenEcho/${currentVersion}`,
+            "X-GitHub-Api-Version":"2022-11-28",
+          },
+          redirect:"follow",
+          signal:controller.signal,
+        });
       if (!response.ok) throw new Error(`GitHub Releases returned HTTP ${response.status}.`);
-      const value = await response.json(),
-        version = releaseVersion(value?.tag_name || value?.name);
-      if (!version) throw new Error("GitHub Releases returned an invalid version.");
-      return {
-        version,
-        title:String(value?.name || `PenEcho ${version}`).trim().slice(0, 200),
-        notes:String(value?.body || "").trim().slice(0, 8000),
-        publishedAt:String(value?.published_at || "").trim(),
-        releaseUrl:String(value?.html_url || "").trim(),
-        assets:Array.isArray(value?.assets) ? value.assets.map(asset => ({
-          name:String(asset?.name || ""),
-          url:String(asset?.browser_download_url || ""),
-          size:Number(asset?.size) || 0,
-          digest:String(asset?.digest || ""),
-        })) : [],
-      };
+      const value = await response.json();
+      if (!prerelease) return releaseDetails(value);
+      return newestRelease(value, platform, arch, currentVersion);
     } catch (error) {
       if (controller.signal.aborted) throw new Error(`The update check timed out after ${timeoutMs} ms.`);
       throw error;
@@ -294,6 +307,7 @@ function createUpdateManager(options) {
   }
 
   async function check(manual = false) {
+    if (state.status === "installing") return true;
     if (downloadReady) {
       dismissed = false;
       publish("ready", { visible:true, progress:100 });
@@ -320,7 +334,7 @@ function createUpdateManager(options) {
       const latest = await fetchLatestRelease();
       release = latest;
       const newer = compareVersions(latest.version, currentVersion) > 0,
-        asset = newer ? releaseAsset(latest, platform, arch) : null;
+        asset = newer ? releaseAsset(latest, platform, arch, currentVersion) : null;
       updateAvailable = Boolean(asset);
       if (!newer) {
         publish("up-to-date", {
@@ -354,7 +368,7 @@ function createUpdateManager(options) {
       return true;
     }
     if (state.status !== "available" || downloadActive) return false;
-    const asset = releaseAsset(release, platform, arch);
+    const asset = releaseAsset(release, platform, arch, currentVersion);
     if (!asset) {
       publish("error", { visible:true, error:"The release does not include a compatible PenEcho installer." });
       return false;
@@ -409,7 +423,7 @@ function createUpdateManager(options) {
   }
 
   async function install() {
-    if (!downloadReady || !downloadedPath || !release) return false;
+    if (!downloadReady || !downloadedPath || !release || state.status === "installing") return false;
     publish("installing", { visible:true, progress:100 });
     try {
       const installer = options.installImpl || installDownloadedUpdate;
@@ -454,5 +468,5 @@ function createUpdateManager(options) {
 }
 
 module.exports = {
-  RELEASE_API_URL, createUpdateManager, downloadReleaseAsset, expectedAssetName, installDownloadedUpdate, macBundlePath, releaseAsset,
+  RELEASE_API_URL, RELEASES_API_URL, createUpdateManager, downloadReleaseAsset, expectedAssetName, installDownloadedUpdate, macBundlePath, releaseAsset,
 };

@@ -1,0 +1,179 @@
+/* What an agent is doing (live.js): the running-Work activity band and its completion animation.
+   Soft Mantle Octopus layout (Direction B) on a clean paper backdrop, in Light and Dark modes.
+   Only transforms and opacity move, and nothing moves with reduced motion. Never used on the Canvas. */
+.lv {
+  --lv-border: rgba(26, 115, 232, .15);
+  --lv-stroke: #1a73e8; --lv-accent: var(--c-run, #0d9488); --lv-accent-label: var(--c-run-label, #0f766e); --lv-accent-soft: rgba(13, 148, 136, .13);
+  --lv-think: #2563eb; --lv-think-3: #0ea5e9; --lv-think-soft: rgba(37, 99, 235, .13); --lv-think-bg: #ffffff;
+  --lv-aha: #d97706; --lv-aha-2: #f59e0b; --lv-aha-soft: rgba(245, 158, 11, .16); --lv-aha-bg: #fffbeb;
+  --lv-leg-idle: rgba(26, 115, 232, .14); --lv-leg-idle-edge: rgba(26, 115, 232, .26);
+  --lv-leg-used: rgba(26, 115, 232, .36); --lv-leg-used-edge: rgba(26, 115, 232, .58);
+  --lv-sucker: rgba(255, 255, 255, .74);
+  --lv-node-bg: rgba(255, 255, 255, .96); --lv-node-border: rgba(26, 115, 232, .22);
+  --lv-node-used-bg: #eff6ff; --lv-node-used-border: rgba(26, 115, 232, .56);
+  --lv-glyph: #52739e; --lv-glyph-used: #1a73e8;
+  --lv-wave: rgba(26, 115, 232, .18); --lv-bubble: rgba(26, 115, 232, .45);
+  --lv-sonar: rgba(26, 115, 232, .22); --lv-say-bg: var(--raised); --lv-label-halo: var(--paper);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0; margin: 0 0 14px;
+  background: var(--paper); border: 1px solid var(--lv-border); border-radius: 14px; box-shadow: var(--shadow-1); overflow: hidden;
+}
+.lv-pic { flex: 1 1 390px; max-width: 540px; height: auto; display: block; }
+.lv.small { flex-wrap: nowrap; align-items: center; }
+.lv.small .lv-pic { flex: 0 0 clamp(156px, 48%, 208px); width: clamp(156px, 48%, 208px); max-width: 208px; margin-right: 4px; overflow: visible; }
+.lv.small .lv-text { flex: 1 1 auto; padding: 10px 12px 10px 4px; }
+.lv.small .lv-now { font-size: 14px; }
+
+/* Subtle seabed wave horizon and rising hollow bubbles */
+.lv-wave { fill: none; stroke: var(--lv-wave); stroke-width: 1.3; stroke-linecap: round; }
+.lv-bubble { fill: none; stroke: var(--lv-bubble); stroke-width: 1.25; opacity: .72; }
+.lv-bubble.b1 { animation: lv-float 4.6s ease-in-out infinite; }
+.lv-bubble.b2 { animation: lv-float 4.6s ease-in-out -1.8s infinite; }
+.lv-bubble.b3 { animation: lv-float 4.6s ease-in-out -3.1s infinite; }
+.lv.is-thinking .lv-bubble.b-crown-r, .lv.is-aha .lv-bubble.b-crown-r { opacity: 0; animation: none; }
+@keyframes lv-float { 0%, 100% { transform: translateY(0); opacity: .55; } 50% { transform: translateY(-3px); opacity: 1; } }
+
+/* Tapered octopus tentacles & subtle suction cups */
+.lv-leg { transition: opacity .3s; }
+.lv-leg-fill { fill: var(--lv-leg-idle); transition: fill .2s, opacity .2s; }
+.lv-leg.used .lv-leg-fill { fill: var(--lv-leg-used); }
+.lv-leg-edge { fill: none; stroke: var(--lv-leg-idle-edge); stroke-width: .9; stroke-linecap: round; transition: stroke .2s, stroke-width .2s; }
+.lv-leg.used .lv-leg-edge { stroke: var(--lv-leg-used-edge); }
+.lv-leg.now .lv-leg-edge { stroke: var(--lv-accent); stroke-width: 1.2; opacity: .85; }
+.lv-sucker { fill: var(--lv-sucker); opacity: 0; transition: opacity .2s; }
+.lv-leg.used .lv-sucker { opacity: .55; }
+.lv-leg.now .lv-sucker { opacity: .92; }
+.lv.is-thinking .lv-leg:not(.used) { opacity: .78; }
+.lv.is-thinking .lv-leg.used .lv-leg-fill { animation: tk-memory-breathe 4.8s ease-in-out infinite; }
+@keyframes tk-memory-breathe { 0%, 100% { opacity: .74; } 50% { opacity: 1; } }
+
+/* Surrounding stops */
+.lv-stop .lv-bg { fill: var(--lv-node-bg); stroke: var(--lv-node-border); stroke-width: 1.5; transition: stroke .18s, fill .18s; }
+.lv-stop.used .lv-bg { fill: var(--lv-node-used-bg); stroke: var(--lv-node-used-border); }
+.lv-stop.now .lv-bg { stroke: var(--lv-accent); fill: var(--lv-accent-soft); stroke-width: 2; }
+.lv-glyph { color: var(--lv-glyph); opacity: .76; transition: color .18s, opacity .18s; }
+.lv-stop.used .lv-glyph { color: var(--lv-glyph-used); opacity: 1; }
+.lv-stop.now .lv-glyph { color: var(--lv-accent-label); opacity: 1; }
+.lv-label { font: 600 11px var(--font); fill: var(--ink3); paint-order: stroke; stroke: var(--lv-label-halo); stroke-width: 3.4px; stroke-linejoin: round; }
+.lv-stop.used .lv-label { fill: var(--ink2); }
+.lv-stop.now .lv-label { fill: var(--lv-accent-label); font-weight: 680; }
+.lv-n { font-weight: 700; fill: var(--lv-stroke); }
+.lv-stop.now .lv-n { fill: var(--lv-accent-label); }
+.lv-ring { fill: none; stroke: var(--lv-accent); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.lv-stop.now .lv-ring { animation: lv-ping 1.5s ease-out infinite; }
+.lv-stop.now .lv-ring.r2 { animation-delay: .75s; }
+@keyframes lv-ping { 0% { opacity: .6; transform: scale(1); } 100% { opacity: 0; transform: scale(1.62); } }
+
+/* Central soft-mantle octopus head */
+.lv-face { transform-box: fill-box; transform-origin: center; animation: lv-bob 4.2s ease-in-out infinite; }
+.lv-mantle { transform-box: fill-box; transform-origin: center; }
+.lv-sonar { fill: none; stroke: var(--lv-sonar); stroke-width: 1.4; stroke-linecap: round; transform-box: fill-box; transform-origin: center; animation: lv-turn-rev 18s linear infinite; }
+.lv-rim { fill: none; stroke: rgba(255, 255, 255, .36); stroke-width: 1.2; }
+.lv-glint { fill: none; stroke: rgba(255, 255, 255, .58); stroke-linecap: round; }
+.lv-eyes { transform-box: fill-box; transform-origin: center; }
+.lv-eye { fill: rgba(255, 255, 255, .92); }
+.lv-pupil { fill: #0d3b8a; transform-box: fill-box; transform-origin: center; }
+.lv-mono { fill: #fff; font-weight: 740; font-family: var(--font); text-anchor: middle; letter-spacing: -.01em; }
+@keyframes lv-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.4px); } }
+@keyframes lv-turn-rev { to { transform: rotate(-360deg); } }
+@keyframes lv-turn-cw { to { transform: rotate(360deg); } }
+
+/* Thought Pearl (?) while thinking -> Spark (!) right after thinking (Direction A) */
+.lv-thought, .tk-a-ripple, .aha-ring, .tk-sheen, .aha-flash, .tk-a-inward, .aha-rays, .lv-glyph-q, .lv-glyph-e { display: none; }
+.lv.is-thinking .lv-thought, .lv.is-thinking .tk-a-ripple, .lv.is-thinking .tk-sheen, .lv.is-thinking .lv-glyph-q, .lv.is-thinking .lv-leg.used .tk-a-inward { display: inline; }
+.lv.is-aha .lv-thought, .lv.is-aha .aha-ring, .lv.is-aha .aha-flash, .lv.is-aha .aha-rays, .lv.is-aha .lv-glyph-e { display: inline; }
+
+.lv.is-thinking .lv-face { animation: tk-ponder-head 5.2s ease-in-out infinite; }
+.lv.is-thinking .lv-mantle { animation: tk-mantle-breath 5.2s ease-in-out infinite; }
+.lv.is-thinking .lv-sonar { opacity: .44; animation: lv-turn-rev 28s linear infinite; }
+.lv.is-thinking .lv-eyes { animation: tk-blink 6.2s ease-in-out infinite; }
+.lv.is-thinking .lv-pupil { animation: tk-gaze-ponder 6.2s cubic-bezier(.4, 0, .2, 1) infinite; }
+.lv.small.is-thinking .lv-pupil { animation-name: tk-gaze-ponder-sm; }
+
+.lv.is-aha .lv-face { animation: aha-hop 1.05s cubic-bezier(.22, 1.32, .36, 1) both; }
+.lv.is-aha .lv-mantle { animation: aha-squash 1.05s cubic-bezier(.22, 1.32, .36, 1) both; }
+.lv.is-aha .lv-sonar { stroke: var(--lv-aha); opacity: .62; animation: lv-turn-cw 14s linear infinite; }
+.lv.is-aha .lv-eyes { animation: aha-eyes 1.05s ease-out both; }
+.lv.is-aha .lv-pupil { animation: aha-pupil 1.05s ease-out both; }
+
+.tk-sheen { opacity: .16; transform-box: fill-box; transform-origin: center; animation: tk-sheen 5.0s ease-in-out infinite; }
+.aha-flash { opacity: .24; transform-box: fill-box; transform-origin: center; animation: aha-flash 1.05s ease-out both; }
+.q-stroke { fill: none; stroke: var(--lv-think); stroke-width: 2.35; stroke-linecap: round; stroke-linejoin: round; }
+.q-dot { fill: var(--lv-think); }
+.e-stroke { fill: none; stroke: var(--lv-aha); stroke-width: 2.65; stroke-linecap: round; }
+.e-dot { fill: var(--lv-aha); }
+.aha-rays { transform-box: fill-box; transform-origin: center; animation: aha-rays 1.05s cubic-bezier(.16, 1, .3, 1) both; }
+.aha-rays line { stroke: var(--lv-aha-2); stroke-width: 1.75; stroke-linecap: round; }
+.aha-ring { fill: none; stroke: var(--lv-aha); stroke-width: 1.8; transform-box: fill-box; transform-origin: center; animation: aha-ring-out 1.05s cubic-bezier(.16, 1, .3, 1) both; }
+
+.tk-a-ripple { fill: none; stroke: var(--lv-think); stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: tk-a-ripple 4.4s cubic-bezier(.22, .61, .36, 1) -1.2s infinite; }
+.tk-a-ripple.r2 { stroke: var(--lv-think-3); stroke-width: 1.2; animation-delay: -3.4s; }
+.tk-a-trail { transform-box: fill-box; transform-origin: center; }
+.tk-a-trail circle { fill: var(--lv-think-bg); stroke: var(--lv-think); stroke-width: 1.4; }
+.lv.is-aha .tk-a-trail circle { fill: var(--lv-aha-bg); stroke: var(--lv-aha); }
+.tk-a-trail.t1 { animation: tk-a-bob 3.6s ease-in-out -.3s infinite; }
+.tk-a-trail.t2 { animation: tk-a-bob 3.6s ease-in-out -.9s infinite; }
+.tk-a-medallion { transform-box: fill-box; transform-origin: center; animation: tk-a-q-bob 3.8s ease-in-out infinite; }
+.tk-a-medallion .m-halo { fill: var(--lv-think-soft); }
+.tk-a-medallion .m-bg { fill: var(--lv-think-bg); stroke: var(--lv-think); stroke-width: 1.65; }
+.lv.is-aha .tk-a-medallion { animation: aha-pop 1.05s cubic-bezier(.22, 1.38, .36, 1) both; }
+.lv.is-aha .tk-a-medallion .m-halo { fill: var(--lv-aha-soft); }
+.lv.is-aha .tk-a-medallion .m-bg { fill: var(--lv-aha-bg); stroke: var(--lv-aha); stroke-width: 1.9; }
+.tk-a-inward { fill: none; stroke: var(--lv-think-3); stroke-width: 1.85; stroke-linecap: round; stroke-dasharray: 10 74; opacity: .55; animation: tk-a-recall 3.4s linear infinite; }
+
+@keyframes tk-ponder-head { 0%, 100% { transform: translateY(0) rotate(0deg); } 28% { transform: translateY(-2.6px) rotate(-2.8deg); } 64% { transform: translateY(-1.2px) rotate(2.3deg); } }
+@keyframes tk-mantle-breath { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.026, 1.02); } }
+@keyframes tk-gaze-ponder { 0%, 12% { transform: translate(1.0px, -.95px); } 24%, 44% { transform: translate(1.3px, -1.1px); } 56%, 76% { transform: translate(-1.15px, -.95px); } 88%, 100% { transform: translate(1.0px, -.95px); } }
+@keyframes tk-gaze-ponder-sm { 0%, 12% { transform: translate(.62px, -.6px); } 24%, 44% { transform: translate(.78px, -.68px); } 56%, 76% { transform: translate(-.7px, -.6px); } 88%, 100% { transform: translate(.62px, -.6px); } }
+@keyframes tk-blink { 0%, 44%, 51%, 100% { transform: scaleY(1); } 47.5% { transform: scaleY(.12); } }
+@keyframes tk-sheen { 0%, 100% { opacity: .10; transform: translateX(-9px); } 50% { opacity: .42; transform: translateX(9px); } }
+@keyframes tk-a-ripple { 0% { opacity: 0; transform: scale(.94); } 24% { opacity: .44; } 100% { opacity: 0; transform: scale(1.38); } }
+@keyframes tk-a-bob { 0%, 100% { transform: translateY(1px) scale(.92); opacity: .72; } 50% { transform: translateY(-2px) scale(1.04); opacity: 1; } }
+@keyframes tk-a-q-bob { 0%, 100% { transform: translateY(1px) rotate(-5deg); } 50% { transform: translateY(-3px) rotate(4deg); } }
+@keyframes tk-a-recall { 0% { stroke-dashoffset: 0; opacity: .14; } 35% { opacity: .66; } 100% { stroke-dashoffset: 84; opacity: .1; } }
+@keyframes aha-hop { 0% { transform: translateY(0); } 22% { transform: translateY(-5.2px); } 46% { transform: translateY(.6px); } 64%, 100% { transform: translateY(0); } }
+@keyframes aha-squash { 0% { transform: scale(1); } 12% { transform: scale(1.04, .95); } 28% { transform: scale(.97, 1.05); } 52%, 100% { transform: scale(1); } }
+@keyframes aha-eyes { 0%, 100% { transform: scale(1); } 24% { transform: scale(1.16); } 55% { transform: scale(1.04); } }
+@keyframes aha-pupil { 0%, 100% { transform: translate(0, -.35px); } 24% { transform: translate(.2px, -.85px); } }
+@keyframes aha-flash { 0% { opacity: .05; transform: scale(.85); } 24% { opacity: .48; transform: scale(1.12); } 100% { opacity: .08; transform: scale(1); } }
+@keyframes aha-pop { 0% { transform: scale(.76) rotate(-6deg); } 24% { transform: scale(1.16) rotate(2deg); } 46% { transform: scale(.96) rotate(0deg); } 64%, 100% { transform: scale(1) rotate(0deg); } }
+@keyframes aha-rays { 0% { opacity: 0; transform: scale(.64); } 26% { opacity: 1; transform: scale(1.06); } 72% { opacity: .78; transform: scale(1.14); } 100% { opacity: 0; transform: scale(1.22); } }
+@keyframes aha-ring-out { 0% { opacity: .72; transform: scale(.92); } 100% { opacity: 0; transform: scale(1.48); } }
+
+/* Bioluminescent pulse pearls gliding down the active tentacle */
+.lv-dot-halo { fill: var(--lv-accent); opacity: .28; }
+.lv-dot-core { fill: var(--lv-accent); }
+.lv-dot-pearl { fill: #fff; opacity: .82; }
+
+.lv-text { flex: 1 1 240px; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 14px 18px 14px 8px; }
+.lv-now { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 15px; font-weight: 620; color: var(--ink); }
+.lv-now::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--lv-accent); box-shadow: 0 0 0 3px var(--lv-accent-soft); animation: lv-pulse 2s ease-in-out infinite; }
+.lv.is-thinking .lv-now::before { background: var(--lv-think); box-shadow: 0 0 0 3px var(--lv-think-soft); animation: tk-dot-breathe 2.6s ease-in-out infinite; }
+.lv.is-aha .lv-now::before { background: var(--lv-aha); box-shadow: 0 0 0 4px var(--lv-aha-soft); animation: aha-dot 1.05s ease-out both; }
+@keyframes lv-pulse { 0%, 100% { opacity: .65; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes tk-dot-breathe { 0%, 100% { opacity: .55; transform: scale(.86); box-shadow: 0 0 0 2px var(--lv-think-soft); } 50% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 0 5px var(--lv-think-soft); } }
+@keyframes aha-dot { 0% { transform: scale(.85); } 25% { transform: scale(1.3); box-shadow: 0 0 0 6px var(--lv-aha-soft); } 100% { transform: scale(1); box-shadow: 0 0 0 3px var(--lv-aha-soft); } }
+.lv-now-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-state-pill { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; font-size: 11.5px; font-weight: 760; line-height: 1; }
+.lv-state-pill[hidden] { display: none; }
+.lv-state-pill.p-think { background: var(--lv-think-soft); color: var(--lv-think); }
+.lv-state-pill.p-aha { background: var(--lv-aha-soft); color: var(--lv-aha); animation: aha-pop 1.05s ease-out both; }
+.lv-now time { margin-left: auto; flex: none; font-size: 13px; font-weight: 500; color: var(--ink3); }
+.lv-say { margin: 0; padding: 0 2px 0 0; font-size: 13.5px; line-height: 21px; color: var(--ink); max-height: 147px; overflow-y: auto; overflow-wrap: anywhere; scrollbar-width: thin; }
+.lv-say[hidden] { display: none; }
+.lv-say p { margin: 0 0 6px; }
+.lv-say p:last-child { margin-bottom: 0; }
+.lv-say strong { font-weight: 620; color: var(--ink); }
+.lv-say code { padding: 1px 4px; font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--soft); border-radius: 4px; }
+.lv.small .lv-say { font-size: 12.5px; line-height: 18px; max-height: 72px; }
+
+/* A Work that has just ended drops onto its line */
+.just-ended .nd, .just-ended > .lp-node, .lp-work.just-ended { animation: lv-drop .9s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes lv-drop { 0% { transform: translateY(-16px) scale(.7); opacity: 0; } 60% { transform: translateY(2px) scale(1.06); opacity: 1; } 100% { transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-face, .lv-mantle, .lv-sonar, .lv-eyes, .lv-pupil, .lv-bubble, .lv-now::before, .lv-stop.now .lv-ring, .lv-leg.used .lv-leg-fill,
+  .tk-a-ripple, .tk-a-trail, .tk-a-medallion, .tk-a-inward, .tk-sheen, .aha-ring, .aha-rays, .aha-flash, .lv-state-pill,
+  .just-ended .nd, .just-ended > .lp-node, .lp-work.just-ended { animation: none; }
+  .tk-a-ripple { opacity: .3; }
+  .tk-a-inward, .aha-ring, .lv-dot { display: none; }
+}

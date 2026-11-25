@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
@@ -16,7 +17,8 @@ function fakeClock() {
     },
     clearTimeout(id) { timers.delete(id); },
     advanceTo(target) {
-      for (;;) {
+      for (let steps = 0; ; steps++) {
+        if (steps > 100000) throw new Error("fake timers never settle: a timer keeps re-arming itself");
         const next = [...timers.entries()].filter(([,timer]) => timer.at <= target).sort((left,right) => left[1].at - right[1].at)[0];
         if (!next) break;
         const [id,timer] = next;

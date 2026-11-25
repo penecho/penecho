@@ -30,7 +30,6 @@
   const localHostControlsAvailable = window.PENECHO_CONFIG?.runtime !== "cloud";
   const BROWSER_SIGN_IN_POLL_MS = 800;
   const BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000;
-  const DEVICE_CONNECTION_POLL_MS = 2_000;
   const CLOUD_COPY = Object.freeze({
     en:Object.freeze({
       close:"Close",
@@ -47,8 +46,6 @@
       favoriteCanvasesHint:"Public Canvases in Favorites",
       favoriteWidgets:"Favorite Widgets",
       favoriteWidgetsHint:"Add one to this Canvas",
-      explore:"Public shares",
-      exploreHint:"Browse public Canvases and Widgets.",
       cloudNavLibrary:"Library",
       cloudAccount:"Cloud account",
       accountHint:"Manage your identity, Cloud storage, and project activity.",
@@ -56,7 +53,6 @@
       accountProjects:"Projects",
       accountCanvases:"Canvases",
       signIn:"Sign in",
-      openAccount:"Open account",
       cloudUser:"PenEcho user",
       credits:"{count} credits",
       subscriptionValidUntil:"Subscription valid until {date}",
@@ -75,30 +71,12 @@
       browserBlocked:"Your browser blocked the sign-in window. Select Open sign-in page below; PenEcho will still connect automatically.",
       signedInReady:"Signed in. Your Cloud account is ready.",
       browserExpired:"Browser sign-in expired. Select Sign in with browser to try again.",
-      linkThisDevice:"Link device",
-      linkDeviceHint:"Use this computer’s model connections, folders and local canvases from Cloud. Enabling this link replaces the previous linked device; no pairing code is needed.",
-      linkSignInFirst:"Sign in, then enable Linked Device with one click.",
-      thisDevice:"This device",
-      connected:"Connected",
-      deviceLinked:"Device linked",
-      notLinked:"Not linked",
-      connecting:"Connecting",
-      connectionFailed:"Connection failed",
-      statusUnavailable:"Status unavailable",
-      paused:"Disconnected",
-      pauseLink:"Disconnect",
-      reconnectLink:"Reconnect",
-      disconnectLinkHint:"Disconnect keeps your login and connection settings. You can reconnect without changing your MCP configuration.",
-      enableLink:"Enable link",
-      removeThisLink:"Remove this link",
-      removeLinkConfirm:"Remove this device link? Remote access will stop, but you can enable it again later without a pairing code.",
       generatePairingBefore:"Generate a pairing key in ",
       penechoDevices:"PenEcho Cloud → Devices",
       generatePairingAfter:", then enter it below.",
       pairingKey:"Pairing key",
       deviceName:"Device name",
       myPenEcho:"My PenEcho",
-      linkDevice:"Link device",
       requestFailed:"PenEcho Cloud request failed.",
       signInProjects:"Sign in to view private projects and pick up your work on any device.",
       cloudSavingNotReady:"Cloud project saving is not ready yet.",
@@ -130,9 +108,9 @@
       loadingFavorites:"Loading favorites…",
       loadMoreFavorites:"Load more",
       retryFavorites:"Retry",
-      noFavorites:"No favorites yet. Favorite a Craft in Public shares to keep it here.",
-      noFavoriteCanvases:"No favorite Canvases yet. Favorite one in Public shares to keep it here.",
-      noFavoriteWidgets:"No favorite Widgets yet. Favorite one in Public shares or from a Canvas.",
+      noFavorites:"No favorites yet.",
+      noFavoriteCanvases:"No favorite Canvases yet.",
+      noFavoriteWidgets:"No favorite Widgets yet. Favorite one from a Canvas.",
       byAuthor:"by {name}",
       creator:"PenEcho creator",
       addToCanvas:"Add to this Canvas",
@@ -216,9 +194,9 @@
       publicLinkCopied:"Public link copied.",
       viewPublicPage:"View public page ↗",
       done:"Done",
-      publicCommonsTitle:"Your Craft is now part of Echoes",
+      publicCommonsTitle:"Your Craft is now public",
       publicCommunityLink:"Public community link",
-      publishedDialogTitle:"Published to Echoes",
+      publishedDialogTitle:"Published",
       publishedDialogSubtitle:"Share this Craft or open its public page.",
       shareAsLink:"Share as link",
       shareAsImage:"Share as image",
@@ -263,8 +241,6 @@
       favoriteCanvasesHint:"收藏中的公开画布",
       favoriteWidgets:"收藏的组件",
       favoriteWidgetsHint:"加入当前画布",
-      explore:"公开分享",
-      exploreHint:"浏览公开画布与组件。",
       cloudNavLibrary:"内容库",
       cloudAccount:"Cloud 账户",
       accountHint:"管理账户身份、Cloud 空间与项目活动。",
@@ -272,7 +248,6 @@
       accountProjects:"项目",
       accountCanvases:"画布",
       signIn:"登录",
-      openAccount:"前往账户",
       cloudUser:"PenEcho 用户",
       credits:"{count} 积分",
       subscriptionValidUntil:"订阅有效期至 {date}",
@@ -291,30 +266,12 @@
       browserBlocked:"浏览器阻止了登录窗口。请选择下方“打开登录页面”，PenEcho 仍会自动连接。",
       signedInReady:"登录成功，PenEcho Cloud 账户已就绪。",
       browserExpired:"浏览器登录已过期，请重新选择“通过浏览器登录”。",
-      linkThisDevice:"连接设备",
-      linkDeviceHint:"在 Cloud 使用本机模型配置、文件夹和本地画布。一键启用，无需配对码；之前连接的设备将立即失效。",
-      linkSignInFirst:"登录后即可一键启用 Linked Device。",
-      thisDevice:"此设备",
-      connected:"已连接",
-      deviceLinked:"设备已连接",
-      notLinked:"未连接",
-      connecting:"连接中",
-      connectionFailed:"连接失败",
-      statusUnavailable:"状态暂不可用",
-      paused:"已断开",
-      pauseLink:"断开连接",
-      reconnectLink:"重新连接",
-      disconnectLinkHint:"断开连接会保留登录和连接设置；再次连接无需修改 MCP 配置。",
-      enableLink:"启用连接",
-      removeThisLink:"移除此连接",
-      removeLinkConfirm:"要移除此设备连接吗？远程访问会停止，之后可直接再次启用，无需配对码。",
       generatePairingBefore:"请在 ",
       penechoDevices:"PenEcho Cloud → 设备",
       generatePairingAfter:" 生成配对密钥，然后在下方输入。",
       pairingKey:"配对密钥",
       deviceName:"设备名称",
       myPenEcho:"我的 PenEcho",
-      linkDevice:"连接设备",
       requestFailed:"PenEcho Cloud 请求失败。",
       signInProjects:"登录后查看私有项目，在任意设备上继续创作。",
       cloudSavingNotReady:"Cloud 项目保存功能尚未就绪。",
@@ -346,9 +303,9 @@
       loadingFavorites:"正在加载收藏…",
       loadMoreFavorites:"加载更多",
       retryFavorites:"重试",
-      noFavorites:"还没有收藏。可在 公开分享中收藏后回到这里使用。",
-      noFavoriteCanvases:"还没有收藏的画布。可在 公开分享中收藏后回到这里打开。",
-      noFavoriteWidgets:"还没有收藏的组件。可在 公开分享或画布中收藏。",
+      noFavorites:"还没有收藏。",
+      noFavoriteCanvases:"还没有收藏的画布。",
+      noFavoriteWidgets:"还没有收藏的组件。可在画布中收藏。",
       byAuthor:"作者：{name}",
       creator:"PenEcho 创作者",
       addToCanvas:"加入当前画布",
@@ -432,9 +389,9 @@
       publicLinkCopied:"公开链接已复制。",
       viewPublicPage:"查看公开页面 ↗",
       done:"完成",
-      publicCommonsTitle:"你的创作现已加入 Echoes",
+      publicCommonsTitle:"你的创作现已公开",
       publicCommunityLink:"公开社区链接",
-      publishedDialogTitle:"已发布到 Echoes",
+      publishedDialogTitle:"已发布",
       publishedDialogSubtitle:"分享此 Craft，或打开公开页面。",
       shareAsLink:"分享链接",
       shareAsImage:"分享为图片",
@@ -477,7 +434,6 @@
     busy:false,
     favoriteWidgetOperations:new Set(),
     browserSignIn:{ id:0, timer:0, poll:null, polling:false, active:false, expiresAt:0, popup:null, authorizationUrl:"", popupBlocked:false, tone:"", message:"" },
-    deviceConnectionWatch:{ id:0, timer:0, polling:false, active:false, expiresAt:0 },
   };
 
   function cloudT(key, replacements = {}) {
@@ -500,7 +456,7 @@
   function runtimeApiPath(path, method = "GET") {
     if (!isCloudRuntime()) return path;
     const source = new URL(path, `${location.origin}/`), requestMethod = String(method || "GET").toUpperCase();
-    if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/share$/i.test(source.pathname)) return source.pathname.replace("/api/cloud/", "/api/v1/") + source.search;
+    if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/(?:share|collaboration)$/i.test(source.pathname)) return source.pathname.replace("/api/cloud/", "/api/v1/") + source.search;
     if (/^\/api\/cloud\/mcp(?:\/|$)/.test(source.pathname)) return source.pathname.replace("/api/cloud/mcp","/api/v1/mcp") + source.search;
     if (requestMethod === "GET" && source.pathname === "/api/cloud/library") return `/api/v1/library${source.search ? `${source.search}&` : "?"}previews=0`;
     if (requestMethod === "POST" && source.pathname === "/api/cloud/projects") return "/api/v1/projects";
@@ -527,16 +483,8 @@
   function linkedImageEmbed(item, name) {
     const href = htmlAttribute(communityUrl(item));
     const src = htmlAttribute(communitySocialCardUrl(item));
-    const alt = htmlAttribute(`${String(name || item?.name || "PenEcho Craft")} — PenEcho Echoes`);
+    const alt = htmlAttribute(`${String(name || item?.name || "PenEcho Craft")} — PenEcho`);
     return `<a href="${href}" target="_blank" rel="noopener noreferrer"><img src="${src}" alt="${alt}" width="1200" height="630" loading="lazy" decoding="async" style="max-width:100%;height:auto"></a>`;
-  }
-
-  function cloudDevicesUrl() {
-    return new URL("/dashboard.html#devices", `${cloudOrigin()}/`).toString();
-  }
-
-  function cloudDevicesLink(text) {
-    return el("a", { href:cloudDevicesUrl(), target:"_blank", rel:"noopener", text });
   }
 
   async function copyText(value) {
@@ -679,7 +627,6 @@
     overlay?.remove();
     if (overlay === activeCloudOverlay) {
       activeCloudOverlay = null;
-      stopDeviceConnectionWatch();
     }
     cloudButton.setAttribute("aria-expanded", "false");
     if (restoreFocus?.isConnected) restoreFocus.focus({ preventScroll:true });
@@ -753,6 +700,26 @@
     renderCanvasShareStatus();
     if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event("penecho:live-share-status-changed"));
   }
+  const shareMenu = document.getElementById("canvasShareMenu");
+  const shareDrawTogetherBtn = document.getElementById("shareDrawTogetherBtn");
+  const shareViewLinkBtn = document.getElementById("shareViewLinkBtn");
+  const shareDrawTogetherState = document.getElementById("shareDrawTogetherState");
+  const shareViewLinkState = document.getElementById("shareViewLinkState");
+  function shareMenuOpen() {
+    return Boolean(shareMenu && !shareMenu.hidden);
+  }
+  function setShareMenuOpen(open, { focus = "" } = {}) {
+    if (!shareMenu) return;
+    if (open) window.dispatchEvent(new CustomEvent("penecho:share-opening"));
+    shareMenu.hidden = !open;
+    shareCanvasButton?.setAttribute("aria-expanded", String(open));
+    if (open && focus === "first") shareDrawTogetherBtn?.focus();
+    else if (open && focus === "last") shareViewLinkBtn?.focus();
+    else if (!open && focus === "button") shareCanvasButton?.focus();
+  }
+  window.addEventListener("penecho:more-opening", () => {
+    if (shareMenuOpen()) setShareMenuOpen(false);
+  });
   function renderCanvasShareStatus() {
     const canvasId = currentLiveShareCanvasId();
     const shared = Boolean(canvasId && liveShareStates.get(liveShareKey(canvasId))?.shared);
@@ -765,11 +732,42 @@
       button.setAttribute("aria-label", label);
       button.title = label;
     }
+    if (shareViewLinkState) shareViewLinkState.hidden = !shared;
   }
   function rememberLiveShare(canvasId, widgetId, share) {
     const key = liveShareKey(canvasId, widgetId);
     liveShareStates.set(key, { shared:Boolean(share) });
+    if (!widgetId) window.PenEchoLiveCanvas?.audience?.(canvasId, "share", Boolean(share));
     notifyLiveShareChange();
+  }
+  // Collaborate has its own link, so its button keeps its own on/off state.
+  const collaborationStates = new Map();
+  const collaborateCanvasButton = document.getElementById("collaborateCanvasBtn");
+  function renderCollaborationStatus() {
+    const canvasId = currentLiveShareCanvasId();
+    // A Canvas not in Cloud may collaborate by a link it started without an account.
+    const on = Boolean(canvasId ? collaborationStates.get(liveShareKey(canvasId))?.on : window.PenEchoLiveCanvas?.link?.());
+    if (collaborateCanvasButton) collaborateCanvasButton.dataset.collaborating = String(on);
+    if (shareCanvasButton) shareCanvasButton.dataset.collaborating = String(on);
+    if (shareDrawTogetherState) shareDrawTogetherState.hidden = !on;
+  }
+  function rememberCollaboration(canvasId, link) {
+    collaborationStates.set(liveShareKey(canvasId), { on:Boolean(link) });
+    window.PenEchoLiveCanvas?.audience?.(canvasId, "collaboration", Boolean(link));
+    renderCollaborationStatus();
+  }
+  function requestCollaborationStatus(canvasId) {
+    if ((!collaborateCanvasButton && !shareMenu) || !canvasId || !accountSignedIn()) return;
+    const key = liveShareKey(canvasId);
+    if (collaborationStates.has(key) && !collaborationStates.get(key).failed) return;
+    const entry = { on:false };
+    collaborationStates.set(key, entry);
+    void api(`/api/cloud/canvases/${canvasId}/collaboration`).then(({ collaboration }) => {
+      if (collaborationStates.get(key) !== entry) return;
+      entry.on = Boolean(collaboration);
+      window.PenEchoLiveCanvas?.audience?.(canvasId, "collaboration", entry.on);
+      renderCollaborationStatus();
+    }).catch(() => { entry.failed = true; });
   }
   function requestLiveShareStatus(canvasId, widgetId = "") {
     if (!canvasId || !accountSignedIn()) return;
@@ -781,6 +779,7 @@
     void api(`/api/cloud/canvases/${canvasId}/share${suffix}`).then(({ share }) => {
       if (liveShareStates.get(key) !== entry) return;
       entry.shared = Boolean(share);
+      if (!widgetId) window.PenEchoLiveCanvas?.audience?.(canvasId, "share", entry.shared);
       notifyLiveShareChange();
     }).catch(() => { entry.failed = true; });
   }
@@ -788,15 +787,17 @@
     const canvasId = currentLiveShareCanvasId();
     const contextKey = canvasId ? liveShareKey(canvasId) : "";
     if (contextKey !== activeLiveShareContextKey) {
-      if (!contextKey) liveShareStates.clear();
+      if (!contextKey) { liveShareStates.clear(); collaborationStates.clear(); }
       activeLiveShareContextKey = contextKey;
       if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event("penecho:live-share-status-changed"));
     }
     renderCanvasShareStatus();
+    renderCollaborationStatus();
     if (canvasId) {
       const key = liveShareKey(canvasId);
       if (liveShareStates.get(key)?.failed) liveShareStates.delete(key);
       requestLiveShareStatus(canvasId);
+      requestCollaborationStatus(canvasId);
     }
   }
   window.PenEchoLiveShareStatus = Object.freeze({
@@ -808,36 +809,29 @@
     },
   });
   window.addEventListener("penecho:live-share-context-changed", refreshCanvasShareStatus);
-
-  function cloudDeviceConnectionStatus(status = state.status) {
-    const device = status?.device || {};
-    if (state.statusUnavailable) return { state:"failed", label:cloudT("statusUnavailable") };
-    if (!device.configured) return { state:"unconfigured", label:cloudT("notLinked") };
-    if (!device.enabled) return { state:"paused", label:cloudT("paused") };
-    if (device.connected) return { state:"connected", label:cloudT("connected") };
-    const relayState = String(device.state || status?.state || "").toLowerCase();
-    const failed = Boolean(device.lastError || status?.lastError) || ["disconnected", "invalid", "waiting"].includes(relayState);
-    return failed
-      ? { state:"failed", label:cloudT("connectionFailed") }
-      : { state:"connecting", label:cloudT("connecting") };
-  }
+  // A link started without an account moved to the Canvas just saved to Cloud.
+  window.addEventListener("penecho:collaboration-adopted", event => {
+    if (event.detail?.canvasId) rememberCollaboration(event.detail.canvasId, event.detail.collaboration || null);
+  });
+  // "Sign in to save" on a link Canvas: sign in first; signed in, Collaborate offers the save.
+  window.addEventListener("penecho:live-link-save", () => {
+    if (!accountSignedIn()) { state.cloudSection = "account"; void openCloud(); return; }
+    void collaborateDialog();
+  });
 
   function updateCloudButton() {
     const account = state.status?.account;
     const remote = window.PENECHO_CONFIG?.runtime === "cloud" ? window.PENECHO_REMOTE_CLOUD_STATUS : null;
-    const connected = remote ? Boolean(remote.deviceReady) : Boolean(state.status?.device?.connected && !state.statusUnavailable);
     const signedIn = remote ? Boolean(remote.accountName) : accountSignedIn();
     const librarySignIn = document.querySelector("#historyCloudSignIn");
     if (librarySignIn) librarySignIn.hidden = signedIn || !state.status && !remote;
     const accountName = String(remote?.accountName || account?.name || "");
     const credits = account?.credits ?? remote?.credits;
-    cloudButton.dataset.state = connected ? "connected" : signedIn ? "signed-in" : "signed-out";
+    cloudButton.dataset.state = signedIn ? "signed-in" : "signed-out";
     cloudButton.querySelector(".cloud-account-label").textContent = accountName ? accountName.split(/\s+/)[0] : "Cloud";
-    cloudButton.title = remote?.deviceOnline && !remote.deviceReady ? `PenEcho Cloud · ${cloudT("connecting")}` : connected
-      ? `PenEcho Cloud · ${cloudT("deviceLinked")}`
-      : signedIn
-        ? `PenEcho Cloud · ${cloudT("credits", { count:credits == null ? "—" : Number(credits).toLocaleString(undefined,{maximumFractionDigits:1}) })}`
-        : cloudT("openPenEchoCloud", { fallback:"Connect PenEcho Cloud" });
+    cloudButton.title = signedIn
+      ? `PenEcho Cloud · ${cloudT("credits", { count:credits == null ? "—" : Number(credits).toLocaleString(undefined,{maximumFractionDigits:1}) })}`
+      : cloudT("openPenEchoCloud", { fallback:"Connect PenEcho Cloud" });
   }
 
   let statusRequestSeq = 0;
@@ -852,7 +846,6 @@
         ...(state.status || {}),
         account:remote.accountName ? { ...(state.status?.account || {}), name:remote.accountName } : null,
         accountSession:{ ...(state.status?.accountSession || {}), signedIn:Boolean(remote.accountName) },
-        device:{ ...(state.status?.device || {}), connected:Boolean(remote.deviceReady) },
       };
       updateCloudButton();
       refreshCanvasShareStatus();
@@ -897,45 +890,6 @@
       else cloudButton.dataset.state = "signed-out";
       return state.status;
     }
-  }
-
-  function stopDeviceConnectionWatch() {
-    state.deviceConnectionWatch.id++;
-    clearTimeout(state.deviceConnectionWatch.timer);
-    state.deviceConnectionWatch.timer = 0;
-    state.deviceConnectionWatch.polling = false;
-    state.deviceConnectionWatch.active = false;
-    state.deviceConnectionWatch.expiresAt = 0;
-  }
-
-  function deviceStatusRevision() {
-    const device = state.status?.device || {};
-    return JSON.stringify([state.statusUnavailable, device.configured, device.enabled, device.connected, device.state, device.id, device.name, state.status?.lastError]);
-  }
-
-  function startDeviceConnectionWatch(render, overlay = activeCloudOverlay) {
-    stopDeviceConnectionWatch();
-    if (isCloudRuntime() || !overlay?.isConnected || state.cloudSection !== "device" || document.visibilityState === "hidden") return;
-    const watch = state.deviceConnectionWatch;
-    const id = watch.id;
-    watch.active = true;
-    const poll = async () => {
-      if (id !== watch.id || !watch.active || watch.polling) return;
-      if (!overlay.isConnected || state.cloudSection !== "device" || document.visibilityState === "hidden") return stopDeviceConnectionWatch();
-      watch.polling = true;
-      const before = deviceStatusRevision();
-      try {
-        await refreshStatus();
-        if (id !== watch.id) return;
-        if (overlay.isConnected && before !== deviceStatusRevision()) render?.();
-      } finally {
-        if (id === watch.id) {
-          watch.polling = false;
-          watch.timer = setTimeout(poll, DEVICE_CONNECTION_POLL_MS);
-        }
-      }
-    };
-    watch.timer = setTimeout(poll, DEVICE_CONNECTION_POLL_MS);
   }
 
   function stopBrowserSignInWatch() {
@@ -1151,57 +1105,8 @@
       return accountSignedIn() && accountId ? `${cloudOrigin()}:${accountId}` : "";
     },
     signInState:()=>({active:state.browserSignIn.active,url:state.browserSignIn.authorizationUrl,message:state.browserSignIn.message}),
-    signIn:refresh=>window.PENECHO_CONFIG?.browserDraftId ? window.PenEchoBrowserDraft.signIn() : isCloudRuntime() ? window.open(new URL('/auth.html',cloudOrigin()).toString(),'_blank','noopener') : beginCloudSignIn(refresh),
+    signIn:refresh=>window.PENECHO_CONFIG?.browserDraftId && isCloudRuntime() ? window.PenEchoBrowserDraft.signIn() : isCloudRuntime() ? window.open(new URL('/auth.html',cloudOrigin()).toString(),'_blank','noopener') : beginCloudSignIn(refresh),
   };
-
-  function devicePanel(render) {
-    const panel = el("section", { class:"penecho-cloud-panel cloud-device-panel" });
-    panel.append(pageHeading(cloudT("linkThisDevice"), cloudT("linkDeviceHint")));
-    const device = state.status?.device || {};
-    if (device.configured) {
-      const connection = cloudDeviceConnectionStatus();
-      panel.append(el("div", { class:"cloud-settings-group" }, [
-        el("div", { class:"cloud-setting-row cloud-device-summary" }, [
-          el("div", { class:"cloud-setting-copy" }, [
-            el("strong", { class:"cloud-device-name", text:device.name || cloudT("thisDevice") }),
-            el("small", { text:cloudT("thisDevice") }),
-          ]),
-          el("span", {
-            class:"cloud-device-state",
-            "data-state":connection.state,
-            text:connection.label,
-          }),
-        ]),
-      ]));
-      const actions = el("div", { class:"cloud-button-row cloud-page-actions" });
-      actions.append(el("button", { class:"cloud-button", type:"button", text:device.enabled ? cloudT("pauseLink") : cloudT("reconnectLink"), onclick:async () => action(render, async () => {
-        await api(`/api/cloud/device/${device.enabled ? "disable" : "enable"}`, { method:"POST", body:"{}" });
-        await refreshStatus();
-        if (!device.enabled) startDeviceConnectionWatch(render);
-      }) }));
-      actions.append(el("button", { class:"cloud-button danger", type:"button", text:cloudT("removeThisLink"), onclick:async () => {
-        if (!window.confirm(cloudT("removeLinkConfirm"))) return;
-        await action(render, async () => { await api("/api/cloud/device/revoke", { method:"POST", body:"{}" }); await refreshStatus(); });
-      } }));
-      panel.append(actions, el("p", { text:cloudT("disconnectLinkHint") }));
-      return panel;
-    }
-    if (!accountSignedIn()) {
-      panel.append(el("p", { text:cloudT("linkSignInFirst") }));
-      panel.append(el("button", { class:"cloud-button", type:"button", text:cloudT("openAccount"), onclick:() => {
-        state.cloudSection = "account";
-        render();
-        queueMicrotask(() => document.querySelector("#cloud-tab-account")?.focus());
-      } }));
-      return panel;
-    }
-    panel.append(el("div", { class:"cloud-button-row cloud-page-actions" }, el("button", { class:"cloud-button primary", type:"button", text:cloudT("enableLink"), onclick:async () => action(render, async () => {
-      await api("/api/cloud/device/enable", { method:"POST", body:"{}" });
-      await refreshStatus();
-      startDeviceConnectionWatch(render);
-    }) })));
-    return panel;
-  }
 
   function field(label, input) {
     return el("label", { class:"cloud-field" }, [el("span", { text:label }), input]);
@@ -1536,12 +1441,11 @@
 
   function cloudSectionPanel(render, setRefreshing) {
     if (state.cloudSection === "account") return accountPanel(render, setRefreshing);
-    if (state.cloudSection === "device") return devicePanel(render);
     if (state.cloudSection === "favorites") return cloudFavoritesPanel(setRefreshing);
     return cloudProjectsPanel(setRefreshing);
   }
 
-  // Desktop Canvas: the Cloud account and Link device pages live in Settings,
+  // Desktop Canvas: the Cloud account page lives in Settings,
   // Cloud projects in the Canvas Library and Favorites in the Library too.
   // Without the Settings host the Cloud Center dialog below remains the surface.
   const settingsCloudHost = document.getElementById("settingsCloudHost");
@@ -1552,18 +1456,14 @@
   function cloudSettingsVisible() {
     return Boolean(settingsCloudHost?.isConnected && !settingsCloudHost.closest?.("[hidden]"));
   }
-  const cloudSettingsWatchHandle = { get isConnected() { return cloudSettingsVisible(); } };
   function cloudSettingsStateRevision() {
-    return JSON.stringify([accountSignedIn(), state.status?.account?.name, state.status?.account?.membership?.tier, deviceStatusRevision(), state.browserSignIn.active, state.browserSignIn.message]);
+    return JSON.stringify([accountSignedIn(), state.status?.account?.name, state.status?.account?.membership?.tier, state.browserSignIn.active, state.browserSignIn.message]);
   }
   function renderCloudSettings() {
     if (!cloudSettingsAvailable()) return;
     const setRefreshing = (refreshing) => settingsCloudHost.setAttribute("aria-busy", String(Boolean(refreshing)));
     cloudSettingsRevision = cloudSettingsStateRevision();
-    settingsCloudHost.replaceChildren(accountPanel(renderCloudSettings, setRefreshing), devicePanel(renderCloudSettings));
-    // Device status polling runs only while this page is visible.
-    state.cloudSection = "device";
-    startDeviceConnectionWatch(renderCloudSettings, cloudSettingsWatchHandle);
+    settingsCloudHost.replaceChildren(accountPanel(renderCloudSettings, setRefreshing));
   }
   function openCloudSettings() {
     window.dispatchEvent(new CustomEvent("penecho:show-settings", { detail:{ page:"cloud" } }));
@@ -1577,7 +1477,6 @@
   if (cloudSettingsAvailable()) {
     window.addEventListener("penecho:settings-page", (event) => {
       if (event.detail?.page === "cloud") queueMicrotask(() => { if (cloudSettingsVisible()) renderCloudSettings(); });
-      else stopDeviceConnectionWatch();
     });
     window.addEventListener("penecho:cloud-status-changed", () => {
       if (cloudSettingsVisible() && cloudSettingsRevision !== cloudSettingsStateRevision()) renderCloudSettings();
@@ -1606,11 +1505,11 @@
     function render() {
       const workspace = el("div", { class:"cloud-workspace" });
       workspace.dataset.peRegion = "content";
-      if (!localHostControlsAvailable && !["projects", "favorites"].includes(state.cloudSection)) state.cloudSection = "projects";
+      if (!localHostControlsAvailable && state.cloudSection !== "projects" || state.cloudSection === "favorites") state.cloudSection = "projects";
       const sections = el("nav", { class:"cloud-section-tabs", role:"tablist", "aria-label":cloudT("cloudArea"), "aria-orientation":"vertical" });
       const appendSection = (value, label, meta = "", navHeading = "", trailing = null) => {
         const active = state.cloudSection === value;
-        const localOnly = value === "account" || value === "device";
+        const localOnly = value === "account";
         const copy = el("span", { class:"cloud-nav-copy" }, [
           el("strong", { text:cloudT(label) }),
           meta ? el("span", { class:"cloud-nav-meta", text:meta }) : null,
@@ -1631,7 +1530,6 @@
             if(value==="mcp") { closeOverlay(shell.overlay); window.dispatchEvent(new CustomEvent("penecho:show-mcp-settings")); return; }
             state.cloudSection = value;
             render();
-            startDeviceConnectionWatch(render, shell.overlay);
             queueMicrotask(() => document.querySelector(`#cloud-tab-${value}`)?.focus());
           },
         }, [el("span", { class:"cloud-nav-icon", "aria-hidden":"true" }), copy, trailing]));
@@ -1639,34 +1537,12 @@
       if (localHostControlsAvailable) {
         const accountName = accountSignedIn() ? String(state.status?.account?.name || cloudT("cloudUser")) : cloudT("signIn");
         appendSection("account", "cloudAccount", accountName);
-        const device = state.status?.device || {};
-        const deviceMeta = device.configured
-          ? String(device.name || (device.connected ? cloudT("connected") : device.enabled ? cloudT("connecting") : cloudT("paused")))
-          : accountSignedIn() ? cloudT("notLinked") : cloudT("signIn");
-        const connection = cloudDeviceConnectionStatus();
-        appendSection("device", "linkThisDevice", deviceMeta, "", el("span", {
-          class:"cloud-device-status-dot",
-          "data-state":connection.state,
-          role:"img",
-          "aria-label":connection.label,
-          title:connection.label,
-        }));
       }
       const definitions = [
         ["projects", "cloudProjects"],
-        ["favorites", "favorites"],
       ];
       appendSection("mcp", "MCP");
       definitions.forEach(([value, label], index) => appendSection(value, label, "", index === 0 ? cloudT("cloudNavLibrary") : ""));
-      sections.append(el("a", {
-        class:"cloud-section-tab cloud-explore-link",
-        href:new URL("/community.html", `${cloudOrigin()}/`).toString(),
-        target:"_blank",
-        rel:"noopener",
-        "data-cloud-section":"echoes",
-        "data-pe-button":"menu-item",
-        "data-pe-state":"default",
-      }, [el("span", { class:"cloud-nav-icon", "aria-hidden":"true" }), el("span", { class:"cloud-nav-copy" }, el("strong", { text:`${cloudT("explore")} ↗` }))]));
       sections.addEventListener("keydown", (event) => {
         if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key) || event.target?.getAttribute?.("role") !== "tab") return;
         const tabs = [...sections.querySelectorAll('[role="tab"]')], current = tabs.indexOf(event.target);
@@ -1702,11 +1578,10 @@
       void refreshStatus();
       return;
     }
-    const hadStatus = Boolean(state.status), wasSignedIn = accountSignedIn(), previousDevice = deviceStatusRevision();
+    const hadStatus = Boolean(state.status), wasSignedIn = accountSignedIn();
     cloudButton.setAttribute("aria-busy", "true");
     void refreshStatus().then(() => {
-      if (shell.overlay.isConnected && (!hadStatus || wasSignedIn !== accountSignedIn() || previousDevice !== deviceStatusRevision())) render();
-      startDeviceConnectionWatch(render, shell.overlay);
+      if (shell.overlay.isConnected && (!hadStatus || wasSignedIn !== accountSignedIn())) render();
     }).finally(() => cloudButton.setAttribute("aria-busy", "false"));
   }
 
@@ -1852,12 +1727,11 @@
     return svg;
   }
 
-  async function liveShareDialog({ kind, widgetId = null, sourceName = "", noteKind = "", publicIntent = false }) {
+  async function liveShareDialog({ kind, widgetId = null, sourceName = "", noteKind = "" }) {
     const zh = (document.documentElement.lang || "").startsWith("zh"), text = (en,cn) => zh ? cn : en;
     const bridge = window.PenEchoCloudProjects;
     const sourceId = widgetId ? bridge?.shareWidgetId(widgetId) : null;
     if (widgetId && !sourceId) return;
-    const emptyCanvas = kind === "canvas" && bridge?.hasShareableContent?.() === false;
     const subject = liveShareSubject(kind, noteKind), thisItem = text(...subject.ref);
     const name = String((kind === "canvas" ? currentCanvasShareName() : sourceName) || "").replace(/\s+/g, " ").trim().slice(0, 160);
     let canvasId = bridge?.currentCanvasId(), currentShare = null, busy = false, nativeSharing = false, renderedUrl = "";
@@ -1876,19 +1750,18 @@
     const scope = el("ul", {class:"live-share-scope","aria-label":text("What sharing means","分享说明")}, [
       scopeItem(text("Public link","公开链接"), text(`Anyone with the link can view ${thisItem} and copy it to edit in their own space. No sign-in needed, no expiry.`, `任何持有链接的人都能查看${thisItem}，并可复制到自己的空间编辑。无需登录，没有有效期。`)
         + (kind === "widget" ? text(` Only ${thisItem} is shared, not the rest of the Canvas.`, `只分享${thisItem}，不含画布上的其他内容。`) : "")),
-      scopeItem(text("Stays current","保持同步"), text("Changes you later save to this Cloud Canvas appear at the same link. No separate snapshot is kept.", "之后保存到这份云端 Canvas 的改动会出现在同一链接中，不保留独立快照。")),
-      scopeItem(text("You stay in control","随时可关闭"), text("Turn sharing off at any time and the link stops working, including in posts. Public discovery is optional and requires review.", "可随时关闭分享，链接随即失效，包括已发帖子中的链接。可自行选择公开展示，审核通过后才会出现在公开分享页面。")),
+      kind === "canvas"
+        ? scopeItem(text("Live","实时同步"), text("People with the link see changes as they happen, without waiting for a save.", "持有链接的人会实时看到改动，无需等待保存。"))
+        : scopeItem(text("Stays current","保持同步"), text("Changes you later save to this Cloud Canvas appear at the same link. No separate snapshot is kept.", "之后保存到这份云端 Canvas 的改动会出现在同一链接中，不保留独立快照。")),
+      scopeItem(text("You stay in control","随时可关闭"), text("Turn sharing off at any time and the link stops working, including in posts.", "可随时关闭分享，链接随即失效，包括已发帖子中的链接。")),
     ]);
-    const publicToggle=el("input",{type:"checkbox",class:"live-share-public-toggle","data-pe-control":"checkbox","aria-describedby":`${idBase}-public-help`});
-    publicToggle.checked=publicIntent;
-    const publicHelp=el("small",{id:`${idBase}-public-help`,text:text("Optional. After review, people can discover this share on PenEcho. Saved changes are reviewed again. Turn this off to remove it from discovery; the link stays available.","可选。审核通过后，其他人可在 PenEcho 发现此分享；保存改动后会重新审核。关闭此选项可停止公开展示，分享链接仍可使用。")});
-    const publicStatus=el("p",{class:"live-share-public-status","aria-live":"polite"});
-    const publicField=el("section",{class:"live-share-public"},[
-      el("label",{"data-pe-hit":"choice"},[publicToggle,el("strong",{text:text("Share publicly","公开展示")})]),publicHelp,publicStatus,
-    ]);
+    // Share links are view-only; editing together lives under Collaborate.
+    const collaborateEntry = kind === "canvas" && collaborateCanvasButton ? el("p", {class:"live-share-collaborate"}, [
+      el("span", {text:text("Want people to edit with you?","想让别人和你一起编辑？")}),
+      el("button", {type:"button","data-pe-button":"ghost","data-pe-density":"compact",text:text("Collaborate","协作"),onclick:() => { closeOverlay(shell.overlay); void collaborateDialog({ start:true }); }}),
+    ]) : null;
     const storageNote = el("p", {text:text("This Canvas must be saved to Cloud first. Future saves must go to this Cloud Canvas to update the link.", "需要先将此 Canvas 保存到云端。后续请继续保存到这份云端 Canvas，链接才会更新。")});
-    const emptyMessage = text("Add content to the Canvas before sharing.","请先在画布上添加内容，再开启分享。");
-    const status = el("p", {role:"status","aria-live":"polite",text:emptyCanvas ? emptyMessage : ""});
+    const status = el("p", {role:"status","aria-live":"polite"});
     const link = el("input", {id:`${idBase}-link`,readonly:"","data-pe-control":"input","aria-label":text("Public link","公开链接"),onfocus:() => link.select()});
     const viewPage = el("a", {class:"live-share-view",target:"_blank",rel:"noopener noreferrer","data-pe-button":"ghost","data-pe-density":"compact",text:cloudT("viewPublicPage")});
     const linkRow = el("div", {class:"live-share-label-row"}, [
@@ -1940,7 +1813,6 @@
     function renderSteps() {
       const signedIn = accountSignedIn(), saved = Boolean(canvasId), linked = Boolean(currentShare);
       const items = [];
-      if (kind === "canvas") items.push(shareStep("content", !emptyCanvas, text("Canvas has content","画布已有内容"), emptyCanvas ? text("Draw or add something first.","请先画点什么或添加内容。") : text("Ready to share.","可以分享。")));
       items.push(shareStep("account", signedIn, text("Sign in to PenEcho Cloud","登录 PenEcho Cloud"), text("Share links are hosted by your Cloud account.","分享链接由你的云端账户托管。")));
       items.push(shareStep("cloud", saved, text("Save to Cloud","保存到云端"), saved ? text("Saved. Later saves to this Cloud Canvas update the link.","已保存。之后保存到这份云端 Canvas 会更新链接。") : "", saved ? null : storageNote));
       items.push(shareStep("link", linked, text("Turn on the link","开启链接"), linked ? text("Sharing is on.","已开启分享。") : text("Then copy the link, or post it on X, LinkedIn, or anywhere else.","之后可复制链接，或发到 X、LinkedIn 等任意平台。")));
@@ -1948,7 +1820,7 @@
       if (current) current.dataset.state = "current";
       steps.replaceChildren(...items);
     }
-    shell.body.append(publicField,active,scope,steps,status); shell.dialog.append(footer);
+    shell.body.append(...(collaborateEntry ? [collaborateEntry] : []),active,scope,steps,status); shell.dialog.append(footer);
     const selection = sourceId ? {widgetId:sourceId} : {};
     const endpoint = () => `/api/cloud/canvases/${canvasId}/share`;
     function setStatus(message, tone = "") {
@@ -1982,16 +1854,7 @@
       link.value=url;
       shell.dialog.dataset.liveShare = shared ? "on" : "off";
       enable.textContent=shared ? text("Copy link","复制链接") : !accountSignedIn() ? text("Sign in / Register","登录 / 注册") : canvasId ? text("Save and enable sharing","保存并开启分享") : text("Save to Cloud and share","保存到云端并开启分享");
-      enable.disabled=busy || (shared ? !url : emptyCanvas); revoke.disabled=busy;
-      publicToggle.disabled=busy || (emptyCanvas && !currentShare?.public);
-      if(currentShare)publicToggle.checked=currentShare.public===true;
-      const state=currentShare?.public ? currentShare.moderation?.state || 'pending' : '';
-      publicStatus.textContent=state==='approved'?text("Visible in Public shares.","已在公开分享页面展示。")
-        : state==='blocked'?text("Not listed: this content does not meet the public-sharing guidelines. You can edit the content and save again.","未公开展示：内容不符合公开分享要求。可修改内容后重新保存。")
-        : state==='review'?text("Not listed: this content needs further review. Try a simpler, self-contained version.","未公开展示：此内容暂时无法完成审核。可调整为内容完整、无需外部资源的版本。")
-        : state==='error'?text("Review temporarily unavailable. We will retry automatically; this share is not listed yet.","审核暂时不可用，系统会自动重试；此分享尚未公开展示。")
-        : state?text("Pending review. This share is not listed yet.","等待审核，暂未公开展示。") : '';
-      publicStatus.hidden=!state;
+      enable.disabled=busy || (shared && !url); revoke.disabled=busy;
       renderSteps();
       renderTargets();
     }
@@ -2006,25 +1869,12 @@
       if(!accountSignedIn()){closeOverlay(shell.overlay);state.cloudSection="account";await openCloud();return;}
       if(currentShare){await copyText(link.value);setStatus(text("Link copied.","链接已复制。"));return;}
       canvasId=await bridge.saveForShare(widgetId);
-      currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify({...selection,...(publicToggle.checked?{public:true}:{})})})).share;
+      currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify(selection)})).share;
       rememberLiveShare(canvasId, sourceId || "", currentShare);
       setStatus(text("Sharing is on. Copy the link or choose where to share.","已开启分享。可复制链接，或选择分享网站。"));
     }));
-    publicToggle.addEventListener("change",()=>{
-      const requested=publicToggle.checked;
-      if(!currentShare)return;
-      void run(async()=>{
-        if(requested) {
-          if(bridge.currentCanvasId()!==canvasId)throw Error(text("Reopen Share on the Canvas you want to share.","请在要分享的画布上重新打开分享窗口。"));
-          const savedId=await bridge.saveForShare(widgetId);
-          if(savedId!==canvasId)throw Error(text("The Canvas changed. Reopen Share.","画布已切换，请重新打开分享窗口。"));
-        }
-        currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify({...selection,public:requested})})).share;
-        setStatus(requested?text("Submitted for public review.","已提交公开展示审核。") : text("Removed from public discovery. Your link still works.","已停止公开展示，分享链接仍可使用。"));
-      });
-    });
     revoke.addEventListener("click",()=>run(async()=>{
-      await api(endpoint(),{method:"DELETE",body:JSON.stringify(selection)});currentShare=null;publicToggle.checked=false;
+      await api(endpoint(),{method:"DELETE",body:JSON.stringify(selection)});currentShare=null;
       rememberLiveShare(canvasId, sourceId || "", null);
       setStatus(text("Sharing is off. The link no longer works, including in posts. Copies visitors already saved remain theirs.","已关闭分享，链接已失效，包括已发帖子中的链接。访客之前保存的副本仍归访客所有。"));
     }));
@@ -2080,7 +1930,7 @@
       currentShare=(await api(endpoint()+(sourceId?`?widgetId=${encodeURIComponent(sourceId)}`:""))).share;
       rememberLiveShare(canvasId, sourceId || "", currentShare);
       if (currentShare && !liveSharePublicUrl(currentShare)) setStatus(text("The public link could not be read. Turn sharing off and on again.","无法读取公开链接，请关闭后重新开启分享。"),"error");
-      else setStatus(emptyCanvas && !currentShare ? emptyMessage : "");
+      else setStatus("");
     });
     async function refreshPublicReview() {
       if(!shell.overlay.isConnected)return;
@@ -2096,8 +1946,136 @@
     setTimeout(refreshPublicReview,5000);
   }
 
+  // Collaborate opens the Canvas to editing by link. The link is separate from
+  // Share, and stopping it removes everyone who joined with it.
+  // One click on Collaborate starts it: the shared page is made from this Canvas
+  // and its link copied. No account is needed unless the user saves it.
+  async function collaborateDialog({ start:startNow = false } = {}) {
+    const zh = (document.documentElement.lang || "").startsWith("zh"), text = (en,cn) => zh ? cn : en;
+    const bridge = window.PenEchoCloudProjects, live = window.PenEchoLiveCanvas;
+    const name = String(currentCanvasShareName() || "").replace(/\s+/g, " ").trim().slice(0, 160);
+    let canvasId = bridge?.currentCanvasId(), current = null, busy = false, linked = live?.link?.() || null;
+    // Without an account, or while a link started that way is still open, the
+    // Canvas collaborates by a link Cloud keeps for 7 days after its last change.
+    const byLink = () => !canvasId && (Boolean(linked) || !accountSignedIn());
+    const shell = dialogShell({ title:text("Collaborate","协作"), subtitle:name });
+    shell.dialog.className = "penecho-live-share-dialog penecho-collaborate-dialog";
+    shell.dialog.querySelector(".cloud-dialog-mark")?.remove();
+    Object.assign(shell.dialog.dataset, {peSurface:"form",peSize:"m",peLayout:"single",pePresentation:"modal",peMaterial:"opaque"});
+    const header = shell.dialog.querySelector("header"); header.className=""; header.dataset.peRegion = "header";
+    shell.dialog.querySelector(".cloud-dialog-identity").className="";
+    shell.dialog.querySelector(".cloud-dialog-heading").className="";
+    shell.body.className = ""; shell.body.dataset.peRegion = "body";
+    const idBase = shell.dialog.getAttribute("aria-labelledby");
+    const lead = el("p", {class:"collaborate-lead",text:text("Everyone with the link can draw on this Canvas with you, live.","持有链接的人可以和你实时一起创作这块画布。")});
+    // A Canvas kept on this computer becomes a Cloud Canvas; collaboration continues there.
+    const storageNote = el("p", {class:"collaborate-storage",text:text("Starting saves this Canvas to your PenEcho Cloud, and you keep working on the Cloud copy.","开始协作会把这块画布保存到你的 PenEcho 云端，之后在云端副本上继续创作。")});
+    const linkExpiry = el("p", {id:`${idBase}-link-expiry`,class:"collaborate-link-expiry",text:text("For free users and guests, collaboration links are valid for 1 day.","免费用户和访客的协作链接有效期为 1 天。")});
+    const link = el("input", {id:`${idBase}-link`,readonly:"","data-pe-control":"input","aria-label":text("Collaboration link","协作链接"),"aria-describedby":linkExpiry.id,onfocus:() => link.select()});
+    const field = el("div", {class:"live-share-link","data-pe-region":"field"}, [
+      el("div", {class:"live-share-label-row"}, [el("label", {class:"live-share-label",for:`${idBase}-link`,text:text("Collaboration link","协作链接")}), el("span", {class:"live-share-live",text:text("On","已开启")})]),
+      link,
+    ]);
+    const keep = el("button", {type:"button","data-pe-button":"ghost","data-pe-density":"compact"});
+    const pdf = el("button", {type:"button","data-pe-button":"ghost","data-pe-density":"compact",text:text("Download PDF","下载 PDF")});
+    const expiry = el("div", {class:"collaborate-expiry"}, [el("p", {text:text("Unsaved canvas storage: kept for 7 days after the last change.","未保存画布：自最后一次修改起保留 7 天。")}), el("div", {class:"collaborate-expiry-actions"}, [keep, pdf])]);
+    const status = el("p", {role:"status","aria-live":"polite"});
+    const start = el("button", {type:"button","data-pe-button":"primary","data-pe-density":"standard"});
+    const open = el("button", {type:"button","data-pe-button":"secondary","data-pe-density":"standard",text:text("Open","打开")});
+    const stop = el("button", {type:"button",class:"live-share-revoke","data-pe-button":"danger","data-pe-density":"standard",text:text("Stop collaborating","停止协作")});
+    shell.body.append(lead, storageNote, field, linkExpiry, expiry, status);
+    shell.dialog.append(el("footer", {"data-pe-region":"footer"}, [stop, open, start]));
+    const endpoint = () => `/api/cloud/canvases/${canvasId}/collaboration`;
+    function setStatus(message, tone = "") {
+      status.textContent = message;
+      if (tone) status.dataset.tone = tone;
+      else delete status.dataset.tone;
+    }
+    function render() {
+      const viaLink = byLink(), on = viaLink ? Boolean(linked) : Boolean(current);
+      const url = viaLink ? linked?.publicUrl || "" : liveSharePublicUrl(current);
+      field.hidden = !url; link.value = url; open.hidden = !url;
+      stop.hidden = !on || viaLink && !linked?.own;
+      storageNote.hidden = viaLink || Boolean(canvasId) || isCloudRuntime();
+      expiry.hidden = !viaLink || !on;
+      keep.textContent = accountSignedIn() ? text("Save to keep it","保存以保留") : text("Sign in to save","登录以保存");
+      shell.dialog.dataset.liveShare = on ? "on" : "off";
+      start.textContent = on ? text("Copy link","复制链接") : text("Start collaborating","开始协作");
+      start.disabled = busy || Boolean(on && !url); stop.disabled = busy; keep.disabled = busy; pdf.disabled = busy; open.disabled = busy;
+    }
+    // Disabled or hidden controls drop focus; keep keyboard users (and Escape) in the dialog.
+    function restoreFocus() {
+      const focused = document.activeElement;
+      if (!shell.overlay.isConnected || start.disabled) return;
+      if (!focused || focused === document.body || focused.hidden || focused.disabled || !shell.dialog.contains?.(focused)) start.focus({ preventScroll:true });
+    }
+    async function run(action) { if(busy)return; busy=true;setStatus(text("Working…","正在处理…"));render();try{await action();}catch(error){setStatus(error.message,"error");}finally{busy=false;render();restoreFocus();} }
+    const copied = text("Link copied. Send it to the people you want to work with.","链接已复制，发给想一起创作的人吧。");
+    async function startCollaborating() {
+      if (byLink()) {
+        if (!live?.startLink || !bridge?.linkBundle) throw Error(text("Live collaboration is unavailable here.","此处无法实时协作。"));
+        await live.startLink(name || text("Canvas","画布"), await bridge.linkBundle());
+        linked = live.link();
+        renderCollaborationStatus();
+      } else {
+        canvasId = await bridge.saveForShare(null);
+        current = (await api(endpoint(), { method:"POST", body:"{}" })).collaboration;
+        rememberCollaboration(canvasId, current);
+      }
+      render();
+      // The link is ready to paste; if the browser refuses the copy, Copy link is right there.
+      try { await copyText(link.value); setStatus(copied); }
+      catch { setStatus(text("Collaboration is on. Copy the link and send it.","已开启协作，复制链接发给对方即可。")); }
+    }
+    start.addEventListener("click", () => run(async () => {
+      if (byLink() ? linked : current) { await copyText(link.value); setStatus(copied); return; }
+      await startCollaborating();
+    }));
+    open.addEventListener("click", () => { if (link.value) window.open(link.value, "_blank", "noopener"); });
+    stop.addEventListener("click", () => run(async () => {
+      if (byLink()) {
+        await live.endLink();
+        linked = null;
+        renderCollaborationStatus();
+        setStatus(text("Collaboration stopped. People with the link can no longer edit.","已停止协作，持有链接的人不能再编辑。"));
+        return;
+      }
+      await api(endpoint(), { method:"DELETE", body:"{}" });
+      current = null;
+      rememberCollaboration(canvasId, null);
+      setStatus(text("Collaboration stopped. People with the link can no longer edit.","已停止协作，持有链接的人不能再编辑。"));
+    }));
+    // Saving to the signed-in account keeps the Canvas, and its link moves with it.
+    keep.addEventListener("click", () => run(async () => {
+      if (!accountSignedIn()) { closeOverlay(shell.overlay); state.cloudSection = "account"; await openCloud(); return; }
+      const adopted = new Promise(resolve => {
+        const done = event => { window.removeEventListener("penecho:collaboration-adopted", done); resolve(event.detail?.collaboration || null); };
+        window.addEventListener("penecho:collaboration-adopted", done);
+        setTimeout(() => done({}), 15000);
+      });
+      canvasId = await bridge.saveForShare(null);
+      current = await adopted;
+      linked = null;
+      if (!current) throw Error(text("Saved. Open Collaborate again to see the link.","已保存。请重新打开协作查看链接。"));
+      rememberCollaboration(canvasId, current);
+      setStatus(text("Saved to your Cloud. The same link keeps working.","已保存到你的云端，原链接继续有效。"));
+    }));
+    pdf.addEventListener("click", () => run(async () => {
+      if (!window.PenEchoCanvasExport?.pdf) throw Error(text("PDF download is unavailable here.","此处无法下载 PDF。"));
+      await window.PenEchoCanvasExport.pdf();
+      setStatus("");
+    }));
+    render();
+    if (canvasId && accountSignedIn()) await run(async () => {
+      current = (await api(endpoint())).collaboration;
+      rememberCollaboration(canvasId, current);
+      setStatus("");
+    });
+    if (startNow && !(byLink() ? linked : current)) await run(startCollaborating);
+  }
+
   function shareDialog({kind,widgetId=null}) {
-    return liveShareDialog({kind,widgetId,publicIntent:true});
+    return liveShareDialog({kind,widgetId});
   }
 
   async function takeFurther(itemId, importOptions = null) {
@@ -2146,7 +2124,6 @@
   const craftsRefreshStatus = document.getElementById("craftsRefreshStatus");
   const craftsFilters = document.getElementById("craftsFilters");
   const craftsViewSwitch = document.getElementById("craftsViewSwitch");
-  const craftsEchoesLink = document.getElementById("craftsEchoesLink");
   const craftsRemoveDialog = document.getElementById("craftsRemoveDialog");
   const craftsRemoveTitle = document.getElementById("craftsRemoveTitle");
   const craftsRemoveDescription = document.getElementById("craftsRemoveDescription");
@@ -2230,13 +2207,6 @@
       option.button.title = label;
     }
     craftsViewSwitch?.setAttribute("aria-label", savedT("savedView", "View"));
-  }
-
-  function updateCraftsEchoesLink() {
-    if (!craftsEchoesLink) return;
-    craftsEchoesLink.setAttribute("href", new URL("/community.html", `${cloudOrigin()}/`).toString());
-    const label = craftsEchoesLink.querySelector?.(".crafts-echoes-label");
-    if (label) label.textContent = savedT("browseEchoes", "Browse public shares");
   }
 
   function selectCraftKind(kind, focus = false) {
@@ -2887,7 +2857,6 @@
     setCraftsOpen(true);
     updateCraftFilterTabs();
     updateCraftView();
-    updateCraftsEchoesLink();
     if (favoritePagerEntries(craftsPager).length) renderCraftsList(favoritePagerEntries(craftsPager));
     else craftsList.replaceChildren(el("p", { class:"crafts-empty", text:savedT("savedLoading", "Loading favorites…") }));
     void refreshCraftsList({ reset:true });
@@ -2932,16 +2901,13 @@
     craftsPager = favoritePagerForKind(selectedCraftKind);
     updateCraftFilterTabs();
     updateCraftView();
-    updateCraftsEchoesLink();
     if (favoritePagerEntries(craftsPager).length) renderCraftsList(favoritePagerEntries(craftsPager));
     else craftsList.replaceChildren(el("p", { class:"crafts-empty", text:savedT("savedLoading", "Loading favorites…") }));
     void refreshCraftsList({ reset:true });
   }
 
   if (libraryFavoritesAvailable()) {
-    // "Browse public shares" belongs to the Library navigation.
     const librarySidebar = libraryPanel.querySelector(".history-library-sidebar");
-    if (craftsEchoesLink && librarySidebar) librarySidebar.append(craftsEchoesLink);
     libraryFavoritesNav?.addEventListener("click", () => openFavorites());
     librarySidebar?.addEventListener("click", (event) => {
       if (craftsInLibrary && event.target?.closest?.(".snapshot-location-options label, .history-project-nav-item, #historyProjectCreate, #historyRecentNav, #historyCanvasNav, #historyNotesNav")) setLibraryFavoritesView(false);
@@ -3002,39 +2968,45 @@
     state.cloudSection = "account";
     void openCloud();
   });
-  shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); await liveShareDialog({ kind:"canvas" }); });
+  if (shareMenu) {
+    shareCanvasButton.addEventListener("click", () => setShareMenuOpen(!shareMenuOpen()));
+    shareCanvasButton.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        setShareMenuOpen(true, { focus:event.key === "ArrowDown" ? "first" : "last" });
+      }
+    });
+    shareMenu.addEventListener("keydown", (event) => {
+      const items = [shareDrawTogetherBtn, shareViewLinkBtn].filter(Boolean);
+      const index = items.indexOf(document.activeElement);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setShareMenuOpen(false, { focus:"button" });
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        items[(index + step + items.length) % items.length]?.focus();
+      } else if (event.key === "Tab") {
+        setShareMenuOpen(false);
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (shareMenuOpen() && !shareMenu.contains(event.target) && !shareCanvasButton.contains(event.target)) setShareMenuOpen(false);
+    }, true);
+    shareDrawTogetherBtn?.addEventListener("click", async () => { setShareMenuOpen(false); await refreshStatus(); await collaborateDialog({ start:true }); });
+    shareViewLinkBtn?.addEventListener("click", async () => { setShareMenuOpen(false); await refreshStatus(); await liveShareDialog({ kind:"canvas" }); });
+  } else {
+    shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); await liveShareDialog({ kind:"canvas" }); });
+  }
+  collaborateCanvasButton?.addEventListener("click", async () => { await refreshStatus(); await collaborateDialog({ start:true }); });
   document.getElementById("echoCanvasBtn")?.addEventListener("click", async () => { await refreshStatus(); shareDialog({kind:"canvas"}); });
+  // A Widget is shared by link; favorites and public Crafts are gone.
   window.addEventListener("penecho:community-widget-action", async (event) => {
-    const actionName = event.detail?.action;
     const widgetId = event.detail?.widgetId;
-    if (!widgetId || !["favorite", "share", "echo"].includes(actionName)) return;
-    if (actionName === "share" || actionName === "echo") {
-      await refreshStatus();
-      if (actionName === "echo") shareDialog({ kind:"widget", widgetId });
-      else await liveShareDialog({ kind:"widget", widgetId, sourceName:typeof event.detail?.title === "string" ? event.detail.title : "", noteKind:event.detail?.noteKind });
-      return;
-    }
-    if (state.favoriteWidgetOperations.has(widgetId)) return;
-    state.favoriteWidgetOperations.add(widgetId);
-    const bridge = window.PenEchoCommunityCanvas;
-    bridge?.setWidgetFavorite?.(widgetId, undefined, true);
-    let completed = false;
-    try {
-      await refreshStatus();
-      await toggleWidgetFavorite(widgetId, {
-        favorite:event.detail?.favorite === true,
-        favoriteArtifactSha256:event.detail?.favoriteArtifactSha256,
-        sourceWidgetId:event.detail?.sourceWidgetId,
-        favoriteCloudId:event.detail?.favoriteCloudId,
-        favoriteCommunityItemId:event.detail?.favoriteCommunityItemId,
-      });
-      completed = true;
-    } catch (error) {
-      window.alert(error?.message || savedT("savedErrorToggle", "Could not update this favorite."));
-    } finally {
-      if (!completed) bridge?.setWidgetFavorite?.(widgetId, undefined, false);
-      state.favoriteWidgetOperations.delete(widgetId);
-    }
+    if (!widgetId || event.detail?.action !== "share") return;
+    await refreshStatus();
+    await liveShareDialog({ kind:"widget", widgetId, sourceName:typeof event.detail?.title === "string" ? event.detail.title : "", noteKind:event.detail?.noteKind });
   });
   window.addEventListener("message", async (event) => {
     if (event.origin !== location.origin || event.data?.type !== "penecho:cloud-sign-in-result") return;
@@ -3049,16 +3021,7 @@
     browserSignInMessage(cloudT("requestFailed"), "error");
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible") { stopDeviceConnectionWatch(); return; }
-    if (activeCloudOverlay?.isConnected && state.cloudSection === "device") {
-      const overlay = activeCloudOverlay;
-      const before = deviceStatusRevision();
-      void refreshStatus().then(() => {
-        if (overlay !== activeCloudOverlay || !overlay.isConnected) return;
-        if (before !== deviceStatusRevision()) overlay._cloudRender?.();
-        startDeviceConnectionWatch(overlay._cloudRender, overlay);
-      });
-    }
+    if (document.visibilityState !== "visible") return;
     if (state.browserSignIn.active && state.browserSignIn.poll) {
       clearTimeout(state.browserSignIn.timer);
       state.browserSignIn.timer = 0;

@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -27,15 +28,42 @@ test("a docked Agent reserves its rectangle without pushing suggestions below th
     panel = { left:260, top:0, right:400, width:140, height:320 },
     ctx = vm.createContext({
       document:{ querySelector:selector => selector === ".topbar" ? topbar : null, querySelectorAll:() => [panel],
-        createElement:() => ({ getContext:() => ({ fillRect(){}, getImageData:() => ({ data:new Uint8ClampedArray(400 * 320 * 4) }) }) }) },
+        createElement:() => ({ getContext:() => ({ fillRect(){}, getImageData:(x, y, w, h) => ({ data:new Uint8ClampedArray(w * h * 4) }) }) }) },
       canvasElementLayoutRect:box => box, viewportRect:() => null,
       visibleWidgets:() => [], visibleImages:() => [], visibleTextBoxes:() => [], visibleAnimations:() => [],
       widgetBox(){}, imageBox(){}, textBoxBox(){}, animationBox(){}, assistPendingBox:() => null,
       assistScreenBox:box => box, canvasDocumentsCurrent:() => ({ id:"canvas" }), tiles:new Map(),
-      state:{ history:[], userRevision:1, scale:1, panX:0, panY:0 },
+      state:{ history:[], userRevision:1, scale:1, panX:0, panY:0 }, ASSIST_MASK_CELL:4,
     });
   vm.runInContext(source.slice(source.indexOf("  let assistPlacementMask = null;"), source.indexOf("  function assistOccupiedArea(")), ctx);
-  assert.equal(ctx.assistContentMask(400, 320).minY, 48, "only the full-width topbar sets the placement floor");
+  const built = ctx.assistContentMask(400, 320);
+  assert.equal(built.minY, 48, "only the full-width topbar sets the placement floor");
+  assert.deepEqual([built.width, built.height], [100, 80], "the capture is a quarter of the screen each way");
+});
+
+// The same boxes, counted in cells of `cell` screen pixels.
+function cellMask(width, height, boxes, cell) {
+  const m = mask(width / cell, height / cell, boxes.map(b => ({ x:Math.floor(b.x / cell), y:Math.floor(b.y / cell),
+    w:Math.ceil((b.x + b.w) / cell) - Math.floor(b.x / cell), h:Math.ceil((b.y + b.h) / cell) - Math.floor(b.y / cell) })));
+  return { ...m, cell };
+}
+
+test("a mask of cells answers in screen pixels", () => {
+  const boxes = [{ x:180, y:170, w:140, h:45 }, { x:0, y:0, w:400, h:140 }],
+    m = cellMask(400, 320, boxes, 4), found = placement(m, 120, 36, { x:180, y:170 }, { x:0, y:0, w:400, h:150 });
+  assert.equal(overlap(m, found, 120, 36), 0);
+  assert.equal(overlap(mask(400, 320, boxes), found, 120, 36), 0, "free in the full-resolution mask too");
+  assert.ok(found.x >= 8 && found.x + 120 <= 392 && found.y >= 140 && found.y + 36 <= 320 - 84);
+  assert.ok(overlap(m, { x:180, y:170 }, 140, 45) >= 140 * 45, "a partly covered cell counts as covered");
+  assert.deepEqual(placement(cellMask(400, 320, [], 4), 120, 36, { x:180, y:170 }, null), { x:180, y:172 },
+    "a free preferred spot moves at most to the nearest cell");
+});
+
+test("a mask of cells keeps the writing clearance", () => {
+  const anchor = { x:150, y:130, w:50, h:40 }, m = cellMask(440, 400, [{ x:0, y:0, w:440, h:400 }], 4),
+    found = placement(m, 120, 36, { x:214, y:130 }, anchor, { inkGap:80, prioritizeInkGap:true });
+  assert.ok(writingDistance(found, 120, 36, anchor) >= 80);
+  assert.ok(found.x >= 8 && found.x + 120 <= 432 && found.y >= 8 && found.y + 36 <= 316);
 });
 
 test("an unobstructed preferred position keeps the writing gap and toolbar clearance", () => {

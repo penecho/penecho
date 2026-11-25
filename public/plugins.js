@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  const MAX_DOCUMENT_BYTES = 12000,
+  const MAX_DOCUMENT_BYTES = 100000,
     MAX_STYLES_BYTES = 32000,
     MAX_CONNECT_ORIGINS = 8,
     PLUGIN_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -74,7 +74,7 @@
   }
 
   function parse(markdown, styles = "") {
-    if (typeof markdown !== "string" || !markdown.trim() || utf8Bytes(markdown) > MAX_DOCUMENT_BYTES) throw Error("Plugin document is empty or exceeds 12000 UTF-8 bytes");
+    if (typeof markdown !== "string" || !markdown.trim() || utf8Bytes(markdown) > MAX_DOCUMENT_BYTES) throw Error("Plugin document is empty or exceeds 100000 UTF-8 bytes");
     const match = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n([\s\S]*)$/.exec(markdown);
     if (!match) throw Error("Plugin document needs YAML frontmatter");
     const metadata = frontmatter(match[1]), body = match[2].trim();

@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -56,7 +57,6 @@ test("the canonical type contract wins after the button and legacy surface rules
   assert.ok(css.indexOf("PenEcho typography contract") > css.indexOf("PenEcho button + semantic tint contract"));
   assert.match(css, /:is\(#pe-type-contract, body\[data-theme="studio"\]\)/);
   assert.match(css, /:is\(#pe-button-contract, \[data-pe-button\]\) > :where\(span, strong, small, b, em\)[^}]*font:\s*inherit/);
-  assert.match(css, /\.canvas-agent-message-body[\s\S]*font:\s*var\(--pe-type-regular\) 14px\/1\.58 var\(--pe-font-ui\)/);
   assert.match(read("public/canvas-agent-activity.css"), /PenEcho typography contract[\s\S]*13\.5px\/1\.3/);
   assert.match(read("public/cloud-connect.css"), /PenEcho typography contract[\s\S]*\.cloud-content-heading h3[\s\S]*font-size:\s*20px/);
 });
@@ -74,23 +74,9 @@ test("Studio uses one UI family with only handwriting and technical exceptions",
   assert.match(css, /\.canvas-welcome > span:last-child\s*\{[^}]*font-weight:\s*400/);
   assert.match(css, /\.text-editor-title\s*\{[^}]*font:\s*500[^}]*var\(--pe-font-ui/);
   assert.match(css, /\.text-editor-button\s*\{[^}]*font:\s*500[^}]*var\(--pe-font-ui/);
-  assert.match(css, /\.canvas-agent-file-type\s*\{[^}]*font:\s*600[^}]*var\(--pe-font-mono/);
-  assert.match(css, /\.canvas-agent-reference-chip\s*\{[^}]*font-weight:\s*500/);
-  assert.match(css, /\.canvas-agent-reference-chip em::before\s*\{[^}]*font:\s*700 15px\/16px var\(--pe-font-ui/);
   assert.match(cloud, /\.cloud-dialog-mark\s*\{[^}]*font-weight:\s*600/);
   assert.match(cloud, /\.cloud-avatar\s*\{[^}]*font-weight:\s*600/);
   assert.match(cloud, /\.cloud-published-mark\s*\{[^}]*font-weight:\s*600/);
-});
-
-test("Agent activity reserves heavier emphasis for parsed Markdown", () => {
-  const css = read("public/style.css"), activity = read("public/canvas-agent-activity.css");
-
-  assert.match(activity, /:is\(#pe-type-contract, \.canvas-agent-dialog-progress\) strong\s*\{[^}]*font:\s*400 11\.5px\/1\.3/);
-  assert.match(activity, /:is\(#pe-type-contract, \.canvas-agent-dialog-progress\) small\s*\{[^}]*font:\s*400 10px\/1\.35/);
-  assert.match(activity, /:is\(#pe-type-contract, \.canvas-agent-dialog-progress\) \.canvas-agent-dialog-progress-meta\s*\{[^}]*font:\s*400 9\.5px\/1\.25/);
-  assert.match(css, /Activity and tool-call copy is ordinary transcript chrome[\s\S]*?font-weight:\s*var\(--pe-type-regular\)/);
-  assert.match(css, /\.canvas-agent-message-body\.is-markdown strong\s*\{[^}]*font-weight:\s*500/);
-  assert.match(css, /\.canvas-agent-message-body\.is-markdown \.canvas-agent-markdown-heading\s*\{[^}]*font-size:\s*\.875rem;[^}]*font-weight:\s*600/);
 });
 
 test("scaled dialogs use the logical viewport instead of clipping enlarged text", () => {

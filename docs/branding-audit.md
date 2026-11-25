@@ -1,5 +1,18 @@
 # PenEcho 标识替换与残留清单
 
+## 2026-11-10：改为鹦鹉螺标识
+
+用户选定新的 PenEcho 标识：蓝色鹦鹉螺（Classic 形状，`#2563EB`），用于整个 PenEcho 产品家族（Canvas、Lines、penecho.ai、桌面应用）；MeetCue 保留自己的图标。用户的要求是标识不必表达名字本身，但含义要相关：把贝壳贴在耳边能听到海的回声，鹦鹉螺一格一格地长大。下方 2026-10-05 的笔形标识记录保留为历史。
+
+| 位置 | 素材及行为 |
+| --- | --- |
+| 矢量母版 | `build/brand/penecho-mark.json`（96 × 96 坐标内的路径：壳体、螺旋壁、隔板）与 `build/brand/penecho-mark.svg`。由 `docs/design/logo-lines/shapes.py` 计算得出，不是手绘 |
+| 位图母版 | `scripts/make-brand-master.js` 生成 `penecho-logo-original.png`（竖排，尺寸与裁切不变）和 `penecho-mark-small.png`（去掉隔板、螺旋线加宽，用于 48 px 及以下）。字样取自 `build/brand/penecho-wordmark.png`（原母版里的 Poppins Light 字样，“Echo”改为新的蓝色） |
+| 派生素材 | `npm run icons` 先生成母版，再照旧生成 README 横排、favicon、`penecho-mark.png`、Windows/macOS 图标、安装动画、移动端源图，并新增 `integrations/penecho-cloud/assets/logo.png` |
+| 分享查看页 | `public/viewer.css` 的遮罩颜色改为 `#2563EB` |
+
+仍需处理：Cloud 仓库的 `public/media/brand-*.png`、网站页头和 Canvas 同步文件要在 Cloud 一侧更新；移动端图标要重新运行 `tools/mobile/build-mobile.js`（`tools/mobile/web/penecho-mark.png` 仍是旧图）；已安装的应用重新打包安装后才会换图标；GitHub 组织头像、社交账号、`og.png` 不在仓库内。尚未做商标检索。
+
 ## 2026-10-05：统一改为笔形标识
 
 用户确认把 071 与 Cloud 的全部 Logo 换成 PenEcho 1.4 宣传片里的标识：蓝色钢笔笔尖落在水面上，下方两圈涟漪（#2350E6）。确认的选项：应用图标和浏览器页签用白底蓝笔；README 顶部用横排（笔 + PenEcho）；penecho.ai 网站顶部导航在文字标前加笔形图标。下方 2026-09-15 的记录保留为历史；其中的渐变图形、黑色圆点和“用户明确保留”各项已被本次替换取代。

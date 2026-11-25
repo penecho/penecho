@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 // Pen gestures, the step checker and Canvas search.
 const test = require("node:test");
 const assert = require("node:assert/strict");

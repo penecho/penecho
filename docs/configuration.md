@@ -100,6 +100,10 @@ penecho --port 4000
 
 `--model`, `--effort`, and `--port` apply only to that process and take precedence over the selected configuration file. Omit them to use the saved choice or the underlying CLI default. Other model-specific effort strings are accepted and passed through.
 
+## Opening the browser
+
+After the version check, PenEcho asks `Open PenEcho in your browser? [Y/n]` in the terminal. Press Enter to open the page in your default browser, or enter `n` to leave the server running and get its URL. Use `--no-open` to skip the browser prompt. The browser prompt is skipped for non-interactive starts, CI, SSH sessions, Linux without a display, and `penecho restart`.
+
 ## Version checks
 
 Interactive starts print the current version immediately. After the server is listening, PenEcho displays `Checking latest PenEcho version...` and queries npm without delaying availability. If a newer version exists, press Enter at the default `Y` prompt to install it globally. The current service then stops without launching a background process; run `penecho` again when you are ready to start the updated version. When the installed version is current, PenEcho says so explicitly. Offline checks and non-interactive starts continue without blocking the running service.

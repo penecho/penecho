@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../src/client/app/canvas-agent-runtime.js'),'utf8');
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
@@ -6,11 +7,11 @@ function fn(name){const start=source.indexOf(`  function ${name}(`);const asyncS
 function fixture(extra={}){
  let doc={};
  const context={crypto:require('node:crypto').webcrypto,canvasDocumentsCurrent:()=>doc,replaceDocument:()=>{doc={};},window:{PENECHO_CONFIG:{runtime:'cloud',canvasAgent:false,browserCanvasEditing:true,hostedCanvasAgent:true}},state:{currentSnapshotLocation:'cloud',currentSnapshotId:B},location:{pathname:`/canvas/${A}`,protocol:'https:',host:'cloud.test'},canvasAgent:{socket:null,socketCloudCanvasId:'',currentConversation:{id:'conversation'},toolControllers:new Map(),toolResultCache:new Map(),sessionGeneration:3},selectedAiConnectionId:()=>`hosted:${A}`,t:k=>k,...extra};
- vm.createContext(context);for(const name of ['canvasAgentCloudSavedCanvasId','canvasAgentCloudExecutionScope','canvasAgentCloudFilesPath','canvasAgentCloudCanvasId','canvasAgentUsesCloudHost','canvasAgentExecutionAvailable','canvasAgentUnavailableMessage','canvasAgentCloudFileScope','canvasAgentSocketUrl','canvasAgentReconcileCloudCanvas'])vm.runInContext(fn(name),context);return context;
+ vm.createContext(context);for(const name of ['canvasAgentCloudSavedCanvasId','canvasAgentCloudExecutionScope','canvasAgentCloudCanvasId','canvasAgentUsesCloudHost','canvasAgentExecutionAvailable','canvasAgentUnavailableMessage','canvasAgentSocketUrl','canvasAgentReconcileCloudCanvas'])vm.runInContext(fn(name),context);return context;
 }
 test('hosted socket, attachments and availability follow active B, never stale URL A; drafts have independent execution scopes',()=>{
- const c=fixture();assert.equal(c.canvasAgentUsesCloudHost(),true);assert.match(c.canvasAgentSocketUrl(),new RegExp(`/canvases/${B}/agent$`));assert.equal(c.canvasAgentCloudFileScope().canvasId,B);
- for(const state of [{currentSnapshotLocation:'device',currentSnapshotId:B},{currentSnapshotLocation:null,currentSnapshotId:null},{currentSnapshotLocation:'cloud',currentSnapshotId:'draft'}]){Object.assign(c.state,state);assert.equal(c.canvasAgentExecutionAvailable(),true);assert.equal(c.canvasAgentCloudFileScope().draft,true);assert.match(c.canvasAgentSocketUrl(),/agent\?draft=1$/);assert.notEqual(c.canvasAgentCloudCanvasId(),A);assert.notEqual(c.canvasAgentCloudCanvasId(),B);}
+ const c=fixture();assert.equal(c.canvasAgentUsesCloudHost(),true);assert.match(c.canvasAgentSocketUrl(),new RegExp(`/canvases/${B}/agent$`));assert.equal(c.canvasAgentCloudExecutionScope().canvasId,B);
+ for(const state of [{currentSnapshotLocation:'device',currentSnapshotId:B},{currentSnapshotLocation:null,currentSnapshotId:null},{currentSnapshotLocation:'cloud',currentSnapshotId:'draft'}]){Object.assign(c.state,state);assert.equal(c.canvasAgentExecutionAvailable(),true);assert.equal(c.canvasAgentCloudExecutionScope().draft,true);assert.match(c.canvasAgentSocketUrl(),/agent\?draft=1$/);assert.notEqual(c.canvasAgentCloudCanvasId(),A);assert.notEqual(c.canvasAgentCloudCanvasId(),B);}
  Object.assign(c.state,{currentSnapshotLocation:'cloud',currentSnapshotId:B});assert.equal(c.canvasAgentExecutionAvailable(),true);
  c.window.PENECHO_CONFIG={runtime:'local',canvasAgent:true};assert.equal(c.canvasAgentExecutionAvailable(),true);assert.match(c.canvasAgentSocketUrl(),/\/api\/canvas-agent\/socket$/);
 });
@@ -51,36 +52,6 @@ test('Cloud ID changed during capabilities await cannot establish stale websocke
 test('draft execution is stable within a document and isolated across new documents',()=>{
  const c=fixture();Object.assign(c.state,{currentSnapshotLocation:null,currentSnapshotId:null});
  const first=c.canvasAgentCloudCanvasId();assert.equal(c.canvasAgentCloudCanvasId(),first);
- assert.match(c.canvasAgentCloudFilesPath(c.canvasAgentCloudFileScope(),'cloud-file-id'),/cloud-file-id\?draft=1$/);
+ assert.equal(c.canvasAgentCloudExecutionScope().draft,true);
  c.replaceDocument();assert.notEqual(c.canvasAgentCloudCanvasId(),first);
-});
-
-function restoredSessionFixture(saved, canvasKey=`cloud:${B}`, conversationId='conversation-B') {
- const c=fixture();
- Object.assign(c.state,{canvasAgentCanvasKey:canvasKey});
- Object.assign(c.canvasAgent,{sessionId:'',projectId:'',accessMode:'controlled',pendingStoredSession:saved,currentConversation:{id:conversationId}});
- vm.runInContext(fn('canvasAgentRestoreScopedSession'),c);
- c.canvasAgentRestoreScopedSession('account:hosted',`hosted:${A}`);
- return c;
-}
-const storedSession=()=>({scope:'account:hosted',connectionId:`hosted:${A}`,projectId:'',accessMode:'controlled',sessionId:'session-A',resumeToken:'test-resume-A',canvasKey:`cloud:${A}`,conversationId:'conversation-A'});
-
-test('a new Cloud Canvas cannot restore another Canvas session from the same account and model',()=>{
- const c=restoredSessionFixture(storedSession());
- assert.equal(c.canvasAgent.sessionId,'');
- assert.equal(c.canvasAgent.pendingStoredSession,null);
-});
-test('a new conversation on the same Cloud Canvas cannot restore the previous conversation session',()=>{
- const c=restoredSessionFixture(storedSession(),`cloud:${A}`,'new-conversation');
- assert.equal(c.canvasAgent.sessionId,'');
-});
-test('reopening the original Canvas conversation can restore its matching session',()=>{
- const c=restoredSessionFixture(storedSession(),`cloud:${A}`,'conversation-A');
- assert.equal(c.canvasAgent.sessionId,'session-A');
- assert.equal(c.canvasAgent.resumeToken,'test-resume-A');
-});
-test('legacy sessions without a Canvas binding cannot replay into a new Cloud Canvas',()=>{
- const saved=storedSession();delete saved.canvasKey;delete saved.conversationId;
- const c=restoredSessionFixture(saved);
- assert.equal(c.canvasAgent.sessionId,'');
 });

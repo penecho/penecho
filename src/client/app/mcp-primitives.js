@@ -123,7 +123,7 @@
       if(!record)throw Error('Canvas rejected the drawing geometry.');records.push({kind:item.kind,record,object});elements.set(item.id,{objectId:record.id,kind:item.kind,...(item.source?{source:item.source}:{}),...(item.renderKey?{renderKey:item.renderKey}:{})});
     }
     const removed=new Set([...old].filter(([id])=>!elements.has(id)).map(([,value])=>value.objectId));
-    for(const [kind,key,max] of [['text','textBoxes',MAX_VISIBLE_TEXT_BOXES],['image','images',MAX_VISIBLE_IMAGES]])if(state[key].filter(item=>!removed.has(item.id)).length+records.filter(item=>item.kind===kind&&!item.object).length>max)throw Error('Canvas object limit reached. Remove unused objects before drawing.');
+    for(const [kind,key,max] of [['text','textBoxes',MAX_VISIBLE_TEXT_BOXES],['image','images',MAX_VISIBLE_IMAGES]])if(state[key].filter(item=>!removed.has(item.id)).length+records.filter(item=>item.kind===kind&&!item.object).length>max)throw Error('This Canvas is full. Continue on a new Canvas: penecho_open_canvas with create:true, then penecho_start_session with its documentId. Or remove unused objects first.');
     // Prepare fully before one synchronous history transaction; never mark AI output as user feedback.
     if(textExecution?.kind==="mcp")state.nextTextBoxId=Math.max(state.nextTextBoxId,textExecution.nextTextBoxId);
     const restoreMutation=canvasAgentBeginMutation(execution,[...old.values()].map(item=>item.objectId));try {

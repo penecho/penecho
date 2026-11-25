@@ -39,29 +39,11 @@ app.whenReady().then(async () => {
     await waitFor(() => Boolean(state.bindings["new-canvas"]), "Canvas menu bridge");
     await js("document.querySelector('#tourSkip')?.click(); document.querySelector('#changelogClose')?.click()");
     await pause(300);
-    await command("mcp-local");
-    assert.equal(await js("!document.querySelector('#settingsPageMcp').hidden && !document.querySelector('#mcpLocalPanel').hidden"), true);
-    await screenshot("mcp-local");
-    await command("mcp-cloud");
-    assert.equal(await js("!document.querySelector('#mcpCloudPanel').hidden"), true);
-    await command("connections");
-    assert.equal(await js("!document.querySelector('#settingsPageConnections').hidden"), true);
-    await command("ai-settings");
-    assert.equal(await js("!document.querySelector('#settingsPageCanvas').hidden"), true);
-    await js("document.querySelector('#settingsClose').click()");
-    await command("agent-history");
-    assert.equal(await js("document.querySelector('[data-studio-navigator-tab=agent]')?.getAttribute('aria-selected')"), "true");
-    await screenshot("ai-history");
-    assert.deepEqual(menu.getMenuItemById("ai-menu").submenu.items.filter(item => item.id).map(item => item.id), ["focus-agent", "agent-history", "connections", "ai-settings"]);
-    assert.equal(menu.getMenuItemById("mcp-menu").submenu.items.some(item => item.id === "connections"), false);
-    assert.equal(menu.getMenuItemById("local-network-menu").submenu.items.some(item => item.submenu), false);
-    report.checks.push("AI actions have their own top-level menu; MCP stays separate; local network entries are second-level");
-    await command("mcp-status");
-    assert.equal(await js("document.querySelector('#mcpStatusPopover').matches(':popover-open')"), true);
-    await screenshot("mcp-status");
-    assert.notEqual(await js("document.querySelector('#mcpToolbarToggle').getAttribute('aria-pressed')"), "true", "viewing status must not connect MCP");
-    await js("document.querySelector('#mcpStatusPopover').hidePopover()");
-    report.checks.push("MCP local/cloud configuration, connections, and status open without enabling MCP");
+    // Settings live on the Projects page; the Canvas offers them, and has no AI, MCP or network menus of its own.
+    assert.deepEqual(menu.items.map(item => item.id).filter(Boolean), []);
+    assert.equal(menu.getMenuItemById("open-settings").enabled, true);
+    assert(menu.getMenuItemById("local-network-menu"), "other devices are under File");
+    report.checks.push("Canvas menus: document actions; Settings, Agents and MCP lead to the Projects page");
 
     await command("save-copy");
     assert.equal(await js("document.querySelector('#historyPanel').classList.contains('open') && document.querySelector('#historySavePanel').open"), true);

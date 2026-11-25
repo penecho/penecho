@@ -8,7 +8,7 @@ const output=path.join(root,"docs/verification/note-library-cache-20261004",clou
 Object.assign(process.env,{NODE_ENV:"test",PENECHO_TEST_OPEN_ACCESS:"1",PENECHO_STATE_DIR:path.join(temporary,"state"),PENECHO_CONFIG_FILE:path.join(temporary,"config.env"),HOST:"127.0.0.1",PORT:"0",AI_PROVIDER:"api",AI_API_KEY:"test-only",AI_API_URL:"http://127.0.0.1:1/v1",AI_API_MODEL:"test",PENECHO_CANVAS_AGENT_AUTO_OPEN:"false",PENECHO_REQUEST_TRACE:"false",PENECHO_JEVISION_ENABLED:"false"});
 const expose=source=>source.replace(/\}\)\(\);\s*$/,`
   const realNoteFetch=noteLibraryFetch;
-  window.noteCacheTest={state,noteCards,canvasDocumentsReady,noteLibraryLoad,noteLibraryDb,noteLibraryCachePut,noteLibraryRecoverPending,noteLibraryPut,noteLibraryPersist,noteLibraryRequestPage,noteLibraryRefreshServer,noteLibraryRender,openNoteLibrary,closeNoteLibrary,noteThumbKey,applyLanguage,closeCanvasAgent,held:[],hold:false,requests:[],rawFetch:realNoteFetch,
+  window.noteCacheTest={state,noteCards,canvasDocumentsReady,noteLibraryLoad,noteLibraryDb,noteLibraryCachePut,noteLibraryRecoverPending,noteLibraryPut,noteLibraryPersist,noteLibraryRequestPage,noteLibraryRefreshServer,noteLibraryRender,openNoteLibrary,closeNoteLibrary,noteThumbKey,applyLanguage,held:[],hold:false,requests:[],rawFetch:realNoteFetch,
     release(){this.hold=false;for(const release of this.held.splice(0))release();},
     dismiss(){markChangelogSeen();markFeatureTourStepsSeen(FEATURE_TOUR_STEPS);closeFeatureTour({restore:false,scroll:false,changelog:false,retry:false});closeChangelog();}};
   noteLibraryFetch=async(url,options={})=>{
@@ -45,7 +45,7 @@ app.whenReady().then(async()=>{try{
   for(const cookie of cookies)await win.webContents.session.cookies.set(cookie);
   win.webContents.on("console-message",event=>{if(event.level==="error")report.errors.push(event.message);});
   const js=code=>win.webContents.executeJavaScript(code,true),shot=async name=>{await js("noteCacheTest.dismiss()");await pause(100);fs.writeFileSync(path.join(output,name+".png"),(await win.webContents.capturePage()).toPNG());};
-  const initialize=()=>js(`(async()=>{const t=noteCacheTest;await t.canvasDocumentsReady();await t.noteLibraryLoad();t.state.auto=false;t.state.language='zh';t.applyLanguage();t.closeCanvasAgent();t.dismiss();})()`);
+  const initialize=()=>js(`(async()=>{const t=noteCacheTest;await t.canvasDocumentsReady();await t.noteLibraryLoad();t.state.auto=false;t.state.language='zh';t.applyLanguage();t.dismiss();})()`);
   await win.loadURL(url);await until(()=>js("!!window.noteCacheTest"),"boot");await initialize();
   assert.equal(await js("noteCacheTest.requests.length"),0);
   await js(`new Promise((resolve,reject)=>{const name='penecho-note-library'+(PENECHO_CONFIG.runtime==='cloud'?':'+noteCacheTest.noteCards.accountId:''),r=indexedDB.open(name,1);r.onupgradeneeded=()=>r.result.createObjectStore('notes',{keyPath:'id'});r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,tx=db.transaction('notes','readwrite');tx.objectStore('notes').put({id:'legacy-copy',saved:false,localDirty:false,version:3});tx.oncomplete=()=>{db.close();resolve();};};})`);

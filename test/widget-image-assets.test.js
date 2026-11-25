@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const host=fs.readFileSync(path.join(__dirname,'../public/widget-host.js'),'utf8');
 const start=host.indexOf('  function resolveImageAssets('),end=host.indexOf('  function csp(',start);

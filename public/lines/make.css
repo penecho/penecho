@@ -1,0 +1,88 @@
+/* What to make, in the box (make.js). Output choices use the standard blue selection colors, distinct from Canvas nodes. */
+.composer { container: cmpbox / inline-size; }
+
+/* The chips, after +. Plain words with no frame, so five of them stay quiet. */
+.cmp-chips { display: flex; align-items: center; gap: 2px; flex: none; min-width: 0; margin-left: 2px; padding-left: 6px; border-left: 1px solid var(--line); }
+.cmp-chips[hidden] { display: none; }
+.cmp-chip { position: relative; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px 0 8px; border-radius: 999px; color: var(--ink2); font-size: 13px; font-weight: 560; white-space: nowrap; transition: color .12s, background .12s, box-shadow .12s; }
+.cmp-chip svg { color: var(--ink3); }
+.cmp-chip:hover, .cmp-chip:focus-visible { color: var(--ink); background: var(--hover); }
+.cmp-chip:hover svg, .cmp-chip.on svg { color: inherit; }
+/* One row at every width (PE-519). Nothing in the bar shrinks or wraps; make.js fitBar takes these steps, in order, until it fits. */
+.cmp-bar { flex-wrap: nowrap; }
+.cmp-bar > :not(.cmp-path) { flex-shrink: 0; }
+.cmp-bar > .cmp-path:not(:empty) { flex: 1 0 auto; }
+/* 1. The ↵ on Send and the branch's arrow go. */
+.cmp-bar.no-keys :is(.cmp-key, .box-branch > svg:last-child) { display: none; }
+.cmp-bar.no-keys .send-btn.has-word { padding-right: 14px; }
+.cmp-bar.no-keys .box-branch { padding-right: 9px; }
+/* 2. A long branch name gives up letters from its start, only as many as it must (fitBar sets .bb-head's max-width);
+   its first seven letters and its end stay. */
+.cmp-bar .cmp-branch { max-width: none; }
+.cmp-bar .box-branch { min-width: auto; max-width: none; }
+.box-branch .bb-name { display: inline-flex; overflow: visible; }
+.box-branch .bb-head { min-width: 7ch; }
+.box-branch .bb-tail { flex: none; }
+/* 3. The kinds keep only their pictures, the chosen one its word too; a hint keeps only its sign. */
+.cmp-bar.icon-chips .cmp-chip:not(.on) { justify-content: center; width: 32px; padding: 0; }
+.cmp-bar.icon-chips :is(.cmp-chip:not(.on), .pv-note) > span { display: none; }
+/* 4. Send to AI is the round arrow, with its own arrow still beside it. */
+.send-btn.has-word > svg { display: none; }
+.cmp-bar.icon-send .send-btn.has-word { justify-content: center; width: 40px; padding: 0 0 0 4px; }
+.cmp-bar.icon-send .send-btn.has-word > span { display: none; }
+.cmp-bar.icon-send .send-btn.has-word > svg { display: block; }
+/* 5. The kinds go inside +; the chosen one stays. */
+.cmp-bar.fold-chips .cmp-chip:not(.on), .cmp-bar.fold-chips .cmp-chips:not(:has(.cmp-chip.on)) { display: none; }
+/* 6. The branch is its sign only; the tooltip and the menu say its name. */
+.cmp-bar.icon-branch .box-branch > span { display: none; }
+.cmp-bar.icon-branch .box-branch { padding: 0 8px; }
+.cmp-chip.on { color: var(--accent-label); background: var(--selected); box-shadow: inset 0 0 0 1.5px var(--accent); font-weight: 640; }
+.cmp-path:empty { flex: 1; padding: 0; }
+
+/* The kinds of the chosen chip, or the five, or MeetCue's meetings: on top of the box */
+.cmp-make { margin: 0 0 6px -4px; padding: 0 0 8px; border-bottom: 1px solid var(--line); }
+.cmp-make[hidden] { display: none; }
+.cmp-kinds { display: flex; align-items: stretch; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.cmp-kind { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100px; padding: 5px 5px 6px; border-radius: 10px; color: var(--ink2); font-size: 12.5px; font-weight: 560; line-height: 1.2; text-align: center; }
+.cmp-kind:hover, .cmp-kind:focus-visible { background: var(--hover); color: var(--ink); }
+.cmp-kind-pic { display: grid; place-items: center; width: 88px; height: 50px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); }
+.cmp-kind-pic img { width: 100%; height: 100%; object-fit: cover; }
+.cmp-kind.on { color: var(--accent-label); font-weight: 650; }
+.cmp-kind.on .cmp-kind-pic { border-color: var(--accent-label); box-shadow: 0 0 0 1.5px var(--accent); }
+.cmp-make-x { flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin-left: auto; color: var(--ink3); border-radius: 7px; position: sticky; right: 0; background: var(--paper); }
+.cmp-make-x:hover, .cmp-make-x:focus-visible { color: var(--ink); background: var(--hover); }
+
+/* What to give for that kind, under the words */
+.cmp-gives { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+.cmp-gives[hidden] { display: none; }
+.cmp-give { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; color: var(--ink2); font-size: 12.5px; border: 1px dashed var(--line2); border-radius: 8px; }
+.cmp-give:hover, .cmp-give:focus-visible { color: var(--accent-label); border-style: solid; border-color: var(--accent); background: var(--selected); }
+
+/* MeetCue's meetings */
+.cmp-mc-head { display: flex; align-items: center; gap: 8px; padding: 0 0 6px 4px; font-size: 13.5px; }
+.cmp-mc-head .cmp-make-x { position: static; }
+.cmp-mc-say { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 2px 0 2px 4px; color: var(--ink2); font-size: 13.5px; }
+.cmp-mc-list { display: grid; max-height: 236px; overflow-y: auto; }
+.cmp-mc-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border-radius: 8px; text-align: left; }
+.cmp-mc-row:hover:not([disabled]), .cmp-mc-row:focus-visible { background: var(--hover); }
+.cmp-mc-row[disabled] { opacity: .5; cursor: default; }
+.cmp-mc-ic { display: grid; place-items: center; width: 28px; height: 28px; flex: none; color: var(--meetcue, var(--ink2)); background: var(--meetcue-soft, var(--soft)); border-radius: 8px; }
+.cmp-mc-text { display: grid; flex: 1; min-width: 0; line-height: 1.25; }
+.cmp-mc-text strong { overflow: hidden; font-size: 13.5px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.cmp-mc-text small { color: var(--ink3); font-size: 12px; }
+.cmp-mc-here { display: inline-flex; align-items: center; gap: 4px; color: var(--ink3); font-size: 12px; }
+.cmp-mc-all { margin: 4px 0 0 8px; font-size: 13px; }
+
+/* The choice, kept on its Ask; a click picks it again */
+.lp-make-tag { display: inline-flex; align-items: center; gap: 6px; height: 26px; margin-top: 8px; padding: 0 10px 0 8px; color: var(--accent-label); font-size: 12.5px; font-weight: 600; background: var(--selected); border-radius: 999px; }
+.lp-make-tag:hover, .lp-make-tag:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* A narrow box, such as the Canvas side panel: smaller pictures, and the chips closer together */
+@container cmpbox (max-width: 680px) {
+  .cmp-kind { width: 84px; }
+  .cmp-kind-pic { width: 74px; height: 42px; }
+}
+@container cmpbox (max-width: 420px) {
+  .cmp-chip { gap: 5px; height: 28px; padding: 0 8px 0 7px; font-size: 12.5px; }
+  .cmp-chips { padding-left: 4px; }
+}

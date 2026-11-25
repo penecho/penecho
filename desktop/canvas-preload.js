@@ -25,6 +25,17 @@ const updateApi = Object.freeze({
 
 contextBridge.exposeInMainWorld("penechoDesktopUpdate", updateApi);
 contextBridge.exposeInMainWorld("penechoDesktop", Object.freeze({
+  platform:process.platform,
+  titleBarInset:["darwin", "win32"].includes(process.platform),
+  whenStartupVisible:() => invoke("penecho:startup-visible"),
+  setTheme:mode => ipcRenderer.send("penecho:set-theme", mode),
+  isFullscreen:() => invoke("penecho:is-fullscreen"),
+  onFullscreenChange:listener => {
+    if (typeof listener !== "function") return () => {};
+    const handler = (_event, full) => listener(Boolean(full));
+    ipcRenderer.on("penecho:fullscreen-change", handler);
+    return () => ipcRenderer.removeListener("penecho:fullscreen-change", handler);
+  },
   onMenuCommand:listener => {
     if (typeof listener !== "function") return () => {};
     const handler = (_event, command) => listener(command);
@@ -50,7 +61,21 @@ function element(tag, className, value) {
   return node;
 }
 
+function syncDesktopLanguage(event) {
+  let savedLanguage = "";
+  try { savedLanguage = localStorage.getItem("penecho-language") || ""; } catch {}
+  const requested = event?.detail?.language || savedLanguage || document.documentElement?.lang;
+  const language = String(requested || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+  ipcRenderer.send("penecho:set-language", language);
+  return language;
+}
+
 function installDesktopUpdatePrompt() {
+  if (document.documentElement) {
+    if (["darwin", "win32"].includes(process.platform)) document.documentElement.dataset.desktop = process.platform;
+    syncDesktopLanguage();
+    window.addEventListener("penecho:languagechange", syncDesktopLanguage);
+  }
   if (!["darwin", "win32"].includes(process.platform) || !document.body) return;
   const brand = document.querySelector(".topbar .brand");
   if (!brand) return;

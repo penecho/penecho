@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const models=JSON.parse(fs.readFileSync('test/fixtures/diagrams/regression/original-models.json','utf8'));
 test('all original architecture and workflow fixtures preserve semantics and route clear of nodes and labels',async()=>{

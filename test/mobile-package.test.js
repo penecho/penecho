@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -91,8 +92,9 @@ test("the shared Canvas already exposes the Apple Pencil input contract without 
   assert.match(persistence, /state\.pen \* \(0\.72 \+ e\.pressure \* 0\.7\)/);
   assert.match(bindings, /if \(e\.pointerType === "touch"\)[\s\S]*?state\.panGesture/);
   assert.match(bindings, /const cssSize = erasing \? state\.eraser : pressureWidth\(e\)/);
-  assert.doesNotMatch(bindings, /drawingPointerSamples|getCoalescedEvents/);
-  assert.match(bindings, /drawingClientPoint\(d, e\)[\s\S]*?appendLiveInkSample\(d, p, size\)[\s\S]*?commitLiveInkDrawingProgress\(d\)/);
+  assert.doesNotMatch(bindings, /drawingPointerSamples/);
+  assert.match(bindings, /getCoalescedEvents\(\)[\s\S]*?drawingClientPoint\(d, input\)[\s\S]*?addCanvasDrawingPoint\(d, p, cssSize\)[\s\S]*?commitLiveInkDrawingProgress\(d\)/);
+  assert.match(bindings, /function addCanvasDrawingPoint\(d, p, cssSize\)[\s\S]*?appendLiveInkSample\(d, p, size\)/);
 });
 
 test("release workflow builds and publishes the Android APK", () => {

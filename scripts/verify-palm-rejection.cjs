@@ -12,7 +12,7 @@ Object.assign(process.env, { NODE_ENV:"test", PENECHO_TEST_OPEN_ACCESS:"1", PENE
 const readStream = fs.createReadStream;
 fs.createReadStream = function(file, ...args) {
   if (path.resolve(String(file)) === path.join(root, "public/app.js")) {
-    const injection = "window.palmTest={state,canvasDocumentsReady,render,setCanvasMode,setSmartSuggestEnabled,resetCanvasPalmRejection,setCanvasViewMode,penGap:()=>performance.now()-canvasPalmLastPenAt};})();";
+    const injection = "projectLinesNothingKept=()=>false;window.palmTest={state,canvasDocumentsReady,render,setCanvasMode,setSmartSuggestEnabled,resetCanvasPalmRejection,setCanvasViewMode,penGap:()=>performance.now()-canvasPalmLastPenAt};})();";
     return Readable.from([fs.readFileSync(file, "utf8").replace(/\}\)\(\);\s*$/, injection)]);
   }
   return readStream.call(this, file, ...args);
@@ -31,7 +31,10 @@ app.whenReady().then(async () => {
     win = new BrowserWindow({ show:false, width:1280, height:900, webPreferences:{ contextIsolation:true, nodeIntegration:false, backgroundThrottling:false, offscreen:true } });
     win.webContents.on("console-message", (_event, level, message) => { if (level >= 3) report.errors.push(message); });
     const js = code => win.webContents.executeJavaScript(code, true);
-    await win.loadURL(`http://127.0.0.1:${server.address().port}`);
+    const url = `http://127.0.0.1:${server.address().port}/index.html`;
+    await win.loadURL(url);
+    await js("sessionStorage.setItem('penecho-opening-seen', (document.cookie.match(/penecho-boot=([^;]+)/)||[])[1]||'played')");
+    await win.loadURL(url);
     await until(()=>js("!!window.palmTest"), "client startup");
     await js("palmTest.canvasDocumentsReady().then(()=>true)");
     await js("document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();palmTest.state.auto=false;palmTest.setSmartSuggestEnabled(false)");
@@ -49,10 +52,11 @@ app.whenReady().then(async () => {
     };
     await reset();
     let p;
-    await until(async()=>{
+    const findCanvasPoint = () => until(async()=>{
       p=await js("(()=>{const screen=document.querySelector('#screen'),r=document.querySelector('#viewport').getBoundingClientRect();for(let dy=.3;dy<.8;dy+=.1)for(let dx=.5;dx<.9;dx+=.1){const x=r.left+r.width*dx,y=r.top+r.height*dy;if(document.elementFromPoint(x,y)===screen)return {x,y};}return null})()");
       return Boolean(p);
     },"unobstructed Canvas input surface");
+    await findCanvasPoint();
     const pen = (type, buttons=type==="pointerdown"?1:0) => js(`document.querySelector('#screen').dispatchEvent(new PointerEvent(${JSON.stringify(type)},{bubbles:true,cancelable:true,pointerId:91,pointerType:'pen',isPrimary:true,button:0,buttons:${buttons},pressure:${buttons ? 0.5 : 0},clientX:${p.x-100},clientY:${p.y-100}}))`);
     const drag = async (id=1) => {await touch("touchStart",[[id,p.x,p.y]]);await touch("touchMove",[[id,p.x+40,p.y+20]]);await touch("touchEnd");};
 
@@ -108,6 +112,49 @@ app.whenReady().then(async () => {
     await mouse("mousePressed",p.x,p.y,"middle",4);await mouse("mouseMoved",p.x+40,p.y+20,"middle",4);await mouse("mouseReleased",p.x+40,p.y+20,"middle",0);
     assert.ok((await camera()).x>30);
     report.checks.push("Middle-button mouse pan remains available during the pen gap");
+    const historyLength = () => js("palmTest.state.history.length");
+    for (const [width, height] of [[390, 844], [844, 390]]) {
+      await win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+        width, height, screenWidth:width, screenHeight:height, deviceScaleFactor:1, mobile:true,
+      });
+      await reset("hand");
+      await findCanvasPoint();
+      const start = await historyLength();
+      await drag();
+      assert.ok((await camera()).x > 0, "Hand pans on a phone");
+      assert.equal(await historyLength(), start);
+
+      const penButton = await js(`(() => {
+        const button = document.querySelector('#penToolBtn'), rect = button.getBoundingClientRect();
+        const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+        return button.contains(document.elementFromPoint(x, y)) ? [1, x, y] : null;
+      })()`);
+      if (!penButton) throw new Error(await js(`(() => {
+        const r=document.querySelector('#penToolBtn').getBoundingClientRect(), x=r.left+r.width/2, y=r.top+r.height/2;
+        return JSON.stringify({rect:r.toJSON(), hit:document.elementFromPoint(x,y)?.outerHTML.slice(0,180), viewport:[innerWidth,innerHeight], body:document.body.className});
+      })()`));
+      await touch("touchStart", [penButton]);
+      await touch("touchEnd");
+      assert.equal(await js("palmTest.state.mode"), "pen");
+      const beforeInk = await camera();
+      await drag();
+      assert.deepEqual(await camera(), beforeInk);
+      assert.equal(await historyLength(), start + 1, "one stroke per drag");
+      assert.ok(await js("palmTest.state.history.at(-1).tiles.some(tile => tile.after)"), "stroke contains ink");
+      assert.equal(await js("palmTest.state.drawing"), null);
+      await touch("touchStart", [[1,p.x,p.y]]);
+      await touch("touchEnd");
+      assert.equal(await historyLength(), start + 2, "one dot per tap");
+
+      await touch("touchStart", [[1,p.x,p.y]]);
+      await touch("touchCancel");
+      await touch("touchStart", [[1,p.x,p.y],[2,p.x+50,p.y]]);
+      await touch("touchMove", [[1,p.x-12,p.y],[2,p.x+62,p.y]]);
+      await touch("touchEnd");
+      assert.ok((await camera()).scale > beforeInk.scale, "pinch zooms on a phone");
+      assert.equal(await historyLength(), start + 2, "cancel and pinch leave no ink");
+      report.checks.push(`Phone ${width}×${height}: Pen drag and dot create ink, Hand pans, pinch zooms, cancellation leaves no mark`);
+    }
     report.passed=true;
   } catch(error) {
     report.passed=false;report.failure=error.stack;process.exitCode=1;

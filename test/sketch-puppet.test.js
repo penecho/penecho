@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("node:vm");
 const puppet=require("../src/shared/sketch-puppet.js"),SCENE=require("../public/scene-spec.js");
 const scope={x:100,y:100,w:400,h:400},plain=value=>JSON.parse(JSON.stringify(value));

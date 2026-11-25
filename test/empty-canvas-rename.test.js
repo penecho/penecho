@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
@@ -218,6 +219,7 @@ function harness(options = {}) {
     functionSource("saveDeviceSnapshot"),
     functionSource("serverSnapshotPayload"),
     functionSource("saveServerSnapshot"),
+    functionSource("folderPageCanvasPath"),
     functionSource("saveCloudSnapshot"),
     functionSource("saveSnapshot"),
     functionSource("saveSnapshotFromHistory"),

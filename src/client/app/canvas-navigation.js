@@ -31,17 +31,17 @@
     const controls = widget.presentationZoomControls;
     if (controls) {
       controls.label.textContent = `${Math.round(zoom * 10) / 10}%`;
-      controls.zoomOut.disabled = zoom <= (noteCardWidget(widget) ? Math.min(40, widgetPresentationFitZoom(widget)) : 40);
+      controls.zoomOut.disabled = zoom <= (widget.presentationViewport ? 40 : Math.min(40, widgetPresentationFitZoom(widget)));
       controls.zoomIn.disabled = zoom === 100;
     }
   }
   function setWidgetPresentationZoom(widget, percent, notifyHost = true) {
     if (!widget?.shell) return;
-    const value = Number(percent), isNote = noteCardWidget(widget),
-      fitZoom = isNote ? widgetPresentationFitZoom(widget) : 100,
-      minimum = isNote ? Math.min(40, fitZoom) : 40,
+    const value = Number(percent), fitPage = !widget.presentationViewport,
+      fitZoom = fitPage ? widgetPresentationFitZoom(widget) : 100,
+      minimum = fitPage ? Math.min(40, fitZoom) : 40,
       zoom = Math.max(minimum, Math.min(100, Number.isFinite(value) ? value : 100));
-    widget.presentationAutoFit = isNote && Math.abs(zoom - fitZoom) < 1e-9;
+    widget.presentationAutoFit = fitPage && Math.abs(zoom - fitZoom) < 1e-9;
     updateWidgetPresentationZoomControls(widget, zoom);
     if (notifyHost) sendWidgetHostState(widget);
     if (widget.maximized) updateWidgetPresentationScroll(widget);
@@ -67,7 +67,7 @@
       scale = widgetPresentationScale(widget),
       toolbar = widget.presentationToolbar.offsetHeight,
       available = Math.max(1, shell.clientHeight - toolbar - parseFloat(style.paddingBottom)),
-      height = noteCardWidget(widget) ? widget.contentH : widget.presentationViewport ? available / scale : Math.max(widget.contentH, available / scale),
+      height = widget.presentationViewport ? available / scale : widget.contentH,
       outside = Math.max(0, height * scale - available),
       content = widget.presentationScrollContent,
       extraY = content ? Math.max(0, content.height - content.viewportHeight) : 0,
@@ -77,8 +77,9 @@
     declaration.setProperty("--widget-page-scale", String(scale));
     declaration.setProperty("--widget-presentation-frame-height", `${height}px`);
     declaration.setProperty("--widget-presentation-frame-top", `${(toolbar - outside) / scale}px`);
-    // Notes retain their card geometry; viewport applications (graphs) fill the
-    // available height, and other documents keep their saved minimum height.
+    // Keep the authored page viewport stable while fitting both axes. Reported
+    // overflow extends scrolling, never the iframe height (which would feed the
+    // viewport floor back into layouts using vh or percentage heights).
     widget.presentationScrollExtent.style.height = `${(height + extraY) * scale}px`;
     widget.presentationScrollExtent.style.width = `${Math.max(width, (content?.width || 0) * scale)}px`;
     syncWidgetPresentationScroll(widget);
@@ -230,7 +231,7 @@
         // must leave the same live iframe usable on the Canvas.
         widget.maximized = true;
         setWidgetPresentationZoom(widget, 100, false);
-        widget.presentationAutoFit = noteCardWidget(widget);
+        widget.presentationAutoFit = !widget.presentationViewport;
         shell.scrollTop = shell.scrollLeft = 0;
         setWidgetPresentationScrolling(widget, true);
       } catch {
@@ -324,10 +325,12 @@
   function canvasWidgetSelectionEnabled() {
     return !state.spacePan && (state.viewMode ? state.viewTool === "select" : state.mode === "select" && !canvasLassoToolActive());
   }
-  // A Widget is live either through the Select tool (View mode) or in place
-  // after an explicit Use gesture, which never changes the editing tool.
+  // Hand uses native Widget input immediately. Explicit interaction also works
+  // in drawing tools, while View mode retains its own Select policy.
   function canvasWidgetInteractive(widget) {
-    if (state.interactingWidgetId !== widget.id || widget.hiddenForReplacement || state.spacePan) return false;
+    if (widget.hiddenForReplacement || state.spacePan) return false;
+    if (!state.viewMode && state.mode === "hand" && !widget.pending && visibleWidgets().includes(widget)) return true;
+    if (state.interactingWidgetId !== widget.id) return false;
     return canvasWidgetSelectionEnabled() || (state.widgetInteractionInPlace === true && !state.viewMode);
   }
   function canvasWidgetAtEvent(event) {
@@ -350,6 +353,7 @@
     document.querySelector('#canvasViewSelect')?.setAttribute('aria-pressed', String(state.viewTool === 'select'));
     const exit = document.querySelector('#canvasWidgetExit');
     if (exit) exit.hidden = !state.interactingWidgetId;
+    syncCanvasPlacedInputRegions();
     syncWidgetHostStates();
     resetCanvasCursor();
   }
@@ -423,7 +427,10 @@
   function setSpacePan(enabled) {
     enabled = Boolean(enabled);
     if (state.spacePan === enabled) return;
-    if (enabled && state.drawing?.pointerType === "pen") finishDrawing("pen");
+    if (enabled) {
+      state.touchPenStart = null;
+      if (state.drawing && ["pen", "touch"].includes(state.drawing.pointerType)) finishDrawing(state.drawing.pointerType);
+    }
     state.spacePan = enabled;
     syncCanvasNavigation();
   }
@@ -464,8 +471,10 @@
   }
   function canvasNavigationSurface(target) {
     if (!target || target === view || target === screen) return true;
+    if (target.classList?.contains('placed-content-input-region')) return true;
     const shell = target.closest?.('.canvas-widget');
-    return Boolean(shell && shell.dataset.widgetId !== state.interactingWidgetId);
+    const widget = shell && visibleWidgets().find(widget => widget.id === shell.dataset.widgetId);
+    return Boolean(shell && (!widget || !canvasWidgetInteractive(widget)));
   }
   let viewerWidgetScrollSequence = 0;
   function requestViewerWidgetScroll(event, dx, dy, fallback) {
@@ -533,28 +542,46 @@
     void window.PenEchoStudioNavigator?.flushMcpFollow?.();
   }
   function canvasFitViewportSize() {
-    const metrics = canvasViewportMetrics();
-    let width = metrics.width, height = metrics.height;
-    const panel = document.querySelector('#canvasAgentPanel');
-    if (panel && !panel.hidden && document.body.classList.contains('canvas-agent-open')
-      && !document.body.classList.contains('canvas-agent-navigation-hidden')) {
-      const rect = canvasElementLayoutRect(panel);
-      if (rect && rect.width > 0 && rect.height > 0 && rect.right > 0
-        && rect.left < width && rect.bottom > 0 && rect.top < height) {
-        // Only the Agent panel occludes Fit All; the left navigator is ignored.
-        if (rect.left > 0) width = Math.min(width, rect.left);
-        else if (rect.top > 0) height = Math.min(height, rect.top);
-      }
+    const { width, height } = canvasViewportMetrics();
+    const panel = document.querySelector('#projectLinesPanel:not([hidden])'),
+      panelRect = panel && canvasElementLayoutRect(panel);
+    // The line panel overlays the Canvas. Fit into the area before its actual
+    // left edge, using Canvas coordinates so page scaling is accounted for.
+    if (panelRect && panelRect.width > 0 && panelRect.height > 0
+      && panelRect.left < width && panelRect.right > 0 && panelRect.top < height && panelRect.bottom > 0) {
+      return { width:Math.max(1, panelRect.left), height };
     }
     return { width, height };
+  }
+  function canvasContentsBounds() {
+    let bounds = visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE });
+    for (const next of [imageBounds(), textBoxBounds(), animationBounds(), widgetBounds()]) bounds = unionLocalBounds(bounds, next);
+    return bounds;
+  }
+  // A Canvas opens framed in the whole window, and its line panel then covers the right of it.
+  // Content that was wholly in view moves into the part the panel leaves, smaller only if it
+  // must; a view zoomed in on a detail stays as it is.
+  function keepCanvasContentsClearOfPanel() {
+    if (state.drawing || state.navigationLocked) return false;
+    const { width, height } = canvasViewportMetrics(), clear = canvasFitViewportSize().width, bounds = canvasContentsBounds();
+    if (!bounds || clear >= width) return false;
+    const left = state.panX + bounds.x * state.scale, top = state.panY + bounds.y * state.scale,
+      right = left + bounds.w * state.scale, bottom = top + bounds.h * state.scale, slack = 1;
+    if (right <= clear || left < -slack || top < -slack || right > width + slack || bottom > height + slack) return false;
+    const padding = Math.min(64, clear * .05), previousPanX = state.panX, previousPanY = state.panY, previousScale = state.scale,
+      centerY = (top + bottom) / 2;
+    state.scale = Math.max(.03, Math.min(state.scale, (clear - padding * 2) / Math.max(1, bounds.w), (height - padding * 2) / Math.max(1, bounds.h)));
+    state.panX = (clear - bounds.w * state.scale) / 2 - bounds.x * state.scale;
+    state.panY = centerY - (bounds.y + bounds.h / 2) * state.scale;
+    requestCanvasNavigationPreview(previousPanX, previousPanY, previousScale);
+    requestCoordinatesUpdate();
+    return true;
   }
   function fitCanvasContents() {
     if (state.drawing) return;
     setWidgetInteraction(null);
     if (state.navigationLocked) setCanvasNavigationLocked(false);
-    let bounds = visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE });
-    for (const next of [imageBounds(), textBoxBounds(), animationBounds(), widgetBounds()]) bounds = unionLocalBounds(bounds, next);
-    if (!bounds) bounds = { x:SIZE / 2 - 1500, y:SIZE / 2 - 1000, w:3000, h:2000 };
+    const bounds = canvasContentsBounds() || { x:SIZE / 2 - 1500, y:SIZE / 2 - 1000, w:3000, h:2000 };
     const metrics = canvasFitViewportSize(), padding = 64;
     const previousPanX = state.panX, previousPanY = state.panY, previousScale = state.scale;
     state.scale = Math.max(.03, Math.min(2, (metrics.width - padding * 2) / Math.max(1,bounds.w), (metrics.height - padding * 2) / Math.max(1,bounds.h)));
@@ -596,16 +623,14 @@
   document.querySelector('#canvasZoomIn')?.addEventListener('click', () => zoomCanvasBy(1.25));
   document.querySelector('#canvasZoomLevel')?.addEventListener('click', () => zoomCanvasBy(1 / state.scale));
   const wheelZoomSetting = document.querySelector('#settingsWheelZoom');
-  if (wheelZoomSetting) {
-    wheelZoomSetting.setAttribute('aria-checked', String(state.wheelZoom));
-    wheelZoomSetting.classList.toggle('on', state.wheelZoom);
-    wheelZoomSetting.addEventListener('click', () => {
-      state.wheelZoom = !state.wheelZoom;
-      wheelZoomSetting.setAttribute('aria-checked', String(state.wheelZoom));
-      wheelZoomSetting.classList.toggle('on', state.wheelZoom);
-      localStorage.setItem('penecho-wheel-zoom', String(state.wheelZoom));
-    });
+  function setWheelZoom(enabled, remember = true) {
+    state.wheelZoom = Boolean(enabled);
+    wheelZoomSetting?.setAttribute('aria-checked', String(state.wheelZoom));
+    wheelZoomSetting?.classList.toggle('on', state.wheelZoom);
+    if (remember) localStorage.setItem('penecho-wheel-zoom', String(state.wheelZoom));
   }
+  setWheelZoom(state.wheelZoom, false);
+  wheelZoomSetting?.addEventListener('click', () => setWheelZoom(!state.wheelZoom));
   window.addEventListener('keydown', (event) => {
     if (state.interactingWidgetId && event.key !== 'Escape') return;
     if (event.defaultPrevented || event.isComposing || canvasNavigationTextTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;

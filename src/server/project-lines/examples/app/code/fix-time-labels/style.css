@@ -1,0 +1,19 @@
+body { margin: 0; background: #f8fafc; color: #0f172a; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.top { display: flex; align-items: baseline; gap: 14px; padding: 22px 32px 10px; }
+.top h1 { margin: 0; font-size: 22px; }
+.top span { color: #64748b; }
+#lines { margin: 0 32px; padding: 6px 0 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+.hours, .line { display: grid; grid-template-columns: 210px 680px; align-items: center; padding: 0 20px; }
+.hours { height: 34px; color: #94a3b8; font-size: 12px; }
+.line { height: 76px; border-top: 1px solid #f1f5f9; }
+.name b { display: block; font-size: 14.5px; }
+.name span { color: #64748b; font-size: 12.5px; }
+.track { position: relative; height: 100%; }
+.hours .track span { position: absolute; bottom: 8px; transform: translateX(-50%); }
+.rail { position: absolute; top: 26px; height: 2px; background: #cbd5e1; }
+.dot { position: absolute; top: 21px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #fff; border: 2.5px solid #2563eb; box-sizing: border-box; }
+.dot.canvas { border-radius: 3px; background: #e9551f; border-color: #e9551f; }
+.dot.work { background: #0d9488; border-color: #0d9488; transform: rotate(45deg); border-radius: 2px; }
+.dot.done { background: #16a34a; border-color: #16a34a; }
+.time { position: absolute; top: 38px; transform: translateX(-50%); color: #475569; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.time.row-1 { top: 54px; }

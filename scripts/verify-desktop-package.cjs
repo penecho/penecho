@@ -11,7 +11,7 @@ const pkg = load("./package.json");
 assert.equal(pkg.version, manifest.desktopVersion);
 assert.equal(pkg.config.desktopVersion, manifest.desktopVersion);
 const report = { version:pkg.version, platform:process.platform, arch:process.arch, electron:process.versions.electron, matchedSourceFiles:0 };
-const required = new Set(["desktop/menu.js", "src/client/app/desktop-menu.js", "desktop/main.js", "desktop/canvas-preload.js", "desktop/update-window-preload.js", "desktop/update-window.html", "desktop/update-window.js", "desktop/update-window.css", "desktop/update-manager.js", "public/desktop-update.css", "public/penecho-mark.png", "public/app.js"]);
+const required = new Set(["desktop/menu.js", "src/client/app/desktop-menu.js", "desktop/main.js", "desktop/server-process.js", "desktop/server-entry.js", "desktop/browser-host.js", "src/server/desktop-link.js", "desktop/canvas-preload.js", "desktop/update-window-preload.js", "desktop/update-window.html", "desktop/update-window.js", "desktop/update-window.css", "desktop/update-manager.js", "public/desktop-update.css", "public/penecho-mark.png", "public/app.js"]);
 for (const file of manifest.files) {
   if (file.path === "package.json") continue; // Forge sets the desktop version.
   const packaged = path.join(archive, file.path);
@@ -28,11 +28,21 @@ async function verify() {
   report.sharp = sharp.versions.sharp;
   const rg = load("@vscode/ripgrep").rgPath.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
   report.ripgrep = execFileSync(rg, ["--version"], { encoding:"utf8" }).split(/\r?\n/)[0];
+  const unpackedMarker = `${path.sep}app.asar.unpacked${path.sep}`;
+  const browserHelper = load("./src/server/project-lines/browser-call.js").BROWSER_HELPER_PATH;
+  const orchHelper = load("./src/server/project-lines/orch-call.js").HELPER_PATH;
+  assert.ok(browserHelper.includes(unpackedMarker) && fs.existsSync(browserHelper), `browser-call.js must be unpacked: ${browserHelper}`);
+  assert.ok(orchHelper.includes(unpackedMarker) && fs.existsSync(orchHelper), `orch-call.js must be unpacked: ${orchHelper}`);
+  const browserHelp = execFileSync(process.execPath, [browserHelper, "--help"], { encoding:"utf8", env:{ ...process.env, ELECTRON_RUN_AS_NODE:"1" } });
+  assert.match(browserHelp, /PENECHO_BROWSER_HELPER/);
+  report.unpackedHelpers = { browser:path.relative(path.dirname(archive), browserHelper), orch:path.relative(path.dirname(archive), orchHelper) };
   if (latestFile) {
     const metadata = JSON.parse(fs.readFileSync(latestFile, "utf8"));
+    // A beta or rc reads the list of releases.
+    const answer = async url => ({ ok:true, json:async () => url.includes("per_page") ? [metadata] : metadata });
     const manager = load("./desktop/update-manager.js").createUpdateManager({
       app:{ getVersion:() => pkg.version },
-      fetchImpl:async () => ({ ok:true, json:async () => metadata }),
+      fetchImpl:answer,
     });
     assert.equal(manager.getState().updateAvailable, false);
     assert.equal(await manager.check(true), true);
@@ -44,7 +54,7 @@ async function verify() {
     assert(state.notes.length > 0);
     const current = load("./desktop/update-manager.js").createUpdateManager({
       app:{ getVersion:() => state.version },
-      fetchImpl:async () => ({ ok:true, json:async () => metadata }),
+      fetchImpl:answer,
     });
     assert.equal(await current.check(true), true);
     assert.equal(current.getState().updateAvailable, false);

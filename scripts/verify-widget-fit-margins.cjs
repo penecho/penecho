@@ -15,7 +15,7 @@ fs.createReadStream = function(file, ...args) {
   const relative = path.relative(path.join(root, "public"), String(file));
   if (relative === "app.js") return Readable.from([fs.readFileSync(path.join(assetRoot, relative), "utf8").replace(/\}\)\(\);\s*$/, `
     canvasAgentAssertToolExecution=()=>{};
-    window.fitMarginsTest={state,canvasDocumentsReady,loadCanvasSettings,canvasAgentCreate,mcpExecute,mcpRevealRegion,render,setCanvasMode,closeCanvasAgent,setWidgetMaximized,setWidgetPresentationZoom,serializedWidgets,undo,redo};
+    window.fitMarginsTest={state,canvasDocumentsReady,loadCanvasSettings,canvasAgentCreate,mcpExecute,mcpRevealRegion,render,setCanvasMode,setWidgetMaximized,setWidgetPresentationZoom,serializedWidgets,undo,redo};
   })();`)]);
   if (cloud && !relative.startsWith("..") && fs.existsSync(path.join(assetRoot, relative))) return readStream.call(this, path.join(assetRoot, relative), ...args);
   return readStream.call(this, file, ...args);
@@ -33,7 +33,7 @@ app.whenReady().then(async () => {
     win.webContents.on("console-message", (_event, level, message) => { if (level >= 3) report.errors.push(message); });
     const js = code => win.webContents.executeJavaScript(code, true);
     await win.loadURL(`http://127.0.0.1:${server.address().port}`);
-    await js("(async()=>{const t=fitMarginsTest;await t.canvasDocumentsReady();await t.loadCanvasSettings();document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();t.closeCanvasAgent();t.state.auto=false;t.state.scale=1;t.state.panX=0;t.state.panY=0;t.setCanvasMode('pen');})()");
+    await js("(async()=>{const t=fitMarginsTest;await t.canvasDocumentsReady();await t.loadCanvasSettings();document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();t.state.auto=false;t.state.scale=1;t.state.panX=0;t.state.panY=0;t.setCanvasMode('pen');})()");
     const geometry = id => js(`(()=>{const w=fitMarginsTest.state.widgets.find(w=>w.id===${JSON.stringify(id)});return {w:w.w,h:w.h,contentW:w.contentW,contentH:w.contentH,fitContentAxes:w.fitContentAxes,version:w.contentVersion,maximized:!!w.maximized};})()`);
     const metrics = async name => {
       for (const frame of win.webContents.mainFrame.framesInSubtree.filter(frame => frame.url === "about:srcdoc")) {
