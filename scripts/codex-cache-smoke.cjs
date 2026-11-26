@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const { testConfiguredProvider } = require('../src/cli/main.js');
 const { callCodexCli } = require('../src/providers/codex-cli.js');
-const { CODEX_CLI_PINNED_VERSION, assertCodexCliBundle, assertCodexCliVersion } = require('../src/providers/cli-installer.js');
+const { assertCodexCliBundle, codexCliVersion } = require('../src/providers/cli-installer.js');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -26,7 +26,7 @@ async function main() {
   if (!options.codex || !path.isAbsolute(options.codex) || !options.output) throw new Error('Provide an absolute --codex executable and --output report path.');
   assertCodexCliBundle(options.codex);
   const version = execFileSync(options.codex, ['--version'], { encoding:'utf8' }).trim();
-  assertCodexCliVersion(version);
+  assert.ok(codexCliVersion(version), `Unexpected Codex CLI version output: ${version}`);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'penecho-cache-smoke-'));
   const report = { startedAt:new Date().toISOString(), version, model:'gpt-6-sol', effort:'medium', turns:[] };
   let host;
@@ -45,10 +45,6 @@ async function main() {
       resolveConnection:id => id === connection.id ? connection : null,
       resolveProject:async () => null, modelTimeoutMs:() => 120000,
       resolveCliCandidates:() => [{ executable:options.codex, source:'configured' }],
-      installManagedCli:async requested => {
-        assert.equal(requested, CODEX_CLI_PINNED_VERSION);
-        return { executable:options.codex, version };
-      },
       onModelUsage:usage => { latestUsage = usage; },
     });
     const context = Array.from({ length:120 }, (_, index) => `Record ${index + 1}: This synthetic cache fixture describes a blue circle on a blank canvas, with no real user content or external resources.`).join('\n');

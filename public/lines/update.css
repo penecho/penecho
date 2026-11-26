@@ -1,0 +1,27 @@
+/* A newer PenEcho for this computer, above the sidebar's foot (desktop-update.js). Desktop app only. */
+#railUpdate:empty { display: none; }
+#railUpdate { flex: none; margin-top: 6px; }
+.rail-update { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 10px; overflow: hidden; color: var(--accent-label); background: var(--accent-soft); border-radius: 8px; font-size: 13px; font-weight: 600; text-align: left; }
+.rail-update:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.rail-update:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rail-update span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-update em { flex: none; font-style: normal; font-size: 12px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.rail-update .ic { flex: none; }
+.rail-update.is-ready { color: #fff; background: var(--accent); }
+.rail-update.is-ready:hover { background: var(--accent2); }
+.rail-update.is-busy { color: var(--ink2); background: var(--soft); font-weight: 550; }
+.rail-update.is-busy:disabled { cursor: default; }
+.rail-update.is-busy .spin { width: 12px; height: 12px; margin: 0 2px; color: var(--ink3); }
+.rail-update.is-bad { color: var(--amber); background: var(--amber-soft); }
+.rail-update-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--line); }
+.rail-update-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--p, 0%); background: var(--accent); transition: width .3s ease; }
+.rail-update-bar.is-unknown::after { width: 30%; animation: rail-update-slide 1.4s ease-in-out infinite; }
+@keyframes rail-update-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .rail-update-bar::after { transition: none; animation: none !important; } }
+/* Settings → About: the installed version and the next step */
+.sys-update-row .sys-acts { gap: 8px; }
+.sys-update-row a.btn { color: inherit; text-decoration: none; }
+@media (max-width: 860px) {
+  .rail-update { justify-content: center; padding: 0; }
+  .rail-update span, .rail-update em { display: none; }
+}

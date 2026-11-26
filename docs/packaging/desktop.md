@@ -54,7 +54,7 @@ Windows installers cannot be created reliably on this Mac without Wine/Mono and 
 
 ## Icons
 
-The PenEcho mark is the blue pen nib touching water with two ripples (`#2350E6`). The checked-in transparent master `build/brand/penecho-logo-original.png` is the stacked lockup: the mark above the Poppins Light wordmark, with "Pen" in ink `#1D1D1F` and "Echo" in blue, lettering baked in. `scripts/prepare-brand-logo.js` validates its PNG alpha channel and copies it byte-for-byte to `build/brand/penecho-logo.png`; `build/brand/penecho-logo.json` documents the full-logo, mark and wordmark crops. `build/brand/penecho-mark-small.png` is the same mark with heavier strokes, used for icons drawn at 48 px and below and for the UI mark. Generate all derived assets with:
+The PenEcho mark is a blue nautilus (`#2563EB`), chosen on 2026-11-10 for the whole PenEcho family; MeetCue keeps its own icon. Its drawing is `build/brand/penecho-mark.json` (paths in a 96 by 96 box: the shell, the spiral wall and the chamber walls cut into it), and `build/brand/penecho-mark.svg` is the same mark as one vector file. `scripts/make-brand-master.js` turns the drawing into the transparent master `build/brand/penecho-logo-original.png`, the stacked lockup: the mark above the Poppins Light wordmark, with "Pen" in ink `#1D1D1F` and "Echo" in the mark's blue. The lettering is kept as pixels in `build/brand/penecho-wordmark.png`, so no build-host font matters. `scripts/prepare-brand-logo.js` validates the master's alpha channel and copies it byte-for-byte to `build/brand/penecho-logo.png`; `build/brand/penecho-logo.json` documents the full-logo, mark and wordmark crops. `build/brand/penecho-mark-small.png` is the same mark without its chamber walls and with a wider spiral, used for icons drawn at 48 px and below and for the UI mark. Generate all derived assets with:
 
 ```bash
 npm run icons
@@ -64,8 +64,9 @@ Generated production assets:
 
 - `public/penecho-readme-header.webp` and `public/penecho-readme-header-dark.webp`: horizontal lockup (mark beside the wordmark), transparent, lossless, 840 px wide, displayed at 320 px with automatic light/dark selection in every README. The dark variant uses `#7C9AFF` and near-white lettering.
 - `public/penecho-readme-header.png`: opaque white copy of the horizontal lockup for places that cannot show transparent WebP.
-- `public/penecho-favicon.png`: 256 px heavier mark on a white rounded tile with transparent outer corners (Canvas browser tabs, password page, Cloud app icon).
-- `public/penecho-mark.png`: 256 px heavier transparent mark (update window, Canvas viewer wordmark, Cloud header mask).
+- `public/penecho-favicon.png`: 256 px small mark on a transparent background (Canvas and Lines browser tabs, the Lines rail, password page, Cloud app icon).
+- `public/penecho-mark.png`: 256 px small transparent mark (update window, Canvas viewer wordmark, Cloud header mask).
+- `integrations/penecho-cloud/assets/logo.png`: 512 px mark on a white rounded tile, shown by agent apps beside the PenEcho plugin.
 - `build/icons/penecho-1024.png`: mobile icon source, an opaque white square with the mark at 70%. Android/iOS apply their own masks.
 - `build/icons/penecho-desktop-1024.png` and `build/icons/penecho.png`: Windows window icons on a transparent background.
 - `build/icons/penecho.icns`: macOS, white rounded tile with transparent outer corners; PNG payloads from 16 to 1024 px.
@@ -132,7 +133,7 @@ Only published GitHub Releases are offered. Drafts and prereleases are not insta
 Local unsigned builds can still exercise the update flow during development:
 
 - macOS downloads the matching ZIP, validates its PenEcho bundle ID and version, then replaces the installed `.app` after the running process exits. PenEcho must be installed in a user-writable location.
-- Windows downloads the matching Squirrel Setup executable and starts its silent installed-app upgrade path. Squirrel install/update events update the shortcut and exit without opening the canvas.
+- Windows downloads the Squirrel package (`penecho-<version>-full.nupkg`), installs it beside the running version with the installed `Update.exe`, then closes PenEcho and opens the new version. A failed install leaves the running version as it is. Without a package in the release, or between pre-releases Squirrel cannot order (`beta.9` to `beta.10`), it runs Setup, which replaces the app and opens it. PenEcho 1.4 and older run Setup silently; the new version's install event opens PenEcho for them.
 
 These paths intentionally do not invoke Electron's native `autoUpdater`, because macOS Squirrel requires a valid Apple code signature even when both releases are intentionally unsigned. Signing and notarization can still be added later without changing the release asset contract.
 
@@ -147,7 +148,7 @@ Recommended public assets:
 - `penecho-1.2.0-full.nupkg`
 - `SHA256SUMS-<platform>-<arch>.txt`
 
-The DMG and Setup executable are the visible installers. PenEcho uses the macOS ZIP and Windows Setup executable for in-app updates, so those assets must remain attached when the draft is published. `RELEASES` and `.nupkg` remain useful Squirrel release artifacts but are not downloaded by PenEcho's unsigned update path.
+The DMG and Setup executable are the visible installers. PenEcho uses the macOS ZIP, the Windows package and the Windows Setup executable for in-app updates, so those assets must remain attached when the draft is published. `RELEASES` and `.nupkg` remain useful Squirrel release artifacts but are not downloaded by PenEcho's unsigned update path.
 
 ### Cloud browser branding
 

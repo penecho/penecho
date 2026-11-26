@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 
 function harness() {
@@ -180,8 +181,6 @@ test('ordinary Agent sends all dirty groups with stable invocation geometry and 
   assert.deepEqual(JSON.parse(JSON.stringify(captures)),[{target:'region',region:{x:100,y:120,width:1880,height:1860},quality:'basic',coordinates:'none'}]);
   assert.equal(request.omitInitialCapture,true);
   assert.equal(request.imageOverrides[0].data,'c2tldGNo');
-  assert.equal(request.includeDraftMedia,false);
-  assert.equal(request.clearInput,false);
   assert.deepEqual(JSON.parse(JSON.stringify(request.referencesOverride.region)),{x:100,y:120,width:1880,height:1860});
 });
 
@@ -330,7 +329,6 @@ test('derived Widget actions preserve source, capture only it, and clear dirty o
     assert.doesNotMatch(request.textOverride,/explicit custom instruction takes precedence|Widget Refine uses local routing|Do not create a replacement object/);
     assert.deepEqual(Array.from(request.referencesOverride.objectIds),['source-widget']);
     assert.equal(captures.length,1);assert.equal(context.agent.resultTarget.inputSnapshot,null);
-    assert.equal(request.includeDraftMedia,false);assert.equal(request.clearInput,false);
     context.assistAgentRecordResult('canvas_document',{operation:'mcp_present_widget',arguments:{}},{objectId:'derived-widget'}, {canvasWritten:true});
     context.assistAgentFinishResult(true);
     assert.equal(context.state.dirty,null);assert.equal(context.consumed,true);

@@ -1,0 +1,38 @@
+/* Model prices: Settings → Preset agents → Model prices, and Statistics (prices.js). */
+.agents-tabs { margin-bottom: 16px; }
+.agents-tabs em.setup-count { min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 9px; background: var(--amber-soft); color: var(--amber); font-style: normal; font-size: 11px; font-weight: 700; }
+button.kind-tag.is-link { gap: 2px; padding-right: 4px; cursor: pointer; }
+button.kind-tag.is-link:hover { background: color-mix(in srgb, var(--amber-mark) 26%, transparent); }
+button.kind-tag.is-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.prices { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.prices .sys-head { flex-wrap: wrap; margin: 0; }
+.price-ways { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.price-ways .spin { width: 12px; height: 12px; margin-right: 5px; }
+.price-state { margin: 0; color: var(--ink2); font-size: 13px; line-height: 1.45; }
+.price-state:empty { display: none; }
+.prices .is-error { color: var(--red); }
+.price-ask { display: grid; gap: 8px; padding: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: 12px; }
+.price-ask-head, .price-ask-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.price-ask-head { justify-content: space-between; }
+.price-ask-foot { justify-content: flex-end; font-size: 13px; }
+.price-ask-foot .is-error { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.price-ask strong, .price-ask label { color: var(--ink); font-size: 13px; font-weight: 600; }
+.price-ask pre, .price-ask textarea { width: 100%; margin: 0; padding: 9px 11px; color: var(--ink2); font: 12px/1.5 var(--mono); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+.price-ask pre { max-height: 150px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.price-ask textarea { color: var(--ink); border-color: var(--line2); resize: vertical; }
+.price-ask textarea:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 2px var(--accent-soft); }
+.price-table td { padding-top: 7px; padding-bottom: 7px; }
+.price-table .price-model { min-width: 130px; color: var(--ink); overflow-wrap: anywhere; }
+.price-table .price-model .kind-tag { margin-left: 4px; vertical-align: 1px; }
+.price-table td.price-source { max-width: 190px; color: var(--ink3); font-size: 12.5px; overflow-wrap: anywhere; }
+.price-table .price-source a { color: inherit; }
+.price-table .price-acts { width: 1%; text-align: right; white-space: nowrap; }
+.price-table .icon-btn { width: 30px; height: 30px; }
+.price-table input { width: 100%; min-width: 62px; height: 30px; padding: 0 7px; color: var(--ink); font-size: 13.5px; background: var(--paper); border: 1px solid var(--line2); border-radius: 6px; }
+.price-table td:not(.price-model) input { max-width: 92px; }
+.price-table input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 2px var(--accent-soft); }
+/* Save stands out once the row has both prices. */
+.price-table tr:has([data-price-field="input"]:not(:placeholder-shown)):has([data-price-field="output"]:not(:placeholder-shown)) [data-act="price-save"] { color: #fff; background: var(--accent); }
+.price-table tr.is-target td { background: var(--amber-soft); }
+.sx-card.prices .sx-scroll { max-width: 860px; }
+@media (max-width: 760px) { .price-table .price-source { display: none; } .price-table .price-model { min-width: 92px; } .price-table input { min-width: 50px; } }

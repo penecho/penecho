@@ -7,7 +7,7 @@ fs.mkdirSync(output, {recursive:true}); app.setPath("userData", path.join(tempor
 Object.assign(process.env, {NODE_ENV:"test", PENECHO_TEST_OPEN_ACCESS:"1", PENECHO_STATE_DIR:path.join(temporary,"state"), PENECHO_CONFIG_FILE:path.join(temporary,"config.env"), HOST:"127.0.0.1", PORT:"0", PENECHO_CANVAS_AGENT_AUTO_OPEN:"false", PENECHO_REQUEST_TRACE:"false", PENECHO_JEVISION_ENABLED:"false"});
 const readStream = fs.createReadStream;
 const exposeRuntime = source => source.replace(/\}\)\(\);\s*$/, `
-    window.noteDetailTest={state,noteCards,canvasDocumentsReady,noteLibraryLoad,noteLibraryPut,noteLibraryPersist,noteLibraryRender,openNoteLibrary,closeNoteLibrary,noteCardInsert,applyLanguage,applyTheme,closeCanvasAgent};
+    window.noteDetailTest={state,noteCards,canvasDocumentsReady,noteLibraryLoad,noteLibraryPut,noteLibraryPersist,noteLibraryRender,openNoteLibrary,closeNoteLibrary,noteCardInsert,applyLanguage,applyTheme};
     penIntelRemote=()=>false;
     maybeStartOnboarding=()=>false;
   })();`);
@@ -48,7 +48,7 @@ app.whenReady().then(async () => { try {
   await win.loadURL(url);
   await until(()=>js("!!window.noteDetailTest"),"Canvas startup");
   await js(`(async()=>{
-    const t=noteDetailTest;await t.canvasDocumentsReady();await t.noteLibraryLoad();t.state.auto=false;t.state.language='en';t.applyLanguage();t.applyTheme('studio');t.closeCanvasAgent();document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();
+    const t=noteDetailTest;await t.canvasDocumentsReady();await t.noteLibraryLoad();t.state.auto=false;t.state.language='en';t.applyLanguage();t.applyTheme('studio');document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();
     const note=PENECHO_NOTE_CARD.normalize({title:'PenEcho 项目架构：四层分层、模型执行器与关键约束',style:'card',category:'reference',bookmarked:true,tags:['PenEcho','架构','画布','MCP','模型执行器'],summary:'PenEcho 空间化 AI 协作画布的分层架构（接入 / 服务 / 执行 / 外部）及客户端、请求流、Canvas Agent、MCP 与桌面构建要点。',blocks:[{type:'markdown',text:'## 分层结构\\n\\n接入层 → 服务层 → 执行层 → 外部。\\n\\nThe original card stays on its canvas when the library copy is removed.'}]});
     const widget=await t.noteCardInsert(note);window.detailWidgetId=widget.id;
     const entry=t.noteCards.entries.find(e=>e.objectId===widget.id);window.detailEntryId=entry.id;

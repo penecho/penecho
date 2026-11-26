@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 const read=file=>fs.readFileSync(path.join(__dirname,"..",file),"utf8"),
   canvas=read("src/client/app/canvas-runtime.js"),mcp=read("src/client/app/mcp-runtime.js"),host=read("public/widget-host.js"),

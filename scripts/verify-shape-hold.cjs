@@ -13,7 +13,7 @@ Object.assign(process.env, {NODE_ENV:"test", PENECHO_TEST_OPEN_ACCESS:"1", PENEC
 const createReadStream = fs.createReadStream;
 fs.createReadStream = function(file, ...args) {
   if (path.resolve(String(file)) === path.join(root,"public/app.js")) return Readable.from([fs.readFileSync(file,"utf8").replace(/\}\)\(\);\s*$/, `
-    window.shapeTest={state,smartSuggest,penIntel,tiles,canvasDocumentsReady,loadCanvasSettings,closeCanvasAgent,setCanvasMode,render,undo,redo,hideAssist,setSmartSuggestEnabled,clearDirtyContributionTracking};
+    window.shapeTest={state,smartSuggest,penIntel,tiles,canvasDocumentsReady,loadCanvasSettings,setCanvasMode,render,undo,redo,hideAssist,setSmartSuggestEnabled,clearDirtyContributionTracking};
   })();`)]);
   return createReadStream.call(this, file, ...args);
 };
@@ -29,7 +29,7 @@ app.whenReady().then(async () => {
       shot = async name => fs.writeFileSync(path.join(output, name + ".png"), (await win.webContents.capturePage()).toPNG());
     await win.loadURL(`http://127.0.0.1:${server.address().port}`);
     await js(`(async()=>{const t=shapeTest,s=t.state;await t.canvasDocumentsReady();await t.loadCanvasSettings();
-      document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();t.closeCanvasAgent();
+      document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();
       if(document.querySelector('#studioNavigatorToggle')?.getAttribute('aria-expanded')==='true')document.querySelector('#studioNavigatorToggle').click();
       s.auto=false;s.language='en';s.scale=1;s.panX=0;s.panY=0;t.smartSuggest.enabled=true;t.smartSuggest.available=false;
       t.penIntel.settings.gestures=false;t.penIntel.settings.stepCheck=false;t.setCanvasMode('pen');t.render();})()`);

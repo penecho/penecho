@@ -1,4 +1,5 @@
 "use strict";
+require('./helpers/safety.js');
 const assert=require('node:assert/strict');
 const {test}=require('node:test');
 const {BOUND_CANVAS_TOOL_NAMES,executeBoundCanvasTool,patchVirtualFile}=require('../src/server/mcp/bound-operations.js');

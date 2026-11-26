@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
@@ -19,7 +20,6 @@ const { macosRemoteRoots, windowsDriveRoots } = require("../src/server/canvas-ag
 const ROOT = path.resolve(__dirname, "..");
 const runtimeSource = fsSync.readFileSync(path.join(ROOT, "src/server/canvas-agent/runtime.mjs"), "utf8");
 const mainSource = fsSync.readFileSync(path.join(ROOT, "src/server/main.js"), "utf8");
-const remoteCanvasHttpSource = fsSync.readFileSync(path.join(ROOT, "src/server/remote-canvas-http.js"), "utf8");
 
 async function fixture(t, options = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "penecho-canvas-resources-"));
@@ -564,13 +564,4 @@ test("main resource routes separate native paths from roots and uploads and reco
   assert.match(mainSource, /PENECHO_CANVAS_AGENT_ALLOWED_ROOTS[\s\S]*path\.isAbsolute\(selectedPath\)/);
   assert.match(mainSource, /macosRemoteRoots\(os\.homedir\(\)\)[\s\S]*windowsDriveRoots\(\)[\s\S]*CANVAS_AGENT_ALLOWED_ROOTS = \[\.\.\.CANVAS_AGENT_CONFIGURED_ROOTS, \.\.\.CANVAS_AGENT_MACOS_REMOTE_ROOTS, \.\.\.CANVAS_AGENT_WINDOWS_DRIVE_ROOTS\]/);
   assert.match(mainSource, /CANVAS_AGENT_PROJECT_STORE\.cleanupUploads\(\)[^\n]*;\s*server\.listen/, "startup cleanup must not gate server listening");
-
-  const remoteLines = remoteCanvasHttpSource.split(/\r?\n/);
-  const rawProjectRoute = remoteLines.find(line => line.includes("pattern:/^\\/api\\/canvas-agent\\/projects$/")) || "";
-  const fromRootRoute = remoteLines.find(line => line.includes("canvas-agent\\/projects\\/from-root")) || "";
-  const filesRoute = remoteLines.find(line => line.includes("canvas-agent\\/files")) || "";
-  assert.match(rawProjectRoute, /methods:new Set\(\["GET"\]\)/, "Remote Canvas may list resources but cannot submit a raw native host path");
-  assert.match(fromRootRoute, /methods:new Set\(\["POST"\]\)/);
-  assert.match(filesRoute, /methods:new Set\(\["POST"\]\)/);
-  assert.equal(remoteCanvasHttpSource.includes("canvas-agent/host-roots"), false, "Cloud cannot bridge the implicit host-home browser");
 });

@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const source = fs.readFileSync(require.resolve("../src/client/app/note-cards.js"), "utf8"),
   track = source.slice(source.indexOf("  function noteChooserTrack("), source.indexOf("  function noteSetCategory("));

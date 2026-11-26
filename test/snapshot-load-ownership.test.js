@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm"),Module=require("node:module");
 const root=process.env.PENECHO_PROOF_ROOT||path.resolve(__dirname,"..");
 function declaration(file,name){
@@ -36,21 +37,6 @@ test("ordinary snapshot load releases its busy state",async()=>{
   assert.equal(await h.context.requestLoadSnapshot("target","device"),true);
   assert.equal(h.state.currentSnapshotId,"target");
   assert.equal(h.context.snapshotLoadInProgress,false);
-});
-test("saved snapshot loading restores and synchronizes the composer while retaining the previous draft",async()=>{
-  const h=harness();await h.canvasDocumentsReady();const previous=h.canvasDocumentsCurrent();
-  h.context.canvasAgentInput.value="Unsent previous Canvas draft";
-  h.saved.set("device:target",{item:snapshot(),tileEntries:[]});
-  const events=[];
-  h.context.canvasAgentSyncPromptSuggestions=()=>events.push({event:"sync",draft:h.context.canvasAgentInput.value,loading:h.context.snapshotLoadInProgress});
-  assert.equal(await h.context.requestLoadSnapshot("target","device"),true);
-  assert.deepEqual(events,[
-    {event:"sync",draft:"",loading:true},
-  ]);
-  assert.equal(h.context.snapshotLoadInProgress,false);
-  assert.equal(h.state.widgets[0].html,"<p>Published source</p>");
-  assert.equal(previous.agentDraft,"Unsent previous Canvas draft");
-  assert.equal(h.records.get(previous.id).agentDraft,previous.agentDraft);
 });
 test("new Canvas during a pending read keeps a blank document and releases the load lock",async()=>{
   const h=harness();await h.canvasDocumentsReady();let finish;

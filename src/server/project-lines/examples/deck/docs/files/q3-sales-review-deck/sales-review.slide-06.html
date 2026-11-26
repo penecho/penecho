@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Q4 targets</title><script src="penecho-slide-charts.js"></script></head><body>
+<div class="slide" data-penecho-slide data-penecho-template="investor" data-penecho-deck="Q3 2026 sales review">
+  <div class="hd"><h1><b>Q4 targets:</b> $1,800K, 7.3% above Q3; West needs the biggest step</h1></div>
+  <div class="body">
+    <div class="col wide"><div class="bar">Q3 and the Q4 target by region</div><div class="cap">Revenue ($K)</div><div id="c1" class="chart"></div></div>
+    <div class="col"><div class="bar">Step needed</div><div class="cap">Q4 target over Q3 (%), West highlighted</div><div id="c2" class="chart"></div></div>
+  </div>
+  <div class="ft">Source: sales-2026.xlsx (By region sheet, Q4 target column); steps computed<span class="co">Brightline</span><span class="pg">6</span></div>
+</div>
+<script>
+SC.bar('#c1', {categories:['North','East','South','West'], series:[{name:'Q3 actual', values:[510,455,372,341], color:'#9CC3EE'},{name:'Q4 target', values:[540,480,400,380], color:'#1F6FD1'}], axis:false, format:'{}'});
+SC.bar('#c2', {horizontal:true, categories:['West','South','North','East'], series:[{name:'Step needed', values:[11.4,7.5,5.9,5.5], colors:['#4B2A99','#A58BE0','#A58BE0','#A58BE0']}], axis:false, format:'+{}%'});
+</script>
+</body></html>

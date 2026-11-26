@@ -119,9 +119,9 @@
     serviceOutdated:["This running PenEcho service has no usable MCP configuration. Restart PenEcho to load the updated service, then check again.","当前运行的 PenEcho 服务未提供有效的 MCP 配置。请重启 PenEcho 以加载更新后的服务，然后重新检查。"],
     hostRequired:["Configure MCP on the computer running PenEcho. Other devices can view the canvas but cannot configure its local AI clients.","请在运行 PenEcho 的电脑上配置 MCP。其他设备可以查看画布，但不能配置这台电脑的 AI 客户端。"],
     remoteSetup:["Auto configure is available on the computer running PenEcho. To connect an Agent on this computer, use the setup prompt below.","自动配置需要在运行 PenEcho 的电脑上使用。连接此电脑上的 Agent，请使用下方配置提示词。"],
-    deviceRequired:["MCP needs a linked device. Go to Linked Devices to connect a computer running PenEcho.","MCP 需要关联设备。请前往「连接设备」，连接运行 PenEcho 的电脑。"],
-    deviceOffline:["Linked Device is unavailable. Open Linked Devices to reconnect, then retry MCP.","Linked Device 不可用。请前往「连接设备」恢复连接后重试 MCP。"],
-    deviceUpdate:["Update PenEcho on the linked computer to enable MCP, then retry.","请更新已连接电脑上的 PenEcho，再重试 MCP。"],
+    deviceRequired:["MCP for a Canvas on a computer is set up in PenEcho on that computer.","电脑上的画布，请在那台电脑的 PenEcho 里配置 MCP。"],
+    deviceOffline:["MCP for a Canvas on a computer is set up in PenEcho on that computer.","电脑上的画布，请在那台电脑的 PenEcho 里配置 MCP。"],
+    deviceUpdate:["Update PenEcho on that computer to enable MCP, then retry.","请更新那台电脑上的 PenEcho，再重试 MCP。"],
     accessDenied:["MCP access was refused. On the PenEcho computer, try its localhost address, or refresh and unlock this page before checking again.","MCP 访问被拒绝。请在 PenEcho 所在电脑尝试 localhost 地址，或刷新并解锁页面后重新检查。"],
     focus:["Show","定位"],working:["Working","进行中"],waiting:["Waiting","等待中"],done:["Done","已完成"],error:["Needs attention","需要处理"],
   };
@@ -299,14 +299,16 @@
   }
   function mcpPositionStatusPopover() {
     const panel=mcpEl("mcpStatusPopover"),button=mcpEl("mcpToolbarToggle");if(!panel||!button)return;
-    // The minimal companion view opens status from its left rail instead of the hidden toolbar.
-    const rail=mcpEl("companionRailMcp");
-    if(!button.getClientRects().length&&rail?.getClientRects().length){
+    // The minimal companion view opens status from its left rail instead of the hidden toolbar,
+    // and the redesigned header displays a compact pill in the top bar when MCP is active.
+    const pill=mcpEl("headerMcpPill"),rail=mcpEl("companionRailMcp");
+    const visibleButton=button.getClientRects().length?button:pill?.getClientRects().length?pill:null;
+    if(!visibleButton&&rail?.getClientRects().length){
       const anchor=rail.getBoundingClientRect(),left=Math.round(anchor.right+8),top=Math.max(12,Math.round(anchor.top));
       panel.style.left=`${left}px`;panel.style.top=`${top}px`;panel.style.maxWidth=`${Math.max(220,innerWidth-left-12)}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-top-12)}px`;return;
     }
     panel.style.maxWidth="";
-    const rect=button.getBoundingClientRect();panel.style.left=`${Math.max(12,Math.min(rect.right-400,innerWidth-Math.min(400,innerWidth-24)-12))}px`;panel.style.top=`${Math.min(rect.bottom+10,Math.max(12,innerHeight-160))}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-rect.bottom-22)}px`;
+    const rect=(visibleButton||button).getBoundingClientRect();panel.style.left=`${Math.max(12,Math.min(rect.right-400,innerWidth-Math.min(400,innerWidth-24)-12))}px`;panel.style.top=`${Math.min(rect.bottom+10,Math.max(12,innerHeight-160))}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-rect.bottom-22)}px`;
   }
   let mcpStatusOpenAtPointerDown=false;
   async function mcpOpenStatus(event, { connect = true } = {}) {
@@ -505,7 +507,7 @@
     for(let column=0;column+width<=SIZE;column+=width+gap)columns.add(column);
     columns.add(SIZE-width);
     for(const column of columns){const slot=findSlot(column,0);if(slot)return slot;}
-    throw Error("No clear space remains for this work. Move the group or use another Canvas.");
+    throw Error("No clear space remains on this Canvas. Continue on a new Canvas: penecho_open_canvas with create:true, then penecho_start_session with its documentId. Or move existing work.");
   }
   function mcpReadingWorldRect(doc=null) {
     const {stage,scale,panX,panY}=mcpPresentationViewport(doc);
@@ -831,6 +833,26 @@
     if(name)name.textContent=ui.key==="updating"?mcpRuntime.activeMutation:"MCP";
     if(stateLabel)stateLabel.textContent=ui.key==="connected"&&sessions.length?`${sessions.length} AI`:ui.label;
     button.setAttribute("data-state",ui.key);
+    const headerPill=mcpEl("headerMcpPill");
+    if(headerPill){
+      const showPill=Boolean(mcpRuntime.wanted||connected||opening||(ui.key!=="off"&&ui.key!=="signin")||(typeof companionCanvasesEnabled==="function"&&companionCanvasesEnabled()&&typeof canvasCompanionMinimal==="function"&&canvasCompanionMinimal()));
+      headerPill.hidden=!showPill;
+      headerPill.setAttribute("data-state",ui.key);
+      headerPill.setAttribute("aria-pressed",String(mcpRuntime.wanted||connected||opening));
+      headerPill.setAttribute("aria-busy",String(opening));
+      headerPill.disabled=Boolean(mcpRuntime.toolbarChecking);
+      headerPill.title=mcpUiText("MCP connection details","MCP 连接详情");
+      headerPill.setAttribute("aria-label",`MCP · ${ui.label}`);
+      const hName=mcpEl("headerMcpName"),hState=mcpEl("headerMcpState");
+      if(hName)hName.textContent=ui.key==="updating"?mcpRuntime.activeMutation:"MCP";
+      if(hState)hState.textContent=ui.key==="connected"&&sessions.length?`${sessions.length} AI`:ui.label;
+      if(typeof syncCompanionUnifiedMcpPill==="function")syncCompanionUnifiedMcpPill();
+    }
+    const moreSwitch=mcpEl("canvasMoreMcpSwitch");
+    if(moreSwitch){
+      moreSwitch.setAttribute("aria-checked",String(Boolean(mcpRuntime.wanted||connected||opening)));
+      moreSwitch.disabled=Boolean(mcpRuntime.toolbarChecking);
+    }
     mcpRenderStatusPopover();
     if(mcpRuntime.toolbarPending&&(connected||mcpRuntime.connectionLost)){
       setStatus(mcpText(connected?"connected":mcpRuntime.wanted?"toolbarCancelRetry":"toolbarRetry"));mcpRuntime.toolbarPending=false;
@@ -839,13 +861,6 @@
   function mcpShowConfigurationError(error) {
     const text=mcpConfigurationErrorText(error);
     setStatus(text);
-    if(window.PENECHO_CONFIG?.runtime!=="cloud"||!["linked_device_required","device_offline","device_timeout"].includes(error.code))return;
-    const notice=mcpEl("status");if(!notice)return;
-    const link=document.createElement("a");
-    link.href="/dashboard.html#devices";
-    link.textContent=text;
-    link.setAttribute("data-mcp-device-link","");
-    notice.replaceChildren(link);
   }
   function mcpConfigurationErrorText(error) {
     if(error.code==="linked_device_required")return mcpText("deviceRequired");
@@ -883,7 +898,7 @@ ${JSON.stringify(direct,null,2)}
 
 Use this computer's user home and this REQUIRED installation directory: ~/.penecho/mcp on macOS/Linux, %USERPROFILE%\\.penecho\\mcp on Windows. Download discoveryCliUrl to discover.js and sessionCliUrl to client.js in that directory. Do not choose any other directory or filename. Both the MCP command configuration and upload commands MUST use this exact downloaded client.js. The upload script is this same client.js: ~/.penecho/mcp/client.js on macOS/Linux, %USERPROFILE%\\.penecho\\mcp\\client.js on Windows. It is not stored in the Agent skill directory or PenEcho application directory. Retain its resolved absolute path and the local Node executable for subsequent uploads. hostId identifies the PenEcho server, NOT a Canvas instance, document or session. For every upload copy the hostId supplied above, which is also the value after --host-id in the MCP entry. client.js resolves addresses and ports automatically; do not guess IDs, inspect its source or parse port mappings. Verify each SHA-256 against its supplied hash BEFORE execution. Use a locally installed Node.js 18+ and absolute executable/script paths. Never use another computer's paths. Save {hostId,certificatePem,accessToken,initialUrl,addresses} in a private temporary JSON file, run node <absolute discover.js> --import <temporary file> WITHOUT --client, then delete only that temporary file. Discovery only saves verified host credentials and addresses; it does not need the Agent's name and must not rewrite Agent configuration during normal reconnects.
 
-Configure this Agent's supported stdio MCP entry named penecho with command=<absolute local Node executable> and args=[<absolute client.js>,"--host-id",hostId]. Preserve unrelated settings and replace only the previous PenEcho entry; remove old HTTP url/header fields and any old idle-exit option from that entry. Do not add an idle process-exit timer. For Codex use its MCP command/args format; for Claude use its stdio command/args format; use the actual supported format for other clients. Authorization and certificate trust stay in the shared ~/.penecho/mcp store, read by client.js. Do not place accessToken on the command line, print credentials, disable TLS verification, or configure discover.js as the stdio server.
+Configure this Agent's supported stdio MCP entry named penecho with command=<absolute local Node executable> and args=[<absolute client.js>,"--host-id",hostId]. Preserve unrelated settings and replace only the previous PenEcho entry; remove old HTTP url/header fields and any old idle-exit option from that entry. Do not add an idle process-exit timer. For Codex use its MCP command/args format; for Claude use its stdio command/args format; use the actual supported format for other clients. Authorization and certificate trust stay in the shared ~/.penecho/mcp store, read by client.js. Do not place accessToken on the command line, print credentials, disable TLS verification, set any user or system environment variable or trusted certificate, or configure discover.js as the stdio server.
 
 Connection order is the last successful IP + port (or the supplied initialUrl on first connection), freshly read shared endpoint cache, then one-shot LAN discovery. Missing, stale or unreachable cache all trigger discovery. Authenticate every candidate and save the verified new address. The same complete sequence runs if reconnecting after idle release fails; another process may already have updated the cache. No hostname lookup is required on this path and address changes never rewrite AI configuration.
 
@@ -913,7 +928,7 @@ ${JSON.stringify(direct,null,2)}
 
 Use Node.js 18+ for the short-lived discovery helper. Download discoveryCliUrl to ~/.penecho/mcp/discover.js (use this computer's home directory on Windows too). Verify its SHA-256 equals discoveryCliSha256 BEFORE executing. Save {hostId,certificatePem,accessToken,addresses} to a private temporary JSON file, import with node <absolute discover.js> --import <file> --client <codex|claude>, then delete only that temporary file. The helper stores shared credentials, trusted CA and endpoint cache under ~/.penecho/mcp. For another client, use --client json and its documented native HTTP MCP format, preserving other entries. Never configure the helper itself as a stdio MCP server. Never print accessToken or disable TLS verification. A certificate is trust; the bearer token authorizes access.
 
-Finish certificate trust using this client's supported CA configuration. Codex supports CODEX_CA_CERTIFICATE and Claude Code supports NODE_EXTRA_CA_CERTS; these are environment variables of the actual client process, not per-server HTTP environment fields. Configure persistent trust for the actual launch method or use an already trusted OS certificate store supported by that client. A saved MCP entry alone does not prove the running client trusts this CA. Reload the MCP client and verify initialize, tools/list and penecho_list_canvases.
+Trust this CA only through this client's own certificate setting for this one server. Never set CODEX_CA_CERTIFICATE, SSL_CERT_FILE, NODE_EXTRA_CA_CERTS or any other environment variable for the user or the system (setx, SetEnvironmentVariable, the registry, launchctl, LaunchAgents, shell profiles), and do not add it to the operating system's certificate store: once that file moves or is gone, the whole client, its desktop app included, can no longer reach its own service. If this client has no certificate setting for one server (Codex has none), change nothing and report that PenEcho needs an update for its stdio connection, which needs no certificate setting. A saved MCP entry alone does not prove the running client trusts this CA. Reload the MCP client and verify initialize, tools/list and penecho_list_canvases.
 
 When the cached endpoint fails, run node <absolute discover.js> --host-id ${direct.hostId} --client <client> again: it probes the cache, rediscovers the trusted host only when needed, updates the matching configuration, and exits. Do not poll or keep a remote-client process alive. Use the client's supported MCP refresh/reconnect after an endpoint change; MCP does not universally execute discovery commands or hot-reload changed URLs. Report the actual verified result.
 
@@ -1003,7 +1018,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(window.PENECHO_CONFIG?.browserDraftId&&[4001,4401].includes(event?.code)){
         mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.connectionLost=true;
         mcpRuntime.connectionNotice=event.code===4001?"workspaceReplaced":"workspaceAccessRequired";
-        setStatus(mcpConnectionNotice());mcpRenderSettings();return;
+        setStatus(mcpConnectionNotice());mcpRenderSettings();window.PenEchoCompanionCanvases?.changed?.();return;
       }
       if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}
       mcpDisconnect(true);
@@ -1192,7 +1207,9 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       }
       artifact.title=args.title;artifact.presentation=presentation;
       if(presentation.attention==="request")mcpQueueView(session,widget,presentation);
-      return {artifactId:args.artifactId,objectId:widget.id,revision:state.userRevision,feedbackCursor:mcpRuntime.feedbackSequence,viewport:{width:widget.contentW,height:widget.contentH},runtimeDiagnostics:widget.runtimeDiagnostics||null,presentation,box:canvasAgentBox({kind:"widget",item:widget}),sourcePlacement:mcpSourcePlacement(execution?.assistContext,canvasAgentBox({kind:"widget",item:widget}),32/(execution?.assistContext?.scale||state.scale))};
+      // A slide reports what its own check found once it has rendered, so the agent can fix it before moving on.
+      const slideProblems=typeof slideWidget==="function"&&slideWidget(widget)?await requestWidgetSlideCheck(widget):null;
+      return {artifactId:args.artifactId,objectId:widget.id,revision:state.userRevision,feedbackCursor:mcpRuntime.feedbackSequence,viewport:{width:widget.contentW,height:widget.contentH},runtimeDiagnostics:widget.runtimeDiagnostics||null,...(slideProblems?{slideCheck:{problems:slideProblems,ok:slideProblems.length===0}}:{}),presentation,box:canvasAgentBox({kind:"widget",item:widget}),sourcePlacement:mcpSourcePlacement(execution?.assistContext,canvasAgentBox({kind:"widget",item:widget}),32/(execution?.assistContext?.scale||state.scale))};
     }
     if(name==="mcp_capture_primitives"){
       const artifact=session.artifacts.get(args.artifactId);
@@ -1227,17 +1244,27 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   addEventListener("penecho:close-mcp",()=>mcpCancelReconnect());
   addEventListener("penecho:show-mcp-settings",()=>{openSettings();selectSettingsPage("mcp");window.PenEchoMcpSettings?.select("cloud");});
   addEventListener("pointerdown",event=>{
-    if([mcpEl("mcpToolbarToggle"),mcpEl("companionRailMcp")].some(control=>control?.contains(event.target)))mcpStatusOpenAtPointerDown=!!mcpEl("mcpStatusPopover")?.matches(":popover-open");
+    if([mcpEl("mcpToolbarToggle"),mcpEl("headerMcpPill"),mcpEl("companionRailMcp")].some(control=>control?.contains(event.target)))mcpStatusOpenAtPointerDown=!!mcpEl("mcpStatusPopover")?.matches(":popover-open");
   },true);
   mcpEl("mcpToolbarToggle")?.addEventListener("click",mcpOpenStatus);
+  mcpEl("headerMcpPill")?.addEventListener("click",mcpOpenStatus);
   mcpEl("companionRailMcp")?.addEventListener("click",mcpOpenStatus);
-  mcpEl("mcpStatusPopover")?.addEventListener("toggle",event=>mcpEl("mcpToolbarToggle")?.setAttribute("aria-expanded",String(event.newState==="open")));
+  mcpEl("canvasMoreMcpSwitch")?.addEventListener("click",()=>{void mcpToolbarClick();});
+  mcpEl("mcpStatusPopover")?.addEventListener("toggle",event=>{
+    const open=String(event.newState==="open");
+    mcpEl("mcpToolbarToggle")?.setAttribute("aria-expanded",open);
+    mcpEl("headerMcpPill")?.setAttribute("aria-expanded",open);
+  });
   addEventListener("resize",()=>{if(mcpEl("mcpStatusPopover")?.matches(":popover-open"))mcpPositionStatusPopover();});
   mcpEl("mcpStatusPower")?.addEventListener("click",()=>{
     if(mcpRuntime.authRequired){mcpEl("mcpStatusPopover").hidePopover();window.PenEchoCloudSettings?.signIn?.(()=>{});return;}
     void mcpToolbarClick();
   });
-  for(const id of ["mcpStatusConnect","mcpStatusSettings"])mcpEl(id)?.addEventListener("click",()=>{mcpEl("mcpStatusPopover").hidePopover();openSettings();selectSettingsPage("mcp");if(id==="mcpStatusConnect")mcpEl("mcpManual")?.setAttribute("open","");});
+  for(const id of ["mcpStatusConnect","mcpStatusSettings"])mcpEl(id)?.addEventListener("click",()=>{
+    mcpEl("mcpStatusPopover").hidePopover();
+    if(id==="mcpStatusSettings"&&typeof window.PenEchoOpenAppSettings==="function"){window.PenEchoOpenAppSettings();return;}
+    openSettings();selectSettingsPage("mcp");if(id==="mcpStatusConnect")mcpEl("mcpManual")?.setAttribute("open","");
+  });
   mcpEl("mcpStatusFollow")?.addEventListener("click",()=>{mcpEl("studioMcpFollowLatest")?.click();mcpRenderStatusPopover();});
   mcpEl("mcpKeepAwake")?.addEventListener("change",event=>{
     try{localStorage.setItem("penecho-mcp-keep-awake",String(event.target.checked));}catch{}

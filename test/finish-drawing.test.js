@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("node:vm");
 const finish=require("../src/shared/finish-drawing.js");
 const scope={x:100,y:200,w:600,h:500},plain=value=>JSON.parse(JSON.stringify(value));

@@ -6,7 +6,9 @@
     return ["xhigh", "max"].includes(String(effort || "").trim().toLowerCase()) ? 2 : 1;
   }
   function activeAiRequestTimeoutMs() {
-    const effort = state.reasoningEffort === "config" ? configuredAiEffort : state.reasoningEffort;
+    const effort = state.reasoningEffort === "config"
+      ? (typeof activeModelDefaultEffort === "function" && activeModelDefaultEffort()) || configuredAiEffort
+      : state.reasoningEffort;
     return state.aiRequestTimeoutMs * aiTimeoutMultiplier(effort);
   }
   function createActivityAwareAbortTimeout(controller, totalTimeoutMs, idleGraceMs = AI_STREAM_IDLE_GRACE_MS) {
@@ -571,6 +573,18 @@
           requestId: state.lastRequestId,
           reason: "animation-cancelled",
         });
+      } else if (globalThis.PENECHO_CONFIG?.guestCanvas === true && ["guest_limit","guest_ai_unavailable","guest_token_required"].includes(e.code)) {
+        // The day's free AI is used up, or PenEcho stopped offering it: the ink stays, and the Canvas asks to sign in.
+        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+          if (run.inputCleared) restoreDirty(run.dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
+        }
+        state.autoEligible = false;
+        setCanvasGuestAi({ available:false, reason:e.code === "guest_limit" ? "guest_limit" : "no_model" });
+        setStatusKey("ready");
+        showCanvasGuestAiHint({ explicit:true });
+        debug("ai-deferred", { requestId:state.lastRequestId, reason:e.code });
       } else if (["hosted_request_superseded","hosted_execution_session_stale"].includes(e.code)) {
         if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           if (run.inputCleared) restoreDirty(run.dirtySnapshot);

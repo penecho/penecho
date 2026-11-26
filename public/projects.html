@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Projects · PenEcho Lines</title>
+<link rel="icon" type="image/png" href="penecho-favicon.png">
+<script src="page-scale.js"></script>
+<link rel="stylesheet" href="lines/bundle.css?v=ace24eebba">
+<script src="lines/head-bundle.js?v=8b684113b8" data-play="self"></script>
+<!-- The first frame waits until main.js has drawn the sidebar and the page or skeleton (#linesDrawn below), so loads never paint a blank white page first (PE-586). -->
+<link rel="expect" href="#linesDrawn" blocking="render">
+</head>
+<body>
+<div id="app"></div>
+<div id="switcher" class="sw-overlay" hidden role="dialog" aria-modal="true" aria-label="Switch project">
+  <div class="sw-panel">
+    <div class="sw-left">
+      <div id="swList" role="listbox" aria-label="Projects"></div>
+      <div class="sw-foot">
+        <button type="button" class="btn" data-act="new-project"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New project</button>
+      </div>
+    </div>
+    <div id="swPreview"></div>
+  </div>
+</div>
+<div id="lightbox" hidden></div>
+<div id="dropOverlay" hidden>Drop to attach</div>
+<input type="file" id="filePick" multiple hidden aria-label="Add images or files">
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<script src="lines/bundle.js?v=f54f634e82"></script>
+<i id="linesDrawn" hidden></i>
+</body>
+</html>

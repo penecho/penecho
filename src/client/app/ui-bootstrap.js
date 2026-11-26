@@ -162,7 +162,7 @@
   // Keep pen ownership through hover and short gaps between strokes. A rejected
   // contact cannot become navigation until it lifts and starts a new gesture.
   function canvasPencilWritingActive() {
-    return state.drawing?.pointerType === "pen" || canvasAgent.inkStroke?.pointerType === "pen";
+    return state.drawing?.pointerType === "pen";
   }
   function canvasExplicitTouchNavigation() {
     return state.mode === "hand" || state.viewMode || state.spacePan;
@@ -174,6 +174,8 @@
   }
   function cancelCanvasPalmTouch(pointerId) {
     canvasPalmRejectedTouches.add(pointerId);
+    if (state.touchPenStart?.event.pointerId === pointerId) state.touchPenStart = null;
+    if (state.drawing?.pointerType === "touch" && state.drawing.id === pointerId) finishDrawing("touch");
     state.pointers.delete(pointerId);
     canvasAgentNavigationPointerDidEnd(pointerId);
     state.touches.delete(pointerId);
@@ -242,8 +244,6 @@
         requestInteractionLayerRender();
       }
     }
-    const ink = canvasAgent.inkStroke;
-    if (ink?.pointerType === "pen" && (all || ink.pointerId === event.pointerId)) canvasAgentFinishInkStroke();
   }
   for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
     window.addEventListener(type, observeCanvasPenForPalmRejection, true);
@@ -283,6 +283,7 @@
     state.viewTool = "hand";
     state.widgetActivationTap = null;
     state.widgetTouchLastTap = null;
+    state.touchPenStart = null;
     state.viewMode = enabled;
     state.pointers.clear();
     state.canvasAgentNavigationPointerIds.clear();
@@ -305,7 +306,6 @@
       ".selection-overlay-layer",
       ".text-editor-layer",
       ".ai-embodiment",
-      ".canvas-agent-panel",
     ].join(","));
     if (enabled) {
       for (const element of inactiveSurfaces) {
@@ -322,7 +322,6 @@
     if (enabled) {
       state.viewModeNavigationLocked = state.navigationLocked;
       if (state.navigationLocked) setCanvasNavigationLocked(false);
-      if (!document.querySelector("#canvasAgentPanel")?.hidden) closeCanvasAgent();
       document.activeElement?.blur?.();
       setCanvasCursor("grab");
       requestAnimationFrame(() => canvasViewCloseButton.focus({ preventScroll:true }));
@@ -397,7 +396,14 @@
       handleSelectionPointerDown(e, point);
       return;
     }
-    if (e.pointerType === "touch") {
+    if (e.pointerType === "touch" && !options.touchInk) {
+      // A phone in either orientation uses Pen for ink. Wait for a drag or a
+      // completed tap so the first contact of a pinch never stamps a dot.
+      if (state.mode === "pen" && Math.min(window.screen.width, window.screen.height) <= 700) {
+        if (state.drawing) return;
+        state.touchPenStart = { event:e, point, inputTransform:options.inputTransform };
+        return;
+      }
       state.panGesture = {
         id: e.pointerId,
         last: { x: e.clientX, y: e.clientY },
@@ -448,6 +454,14 @@
     updateCanvasPointerPreview(e, p);
     appendLiveInkSample(state.drawing, p, size);
   }
+  function startPendingTouchInk(event) {
+    const start = state.touchPenStart;
+    if (start?.event.pointerId !== event.pointerId) return;
+    if (event.type === "pointermove" && Math.hypot(event.clientX - start.event.clientX, event.clientY - start.event.clientY) <= 6) return;
+    state.touchPenStart = null;
+    if (event.type === "pointercancel" || state.handToolbarTap?.id === event.pointerId) return;
+    beginCanvasPointerAction(start.event, start.point, { inputTransform:start.inputTransform, touchInk:true });
+  }
   function beginHandObjectResize(event, point) {
     if (!["hand", "select"].includes(state.mode) || state.viewMode || state.spacePan || event.pointerType === "touch" || Number(event.button) !== 0 || !point || !valid(point)) return false;
     if (state.mode === "select" && state.pending) {
@@ -479,7 +493,9 @@
   }
   function handleCanvasPointerDown(e) {
     if (e.pointerType !== "touch" || state.mode !== "pen" && !canvasLassoToolActive() || state.viewMode || state.spacePan || e.altKey) state.widgetTouchLastTap = null;
-    if (e.target?.closest?.(".canvas-widget")?.dataset.widgetId === state.interactingWidgetId) return;
+    const inputWidgetId = e.target?.closest?.(".canvas-widget")?.dataset.widgetId,
+      inputWidget = inputWidgetId && visibleWidgets().find(widget => widget.id === inputWidgetId);
+    if (inputWidget && canvasWidgetInteractive(inputWidget)) return;
     view.classList.remove("is-wheel-navigating");
     state.handToolbarTap = null;
     if (!state.viewMode && state.mode === "hand" && !state.spacePan && !e.altKey && e.button === 0 && !state.touches.size) {
@@ -496,6 +512,10 @@
     }
     if (e.pointerType === "touch" && canvasPencilWritingActive()) return;
     if (e.pointerType === "mouse" && ![0, 1].includes(e.button)) return;
+    if (e.pointerType !== "touch") {
+      state.touchPenStart = null;
+      if (state.drawing?.pointerType === "touch") finishDrawing("touch");
+    }
     e.preventDefault();
     if (state.viewMode) {
       const target = state.viewTool === "select" && !state.spacePan && e.button === 0
@@ -537,7 +557,7 @@
     if (Date.now() < state.textInputBlockedUntil) return;
     // Pointer input deliberately returns keyboard ownership to the Canvas.
     // preventDefault above suppresses the browser's normal focus transfer.
-    if (e.target === screen) screen.focus({ preventScroll:true });
+    if (e.target === screen || e.target?.classList?.contains("placed-content-input-region")) screen.focus({ preventScroll:true });
     state.canvasAgentNavigationPointerIds.add(e.pointerId);
     try {
       screen.setPointerCapture(e.pointerId);
@@ -572,6 +592,7 @@
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
       if (state.touches.size >= 2) {
+        state.touchPenStart = null;
         state.textTap = null;
         cancelAreaEraseGesture();
         if (state.pendingGesture) state.pendingGesture = null;
@@ -601,22 +622,17 @@
     beginCanvasPointerAction(e, input.point, { inputTransform:input.inputTransform });
   }
   screen.addEventListener("pointerdown", handleCanvasPointerDown);
-  function updateActiveCanvasDrawing(e) {
-    const d = state.drawing;
-    if (!d || d.id !== e.pointerId) return false;
-    const old = state.pointers.get(e.pointerId),
-      p = drawingClientPoint(d, e),
-      cssSize = d.erase ? state.eraser : pressureWidth(e),
-      size = logicalWidth(cssSize);
-    state.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  // The browser often hands over several real pen positions as one move. Drawing only the last one turns a fast circle into
+  // corners, so every position is used. Where two positions are still far apart (a fast hand, a slow frame), the ink bends
+  // between them the way the stroke was already turning, instead of cutting straight across.
+  const DRAWING_BEND_MIN_PX = 8, DRAWING_BEND_STEP_PX = 5, DRAWING_BEND_MAX_STEPS = 12, DRAWING_BEND_MAX_TURN = 0.9, DRAWING_BEND_MIN_TURN = 0.03;
+  function addCanvasDrawingPoint(d, p, cssSize) {
+    const size = logicalWidth(cssSize);
     state.userRevision++;
     appendLiveInkSample(d, p, size);
-    commitLiveInkDrawingProgress(d);
-    if (d.erase) updateCanvasPointerPreview(e, p);
     d.last = p;
     d.size = size;
     d.points++;
-    d.screenDistance += old ? Math.hypot(e.clientX - old.x, e.clientY - old.y) : 0;
     if (d.points % 8 === 0) d.trail.push(p);
     d.widthMin = Math.min(d.widthMin, cssSize);
     d.widthMax = Math.max(d.widthMax, cssSize);
@@ -625,6 +641,53 @@
       x2 = Math.max(d.bbox.x + d.bbox.w, p.x),
       y2 = Math.max(d.bbox.y + d.bbox.h, p.y);
     d.bbox = { x:x1, y:y1, w:x2 - x1, h:y2 - y1 };
+  }
+  // The points to draw between the last real position and this one. None when they are close, when the stroke goes straight,
+  // or when it turns sharply (a corner you meant).
+  function canvasDrawingBend(d, from, to) {
+    const before = d.inputBefore;
+    if (!before) return [];
+    const ax = from.x - before.x, ay = from.y - before.y, bx = to.x - from.x, by = to.y - from.y,
+      la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    if (!la || lb * state.scale < DRAWING_BEND_MIN_PX) return [];
+    const turn = Math.atan2(ax * by - ay * bx, ax * bx + ay * by), size = Math.abs(turn);
+    if (size < DRAWING_BEND_MIN_TURN || size > DRAWING_BEND_MAX_TURN) return [];
+    // It leaves along the line between the old direction and the new, and arrives turned as much again: an arc, if the hand keeps turning.
+    const half = turn / 2, cos = Math.cos(half), sin = Math.sin(half),
+      sx = bx * cos + by * sin, sy = by * cos - bx * sin,
+      ex = bx * cos - by * sin, ey = by * cos + bx * sin,
+      steps = Math.max(2, Math.min(DRAWING_BEND_MAX_STEPS, Math.ceil(lb * state.scale / DRAWING_BEND_STEP_PX))), points = [];
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps, t2 = t * t, t3 = t2 * t,
+        h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+      points.push({ t, x:h00 * from.x + h10 * sx + h01 * to.x + h11 * ex, y:h00 * from.y + h10 * sy + h01 * to.y + h11 * ey });
+    }
+    return points;
+  }
+  function updateActiveCanvasDrawing(e) {
+    const d = state.drawing;
+    if (!d || d.id !== e.pointerId) return false;
+    const old = state.pointers.get(e.pointerId),
+      joined = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [],
+      inputs = joined.length ? joined : [e];
+    let p = d.last;
+    for (const input of inputs) {
+      p = drawingClientPoint(d, input);
+      const cssSize = d.erase ? state.eraser : pressureWidth(input), from = d.inputLast || d.last;
+      if (from && p.x === from.x && p.y === from.y) continue;
+      if (!d.erase && from) {
+        const fromSize = Number.isFinite(d.inputSize) ? d.inputSize : cssSize;
+        for (const mid of canvasDrawingBend(d, from, p)) addCanvasDrawingPoint(d, { x:mid.x, y:mid.y }, fromSize + (cssSize - fromSize) * mid.t);
+      }
+      addCanvasDrawingPoint(d, p, cssSize);
+      d.inputBefore = from;
+      d.inputLast = p;
+      d.inputSize = cssSize;
+    }
+    state.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    commitLiveInkDrawingProgress(d);
+    if (d.erase) updateCanvasPointerPreview(e, p);
+    d.screenDistance += old ? Math.hypot(e.clientX - old.x, e.clientY - old.y) : 0;
     if (typeof smartSuggestDrawingMoved === "function") smartSuggestDrawingMoved(d);
     return true;
   }
@@ -657,13 +720,16 @@
       }
       return;
     }
+    if (e.pointerType === "touch") {
+      startPendingTouchInk(e);
+      state.touches.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    }
     if (updateActiveCanvasDrawing(e)) return;
     updateCanvasWidgetGestureResetTap(e);
     if (finishReleasedWidgetGesture(e)) return;
     const old = state.pointers.get(e.pointerId);
     calibrateScreenClientRatio(e, true);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (state.panGesture?.id === e.pointerId && (e.pointerType !== "touch" || state.touches.size < 2)) {
       if (old && canvasPanMovementReady(e)) {
         moveCanvas(e.clientX - old.x, e.clientY - old.y);
@@ -762,6 +828,13 @@
   }
   function end(e) {
     if (typeof assistShapePointerUp === "function" && assistShapePointerUp(e)) return;
+    if (e.pointerType === "touch") {
+      startPendingTouchInk(e);
+      if (state.drawing?.id === e.pointerId) {
+        if (e.type === "pointerup") updateActiveCanvasDrawing(e);
+        finishDrawing("touch");
+      }
+    }
     finishHandCanvasTap(e);
     const activation = state.widgetActivationTap;
     if (activation?.id === e.pointerId) {
@@ -881,6 +954,12 @@
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("lostpointercapture", (event) => {
+    if (event.pointerType === "touch" && (state.touchPenStart?.event.pointerId === event.pointerId || state.drawing?.id === event.pointerId)) {
+      state.touchPenStart = null;
+      if (state.drawing?.id === event.pointerId) finishDrawing("touch");
+      state.touches.delete(event.pointerId);
+      state.pointers.delete(event.pointerId);
+    }
     if (state.handToolbarTap?.id === event.pointerId) {
       state.handToolbarTap = null;
       state.widgetTouchLastTap = null;
@@ -1015,7 +1094,10 @@
     const eraserMode = ["eraser", "area-eraser"].includes(mode),
       button = eraserMode ? eraserToolButton : document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
-    if (mode !== state.mode && state.drawing) finishDrawing(state.drawing.pointerType);
+    if (mode !== state.mode) {
+      state.touchPenStart = null;
+      if (state.drawing) finishDrawing(state.drawing.pointerType);
+    }
     if (state.widgetGesture) finishInterruptedWidgetGesture({ type:"tool-change" });
     if (eraserMode) {
       state.eraserMode = mode;
@@ -1094,7 +1176,6 @@
       showCanvasGuestAiHint();
     } else if (options.showHint) {
       const shortcutHints = {
-        agent:keyboardShortcutCanvasHint("focus-agent", "canvasHintShortcutAgent"),
         save:keyboardShortcutCanvasHint("save-canvas", "canvasHintShortcutSave"),
         undoRedo:keyboardShortcutUndoRedoHint(),
         library:keyboardShortcutCanvasHint("canvas-library", "canvasHintShortcutLibrary"),
@@ -1102,8 +1183,8 @@
         settings:keyboardShortcutCanvasHint("open-settings", "canvasHintShortcutSettings"),
       };
       const hintKey = {
-        pen:[shortcutHints.agent, shortcutHints.save, shortcutHints.undoRedo, "canvasHintMcp"],
-        hand:["canvasHintHand", "canvasHintHandAlt", shortcutHints.agent, shortcutHints.library, shortcutHints.fullscreen],
+        pen:[shortcutHints.save, shortcutHints.undoRedo, "canvasHintMcp"],
+        hand:["canvasHintHand", "canvasHintHandAlt", shortcutHints.library, shortcutHints.fullscreen],
         select:["canvasHintLasso", "canvasHintLassoAlt", shortcutHints.undoRedo],
         text:["canvasHintText", "canvasHintTextAlt", shortcutHints.save],
         eraser:["canvasHintEraser", "canvasHintEraserAlt"],
@@ -1751,9 +1832,6 @@
     autoDelayRange.value = event.target.value;
     autoDelayRange.dispatchEvent(new Event("input", {bubbles:true}));
   });
-  document.querySelector("#canvasAgentSignIn").addEventListener("click", () => {
-    window.dispatchEvent(new CustomEvent("penecho:show-settings", {detail:{page:"cloud"}}));
-  });
   document.querySelector("#gridToggle").onclick = () => {
     state.gridVisible = !state.gridVisible;
     localStorage.setItem("penecho-grid", String(state.gridVisible));
@@ -1774,7 +1852,39 @@
   };
   document.querySelector("#newCanvasBtn").onclick = () => window.PenEchoCompanionCanvases ? void window.PenEchoCompanionCanvases.create() : canvasDocumentsUiAction(openNewCanvasDialog);
   document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvasFromUser;
+  // A Cloud visitor who is not signed in can sign in, or sign up, from every Canvas page.
+  document.querySelector("#guestAccountActions").hidden = !canvasGuest();
+  document.querySelector("#guestSignInBtn").onclick = () => canvasGuestSignIn();
+  document.querySelector("#guestSignUpBtn").onclick = () => canvasGuestSignIn({ signup:true });
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
+  // Direct More-menu items and Project Lines bridges.
+  document.querySelector("#moreNewCanvasBtn")?.addEventListener("click", () => {
+    if (typeof window.projectLinesNewFromMenu === "function" && window.projectLinesNewFromMenu()) return;
+    document.querySelector("#newCanvasBtn")?.click();
+  });
+  document.querySelector("#moreRenameCanvasBtn")?.addEventListener("click", () => {
+    document.querySelector("#canvasDocumentName")?.click();
+  });
+  document.querySelector("#canvasMoreSettingsBtn")?.addEventListener("click", () => {
+    if (typeof window.projectLinesOpenCanvasSettings === "function" && window.projectLinesOpenCanvasSettings()) return;
+    if (typeof window.PenEchoOpenSettingsPage === "function") window.PenEchoOpenSettingsPage("canvas");
+    else { selectSettingsPage("canvas"); openSettings(); }
+  });
+  document.querySelector("#moreDeleteCanvasBtn")?.addEventListener("click", async () => {
+    if (typeof window.projectLinesDeleteFromMenu === "function" && await window.projectLinesDeleteFromMenu()) return;
+    if (canvasGuest()) return;
+    if (state.currentSnapshotId && state.currentSnapshotLocation) {
+      requestSnapshotDelete({ id: state.currentSnapshotId, name: state.currentSnapshotName || t("canvasUntitledName") }, state.currentSnapshotLocation);
+      return;
+    }
+    document.querySelector('[data-action="clear"]')?.click();
+  });
+  // A direct More-menu item: close the menu, then export.
+  document.querySelector("#exportPdfBtn").onclick = () => {
+    const menu = document.querySelector("#canvasMoreMenu");
+    if (menu && !menu.hidden) { menu.hidden = true; document.querySelector("#canvasMoreBtn")?.setAttribute("aria-expanded", "false"); }
+    return exportCanvasPdf();
+  };
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
   document.querySelector("#historyRecentNav").onclick = openHistoryRecent;
   document.querySelector("#historyCanvasNav").onclick = openHistoryCanvas;
@@ -1860,7 +1970,6 @@
   document.querySelector("#newCanvasClose").onclick = () => {
     pendingCanvasTransition?.onCancel?.();
     pendingCanvasTransition = null;
-    window.PenEchoStudioNavigator?.cancelPendingConversation?.();
     document.querySelector("#newCanvasDialog").close("cancel");
   };
   document.querySelector("#textHelpClose").onclick = closeTextHelp;
@@ -1873,7 +1982,6 @@
     else {
       pendingCanvasTransition?.onCancel?.();
       pendingCanvasTransition = null;
-      window.PenEchoStudioNavigator?.cancelPendingConversation?.();
     }
   });
   document.querySelector("#historyName").addEventListener("keydown", (event) => {
@@ -1966,14 +2074,6 @@
     }
     invokeAIAction("auto");
   });
-  tourBackButton.addEventListener("click", previousFeatureTourStep);
-  tourNextButton.addEventListener("click", nextFeatureTourStep);
-  tourSkipButton.addEventListener("click", skipFeatureTour);
-  changelogCloseButton.addEventListener("click", closeChangelog);
-  changelogLayer.addEventListener("pointerdown", (event) => {
-    if (event.target === changelogLayer) closeChangelog();
-  });
-  changelogLayer.addEventListener("keydown", handleChangelogKeydown);
   settingsButton.addEventListener("click", () => {
     if (settings.open) closeSettings();
     else openSettings();
@@ -2068,17 +2168,44 @@
   });
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.autoPreference));
   settingsCanvasHintsToggle.addEventListener("click", () => setCanvasHintsEnabled(!state.canvasHintsEnabled));
-  settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpenPreference));
   settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
-  settingsTourButton.addEventListener("click", () => {
-    closeSettings(false);
-    replayFeatureTour();
-  });
-  settingsChangelogButton.addEventListener("click", () => {
-    closeSettings(false);
-    maybeShowChangelog(true);
-  });
+  // The ? menu keeps keyboard shortcuts and feedback.
+  const helpMenuButton = document.querySelector("#helpMenuBtn"), helpMenu = document.querySelector("#helpMenu");
+  if (helpMenuButton && helpMenu) {
+    const helpItems = () => [...helpMenu.querySelectorAll('[role="menuitem"]')];
+    const setHelpOpen = (open, focus = false) => {
+      helpMenu.hidden = !open;
+      helpMenuButton.setAttribute("aria-expanded", String(open));
+      if (open && focus) helpItems()[0]?.focus();
+    };
+    helpMenuButton.addEventListener("click", () => setHelpOpen(helpMenu.hidden));
+    helpMenuButton.addEventListener("keydown", event => { if (event.key === "ArrowDown") { event.preventDefault(); setHelpOpen(true, true); } });
+    helpMenu.addEventListener("keydown", event => {
+      const items = helpItems(), at = items.indexOf(document.activeElement);
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setHelpOpen(false); helpMenuButton.focus(); }
+      else if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); items[(at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus(); }
+      else if (event.key === "Tab") setHelpOpen(false);
+    });
+    document.addEventListener("pointerdown", event => { if (!helpMenu.hidden && !helpMenu.contains(event.target) && !helpMenuButton.contains(event.target)) setHelpOpen(false); }, true);
+    helpMenu.addEventListener("click", event => {
+      const item = event.target.closest?.("[data-help]");
+      if (!item) return;
+      setHelpOpen(false);
+      if (item.dataset.help === "shortcuts") { selectSettingsPage("shortcuts"); openSettings(); }
+    });
+  }
+  const moreHelpPanel = document.querySelector('#canvasMoreMenu [data-more-submenu="help"]');
+  if (moreHelpPanel) {
+    moreHelpPanel.addEventListener("click", event => {
+      const item = event.target.closest?.("[data-more-help]");
+      if (!item) return;
+      if (item.dataset.moreHelp === "shortcuts") {
+        if (typeof window.PenEchoOpenSettingsPage === "function") window.PenEchoOpenSettingsPage("shortcuts");
+        else { selectSettingsPage("shortcuts"); openSettings(); }
+      }
+    });
+  }
   window.addEventListener("keydown", (event) => {
     // Native modal dialogs own Escape before the Settings surface beneath them.
     if (event.key === "Escape" && document.querySelector("dialog:modal")) return;
@@ -2092,11 +2219,6 @@
       closeConfiguration();
     }
   }, true);
-  window.addEventListener("keydown", handleFeatureTourKeydown, true);
-  window.addEventListener("resize", handleFeatureTourViewportChange);
-  window.addEventListener("scroll", scheduleFeatureTourPosition, true);
-  window.visualViewport?.addEventListener("resize", handleFeatureTourViewportChange);
-  window.visualViewport?.addEventListener("scroll", scheduleFeatureTourPosition);
   window.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.isComposing || keyboardShortcutTextEditingTarget(e.target)) return;
     const canvasKeyContext = keyboardShortcutCanvasContext(e, keyboardShortcutChordFromEvent(e));
@@ -2215,15 +2337,20 @@
   });
   window.PenEchoCloudProjects = Object.freeze({
     currentExecutionScope:canvasAgentCloudExecutionScope,
-    currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) ? state.currentSnapshotId : null,
+    // A Canvas kept with its folder page (a guest's, or a signed-out app's) is in
+    // no Cloud library, so it collaborates by a link that needs no account.
+    currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) && !folderPageCanvasPath() ? state.currentSnapshotId : null,
     saveEcho:saveEchoToCloud,
     saveForShare:saveLiveShareToCloud,
+    linkBundle:liveLinkCanvasBundle,
     hasShareableContent:canvasHasShareableContent,
     shareWidgetId:(id) => state.widgets.find(widget => widget.id === id)?.shareSourceId || null,
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
     confirmExternalOpen:confirmExternalCanvasOpen,
   });
+  // Collaborate offers the same PDF as the More menu.
+  window.PenEchoCanvasExport = Object.freeze({ pdf:exportCanvasPdf });
   // Companion view controller. The minimal view keeps the narrow rail and
   // hides PenEcho's own Agent and AI chrome; the full view is the complete
   // Canvas. Both show the same document in this tab, and switching is reversible.
@@ -2252,8 +2379,7 @@
     canvasCompanionView = view === "full" ? "full" : "minimal";
     try { sessionStorage.setItem(canvasCompanionViewKey(), canvasCompanionView); } catch {}
     if (canvasCompanionMinimal()) {
-      if (document.body.classList.contains("canvas-agent-open")) closeCanvasAgent({ focus:false, animate:false });
-      window.PenEchoStudioNavigator?.setOpen?.(false, { restoreAgent:false });
+      window.PenEchoStudioNavigator?.setOpen?.(false);
     }
     renderCanvasCompanionView();
     window.dispatchEvent(new CustomEvent("penecho:companion-view", { detail:{ view:canvasCompanionView } }));
@@ -2268,6 +2394,11 @@
     if (canvasCompanionMinimal()) selectCanvasToolMode("hand");
     renderCanvasCompanionView();
   }
+  if (window.projectLinesWelcomeOpen && !state.viewMode) setCanvasMode("hand", {
+    preserveSelection:true,
+    skipDraftFinalize:true,
+    preserveWidgetRefinement:true,
+  });
   window.PenEchoCompanion = Object.freeze({
     requested:() => CANVAS_COMPANION_REQUESTED,
     view:() => canvasCompanionView,
@@ -2279,21 +2410,26 @@
   setWidgetShadowEnabled(state.widgetShadowEnabled);
   applyTheme(state.theme);
   applyStudioPalette(state.studioPalette);
-  applyPageScale(state.pageScale);
   resetCanvasCursor();
   loadPluginDocuments().catch(() => {});
   // The public viewer has no history UI and must never probe private/local
   // snapshot APIs on the Cloud origin.
   // A Cloud deep link already identifies its document. Do not prefetch a
   // remembered Server Library (including every preview) on the opening path.
+  // A local project's picture also identifies its Canvas and needs no Library.
   // Opening Library itself owns its refresh through openHistoryPanel().
   if (window.PENECHO_CONFIG?.runtime !== "viewer"
+    && !(projectLinesTarget && projectLinesLocal())
     && !(window.PENECHO_CONFIG?.runtime === "cloud" && window.PENECHO_CONFIG?.remoteCanvasNativeReads === true)) refreshSnapshots().catch(() => {});
   fit();
   if(window.PENECHO_CONFIG?.runtime!=="cloud")void window.PenEchoPlayground?.start().catch(error=>setStatus(String(error.message)));
   setNavigating(true);
   scheduleAIOrbIdle();
-  if(window.PENECHO_CONFIG?.runtime!=="viewer")void (window.PENECHO_CONFIG?.browserDraftId ? canvasDocumentsReady() : canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")).catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")));
+  // A folder page of this app opens its draft and connects its agents, as the
+  // Cloud gate does for Cloud's folder pages.
+  const localFolderPage=Boolean(window.PENECHO_CONFIG?.browserDraftId)&&window.PENECHO_CONFIG?.runtime!=="cloud";
+  const restorePreviousCanvas = window.PENECHO_CONFIG?.runtime !== "cloud" && !(projectLinesTarget && projectLinesLocal());
+  if(window.PENECHO_CONFIG?.runtime!=="viewer")void (localFolderPage ? canvasDocumentsStartDraft(true).then(()=>{if(new URLSearchParams(location.search).get("mcp")==="1")window.dispatchEvent(new CustomEvent("penecho:open-cloud-mcp"));}) : window.PENECHO_CONFIG?.browserDraftId ? canvasDocumentsReady() : canvasDocumentsStartDraft(restorePreviousCanvas)).catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsStartDraft(restorePreviousCanvas)));
   requestAnimationFrame(() => {
     if (window.PENECHO_CONFIG?.runtime !== "viewer") void loadCanvasSettings().finally(maybeStartOnboarding);
   });

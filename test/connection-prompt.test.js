@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -21,7 +22,8 @@ function fixture(runtime = "cloud", config = {}) {
     hostedSettings:{ models:[], loading:false, generation:0, signedIn:false, error:false },
     featureTour:{ active:false }, changelog:{ active:false },
     requestAnimationFrame:callback => setImmediate(callback),
-    document:{ querySelector:() => null, activeElement:null },
+    document:{ querySelector:() => null, activeElement:null, documentElement:{ dataset:{} } },
+    canvasGuestAi:{ checked:false, usedUp:false },
     canvasSettingsForm:{}, settingsLayer:{ contains:() => false, setAttribute:() => {} },
     settingsButton:{ setAttribute:() => {} },
     authenticatedApiHeaders:() => ({}), t:key => key,
@@ -39,7 +41,7 @@ function fixture(runtime = "cloud", config = {}) {
   for (const name of ["settingsProvider", "settingsApiKey", "settingsApiSaved", "settingsDeepSeekSearchApiKey",
     "settingsTavilyApiKey", "settingsEffort", "settingsMaxTokens", "settingsAgentTurnLimit", "settingsTimeout",
     "settingsAutoDelay", "settingsImageFormat", "settingsTraceLimit"]) c[name] = { dataset:{} };
-  for (const name of ["canvasGuestAiRestricted", "aiConnectionScope", "aiConnectionStorageKey", "selectedAiConnectionId", "storeAiConnectionSelection", "aiConnectionSelectionError", "aiRequestHeaders",
+  for (const name of ["canvasGuest", "canvasGuestAiRestricted", "setCanvasGuestAi", "aiConnectionScope", "aiConnectionStorageKey", "selectedAiConnectionId", "storeAiConnectionSelection", "aiConnectionSelectionError", "aiRequestHeaders",
     "syncLocalConnectionSelection", "hasSelectedAiConnection", "promptForAiConnectionSelection", "requireAiConnectionSelection", "closeSettings", "loadHostedModels", "loadHostedModelsOnce",
     "loadCanvasSettings", "performCanvasSettingsLoad"]) {
     const match = new RegExp(`  (?:async )?function ${name}\\(`).exec(source);
@@ -154,6 +156,44 @@ test("Cloud defaults are scoped to each account and guest canvases never get one
   const guest = fixture("cloud", { guestCanvas:true });
   await guest.c.loadHostedModels();
   assert.equal(guest.data.size, 0);
+});
+
+test("a guest uses the free model PenEcho offers, with nothing chosen or stored, until the day's allowance is used up", async () => {
+  const guest = (offer, models = [{ id:hosted, available:true, enabled:true, multiplier:1 }]) => {
+    const made = fixture("cloud", { guestCanvas:true, connectionAccountId:"" }), asked = [];
+    made.c.fetch = async url => { asked.push(url); return url === "/api/v1/guest/ai" ? response(offer) : response({ accountId:null, guest:true, models }); };
+    return { ...made, asked };
+  };
+  const none = guest({ available:false, model:null, reason:"no_model" });
+  await none.c.loadHostedModels();
+  assert.deepEqual(none.asked, ["/api/v1/guest/ai"], "without free AI the model list is not asked for");
+  assert.equal(none.c.canvasGuestAiRestricted(), true);
+  assert.equal(none.c.selectedAiConnectionId(), "default");
+  assert.equal(none.c.requireAiConnectionSelection(), false);
+  assert.deepEqual(none.calls, [], "a guest is never sent to Connections");
+
+  const free = guest({ available:true, model:{ id:hosted, name:"Free model" }, limit:50, used:3, remaining:47 });
+  assert.equal(free.c.canvasGuestAiRestricted(), true, "no AI before PenEcho has answered");
+  await free.c.loadHostedModels();
+  assert.deepEqual(free.asked, ["/api/v1/guest/ai", "/api/v1/models"]);
+  assert.equal(free.c.canvasGuestAiRestricted(), false);
+  assert.equal(free.c.document.documentElement.dataset.penechoGuestAiOn, "true");
+  assert.equal(free.c.selectedAiConnectionId(), `hosted:${hosted}`);
+  assert.equal(free.c.aiConnectionScope(true), "https://cloud.test:guest:cloud:hosted");
+  assert.equal(free.c.requireAiConnectionSelection(), true);
+  assert.equal(free.c.hostedSettings.signedIn, false, "a guest is not shown as signed in");
+  assert.equal(free.data.size, 0, "nothing is stored for a guest");
+  assert.deepEqual(free.calls, []);
+
+  free.c.setCanvasGuestAi({ available:false, reason:"guest_limit" });
+  assert.equal(free.c.canvasGuestAiRestricted(), true);
+  assert.equal(free.c.canvasGuestAi.usedUp, true);
+  assert.equal(free.c.document.documentElement.dataset.penechoGuestAiOn, undefined);
+  assert.equal(free.c.selectedAiConnectionId(), "default");
+
+  const gone = guest({ available:true, model:{ id:hosted, name:"Free model" } }, []);
+  await gone.c.loadHostedModels();
+  assert.equal(gone.c.canvasGuestAiRestricted(), true, "a free model missing from the list is no AI");
 });
 
 for (const runtime of ["local", "desktop"]) {
@@ -294,24 +334,14 @@ test("Auto AI does not reopen Connections for the same ink after dismissal", asy
   assert.deepEqual(calls, ["connections", "open", "connections", "open"]);
 });
 
-test("Agent can open the chooser without an execution host, keeping its full draft", async () => {
+test("a request to the Agent's engine can open the chooser without an execution host", async () => {
   const { c, calls } = fixture("cloud", { canvasAgent:false, hostedCanvasAgent:true });
-  const draft = { attachments:[{ id:"image" }], inkPresent:true, attachmentBusy:false };
   Object.assign(c, {
-    canvasAgent:draft, canvasAgentInput:{ value:"keep this draft", disabled:false },
-    canvasAgentSend:{ setAttribute(){}, removeAttribute(){} }, canvasAgentPromptHasDraft:()=>true,
-    canvasAgentExecutionAvailable:()=>false, canvasAgentBeginRequest:()=>assert.fail("must not begin request"),
+    canvasAgent:{}, canvasAgentExecutionAvailable:()=>false, canvasAgentBeginRequest:()=>assert.fail("must not begin request"),
   });
-  for (const name of ["canvasAgentSyncSendAvailability", "canvasAgentSubmitMessage"]) vm.runInContext(clientFunction("canvas-agent-runtime", name), c);
-  c.canvasAgentSyncSendAvailability();
-  assert.equal(c.canvasAgentSend.disabled, false, "Send remains available to select a model");
-  assert.equal(await c.canvasAgentSubmitMessage(), false);
+  vm.runInContext(clientFunction("canvas-agent-runtime", "canvasAgentSubmitMessage"), c);
+  assert.equal(await c.canvasAgentSubmitMessage({ textOverride:"Explain this" }), false);
   assert.deepEqual(calls, ["connections", "open"]);
-  assert.equal(c.canvasAgentInput.value, "keep this draft");
-  assert.equal(c.canvasAgentInput.disabled, false);
-  assert.equal(c.canvasAgent, draft);
-  assert.deepEqual(draft.attachments, [{ id:"image" }]);
-  assert.equal(draft.inkPresent, true);
 });
 
 test("Agent empty submissions do not open Connections", async () => {
@@ -322,39 +352,24 @@ test("Agent empty submissions do not open Connections", async () => {
   assert.deepEqual(calls, []);
 });
 
-test("Agent recovers a connection removed during submission without consuming or refocusing its draft", async () => {
+test("the Agent's engine recovers a connection removed during submission by opening Connections", async () => {
   const { c, calls } = fixture("local");
   c.storeAiConnectionSelection(local);
   c.settings.connectionScope = c.aiConnectionScope();
   c.settings.connections = [connection];
-  const control = () => ({ setAttribute(){}, removeAttribute(){}, focus(){ assert.fail("focus stays in Connections"); } });
   const statuses = [];
   Object.assign(c, {
-    canvasAgent:{ attachments:[], inkPresent:false }, canvasAgentInput:{ value:"keep this draft", ...control() },
-    canvasAgentSend:control(), canvasAgentAttach:control(), canvasAgentReference:control(), canvasAgentInkCanvas:control(),
-    canvasAgentExecutionAvailable:()=>true, canvasAgentDidStartUserConversation(){}, canvasAgentBeginRequest(){},
+    canvasAgent:{},
+    canvasAgentExecutionAvailable:()=>true, canvasAgentBeginRequest(){},
     canvasAgentBeginSubmitExecution:()=>{ const value={};c.canvasAgent.activeSubmitExecution=value;return value; },
     canvasAgentAssertSubmitExecution(){}, canvasAgentSubmitExecutionCurrent:()=>true, canvasAgentRequestDidNotSend(){},
     canvasAgentConnect:async()=>{ throw Object.assign(Error("stale"),{code:"CONNECTION_STALE"}); },
-    canvasAgentSyncSendAvailability(){}, canvasAgentSetStatus:text=>statuses.push(text),
+    canvasAgentSetStatus:text=>statuses.push(text),
   });
   vm.runInContext(clientFunction("canvas-agent-runtime", "canvasAgentSubmitMessage"), c);
-  assert.equal(await c.canvasAgentSubmitMessage(), false);
+  assert.equal(await c.canvasAgentSubmitMessage({ textOverride:"Explain this" }), false);
   assert.deepEqual(calls, ["connections", "open"]);
-  assert.equal(c.canvasAgentInput.value, "keep this draft");
-  assert.equal(c.canvasAgentInput.disabled, false);
   assert.deepEqual(statuses, ["canvasAgentChooseConnection"]);
-});
-
-test("external MCP submissions bypass the internal model chooser entirely", async () => {
-  const queued = [], options = { textOverride:"MCP task" };
-  const submit = vm.runInNewContext(`(${clientFunction("canvas-agent-runtime", "canvasAgentSubmitMessage")})`, {
-    canvasAgent:{},
-    canvasDocumentsExternal:()=>true, canvasDocumentsQueueMessage:options=>{ queued.push(options); return true; },
-    requireAiConnectionSelection:()=>assert.fail("MCP must not consult the built-in model chooser"),
-  });
-  assert.equal(await submit(options), true);
-  assert.deepEqual(queued, [options]);
 });
 
 test("startup only loads configuration; opening or switching canvases has no connection prompt", async () => {

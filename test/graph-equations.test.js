@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path");
 const SMART=require("../public/smart-suggest.js"),math=SMART.createGraphMath();
 const value=(source,x=0,y=0,z=0,p={})=>math.compile(source).f(x,y,p,z);

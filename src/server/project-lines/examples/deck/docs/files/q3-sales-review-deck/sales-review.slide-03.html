@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Regions</title><script src="penecho-slide-charts.js"></script></head><body>
+<div class="slide" data-penecho-slide data-penecho-template="investor" data-penecho-deck="Q3 2026 sales review">
+  <div class="hd"><h1><b>Regions:</b> West grew fastest, +31.2% from Q1 to Q3; North second</h1></div>
+  <div class="body">
+    <div class="col wide"><div class="bar">Growth by region, ranked</div><div class="cap">Revenue growth, Q1 to Q3 (%), West highlighted</div><div id="c1" class="chart"></div></div>
+    <div class="col"><div class="bar">Q3 revenue</div><div class="cap">Revenue ($K), same order</div><div id="c2" class="chart"></div></div>
+  </div>
+  <div class="ft">Source: sales-2026.xlsx (By region sheet); growth computed<span class="co">Brightline</span><span class="pg">3</span></div>
+</div>
+<script>
+SC.bar('#c1', {horizontal:true, categories:['West','North','South','East'], series:[{name:'Growth, Q1 to Q3', values:[31.2,21.4,20.0,19.7], colors:['#4B2A99','#A58BE0','#A58BE0','#A58BE0']}], axis:false, format:'{}%'});
+SC.bar('#c2', {horizontal:true, categories:['West','North','South','East'], series:[{name:'Q3 revenue', values:[341,510,372,455], colors:['#1F6FD1','#9CC3EE','#9CC3EE','#9CC3EE']}], axis:false, format:'${}K'});
+</script>
+</body></html>

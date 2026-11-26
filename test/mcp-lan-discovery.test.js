@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{EventEmitter}=require('node:events');
 const hostId='a'.repeat(64),otherId='b'.repeat(64);
 function fixture(bindErrors=[]){

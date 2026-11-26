@@ -149,11 +149,12 @@
 
   function executionRoute(id, answer, scope = "ink") {
     // Animate sketch rigs the user's own strokes in one Canvas AI response; the
-    // caller uses the Agent only when no vector ink can be rigged.
+    // caller can save a sidebar task when no vector ink can be rigged.
     const fixed = scope === "widget" ? ["fix_error"] : ["animate", "prototype"];
-    if (fixed.includes(id)) return "penecho_agent";
+    if (fixed.includes(id)) return "sidebar_task";
     const conditional = scope === "widget" ? ["fix_layout", "apply_marks", "ask"] : ["ask", "answer", "create_visual", "explain", "solve", "practice", "diagram", "organize", "vivid", "finish_drawing"];
-    return conditional.includes(id) && answer?.type === "choice" && answer.choice === "penecho_agent" ? "penecho_agent" : "canvas_ai";
+    // Older ranking services and cached verdicts call the complex route penecho_agent.
+    return conditional.includes(id) && answer?.type === "choice" && ["penecho_agent", "sidebar_task"].includes(answer.choice) ? "sidebar_task" : "canvas_ai";
   }
 
   // Refine routing uses existing source facts only. Ranking may offer an action,
@@ -162,31 +163,31 @@
     const format = String(widget?.sourceFormat || "").toLowerCase(),
       framework = String(widget?.frameworkVersion || "").toLowerCase(),
       html = String(widget?.html || "").replace(/<!--[\s\S]*?-->/g, ""),
-      agent = (reason, guidance = []) => ({ executor:"penecho_agent", reason, guidance });
-    if (["vivid", "animate", "animate_sketch"].includes(actionId)) return agent("widget-variant", [actionId === "vivid" ? "general-html" : "scene"]);
+      task = (reason, guidance = []) => ({ executor:"sidebar_task", reason, guidance });
+    if (["vivid", "animate", "animate_sketch"].includes(actionId)) return task("widget-variant", [actionId === "vivid" ? "general-html" : "scene"]);
     const guidance = ["architecture", "sequence", "workflow"].filter(id =>
       new RegExp(`<[^>]+\\bdata-(?:penecho-${id}|${id}-source)(?=[\\s=>])`, "i").test(html));
-    if (guidance.length) return agent("structured-diagram", guidance);
+    if (guidance.length) return task("structured-diagram", guidance);
     if (widget?.widgetType === "diagram_source" || widget?.pluginId === "flowchart"
       || framework.startsWith("penecho-professional-diagrams")
-      || ["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json", "plantuml", "d2"].includes(format)) return agent("professional-diagram", ["professional-diagram-edit"]);
-    if (/^(?:flowchart|process-flow|workflow|sequence(?:-diagram)?|architecture(?:-diagram)?|dependency|bpmn)$/.test(String(widget?.diagramKind || "").toLowerCase())) return agent("diagram-kind", ["general-html"]);
-    if (format === "penecho-scene+json") return agent("scene-source", ["scene"]);
-    if (format === "penecho-visual-explainer-plan+json") return agent("visual-explainer-source", ["visual-explorer"]);
+      || ["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json", "plantuml", "d2"].includes(format)) return task("professional-diagram", ["professional-diagram-edit"]);
+    if (/^(?:flowchart|process-flow|workflow|sequence(?:-diagram)?|architecture(?:-diagram)?|dependency|bpmn)$/.test(String(widget?.diagramKind || "").toLowerCase())) return task("diagram-kind", ["general-html"]);
+    if (format === "penecho-scene+json") return task("scene-source", ["scene"]);
+    if (format === "penecho-visual-explainer-plan+json") return task("visual-explainer-source", ["visual-explorer"]);
     // Note cards are edited through their compact note source, never HTML.
     if (format === "penecho-note-card+json") return { executor:"canvas_ai", reason:"note-card-source", guidance:[] };
-    if (["fix_error", "add_controls"].includes(actionId)) return agent("complex-action", ["general-html"]);
-    if (widget?.runtimeDiagnostics?.errors?.length) return agent("runtime-error", ["general-html"]);
-    if (/(?:\b(?:api|websocket|database|webgl|three\.js)\b|\b(?:add|implement|build|fix|debug|change|update)\b.{0,35}\b(?:interaction|interactive|animation|simulation|logic|algorithm|drag|playback)\b|(?:增加|添加|实现|修改|修复).{0,16}(?:交互|动画|模拟|逻辑|算法|拖拽|播放控制)|(?:接口|数据库|物理模拟|三维))/.test(String(instruction).toLowerCase())) return agent("complex-instruction", ["general-html"]);
+    if (["fix_error", "add_controls"].includes(actionId)) return task("complex-action", ["general-html"]);
+    if (widget?.runtimeDiagnostics?.errors?.length) return task("runtime-error", ["general-html"]);
+    if (/(?:\b(?:api|websocket|database|webgl|three\.js)\b|\b(?:add|implement|build|fix|debug|change|update)\b.{0,35}\b(?:interaction|interactive|animation|simulation|logic|algorithm|drag|playback)\b|(?:增加|添加|实现|修改|修复).{0,16}(?:交互|动画|模拟|逻辑|算法|拖拽|播放控制)|(?:接口|数据库|物理模拟|三维))/.test(String(instruction).toLowerCase())) return task("complex-instruction", ["general-html"]);
     const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)],
       executable = scripts.filter(([, attrs]) => !/\btype\s*=\s*["']application\/(?:ld\+)?json["']/i.test(attrs)),
       code = executable.map(([, , source]) => source).join("\n");
     if (widget?.pluginId && widget.pluginId !== "general"
       || executable.some(([, attrs]) => /\bsrc\s*=/i.test(attrs))
-      || /\b(?:fetch|WebSocket|XMLHttpRequest|Worker)\s*\(|\b(?:WebGLRenderer|createShader|indexedDB)\b/.test(code)) return agent("runtime-dependencies", ["general-html"]);
+      || /\b(?:fetch|WebSocket|XMLHttpRequest|Worker)\s*\(|\b(?:WebGLRenderer|createShader|indexedDB)\b/.test(code)) return task("runtime-dependencies", ["general-html"]);
     // Simple SVG clocks use 4–6 KB of local JS. Count executable code separately
     // from JSON and embedded image bytes; a timer alone is not complex behavior.
-    if (code.length > 12000 || html.replace(/data:image\/[^\s"'<>]+/gi, "").length > 24000) return agent("large-source", ["general-html"]);
+    if (code.length > 12000 || html.replace(/data:image\/[^\s"'<>]+/gi, "").length > 24000) return task("large-source", ["general-html"]);
     return { executor:"canvas_ai", reason:"simple-widget", guidance:[] };
   }
 

@@ -1,12 +1,14 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { buildCodexArgs, callCodexCli, prepareIsolatedRuntime, sanitizeCodexEnv } = require("../src/providers/codex-cli.js");
+const { buildCodexArgs, callCodexCli, darwinCodexAppPaths, findCodexInApp, prepareIsolatedRuntime, sanitizeCodexEnv } = require("../src/providers/codex-cli.js");
 const { cliCandidates } = require("../src/providers/cli-discovery.js");
+const { createAgents } = require("../src/server/project-lines/agents.js");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const WEBP = "data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA4AAAAvAAAAAAcQEf0PRET/Aw==";
@@ -18,15 +20,86 @@ function testCodexEnv(directory, overrides = {}) {
   return { ...process.env, CODEX_HOME:codexHome, ...overrides };
 }
 
-test("Windows npm PenEcho discovers the desktop-managed Codex before a stale saved npm wrapper", () => {
+test("Codex discovery ignores any legacy PenEcho-managed copy and uses only the user's own Codex", () => {
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-windows-codex-discovery-")),home=path.join(directory,"home"),appData=path.join(home,"AppData","Roaming"),stateDir=path.join(home,".penecho"),
     privateManaged=path.join(stateDir,"tools","codex","bin","codex.exe"),desktopManaged=path.join(appData,"PenEcho","tools","codex","bin","codex.exe"),configured=path.join(appData,"npm","codex.cmd");
   try {
     for(const file of [privateManaged,desktopManaged,configured]){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,"test");}
     const candidates=cliCandidates("codex-cli",{platform:"win32",home,stateDir,env:{APPDATA:appData,PATH:"",PATHEXT:".COM;.EXE;.BAT;.CMD"},configuredPath:configured});
-    assert.deepEqual(candidates.map(candidate=>candidate.executable),[privateManaged,desktopManaged,configured]);
-    assert.deepEqual(candidates.map(candidate=>candidate.source),["managed","managed","configured"]);
+    assert.deepEqual(candidates.map(candidate=>candidate.executable),[configured]);
+    assert.deepEqual(candidates.map(candidate=>candidate.source),["configured"]);
+
+    const macManaged=path.join(home,"Library","Application Support","PenEcho","tools","codex","bin","codex"),macSystem=path.join(directory,"usr","local","bin","codex");
+    for(const file of [macManaged,macSystem]){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,"test");}
+    const macCandidates=cliCandidates("codex-cli",{platform:"darwin",home,stateDir,appFolders:[path.join(directory,"Applications")],systemDirs:[],env:{PATH:path.dirname(macSystem)}});
+    assert.deepEqual(macCandidates.map(candidate=>candidate.executable),[macSystem]);
+    assert.deepEqual(macCandidates.map(candidate=>candidate.source),["system"]);
   } finally { fs.rmSync(directory,{recursive:true,force:true}); }
+});
+
+test("macOS Codex discovery finds modern ChatGPT.app/Codex.app codex-cli/bin/codex, legacy app layout, and Homebrew/local folders under minimal Desktop PATH", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-macos-codex-discovery-"));
+  try {
+    const home = path.join(directory, "home");
+    const stateDir = path.join(home, "Library", "Application Support", "PenEcho");
+    const appDir = path.join(directory, "Applications");
+    const homebrewBin = path.join(directory, "opt", "homebrew", "bin");
+    const legacyManaged = path.join(stateDir, "tools", "codex", "bin", "codex");
+    const chatgptModern = path.join(appDir, "ChatGPT.app", "Contents", "Resources", "codex-cli", "bin", "codex");
+    const chatgptPkg = path.join(appDir, "ChatGPT.app", "Contents", "Resources", "codex-cli", "codex-package.json");
+    const chatgptLegacy = path.join(appDir, "ChatGPT.app", "Contents", "Resources", "codex");
+    for (const file of [legacyManaged, chatgptModern, chatgptLegacy]) {
+      fs.mkdirSync(path.dirname(file), { recursive:true });
+      fs.writeFileSync(file, "#!/bin/sh\n", { mode:0o755 });
+    }
+    fs.writeFileSync(chatgptPkg, JSON.stringify({ entrypoint:"bin/codex" }));
+
+    const minDesktopEnv = { HOME:home, PATH:"/usr/bin:/bin:/usr/sbin:/sbin" };
+    assert.equal(findCodexInApp(minDesktopEnv, { platform:"darwin", appFolders:[appDir] }), chatgptModern);
+    assert.equal(darwinCodexAppPaths({ appFolders:[appDir] }).includes(chatgptModern), true);
+    assert.equal(darwinCodexAppPaths({ appFolders:[appDir] }).includes(chatgptLegacy), true);
+
+    const discovered = cliCandidates("codex-cli", {
+      platform:"darwin",
+      home,
+      stateDir,
+      appFolders:[appDir],
+      systemDirs:[homebrewBin],
+      env:minDesktopEnv,
+    });
+    assert.equal(discovered.some(c => c.executable === legacyManaged), false, "must ignore legacy PenEcho-managed Codex");
+    assert.equal(discovered[0]?.executable, chatgptModern, "must discover modern ChatGPT.app codex-cli/bin/codex");
+
+    // When a macOS user also has Homebrew/local codex installed outside LaunchServices minimal PATH, prefer CLI over app bundle.
+    const homebrewCodex = path.join(homebrewBin, "codex");
+    fs.mkdirSync(homebrewBin, { recursive:true });
+    fs.writeFileSync(homebrewCodex, "#!/bin/sh\n", { mode:0o755 });
+    const withHomebrew = cliCandidates("codex-cli", {
+      platform:"darwin",
+      home,
+      stateDir,
+      appFolders:[appDir],
+      systemDirs:[homebrewBin],
+      env:minDesktopEnv,
+    });
+    assert.equal(withHomebrew[0]?.executable, homebrewCodex);
+    assert.equal(withHomebrew.some(c => c.executable === chatgptModern), true);
+
+    // Project Lines agents.js on macOS resolves ChatGPT.app under minimal Desktop PATH when no CLI exists,
+    // and prefers Homebrew/local CLI when present, without leaking into isolated fromApps:false tests.
+    fs.rmSync(homebrewCodex);
+    const appOnlyAgents = createAgents({ env:minDesktopEnv, platform:"darwin", fromApps:true, appFolders:[appDir], paths:{ home, stateDir, systemDirs:[homebrewBin] } });
+    assert.equal(appOnlyAgents.launch("codex")?.command, chatgptModern);
+
+    const isolatedAgents = createAgents({ env:{ HOME:home, PATH:"" }, platform:"darwin", fromApps:false, appFolders:[appDir], paths:{ home, stateDir, systemDirs:[homebrewBin] } });
+    assert.equal(isolatedAgents.launch("codex"), null);
+
+    fs.writeFileSync(homebrewCodex, "#!/bin/sh\n", { mode:0o755 });
+    const cliAndAppAgents = createAgents({ env:minDesktopEnv, platform:"darwin", fromApps:true, appFolders:[appDir], paths:{ home, stateDir, systemDirs:[homebrewBin] } });
+    assert.equal(cliAndAppAgents.launch("codex")?.command, homebrewCodex);
+  } finally {
+    fs.rmSync(directory, { recursive:true, force:true });
+  }
 });
 
 test("builds a non-interactive read-only Codex invocation", () => {

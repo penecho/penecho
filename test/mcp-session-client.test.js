@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {PassThrough}=require('node:stream');
 const {createSessionClient}=require('../src/server/mcp/session-client.js');

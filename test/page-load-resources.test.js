@@ -1,4 +1,5 @@
 "use strict";
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto'),{spawn}=require('node:child_process');
 // Release checks can point this same resource test at an extracted npm package.
 const root=path.resolve(process.env.PENECHO_RESOURCE_TEST_ROOT||path.join(__dirname,'..'));

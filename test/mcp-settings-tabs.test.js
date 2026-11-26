@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
@@ -16,15 +17,14 @@ test('Cloud hides Local when no device is online and keyboard never selects a hi
   const h=setup('cloud');assert.equal(h.node('mcpLocalTab').hidden,true);h.window.PenEchoMcpSettings.select('local');assert.equal(h.node('mcpLocalPanel').hidden,true);
   h.node('.mcp-settings-tabs').listeners.keydown({key:'End',preventDefault(){}});assert.equal(h.document.activeElement,h.node('mcpCloudTab'));assert.equal(h.node('mcpLocalPanel').hidden,true);
 });
-test('device presence changes reveal Local, then safely return an offline selection to Cloud without refetching settings',()=>{
+test('on penecho.ai Local never shows, whatever a status says: the linked device is retired',()=>{
   const h=setup('cloud');h.window.PENECHO_REMOTE_CLOUD_STATUS={deviceOnline:true};h.window.dispatchEvent(new Event('penecho:remote-cloud-status'));
-  assert.equal(h.node('mcpLocalTab').hidden,false);h.window.PenEchoMcpSettings.select('local');h.node('mcpLocalTab').focus();
-  h.window.PENECHO_REMOTE_CLOUD_STATUS={deviceOnline:false};h.window.dispatchEvent(new Event('penecho:remote-cloud-status'));
-  assert.equal(h.node('mcpLocalTab').hidden,true);assert.equal(h.node('mcpCloudPanel').hidden,false);assert.equal(h.document.activeElement,h.node('mcpCloudTab'));assert.equal(h.refreshes,0);
+  assert.equal(h.node('mcpLocalTab').hidden,true);h.window.PenEchoMcpSettings.select('local');assert.equal(h.node('mcpLocalPanel').hidden,true);assert.equal(h.node('mcpCloudPanel').hidden,false);assert.equal(h.refreshes,0);
+  h.window.PenEchoMcpSettings.open();assert.equal(typeof h.options.enable,'function','the open Cloud Canvas can be turned on and off for Cloud MCP');
 });
-test('local Canvas preserves both existing tabs and enable action, and supplies offline status to its warning',async()=>{
-  const h=setup('local');assert.equal(h.node('mcpLocalTab').hidden,false);h.window.PenEchoMcpSettings.open();assert.equal(typeof h.options.enable,'function');
-  h.window.PenEchoMcpSettings.setDeviceStatus({connected:false});assert.equal(h.lastDevice.connected,false);
+test('a Canvas on a computer keeps both tabs, with no switch to reach it through Cloud',async()=>{
+  const h=setup('local');assert.equal(h.node('mcpLocalTab').hidden,false);h.window.PenEchoMcpSettings.open();assert.equal(h.options.enable,undefined);
+  assert.equal(h.window.PenEchoMcpSettings.setDeviceStatus,undefined);
   h.window.PenEchoMcpSettings.select('local');assert.equal(h.node('mcpLocalPanel').hidden,false);
 });
 test('opening MCP settings after a language change refreshes both tab labels',()=>{

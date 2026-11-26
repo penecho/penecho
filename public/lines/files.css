@@ -1,0 +1,216 @@
+/* Canvases & files (files.js): kinds, cards and the sheet on the right. The design: docs/design/next/files.html. */
+.page.fl-page { padding: 0; min-height: 100%; }
+.fl-wrap { display: flex; min-height: 100%; }
+.fl-main { flex: 1; min-width: 0; padding: 18px var(--pad-r) 60px var(--pad-l); }
+.fl-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fl-bar h2 { margin: 0 8px 0 0; font-size: 22px; font-weight: 680; letter-spacing: -.01em; }
+.fl-search { display: flex; align-items: center; gap: 8px; height: 34px; width: 260px; max-width: 100%; padding: 0 10px; border: 1px solid var(--line2); border-radius: 9px; background: var(--paper); color: var(--ink3); font-size: 14px; }
+.fl-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fl-search input { border: 0; outline: 0; background: none; flex: 1; min-width: 0; color: var(--ink); }
+.fl-sp { flex: 1; }
+/* Kinds as quiet tabs; who, size, Line status and order on one row under them. */
+.fl-kinds { display: flex; gap: 2px; flex-wrap: wrap; margin: 16px 0 0; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.fl-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; border: 0; background: none; font-size: 13.5px; color: var(--ink2); white-space: nowrap; }
+.fl-chip svg { color: var(--ink3); }
+.fl-chip:hover { background: var(--hover); color: var(--ink); }
+.fl-chip em { font-style: normal; color: var(--ink3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.fl-chip.on { background: var(--selected); color: var(--accent-label); font-weight: 600; }
+.fl-chip.on svg, .fl-chip.on em { color: var(--accent-label); }
+.fl-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 2px; }
+.fl-seg button.on { background: var(--paper); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-1); }
+.fl-filter { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 8px 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink2); font-size: 13.5px; white-space: nowrap; }
+.fl-filter svg { color: var(--ink3); }
+.fl-filter:hover, .fl-filter[aria-expanded="true"] { border-color: var(--line2); color: var(--ink); }
+.fl-filter.on { background: var(--selected); border-color: var(--accent); color: var(--accent-label); font-weight: 600; }
+.fl-filter.on svg { color: var(--accent-label); }
+.fl-filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fl-sort { border-color: transparent; background: none; }
+.fl-sum { display: flex; align-items: baseline; gap: 12px; margin: 14px 0 -6px; font-size: 13.5px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.fl-sum b { color: var(--ink); font-weight: 600; }
+.fl-sum .link { font-weight: 600; color: var(--accent-label); }
+.fl-page .cv-groups { margin: 12px 0 0; }
+.fl-sec { margin-top: 22px; }
+.fl-sec h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 650; color: var(--ink); }
+.fl-sec h3 em { font-style: normal; color: var(--ink3); font-weight: 500; font-size: 13px; }
+.fl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.fl-all { margin-top: 12px; }
+
+/* A card: its picture or the kind's mark, the kind on the picture, its name, who made it and its line. */
+.fl-card { position: relative; display: flex; flex-direction: column; min-width: 0; text-align: left; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-1); cursor: pointer; transition: box-shadow .15s, border-color .15s; }
+.fl-card:hover { box-shadow: var(--shadow-2); border-color: var(--line2); }
+.fl-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fl-card.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fl-thumb { position: relative; height: 128px; background: var(--soft); display: grid; place-items: center; color: var(--ink3); overflow: hidden; }
+/* Pictures, drawings and prototypes stay on white paper, because they were drawn on it. */
+.fl-thumb.has-pic { background: #fff; }
+.fl-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.fl-page-preview { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.fl-page-frame { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; border: 0; background: #fff; transform-origin: top left; pointer-events: none; visibility: hidden; }
+.fl-page-frame.is-ready { visibility: visible; }
+.fl-mark { width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center; align-content: center; gap: 1px; background: var(--paper); border: 1px solid var(--line); }
+.fl-mark small { font: 600 9.5px/1 var(--font); letter-spacing: .04em; text-transform: uppercase; color: var(--ink3); }
+.fl-mark.big { width: 80px; height: 80px; border-radius: 18px; }
+.fl-art { background: linear-gradient(160deg, #fff7ed, #fde7d6); }
+.fl-art .fl-mark { color: #c2410c; }
+.fl-pagek { background: linear-gradient(160deg, #eff6ff, #e0ecff); }
+.fl-pagek .fl-mark { color: var(--accent); }
+.fl-docs { background: linear-gradient(160deg, #f8fafc, #eef2f7); }
+.fl-meet { background: linear-gradient(160deg, #f5f3ff, #ede9fe); }
+.fl-meet .fl-mark { color: #7c3aed; }
+.fl-stack .fl-thumb { box-shadow: inset 0 -1px 0 var(--line); }
+.fl-stack::before { content: ""; position: absolute; inset: 4px 4px auto 4px; height: 128px; border-radius: 12px; }
+.fl-stack-n { position: absolute; right: 8px; bottom: 8px; padding: 2px 8px; border-radius: 10px; background: rgba(15, 23, 42, .78); color: #fff; font-size: 12px; font-weight: 600; }
+.fl-k { position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 6px; background: rgba(255, 255, 255, .92); color: #475569; font-size: 11.5px; font-weight: 600; box-shadow: var(--shadow-1); }
+/* A file whose line is archived, deleted or missing says so on its picture. */
+.fl-tag { position: absolute; left: 8px; bottom: 8px; height: 20px; padding: 0 7px; border-radius: 6px; background: #fef3c7; color: #8f5410; font-size: 11.5px; font-weight: 600; line-height: 20px; box-shadow: var(--shadow-1); }
+.fl-tx { padding: 9px 11px 11px; min-width: 0; }
+.fl-tx b { display: block; font-size: 13.5px; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-by { display: flex; align-items: center; gap: 6px; margin-top: 5px; min-height: 22px; font-size: 12px; color: var(--ink3); min-width: 0; }
+.fl-by .fl-where { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-size { flex: none; color: var(--ink3); font-variant-numeric: tabular-nums; }
+.fl-more { margin: -4px -4px -4px 0; opacity: 0; }
+.fl-card:hover .fl-more, .fl-more:focus-visible, .fl-more[aria-expanded="true"] { opacity: 1; }
+@media (hover: none) { .fl-more { opacity: 1; } }
+
+/* The sheet on the right. */
+.fl-sheet { position: sticky; top: 0; align-self: flex-start; width: 400px; flex: none; height: calc(var(--lines-viewport-height, 100vh) - var(--fl-top, 56px)); height: calc(var(--lines-viewport-dynamic-height, 100dvh) - var(--fl-top, 56px)); overflow: auto; border-left: 1px solid var(--line); background: var(--paper); }
+.fl-big-wrap { position: relative; }
+.fl-big { height: 250px; background: var(--soft); display: grid; place-items: center; overflow: hidden; border-bottom: 1px solid var(--line); color: var(--ink3); }
+.fl-big.has-pic { background: #fff; }
+.fl-big img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.fl-x { position: absolute; right: 10px; top: 10px; width: 32px; height: 32px; background: rgba(255, 255, 255, .92); color: #475569; box-shadow: var(--shadow-1); }
+.fl-x:hover { background: #fff; color: #0f172a; }
+.fl-in { padding: 16px 18px 24px; }
+.fl-in h3 { margin: 0 0 4px; font-size: 17px; font-weight: 650; overflow-wrap: anywhere; }
+.fl-meta { color: var(--ink3); font-size: 13px; }
+.fl-acts .btn.sm { padding: 0 9px; }
+.fl-acts .fl-dots { width: 31px; height: 31px; }
+.fl-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
+.fl-acts a.btn { text-decoration: none; color: inherit; }
+.fl-acts a.btn.primary { color: #fff; }
+.fl-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; margin: 14px 0; }
+.fl-strip button { height: 64px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.fl-strip button:hover { border-color: var(--accent); }
+.fl-strip img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.fl-strip-file { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100%; padding: 4px; color: var(--ink3); }
+.fl-strip-file small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.fl-from { margin-top: 6px; padding: 12px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line); font-size: 13.5px; }
+.fl-from .t { display: block; font-weight: 600; margin-bottom: 6px; }
+.fl-line { display: block; font-weight: 600; text-decoration: none; line-height: 1.35; }
+.fl-line:hover { text-decoration: underline; }
+.fl-mini { display: flex; align-items: center; margin-top: 12px; max-width: 240px; }
+.fl-mini i { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--c-ask); background: var(--paper); flex: none; }
+.fl-mini i.hl { box-shadow: 0 0 0 4px var(--accent-soft); background: currentColor; color: var(--paper); }
+.fl-mini s { flex: 1; min-width: 8px; height: 2px; background: var(--l-line); }
+.fl-step { margin-top: 8px; color: var(--ink3); font-size: 12.5px; }
+.fl-dl { display: grid; grid-template-columns: 70px 1fr; gap: 6px 10px; margin: 14px 0 0; font-size: 13px; }
+.fl-dl dt { color: var(--ink3); }
+.fl-dl dd { margin: 0; min-width: 0; }
+.fl-path { font: 12px/1.45 var(--mono); word-break: break-all; }
+.fl-name-row { display: flex; align-items: center; gap: 6px; }
+.fl-name-row input { flex: 1; min-width: 0; }
+.fl-ext { color: var(--ink3); font: 13px var(--mono); }
+
+/* The viewer (files-view.js): the file on the left, what it is and what to do with it on the right. */
+#lightbox:has(> .fv) { padding: 18px; }
+.fv { display: flex; width: min(1680px, 100%); height: 100%; background: var(--paper); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-3); }
+.fv-stage { position: relative; flex: 1; min-width: 0; display: grid; place-items: center; background: var(--soft); color: var(--ink3); }
+.fv-stage .lb-image-viewport { position: absolute; inset: 0; height: auto; }
+.fv-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+.fv-doc { position: absolute; inset: 0; overflow: auto; background: var(--paper); }
+.fv-doc-in { max-width: 760px; margin: 0 auto; padding: 36px 40px 60px; }
+.fv-text { margin: 0; padding: 28px 36px 60px; font: 13px/1.6 var(--mono); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.fv-zoom { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); padding: 4px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-2); }
+.fv-zoom .btn { min-width: 34px; height: 34px; }
+.fv-nav { position: absolute; top: 50%; z-index: 2; width: 42px; height: 42px; margin-top: -21px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: rgba(255, 255, 255, .94); color: #334155; box-shadow: var(--shadow-2); cursor: pointer; }
+.fv-nav:hover { background: #fff; color: #0f172a; }
+.fv-nav:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fv-nav.prev { left: 14px; }
+.fv-nav.next { right: 14px; }
+.fv-count { position: absolute; top: 14px; left: 50%; z-index: 2; transform: translateX(-50%); padding: 3px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink2); font-size: 13px; font-variant-numeric: tabular-nums; box-shadow: var(--shadow-2); pointer-events: none; }
+.fv-side { width: 360px; flex: none; overflow: auto; border-left: 1px solid var(--line); background: var(--paper); }
+.fv-head { display: flex; align-items: flex-start; gap: 8px; padding: 14px 10px 0 18px; }
+.fv-head h3 { flex: 1; min-width: 0; margin: 5px 0 4px; font-size: 17px; font-weight: 650; overflow-wrap: anywhere; }
+.fv-x, .fv-more { flex: none; width: 34px; height: 34px; }
+.fv-in { padding: 0 18px 24px; }
+.fv-open { width: 100%; justify-content: center; height: 38px; margin-top: 14px; }
+.fv-acts { margin-top: 10px; }
+.fv-strip button.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.fl-card.fv-on { border-color: var(--accent); }
+/* Menus and messages opened from the viewer show over it. */
+body:has(#lightbox:not([hidden]) > .fv) :is(.menu, #toast) { z-index: 95; }
+
+/* Narrower: the sheet comes over the list. A phone: it takes the screen. */
+@media (max-width: 1100px) {
+  .fl-sheet { position: fixed; right: 0; top: var(--fl-top, 56px); bottom: 0; height: auto; align-self: stretch; z-index: 40; width: min(400px, var(--lines-viewport-width, 100vw)); box-shadow: var(--shadow-3); }
+}
+@media (max-width: 900px) {
+  .fv { flex-direction: column; }
+  .fv-side { width: auto; max-height: 42%; border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 760px) {
+  #lightbox:has(> .fv) { padding: 0; }
+  .fv { border-radius: 0; }
+  .fv-nav { width: 36px; height: 36px; margin-top: -18px; }
+  .fl-bar h2 { font-size: 19px; width: 100%; }
+  .fl-search { flex: 1 1 100%; width: auto; order: 3; }
+  .fl-bar .fl-sp { display: none; }
+  .fl-kinds { flex-wrap: nowrap; overflow-x: auto; margin-right: calc(-1 * var(--pad-r)); padding-right: var(--pad-r); scrollbar-width: none; }
+  .fl-kinds::-webkit-scrollbar { display: none; }
+  .fl-chip { flex: none; }
+  .fl-seg button { padding: 0 9px; }
+  .fl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .fl-thumb { height: 104px; }
+  .fl-sheet { width: var(--lines-viewport-width, 100vw); border-left: 0; }
+  .fl-big { height: 220px; }
+}
+
+/* Dark: the cards and sheet follow the tokens; the kinds' own tints get darker ones. */
+:root[data-mode="dark"] .fl-art { background: linear-gradient(160deg, #2a1d14, #33210f); }
+:root[data-mode="dark"] .fl-art .fl-mark { color: #fdba74; }
+:root[data-mode="dark"] .fl-pagek { background: linear-gradient(160deg, #142035, #182a48); }
+:root[data-mode="dark"] .fl-pagek .fl-mark { color: #93c5fd; }
+:root[data-mode="dark"] .fl-docs { background: linear-gradient(160deg, #1b222c, #202833); }
+:root[data-mode="dark"] .fl-meet { background: linear-gradient(160deg, #211a35, #281f45); }
+:root[data-mode="dark"] .fl-meet .fl-mark { color: #c4b5fd; }
+:root[data-mode="dark"] .fv-nav { background: rgba(30, 41, 59, .94); color: #e2e8f0; }
+:root[data-mode="dark"] .fv-nav:hover { background: #334155; color: #fff; }
+
+/* Choosing files: a box on a card shows on hover, keyboard focus or touch, and on every card once one is chosen.
+   What is chosen and what to do with it float at the bottom. */
+.fl-select { position: absolute; right: 8px; top: 8px; z-index: 2; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1.5px solid rgba(15, 23, 42, .35); border-radius: 7px; background: rgba(255, 255, 255, .94); color: transparent; box-shadow: var(--shadow-1); opacity: 0; transition: opacity .12s; }
+.fl-card:hover .fl-select, .fl-select:focus-visible, .fl-list.picking .fl-select, .fl-select[aria-checked="true"] { opacity: 1; }
+.fl-select:hover { border-color: var(--accent); }
+.fl-select[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fl-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fl-card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.fl-card.picked .fl-thumb > :is(img, .fl-mark, .fl-page-preview) { opacity: .82; }
+.fl-selbar { position: sticky; bottom: 18px; z-index: 30; display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; margin: 20px auto 0; padding: 6px 6px 6px 16px; border-radius: 12px; background: var(--ink); color: var(--paper); box-shadow: var(--shadow-3); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.fl-selbar > span { color: var(--paper); opacity: .65; margin-right: 6px; }
+.fl-selbar .btn.ghost-b { color: var(--paper); }
+.fl-selbar .btn.ghost-b:hover { background: rgba(255, 255, 255, .12); }
+.fl-selbar .fl-del { background: var(--red); border-color: var(--red); color: #fff; }
+.fl-selbar .fl-del:hover { background: #9b1c24; }
+.fl-cleanup-note { margin: 12px 0 0; font-size: 13px; color: var(--red); line-height: 1.5; }
+@media (hover: none), (pointer: coarse) { .fl-select { opacity: 1; width: 32px; height: 32px; } }
+@media (max-width: 760px) {
+  .fl-tools .fl-sp { display: none; }
+  .fl-selbar { flex-wrap: wrap; justify-content: center; bottom: 10px; }
+}
+:root[data-mode="dark"] .fl-tag { background: #3a2a10; color: #fcd34d; }
+:root[data-mode="dark"] .fl-select { background: rgba(30, 41, 59, .94); border-color: rgba(226, 232, 240, .4); }
+:root[data-mode="dark"] .fl-select[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.cv-gone-note { margin: -4px 0 10px; color: var(--ink3); font-size: 13px; }
+
+/* Favourites: a star beside the card's size on hover, kept in sight once starred, as on the line page. */
+.fl-fav { flex: none; margin: -4px -2px; opacity: 0; color: var(--ink3); }
+.fl-card:hover .fl-fav, .fl-fav:focus-visible, .fl-fav.on, .fl-sheet .fl-fav, .fv-side .fl-fav { opacity: 1; }
+.fv-head .fv-fav { width: 34px; height: 34px; margin: 0; }
+.fl-fav:hover { color: var(--amber-mark); }
+.fl-fav.on { color: var(--amber-mark); }
+.fl-fav.on svg { fill: currentColor; }
+.fl-fav-filter { gap: 6px; padding-right: 11px; }
+.fl-fav-filter.on svg { color: var(--amber-mark); fill: currentColor; }
+@media (hover: none) { .fl-fav { opacity: 1; } }
+.lb-card header .lb-fav { flex: none; margin: 0 0 0 auto; opacity: 1; }
+.lb-count + .lb-fav { margin-left: 0; }

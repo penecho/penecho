@@ -17,7 +17,7 @@ Object.assign(process.env, {
   PENECHO_CANVAS_AGENT_AUTO_OPEN:"false", PENECHO_REQUEST_TRACE:"false", PENECHO_JEVISION_ENABLED:"false",
 });
 const expose = source => source.replace(/\}\)\(\);\s*$/, `
-  window.libraryNavTest = { state, canvasDocumentsReady, openHistoryPanel, closeCanvasAgent,
+  window.libraryNavTest = { state, canvasDocumentsReady, openHistoryPanel,
     setLanguage(value) { state.language=value; applyLanguage(); },
     dismiss() { markChangelogSeen(); markFeatureTourStepsSeen(FEATURE_TOUR_STEPS);
       closeFeatureTour({restore:false,scroll:false,changelog:false,retry:false}); closeChangelog(); },
@@ -90,7 +90,7 @@ app.whenReady().then(async () => {
     };
     await win.loadURL(url);
     await until(() => js("!!window.libraryNavTest"), "client startup");
-    await js("(async()=>{await libraryNavTest.canvasDocumentsReady();libraryNavTest.state.auto=false;libraryNavTest.setLanguage('en');libraryNavTest.closeCanvasAgent();libraryNavTest.dismiss();libraryNavTest.openHistoryPanel();})()");
+    await js("(async()=>{await libraryNavTest.canvasDocumentsReady();libraryNavTest.state.auto=false;libraryNavTest.setLanguage('en');libraryNavTest.dismiss();libraryNavTest.openHistoryPanel();})()");
     await settled();
     assert.deepEqual(await current(), ["historyCanvasNav"]);
     assert.deepEqual(await js("[...document.querySelector('.shell-library-links').children].map(e=>e.id||e.getAttribute('role'))"),

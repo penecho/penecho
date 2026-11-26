@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const SMART = require("../public/smart-suggest.js");
 const FINISH_DRAWING = require("../src/shared/finish-drawing.js");

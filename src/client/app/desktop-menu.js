@@ -4,9 +4,16 @@
     "new-canvas":"#newCanvasBtn", "save-canvas":"#saveCanvasBtn", "export-png":"#exportPngBtn",
     undo:'[data-action="undo"]', redo:'[data-action="redo"]', "canvas-view":"#canvasViewBtn",
     "fit-content":"#canvasFitContents", "zoom-in":"#canvasZoomIn", "zoom-out":"#canvasZoomOut",
-    "zoom-reset":"#canvasZoomLevel", "toggle-fullscreen":"#fullscreenBtn", "mcp-status":"#mcpToolbarToggle",
+    "zoom-reset":"#canvasZoomLevel", "toggle-fullscreen":"#fullscreenBtn",
   });
-  const DESKTOP_MENU_SETTINGS = Object.freeze({ "open-settings":null, connections:"connections", "ai-settings":"canvas", shortcuts:"shortcuts", "mcp-local":"mcp", "mcp-cloud":"mcp" });
+  const DESKTOP_MENU_SETTINGS = Object.freeze({ shortcuts:"shortcuts" });
+  // Settings live on the Projects page: these save the Canvas and go there (projectLinesLeave in project-lines-bridge.js).
+  const DESKTOP_MENU_PROJECT_PAGES = Object.freeze({ "new-project":"#new", "open-settings":"#settings", "open-agents":"#agents", "open-mcp":"#agents/apps", "open-archived":"#archived" });
+  function desktopMenuProjectsAddress(command) {
+    if (DESKTOP_MENU_PROJECT_PAGES[command]) return `/projects.html${DESKTOP_MENU_PROJECT_PAGES[command]}`;
+    const project = projectLinesTarget && !projectLinesTarget.draft ? projectLinesTarget.back || projectLinesTarget.project : "";
+    return project ? `/projects.html#${encodeURIComponent(project)}` : "/projects.html";
+  }
 
   function desktopMenuCommandEnabled(command) {
     const dialogOpen = Boolean(document.querySelector("dialog[open]")), editing = keyboardShortcutTextEditingTarget(document.activeElement) || document.activeElement?.tagName === "IFRAME";
@@ -19,23 +26,21 @@
     }
     const selector = DESKTOP_MENU_BUTTONS[command], button = selector && document.querySelector(selector);
     if (selector) return Boolean(button && !button.disabled);
-    if (command === "focus-agent" || command === "agent-history") return canvasAgentAvailable();
-    return ["canvas-library", "save-copy", "search-work", "tour", "close-canvas"].includes(command);
+    return ["canvas-library", "save-copy", "search-work", "close-canvas"].includes(command);
   }
 
   function performDesktopMenuCommand(command) {
+    if (command === "show-projects" || Object.hasOwn(DESKTOP_MENU_PROJECT_PAGES, command)) {
+      if (DESKTOP_MENU_PROJECT_PAGES[command] && command !== "new-project") projectLinesSettingsReturnUrl();
+      projectLinesLeave(desktopMenuProjectsAddress(command)).catch(error => setStatus(String(error?.message || error)));
+      return true;
+    }
     if (!desktopMenuCommandEnabled(command)) return false;
     if ((command === "undo" || command === "redo") && (keyboardShortcutTextEditingTarget(document.activeElement) || document.activeElement?.tagName === "IFRAME")) {
       void window.penechoDesktop.nativeEdit(command);
     } else if (Object.hasOwn(DESKTOP_MENU_SETTINGS, command)) {
-      const page = DESKTOP_MENU_SETTINGS[command];
-      if (page) selectSettingsPage(page);
+      selectSettingsPage(DESKTOP_MENU_SETTINGS[command]);
       openSettings();
-      if (command.startsWith("mcp-")) window.PenEchoMcpSettings?.select(command === "mcp-local" ? "local" : "cloud");
-    } else if (command === "agent-history") {
-      window.PenEchoStudioNavigator?.open?.("agent");
-    } else if (command === "mcp-status") {
-      void mcpOpenStatus(null, { connect:false });
     } else if (command === "close-canvas") {
       canvasDocumentsUiAction(() => requestCanvasTransition({ type:"close", documentId:canvasDocumentsCurrent().id }));
     } else if (command === "save-copy") {
@@ -43,8 +48,7 @@
       openHistoryPanel();
       document.querySelector("#historySavePanel").open = true;
       requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector("#historyName")?.focus()));
-    } else if (command === "tour") replayFeatureTour();
-    else if (DESKTOP_MENU_BUTTONS[command]) document.querySelector(DESKTOP_MENU_BUTTONS[command])?.click();
+    } else if (DESKTOP_MENU_BUTTONS[command]) document.querySelector(DESKTOP_MENU_BUTTONS[command])?.click();
     else keyboardShortcutPerform(command);
     return true;
   }
@@ -55,7 +59,7 @@
     let pending = false, previous = "";
     function sync() {
       pending = false;
-      const commands = [...Object.keys(DESKTOP_MENU_BUTTONS), ...Object.keys(DESKTOP_MENU_SETTINGS), "canvas-library", "save-copy", "search-work", "focus-agent", "agent-history", "tour", "close-canvas"],
+      const commands = [...Object.keys(DESKTOP_MENU_BUTTONS), ...Object.keys(DESKTOP_MENU_SETTINGS), "canvas-library", "save-copy", "search-work", "close-canvas"],
         value = { enabled:Object.fromEntries(commands.map(command => [command, desktopMenuCommandEnabled(command)])), bindings:{ ...keyboardShortcutBindings }, recording:Boolean(keyboardShortcutRecordingId), canvasView:document.querySelector("#canvasViewBtn")?.getAttribute("aria-pressed") === "true" },
         serialized = JSON.stringify(value);
       if (serialized !== previous) { previous = serialized; desktop.setMenuState(value); }
@@ -67,7 +71,7 @@
     window.addEventListener("focusout", schedule);
     // Observe control state only; drawing and live Widget mutations do not poll menus.
     const observer = new MutationObserver(schedule);
-    for (const element of document.querySelectorAll([...Object.values(DESKTOP_MENU_BUTTONS), "dialog", "#settingsLayer", "#configurationLayer", "#historyPanel", ".tour-layer", ".changelog-layer", ".plugin-modal-layer", "body"].join(","))) {
+    for (const element of document.querySelectorAll([...Object.values(DESKTOP_MENU_BUTTONS), "dialog", "#settingsLayer", "#configurationLayer", "#historyPanel", ".plugin-modal-layer", "body"].join(","))) {
       observer.observe(element, { attributes:true, attributeFilter:["disabled", "hidden", "open", "class", "aria-pressed"] });
     }
     sync();

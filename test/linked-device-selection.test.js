@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
 const core=fs.readFileSync(path.join(__dirname,'../src/client/app/core.js'),'utf8');
 const agent=fs.readFileSync(path.join(__dirname,'../src/client/app/canvas-agent-runtime.js'),'utf8');
@@ -73,16 +74,6 @@ test('preflight failure starts no handshake and concurrent callers share validat
  vm.runInContext(fn(agent,'canvasAgentWaitForReady'),c);
  const first=c.canvasAgentWaitForReady(()=>starts++,{handshakeId:'h'}),second=c.canvasAgentWaitForReady(()=>starts++,{handshakeId:'h2'});
  assert.equal(first,second);await new Promise(setImmediate);release();await assert.rejects(first);assert.equal(starts,0);assert.equal(validations,1);
-});
-
-test('deferred resume restores only matching account/device/connection identity',()=>{
- const c=fixture();vm.runInContext(fn(agent,'canvasAgentRestoreScopedSession'),c);
- c.state={canvasAgentCanvasKey:'cloud:canvas-a'};
- const scope=c.aiConnectionScope(),saved={scope,sessionId:'session-a',resumeToken:'resume-a',connectionId:A,projectId:'',accessMode:'controlled',canvasKey:c.state.canvasAgentCanvasKey,conversationId:'conversation-a'};
- Object.assign(c.canvasAgent,{projectId:'',accessMode:'controlled',pendingStoredSession:saved,currentConversation:{id:saved.conversationId}});
- c.canvasAgentRestoreScopedSession(scope,B);assert.equal(c.canvasAgent.sessionId,undefined);
- c.canvasAgent.pendingStoredSession=saved;c.canvasAgentRestoreScopedSession(scope,A);assert.equal(c.canvasAgent.sessionId,'session-a');
- c.canvasAgent.sessionId='';c.canvasAgent.pendingStoredSession=saved;c.canvasAgentRestoreScopedSession('different-account',A);assert.equal(c.canvasAgent.sessionId,'');
 });
 
 test('Canvas or conversation switch during preflight cancels the pending handshake',async()=>{

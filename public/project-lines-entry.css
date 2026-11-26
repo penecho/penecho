@@ -1,0 +1,533 @@
+/* Links into Projects from the Canvas, and the "Start a project" panel shared by an empty Canvas and the Projects page. */
+.project-lines-link { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 12px; height:32px; margin-right:6px; color:#fff; font-size:13px; font-weight:600; line-height:1; white-space:nowrap; text-decoration:none; border-radius:8px; background:#4f46e5; }
+.project-lines-link:hover { background:#4338ca; }
+.project-lines-link:focus-visible { outline:3px solid #4f5fd6; outline-offset:3px; }
+.project-lines-link[hidden] { display:none; }
+.project-lines-link svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linejoin:round; }
+.project-lines-link.project-lines-back { order:-5; flex-shrink:0; box-sizing:border-box; color:var(--studio-text, #20242c); border:1px solid var(--studio-line, #d9dde5); background:var(--studio-panel, #fff); }
+.project-lines-link.project-lines-back:hover { background:color-mix(in srgb, var(--studio-text, #20242c) 6%, var(--studio-panel, #fff)); }
+@media (max-width:1100px) {
+  .project-lines-link.project-lines-back { width:32px; padding:0; }
+  .project-lines-link.project-lines-back span { display:none; }
+  .topbar:has(.project-lines-back) .project-lines-panel-button { width:32px; padding:0; }
+  .topbar:has(.project-lines-back) .project-lines-panel-button span { display:none; }
+  body[data-theme="studio"] .topbar:has(.project-lines-back) .brand { display:none; }
+}
+@media (min-width:701px) and (max-width:1100px) {
+  body[data-theme="studio"] .topbar:has(.project-lines-back) .canvas-document-name { max-width:104px; }
+}
+@media (pointer:coarse) { .project-lines-link.project-lines-back { min-width:44px; min-height:44px; } }
+.project-lines-error { position:fixed; z-index:9999; top:16px; left:50%; display:flex; align-items:center; gap:12px; max-width:min(760px,calc(100vw / var(--penecho-page-scale, 1) - 32px)); padding:12px 16px; color:#20242c; font-size:14px; border:1px solid #e0b4b7; border-radius:8px; background:#fff; box-shadow:0 8px 24px rgba(32,36,44,.16); transform:translateX(-50%); }
+.project-lines-error a { color:#4338ca; font-weight:600; white-space:nowrap; }
+.project-lines-error button { padding:4px 10px; font:inherit; color:#20242c; border:1px solid #d6d9df; border-radius:6px; background:#fff; cursor:pointer; white-space:nowrap; }
+
+/* The panel. Only its controls take the pointer, so a stroke can start anywhere else on an empty Canvas. */
+.pls, .pls-gains, .pld-back, .pls-zoom { --pl-paper:#fff; --pl-raised:#f8f9fb; --pl-ink:#0f172a; --pl-ink2:#475569; --pl-ink3:#64748b; --pl-line:rgba(31,36,45,.14); --pl-line2:rgba(31,36,45,.24); --pl-accent:#2563eb; --pl-accent2:#1d4ed8; --pl-label:#1d4ed8; --pl-accent-soft:#eff6ff; --pl-focus:rgba(37,99,235,.36); --pl-red:#b4232c; --pl-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  /* The pictures. On the Projects pages they take the Lines tokens, which follow dark mode; the Canvas has none, so the light values stand. */
+  --pl-main:var(--l-main,#0f172a); --pl-branch:var(--l-line,#64748b); --pl-bar:var(--l-todo,#cbd5e1); --pl-ask:var(--c-ask,#2563eb); --pl-ask-fill:var(--c-ask-fill,#eff6ff); --pl-ask-line:var(--c-ask-line,#bfdbfe); --pl-ask-text:var(--c-ask-text,#1e3a8a); --pl-work:var(--c-work,#0d9488); --pl-end:var(--c-end,#16a34a); --pl-saved:var(--green,#15803d); --pl-wait:var(--amber-mark,#d98a1f);
+  --pl-art:#eef2f7; --pl-wire:#94a3b8; --pl-bar2:#e2e8f0; --pl-canvas:#ea580c; --pl-mark:#dc2626; --pl-hit:#fcd34d; --pl-file:#f2f3f6; --pl-meet:var(--meetcue,#6a5cf6); --pl-cl:#9a3412; --pl-cx:#1e293b; --pl-ds:#1d4ed8; --pl-pi:#0f766e;
+  --pl-wash:#dbeafe; --pl-wash-op:.55; --pl-tc-stroke:#1d4ed8; --pl-tc-accent:#0d9488; --pl-tc-muted:#94a3b8; --pl-tc-blue:#2563eb; --pl-tc-blue-txt:#1d4ed8; --pl-tc-coral:#ea580c; --pl-tc-amber:#d98a1f; }
+.pls { display:flex; flex-direction:column; gap:14px; width:100%; color:var(--pl-ink); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; font:400 14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI Variable Text","Segoe UI","Noto Sans SC",sans-serif; text-align:left; }
+.pls[hidden] { display:none; }
+.pls h2, .pls h3, .pls p { margin:0; }
+.pls-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.pls-title { font-size:22px; font-weight:700; letter-spacing:-.02em; line-height:1.25; }
+.pls-head span { color:var(--pl-ink3); font-size:14px; }
+.pls-examples { display:grid; gap:10px; }
+.pls-examples h3 { font-size:16px; font-weight:600; letter-spacing:-.01em; }
+.pls-ex-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.pls-ex { display:flex; align-items:center; gap:10px; min-width:0; padding:10px 12px; color:var(--pl-ink); font:inherit; text-align:left; background:var(--pl-paper); border:1px solid var(--pl-line); border-radius:12px; cursor:pointer; pointer-events:auto; transition:box-shadow .14s,transform .14s,border-color .14s; }
+.pls-ex:hover { border-color:var(--pl-accent); box-shadow:0 6px 18px rgba(17,24,39,.12); transform:translateY(-2px); }
+.pls-ex:focus-visible { outline:2px solid var(--pl-accent); outline-offset:2px; }
+.pls-ex:disabled { opacity:.6; cursor:progress; }
+.pls-ex-ic { flex:none; display:grid; place-items:center; width:34px; height:34px; color:var(--pl-label); background:var(--pl-accent-soft); border-radius:10px; }
+.pls-ex.k-class .pls-ex-ic { color:#1f7a4d; background:#e5f4ec; }
+.pls-ex.k-deck .pls-ex-ic { color:#b4461f; background:#fbe9e1; }
+.pls-ex-t { display:grid; min-width:0; }
+.pls-ex-t strong { overflow:hidden; font-size:14.5px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.pls-ex-t span { overflow:hidden; color:var(--pl-ink3); font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+.pls-card { display:flex; flex-direction:column; min-width:0; overflow:hidden; color:var(--pl-ink); text-decoration:none; background:var(--pl-paper); border:1px solid var(--pl-line); border-radius:12px; pointer-events:auto; transition:box-shadow .14s,transform .14s,border-color .14s; }
+.pls-card:hover { border-color:var(--pl-accent); box-shadow:0 6px 18px rgba(17,24,39,.12); transform:translateY(-2px); }
+.pls-card:focus-visible { outline:2px solid var(--pl-accent); outline-offset:2px; }
+.pls-pic { --project-color:#2563eb; display:grid; place-items:center; height:92px; overflow:hidden; background:var(--pl-raised); border-bottom:1px solid var(--pl-line); }
+.pls-pic img { display:block; width:100%; height:100%; object-fit:cover; }
+.pls-pic svg { display:block; width:100%; height:100%; padding:6px; box-sizing:border-box; }
+.pls-letter { display:grid; place-items:center; width:42px; height:42px; color:#fff; font-size:20px; font-weight:650; border-radius:10px; background:var(--project-color); }
+.pls-card-text { display:grid; gap:0; padding:7px 10px 8px; min-width:0; }
+.pls-card-text strong { overflow:hidden; font-size:14px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.pls-card-text span { overflow:hidden; color:var(--pl-ink3); font-size:12.5px; text-overflow:ellipsis; white-space:nowrap; }
+
+/* What a project gives you: 8 equal points in a clean 2×4 grid, each with a simple illustration (PE-823). */
+.pls-gains { container:pls-gains / inline-size; display:flex; flex-direction:column; gap:16px; min-width:0; color:var(--pl-ink); }
+.pls-agents { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+.pls .pls-pitch { color:var(--pl-ink2); font-size:14px; font-weight:500; }
+.pls-gains .pls-gives { margin:0; font-size:16px; font-weight:600; line-height:26px; letter-spacing:-.01em; }
+.pls-points { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:0; padding:0; list-style:none; }
+.pls-point { box-sizing:border-box; display:flex; align-items:flex-start; gap:13px; min-width:0; padding:12px 14px 13px 12px; background:var(--pl-paper); border:1px solid var(--pl-line); border-radius:12px; }
+.pls-pt-art { flex:none; width:74px; height:58px; border-radius:9px; background:var(--pl-art); display:grid; place-items:center; overflow:hidden; }
+.pls-pt-svg { display:block; width:74px; height:58px; }
+.pls-pt-copy { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
+.pls-point h3 { margin:0; color:var(--pl-ink); font-size:14px; font-weight:630; line-height:1.3; letter-spacing:-.01em; text-wrap:pretty; }
+.pls-point p { margin:0; color:var(--pl-ink2); font-size:12.5px; line-height:1.44; text-wrap:pretty; }
+@container pls-gains (max-width:640px) {
+  .pls-points { grid-template-columns:minmax(0,1fr); gap:10px; }
+}
+/* The pictures draw with these classes, so each colour is a token. */
+.pls-art { display:block; flex:none; width:132px; height:92px; }
+.pls-art.pls-pt-svg { width:74px; height:58px; }
+.pls-art text { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-weight:700; font-variant-numeric:tabular-nums; }
+.pls-art .pa-bg { fill:var(--pl-art); }
+.pls-art .pa-fp { fill:var(--pl-paper); }
+.pls-art .pa-fm { fill:var(--pl-main); }
+.pls-art .pa-faf { fill:var(--pl-ask-fill); }
+.pls-art .pa-fal { fill:var(--pl-ask-line); }
+.pls-art .pa-fat { fill:var(--pl-ask-text); }
+.pls-art .pa-fw { fill:var(--pl-work); }
+.pls-art .pa-fe { fill:var(--pl-end); }
+.pls-art .pa-fg { fill:var(--pl-saved); }
+.pls-art .pa-fb { fill:var(--pl-bar); }
+.pls-art .pa-fb2 { fill:var(--pl-bar2); }
+.pls-art .pa-fwire { fill:var(--pl-wire); }
+.pls-art .pa-fh { fill:var(--pl-hit); }
+.pls-art .pa-fwait { fill:var(--pl-wait); }
+.pls-art .pa-fi2 { fill:var(--pl-ink2); }
+.pls-art .pa-fa { fill:var(--pl-ask); }
+.pls-art .pa-fmeet { fill:var(--pl-meet); }
+.pls-art .pa-fnf { fill:#000; opacity:.14; }
+.pls-art .pa-snote { stroke:var(--pl-note-ink,#92400e); }
+.pls-art .pa-scv { stroke:var(--pl-canvas); }
+.pls-art .pa-sa { stroke:var(--pl-ask); }
+.pls-art .pa-sal { stroke:var(--pl-ask-line); }
+.pls-art .pa-sm { stroke:var(--pl-main); }
+.pls-art .pa-sl { stroke:var(--pl-branch); }
+.pls-art .pa-sw { stroke:var(--pl-wire); }
+.pls-art .pa-sb { stroke:var(--pl-bar); }
+.pls-art .pa-sx { stroke:var(--pl-mark); }
+.pls-art .pa-srun { stroke:var(--pl-work); }
+.pls-art .pa-swait { stroke:var(--pl-wait); }
+.pls-art .pa-swhite { stroke:#fff; }
+.pls-art .pa-sline { stroke:var(--pl-line2); }
+.pls-art .pa-ft { fill:#fff; font-weight:700; }
+:is(.pls-art,.pls-faces) .pa-cl { fill:var(--pl-cl); background:var(--pl-cl); }
+:is(.pls-art,.pls-faces) .pa-cx { fill:var(--pl-cx); background:var(--pl-cx); }
+:is(.pls-art,.pls-faces) .pa-ds { fill:var(--pl-ds); background:var(--pl-ds); }
+:is(.pls-art,.pls-faces) .pa-pi { fill:var(--pl-pi); background:var(--pl-pi); }
+.pls-art .tc-wash { fill:var(--pl-wash); opacity:var(--pl-wash-op); }
+.pls-art .tc-paper { fill:var(--pl-paper); }
+.pls-art .tc-stroke { stroke:var(--pl-tc-stroke); }
+.pls-art .tc-accent { stroke:var(--pl-tc-accent); }
+.pls-art .tc-muted { stroke:var(--pl-tc-muted); }
+.pls-art .tc-ink { fill:var(--pl-main); }
+.pls-art .tc-blue { fill:var(--pl-tc-blue); }
+.pls-art .tc-blue-txt { fill:var(--pl-tc-blue-txt); }
+.pls-art .tc-teal { fill:var(--pl-work); }
+.pls-art .tc-green { fill:var(--pl-end); }
+.pls-art .tc-green-txt { fill:var(--pl-saved); }
+.pls-art .tc-coral { fill:var(--pl-tc-coral); }
+.pls-art .tc-coral-stroke { stroke:var(--pl-tc-coral); }
+.pls-art .tc-amber { fill:var(--pl-tc-amber); }
+
+.pls-chips { display:flex; flex-wrap:wrap; gap:4px 5px; min-width:0; }
+.pls-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 10px 3px 8px; color:var(--pl-ink); font:inherit; font-size:12.5px; font-weight:500; line-height:1.5; white-space:nowrap; background:var(--pl-raised); border:1px solid var(--pl-line); border-radius:99px; }
+.pls-chip i { width:8px; height:8px; background:#697281; border-radius:50%; }
+.pls-chip[data-agent="claude"] i { background:#a8502a; }
+.pls-chip[data-agent="codex"] i { background:#2b303a; }
+.pls-chip[data-agent="opencode"] i { background:#3f4754; }
+.pls-chip[data-agent="pi"] i { background:#0f766e; }
+.pls-chip[data-agent="dsh"] i { background:#3457c9; }
+.pls-chip[data-agent="kimi"] i { background:#16181d; }
+.pls-chip[data-agent="workbuddy"] i { background:#0052d9; }
+.pls-chip[data-agent="omp"] i { background:#64748b; }
+.pls-chip[data-agent="antigravity"] i { background:#1a73e8; }
+.pls-chip.off { color:var(--pl-ink3); font-weight:450; background:transparent; border-style:dashed; }
+.pls-chip.off i { opacity:.35; }
+.pls-chips.is-plain { gap:6px 14px; }
+.pls-chips.is-plain .pls-chip { gap:6px; padding:0; color:var(--pl-ink2); font-size:13.5px; font-weight:400; background:none; border:0; border-radius:0; }
+.pls-chips.is-plain .pls-chip i { width:7px; height:7px; }
+.pls-chips.is-plain .pls-chip.off { color:var(--pl-ink3); }
+.pls-vision { display:grid; gap:4px; padding-top:10px; border-top:1px solid var(--pl-line); }
+.pls-vision h4 { margin:0; font-size:13.5px; font-weight:650; }
+.pls-vision p { color:var(--pl-ink2); font-size:13.5px; line-height:1.45; }
+
+.pls-model { display:flex; flex-direction:column; gap:9px; }
+.pls-model h3 { font-size:16px; font-weight:660; letter-spacing:-.01em; text-wrap:balance; }
+.pls-row { display:grid; grid-template-columns:minmax(0,1fr) 26px minmax(0,1fr) 26px minmax(0,1fr); gap:3px; align-items:stretch; }
+.pls-file { display:flex; flex-direction:column; gap:7px; min-width:0; padding:9px 11px; background:var(--pl-paper); border:1px solid var(--pl-line); border-radius:11px; }
+.pls-file.main { border-color:rgba(37,99,235,.45); }
+.pls-file header { display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:620; }
+.pls-file header code { font-family:var(--pl-mono); font-size:13px; font-weight:600; }
+.pls-page { display:flex; flex-direction:column; gap:5px; height:58px; padding:7px 9px; overflow:hidden; background:var(--pl-raised); border:1px solid var(--pl-line); border-radius:6px; box-sizing:border-box; }
+.pls-page svg { display:block; flex:1; width:100%; min-height:0; }
+.pls-dots { background-color:#fff; background-image:radial-gradient(rgba(31,36,45,.1) 1px,transparent 1.2px); background-size:10px 10px; }
+.pls-page i { display:block; flex:none; height:5px; border-radius:3px; background:#cfd2d9; }
+.pls-page i.w1 { width:58%; background:var(--pl-ink2); }
+.pls-page i.w2 { width:92%; }
+.pls-page b { display:flex; flex:none; align-items:center; gap:7px; height:10px; }
+.pls-page b::before { flex:none; width:9px; height:9px; content:""; background:#fff; border:1.5px solid #aeb4bf; border-radius:3px; }
+.pls-page b::after { flex:1; max-width:78%; height:5px; content:""; background:#cfd2d9; border-radius:3px; }
+.pls-page b.on::before { background:var(--pl-accent); border-color:var(--pl-accent); }
+.pls-page b.now::before { border-color:var(--pl-accent); }
+.pls-page b.now::after { background:var(--pl-accent); opacity:.55; }
+.pls-file p { color:var(--pl-ink2); font-size:12.5px; line-height:1.38; }
+.pls-file p strong { color:var(--pl-ink); font-weight:620; }
+.pls-link { display:grid; place-items:center; color:var(--pl-ink3); }
+.pls-link.two { color:var(--pl-accent); }
+
+/* One thing under another: the name, then the docs folder, then the code folder, each label above its field. */
+.pls-form { display:flex; flex-direction:column; gap:16px; padding:18px; background:var(--pl-paper); border:1px solid var(--pl-line); border-radius:12px; }
+.pls-rows { display:grid; gap:18px; }
+.pls-field, .pls-field-in { display:flex; flex-direction:column; gap:6px; min-width:0; font-size:14px; font-weight:500; }
+.pls-field-head { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.pls-label { color:var(--pl-ink); font-size:13.5px; font-weight:600; line-height:1.35; }
+.pls-label em { margin-left:4px; color:var(--pl-ink3); font-size:12.5px; font-style:normal; font-weight:400; }
+.pls-desc { color:var(--pl-ink2); font-size:12.5px; font-weight:400; line-height:1.45; text-wrap:pretty; }
+.pls-form input { width:100%; min-width:0; height:40px; padding:0 12px; color:var(--pl-ink); font:inherit; font-size:14.5px; font-weight:400; background:var(--pl-paper); border:1px solid var(--pl-line2); border-radius:7px; box-sizing:border-box; pointer-events:auto; }
+.pls-form input[name="docs"] { font-family:var(--pl-mono); font-size:13.5px; }
+.pls-form input:focus { border-color:var(--pl-accent); outline:0; box-shadow:0 0 0 3px var(--pl-focus); }
+.pls-path { display:flex; gap:8px; min-width:0; }
+.pls-path input { flex:1; }
+.pls-path .pld-btn { height:40px; padding:0 13px; border-radius:7px; }
+.pls-sub[hidden] { display:none; }
+.pls-hint { display:flex; flex-wrap:wrap; align-items:center; gap:3px 5px; color:var(--pl-ink3); font-size:12px; font-weight:400; line-height:1.42; }
+.pls-hint + .pls-hint { margin-top:-2px; }
+.pls-hint code { font-family:var(--pl-mono); font-size:12px; color:var(--pl-ink3); }
+.pls-hint.is-conflict { color:var(--pl-red); font-weight:500; }
+.pls-form-foot { display:flex; flex-direction:column; align-items:stretch; gap:8px; padding-top:4px; }
+.pls-form-foot .pls-create { width:100%; height:42px; font-size:15px; font-weight:600; }
+.pls-import { align-self:center; border:0; background:none; padding:4px 6px; color:var(--pl-ink3); font:inherit; font-size:13px; cursor:pointer; }
+.pls-import:hover { color:var(--pl-accent); text-decoration:underline; }
+.pld-btn { display:inline-flex; flex:none; align-items:center; justify-content:center; height:36px; padding:0 12px; color:var(--pl-ink); font:inherit; font-size:14px; font-weight:500; white-space:nowrap; background:var(--pl-paper); border:1px solid var(--pl-line2); border-radius:8px; cursor:pointer; pointer-events:auto; }
+.pld-btn:hover:not(:disabled) { background:#f2f3f6; }
+.pld-btn:focus-visible { outline:2px solid var(--pl-accent); outline-offset:2px; }
+.pld-btn.primary { color:#fff; font-weight:600; background:var(--pl-accent); border-color:var(--pl-accent); }
+.pld-btn.primary:hover:not(:disabled) { background:var(--pl-accent2); }
+.pld-btn:disabled { cursor:default; opacity:.5; }
+.pls-error, .pls-ex-error { flex:1; color:var(--pl-red); font-size:13px; }
+
+/* Choosing a folder from another machine */
+.pld-back { position:fixed; z-index:10000; inset:0; display:grid; place-items:center; padding:16px; background:rgba(20,24,32,.42); font:400 14px/1.42 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI Variable Text","Segoe UI","Noto Sans SC",sans-serif; text-align:left; }
+.pld { display:flex; flex-direction:column; width:min(620px,100%); max-height:min(620px,100%); overflow:hidden; color:var(--pl-ink); background:var(--pl-paper); border-radius:14px; box-shadow:0 16px 40px rgba(17,24,39,.28); }
+.pld-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 16px 8px; }
+.pld-head strong { display:block; font-size:16px; font-weight:650; }
+.pld-head span { color:var(--pl-ink3); font-size:13px; }
+.pld-x { display:grid; flex:none; place-items:center; width:32px; height:32px; color:var(--pl-ink2); background:none; border:0; border-radius:7px; cursor:pointer; }
+.pld-x:hover { background:rgba(31,36,45,.055); }
+.pld-crumbs { display:flex; flex-wrap:wrap; align-items:center; gap:2px 4px; padding:0 16px 8px; color:var(--pl-ink3); font-size:13px; }
+.pld-crumbs button { padding:2px 5px; color:var(--pl-label); font:inherit; font-weight:560; background:none; border:0; border-radius:5px; cursor:pointer; }
+.pld-crumbs button:hover { background:rgba(37,99,235,.09); }
+.pld-crumbs i { font-style:normal; }
+.pld-list { flex:1; min-height:220px; padding:4px 8px; overflow-y:auto; border-block:1px solid var(--pl-line); }
+.pld-row { display:flex; align-items:center; gap:9px; width:100%; min-height:38px; padding:0 8px; color:var(--pl-ink); font:inherit; text-align:left; background:none; border:0; border-radius:7px; cursor:pointer; }
+.pld-row:hover, .pld-row:focus-visible { background:#f2f3f6; }
+.pld-row svg { flex:none; color:var(--pl-ink3); }
+.pld-row span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pld-note { margin:16px 8px; color:var(--pl-ink3); }
+.pld-ask { display:grid; gap:10px; margin:16px 8px; }
+.pld-ask p { margin:0; }
+.pld-ask code { font-family:var(--pl-mono); font-size:13px; color:var(--pl-ink2); }
+.pld-ask div { display:flex; gap:8px; }
+.pld-foot { display:flex; align-items:center; gap:8px; padding:10px 16px; }
+.pld-path { flex:1; min-width:0; overflow:hidden; color:var(--pl-ink2); font-family:var(--pl-mono); font-size:12.5px; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Opening a project: its picture grows to fill the screen. */
+.pls-zoom { position:fixed; z-index:10001; inset:0; overflow:hidden; background:#eef0f3; pointer-events:none; }
+.pls-zoom-pic { position:fixed; display:grid; place-items:center; overflow:hidden; background:var(--pl-raised); border-radius:12px; transform-origin:center; }
+
+/* An empty Canvas: the panel sits in the middle, and everything around it is still paper. */
+#canvasWelcome .pls { width:min(1120px,100%); margin:0 auto; pointer-events:none; }
+#canvasWelcome .pls :is(a,button,input) { pointer-events:auto; }
+/* The Canvas's own welcome type must not reach inside the panel. */
+body[data-theme="studio"] #canvasWelcome .pls strong { color:inherit; font-size:inherit; font-weight:620; line-height:inherit; }
+/* Centred while it fits, and scrolling from the top when it does not. The top keeps clear of the AI toolbar floating over the Canvas's top right corner. */
+body[data-theme="studio"] .canvas-welcome:has(> .pls:not([hidden])) { justify-content:safe center; align-items:safe center; padding:64px 24px 74px; overflow-x:hidden; overflow-y:auto; }
+body[data-theme="studio"] .canvas-welcome:has(> .pls:not([hidden])) > :is(strong,span,.canvas-welcome-actions) { display:none; }
+#canvasWelcome.pls-drawing .pls { opacity:.12; transition:opacity .12s; }
+/* Height decides what stays. The examples are always a click away in the menu and the sidebar. */
+body[data-theme="studio"] .canvas-welcome:has(> .pls.pls-has-examples:not([hidden])) > .canvas-welcome-examples { display:none; }
+@media (min-height:1240px) { body[data-theme="studio"] .canvas-welcome:has(> .pls.pls-has-examples:not([hidden])) > .canvas-welcome-examples { display:grid; } }
+@media (max-height:1100px) { body[data-theme="studio"] .canvas-welcome:has(> .pls:not([hidden])) > .canvas-welcome-examples { display:none; } }
+@media (max-width:760px) {
+  .pls-ex-row { grid-template-columns:minmax(0,1fr); }
+  .pls-row { grid-template-columns:minmax(0,1fr); }
+  .pls-link { height:20px; transform:rotate(90deg); }
+  .project-lines-link span { display:none; }
+  .project-lines-link { width:32px; padding:0; }
+}
+/* On a phone the Canvas has a second toolbar row, which would cover the start page's title. */
+@media (max-width:760px) { body[data-theme="studio"] .canvas-welcome:has(> .pls:not([hidden])) { padding-top:52px; } }
+
+/* The Canvas sidebar's list of projects */
+.project-lines-side { padding:0 0 12px; }
+.project-lines-side[hidden] { display:none; }
+.project-lines-side-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.project-lines-side-head a { margin-right:8px; color:#3730a3; font-size:12px; font-weight:600; text-decoration:none; }
+.project-lines-side-head a:hover { text-decoration:underline; text-underline-offset:2px; }
+.project-lines-side-row { --project-color:#4f46e5; display:flex; align-items:center; gap:9px; min-height:36px; padding:4px 8px; color:#20242c; font-size:13px; text-decoration:none; border-radius:7px; }
+.project-lines-side-row:hover { background:rgba(31,36,45,.055); }
+.project-lines-side-row:focus-visible { outline:2px solid #4f46e5; outline-offset:-2px; }
+.project-lines-side-mark { display:grid; flex:none; place-items:center; width:22px; height:22px; color:#fff; font-size:12px; font-weight:650; border-radius:5px; background:var(--project-color); }
+.project-lines-side-row b { flex:1; min-width:0; overflow:hidden; font-weight:520; text-overflow:ellipsis; white-space:nowrap; }
+.project-lines-side-row em { flex:none; color:#697281; font-size:11.5px; font-style:normal; }
+/* A project's Canvas opens under this, with the picture you clicked. */
+#projectLinesCover { position:fixed; inset:0; z-index:2147483000; display:grid; grid-template:minmax(0,1fr) / minmax(0,1fr); padding:64px; background:#f8fafc; transition:opacity .16s ease-out; }
+@media (prefers-color-scheme: dark) { #projectLinesCover { background:#0e131a; } }
+#projectLinesCover img { display:block; width:100%; height:100%; object-fit:contain; }
+#projectLinesCover.lifted { opacity:0; pointer-events:none; }
+body.project-lines-draft #canvasWelcome { display:none !important; }
+
+/* ---------- PenEcho Lines' start page: the name and the way to start beside what a project is, then the eight as words ---------- */
+.pls-hero { display:flex; flex-wrap:wrap; align-items:center; gap:40px 56px; }
+.pls-intro { display:flex; flex:1 1 400px; flex-direction:column; gap:18px; min-width:0; }
+.pls-hero > .pls-lines, .pls-hero > .pls-stage { flex:1 1 460px; }
+.pls-brand { display:flex; flex-direction:column; gap:18px; }
+.pls .pls-brand h2 { margin:0; color:var(--pl-ink); font-size:44px; font-weight:700; line-height:1.1; letter-spacing:-.025em; }
+.pls-brand h2 span { color:var(--pl-accent); }
+/* Stronger than the Canvas's own "header p" grey. */
+.pls .pls-brand p { max-width:440px; color:var(--pl-ink2); font-size:18px; line-height:1.5; text-wrap:pretty; }
+.pls-start-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:6px; pointer-events:auto; }
+.pls-start-new { height:44px; padding:0 20px; font-size:15.5px; font-weight:600; text-decoration:none; }
+.pls-back { height:44px; padding:0 16px; font-size:15px; }
+.pls-works { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+.pls-works-k { color:var(--pl-ink3); font-size:13.5px; }
+.pls-found .pls-chips { flex-wrap:wrap; }
+.pls-draw { display:inline-flex; align-items:center; gap:8px; }
+/* Found on this computer: the agents here with a tick, the others in one line, or what to do with none. */
+.pls .pls-found-here { display:flex; flex-direction:column; gap:8px; min-height:44px; margin-top:8px; pointer-events:auto; }
+.pls .pls-here { display:flex; flex-wrap:wrap; gap:8px 16px; }
+.pls .pls-ag { display:inline-flex; align-items:center; gap:7px; color:var(--pl-ink); font-size:14px; font-weight:550; }
+.pls .pls-ag-face { display:grid; place-items:center; width:20px; height:20px; color:#fff; font-size:9.5px; font-style:normal; font-weight:700; background:#64748b; border-radius:50%; }
+/* Each agent in its own colour, as the chips have them. Inline styles are not allowed by the page's policy. */
+.pls .pls-ag[data-agent="claude"] .pls-ag-face { background:#a8502a; } .pls .pls-ag[data-agent="codex"] .pls-ag-face { background:#2b303a; } .pls .pls-ag[data-agent="opencode"] .pls-ag-face { background:#3f4754; } .pls .pls-ag[data-agent="pi"] .pls-ag-face { background:#0f766e; }
+.pls .pls-ag[data-agent="dsh"] .pls-ag-face { background:#3457c9; } .pls .pls-ag[data-agent="kimi"] .pls-ag-face { background:#16181d; } .pls .pls-ag[data-agent="omp"] .pls-ag-face { background:#7c3aed; } .pls .pls-ag[data-agent="antigravity"] .pls-ag-face { background:#1a73e8; } .pls .pls-ag[data-agent="workbuddy"] .pls-ag-face { background:#0052d9; }
+.pls .pls-tick { color:#16a34a; }
+.pls .pls-also { color:var(--pl-ink3); font-size:13.5px; }
+.pls .pls-none { max-width:460px; padding:12px 14px; color:var(--pl-ink2); font-size:13.5px; line-height:1.5; background:var(--pl-paper); border:1px solid var(--pl-line); border-radius:10px; }
+.pls .pls-none b { color:var(--pl-ink); font-weight:600; }
+.pls-none-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.pls-none-row .pld-btn { height:34px; padding:0 14px; font-size:13.5px; text-decoration:none; }
+.pls-none-row [hidden] { display:none; }
+
+/* A project building itself: a dark stage, its folder, and three lines that grow one mark at a time. Its colours are its own, in light and dark. */
+.pls-stage { position:relative; min-width:0; max-width:680px; aspect-ratio:520 / 416; overflow:hidden; background:radial-gradient(120% 90% at 20% 0%, #131f3a, #0b1220 62%); border:1px solid rgba(255,255,255,.08); border-radius:20px; box-shadow:0 1px 2px rgba(17,24,39,.06), 0 14px 36px rgba(17,24,39,.16); box-sizing:border-box; pointer-events:auto; }
+.pls-stage::before { position:absolute; inset:0; content:""; background-image:radial-gradient(rgba(255,255,255,.07) 1px, transparent 1.2px); background-size:22px 22px; }
+.pls-stage svg { position:absolute; inset:0; display:block; width:100%; height:100%; }
+.pls > .pls-stage { align-self:center; width:100%; }
+.st-line, .st-trunk { fill:none; stroke:#64748b; stroke-width:2; stroke-linecap:round; }
+.st-trunk { stroke:#e2e8f0; stroke-width:2.5; }
+.st-chip { fill:#f1f5f9; } .st-chip-t { fill:#0b1220; font-weight:650; font-size:13.5px; }
+.st-title { fill:#f1f5f9; font-weight:650; font-size:14px; }
+.st-label { fill:#a9b4c8; font-weight:500; font-size:12px; text-anchor:middle; }
+.st-file { fill:rgba(255,255,255,.08); } .st-file-t { fill:#cbd5e1; font:500 11.5px ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; text-anchor:middle; }
+.st-ask { fill:#0b1220; stroke:#60a5fa; stroke-width:3; }
+.st-work { fill:#2dd4bf; } .st-who { fill:#042f2e; font-weight:700; font-size:9.5px; text-anchor:middle; }
+.st-done { fill:#4ade80; } .st-check { fill:none; stroke:#052e16; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.st-cv { fill:rgba(251,146,60,.16); stroke:#fb923c; stroke-width:1.6; } .st-cv-ink { fill:none; stroke:#fb923c; stroke-width:1.6; stroke-linecap:round; }
+.st-meet { fill:#8b7ff9; } .st-note { fill:#64748b; }
+.st-glyph { fill:none; stroke:#fff; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.st-spin { fill:none; stroke:#2dd4bf; stroke-width:2.2; stroke-linecap:round; stroke-dasharray:22 80; transform-box:fill-box; transform-origin:center; animation:st-spin 1.1s linear infinite; }
+@keyframes st-spin { to { transform:rotate(360deg); } }
+.st-seg { stroke-dasharray:1; stroke-dashoffset:1; transition:stroke-dashoffset .45s cubic-bezier(.4,0,.2,1); }
+.st-seg.in { stroke-dashoffset:0; }
+.st-pop { opacity:0; transform:scale(.3); transform-box:fill-box; transform-origin:center; transition:opacity .2s, transform .4s cubic-bezier(.3,1.6,.5,1); }
+.st-pop.in { opacity:1; transform:none; }
+.st-fade { opacity:0; transition:opacity .4s; } .st-fade.in { opacity:1; }
+@media (prefers-reduced-motion:reduce) { .st-seg, .st-pop, .st-fade { transition:none; } .st-spin { animation:none; } }
+
+/* A project is a folder of lines: a folder, its main, three lines with their marks and agents, and the file each one is. */
+.pls-lines { display:flex; flex-direction:column; gap:16px; min-width:0; padding:24px 28px 22px; color:var(--pl-ink); background:var(--pl-paper); border:1px solid var(--pl-line); border-radius:12px; box-shadow:0 6px 18px rgba(17,24,39,.07); box-sizing:border-box; container-type:inline-size; pointer-events:auto; }
+.pls-lines-head { display:flex; flex-direction:column; gap:4px; }
+.pls .pls-lines-head h3, .pls-lines-head h3 { margin:0; color:var(--pl-ink); font-size:17px; font-weight:600; line-height:1.35; }
+.pls .pls-lines-head p { margin:0; color:var(--pl-ink2); font-size:14px; line-height:1.45; }
+.pls-tree { position:relative; padding-left:26px; }
+.pls-tree::before { position:absolute; top:10px; bottom:6px; left:0; width:3px; content:""; background:var(--pl-main); border-radius:2px; }
+.pls-folder { position:relative; display:inline-flex; align-items:center; gap:7px; height:28px; margin:0 0 4px -26px; padding:0 11px; color:var(--pl-paper); font-size:13px; font-weight:600; background:var(--pl-main); border-radius:7px; }
+.pls-tree ul { margin:0; padding:0; list-style:none; }
+.pls-tline { position:relative; display:flex; align-items:center; gap:12px; height:44px; min-width:0; }
+.pls-tline::before { position:absolute; top:7px; left:-26px; width:26px; height:16px; content:""; border-bottom:2px solid var(--pl-branch); border-left:2px solid var(--pl-branch); border-bottom-left-radius:12px; box-sizing:border-box; }
+.pls-marks { position:relative; display:inline-flex; flex:none; align-items:center; gap:16px; height:20px; padding-right:2px; }
+.pls-marks::before { position:absolute; top:9px; right:6px; left:0; height:2px; content:""; background:var(--pl-branch); }
+.pls-tline b { flex:none; font-size:14px; font-weight:600; white-space:nowrap; }
+.pls-faces { display:inline-flex; flex:none; }
+.pls-faces i { display:grid; place-items:center; width:18px; height:18px; color:#fff; font-size:9.5px; font-style:normal; font-weight:600; border-radius:50%; }
+.pls-faces i + i { margin-left:-4px; box-shadow:0 0 0 2px var(--pl-paper); }
+.pls-leader { flex:1 1 20px; min-width:12px; border-top:2px dotted var(--pl-bar); }
+.pls-tline code { flex:none; padding:3px 8px; color:var(--pl-ink2); font-family:var(--pl-mono); font-size:12.5px; background:var(--pl-file); border-radius:5px; }
+/* The four kinds of mark, drawn the same on a line and in the legend. */
+.pls-mk { position:relative; flex:none; display:inline-block; box-sizing:border-box; }
+.pls-mk.mk-note { width:11px; height:11px; background:var(--pl-main); border-radius:50%; }
+.pls-mk.mk-canvas { width:11px; height:11px; background:var(--pl-canvas); border-radius:2px; }
+.pls-mk.mk-ask { width:12px; height:12px; background:var(--pl-paper); border:2.5px solid var(--pl-ask); border-radius:50%; }
+.pls-mk.mk-result { width:9px; height:9px; background:var(--pl-work); transform:rotate(45deg); }
+.pls-kinds { display:flex; flex-wrap:wrap; align-items:center; gap:8px 22px; margin:0; padding:14px 0 0; color:var(--pl-ink2); font-size:13.5px; list-style:none; border-top:1px solid var(--pl-line); }
+.pls-kinds li { display:inline-flex; align-items:center; gap:7px; }
+.pls-kinds b { color:var(--pl-ink); font-weight:600; }
+.pls-kinds .mk-note, .pls-kinds .mk-canvas { width:10px; height:10px; }
+.pls-kinds .mk-ask { width:11px; height:11px; }
+.pls-kinds .mk-result { width:8px; height:8px; margin:0 1px; }
+/* In a narrow card the agents and the dotted leaders go, and the file names stay. */
+@container (max-width:400px) { .pls-faces, .pls-leader { display:none; } .pls-tline code { margin-left:auto; } .pls-marks { gap:10px; } }
+@container (max-width:300px) { .pls-tline code { display:none; } }
+
+/* The eight, as words only: four columns, a thin rule above each. */
+.pls-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:0 32px; margin:0; padding:0; list-style:none; }
+.pls-list li { display:flex; flex-direction:column; gap:4px; padding:16px 0 18px; border-top:1px solid var(--pl-line2); }
+.pls .pls-list h3 { margin:0; color:var(--pl-ink); font-size:14.5px; font-weight:600; line-height:1.35; }
+.pls .pls-list p { margin:0; color:var(--pl-ink2); font-size:13.5px; line-height:1.45; }
+.pls .pls-draw-hint { margin-top:-12px; color:var(--pl-ink3); font-size:13px; }
+/* The start page fits comfortably on one screen: hero above, 8 equal cards in a compact 2×4 grid below, clearing the bottom Canvas toolbar. */
+.pls:has(> .pls-hero) { gap:18px; }
+#canvasWelcome .pls:has(> .pls-hero) .pls-stage { max-width:420px; }
+#canvasWelcome .pls:has(> .pls-hero) .pls-gains { gap:10px; }
+#canvasWelcome .pls:has(> .pls-hero) .pls-points { gap:9px 12px; }
+#canvasWelcome .pls:has(> .pls-hero) .pls-point { gap:11px; padding:9px 12px 10px 10px; border-radius:11px; }
+#canvasWelcome .pls:has(> .pls-hero) .pls-pt-art,
+#canvasWelcome .pls:has(> .pls-hero) .pls-art.pls-pt-svg { width:64px; height:50px; }
+#canvasWelcome .pls:has(> .pls-hero) .pls-pt-copy { gap:2px; }
+#canvasWelcome .pls:has(> .pls-hero) .pls-point h3 { font-size:13.5px; line-height:1.26; }
+#canvasWelcome .pls:has(> .pls-hero) .pls-point p { font-size:12px; line-height:1.36; }
+@media (max-width:720px) {
+  .pls .pls-brand h2 { font-size:34px; } .pls .pls-brand p { font-size:16px; }
+  .pls:has(> .pls-hero) { gap:20px; } .pls-hero { gap:24px; } .pls-lines { padding:18px 16px 16px; }
+}
+@media (max-height:860px) {
+  #canvasWelcome .pls:has(> .pls-hero) { gap:14px; }
+  #canvasWelcome .pls:has(> .pls-hero) .pls-stage { max-width:370px; }
+  #canvasWelcome .pls:has(> .pls-hero) .pls-points { gap:7px 10px; }
+  #canvasWelcome .pls:has(> .pls-hero) .pls-point { gap:9px; padding:8px 10px; }
+  #canvasWelcome .pls:has(> .pls-hero) .pls-pt-art,
+  #canvasWelcome .pls:has(> .pls-hero) .pls-art.pls-pt-svg { width:56px; height:44px; }
+  #canvasWelcome .pls:has(> .pls-hero) .pls-point h3 { font-size:13px; }
+  #canvasWelcome .pls:has(> .pls-hero) .pls-point p { font-size:11.5px; line-height:1.32; }
+  #canvasWelcome .pls-list p { display:none; }
+  #canvasWelcome .pls-list li { padding:12px 0 14px; }
+  #canvasWelcome .pls-draw-hint { margin-top:-6px; }
+}
+@media (max-height:700px) { #canvasWelcome .pls-brand h2 { font-size:34px; } #canvasWelcome .pls-hero { gap:20px 36px; } #canvasWelcome .pls:has(> .pls-hero) .pls-stage { max-width:340px; } }
+mjx-assistive-mml { position:absolute !important; width:1px !important; height:1px !important; overflow:hidden !important; clip:rect(1px,1px,1px,1px) !important; }
+.pls-form[hidden] { display:none !important; }
+/* Over a Canvas kept from last time the panel covers it. A stroke off the cards still starts there: the cover lifts and the stroke lands on that Canvas. */
+#canvasWelcome.pls-kept.pls-drawing { background:transparent; }
+#canvasWelcome.pls-kept { background:#fff radial-gradient(circle, rgba(31,36,45,.14) 1px, transparent 1.3px) 0 0 / 24px 24px; }
+/* While PenEcho Lines is up, the Canvas's own examples wait. Back to my Canvas shows them. */
+body[data-theme="studio"] .canvas-welcome:has(> .pls:not([hidden])) > .canvas-welcome-examples { display:none !important; }
+/* Until PenEcho Lines is drawn, nothing of the Canvas's own welcome shows. */
+html.pls-first #canvasWelcome > :not(#projectLinesEntry) { display:none !important; }
+
+/* The line beside a Canvas that belongs to a project (src/client/app/project-lines-bridge.js). It sits where the Agent panel sat. */
+.project-lines-panel-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 12px; color:#1e293b; font:600 13px/1 inherit; white-space:nowrap; border:1px solid rgba(31,36,45,.2); border-radius:8px; background:#fff; cursor:pointer; }
+body[data-theme="studio"] .topbar .project-lines-panel-button { order:5; flex-shrink:0; }
+.project-lines-panel-button:hover { background:#f1f5f9; }
+.project-lines-panel-button[aria-expanded="true"] { color:#1d4ed8; border-color:#2563eb; background:#eff6ff; }
+.project-lines-panel-button:focus-visible { outline:3px solid #4f5fd6; outline-offset:3px; }
+.project-lines-panel-button svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linejoin:round; }
+body { --project-lines-panel-width: clamp(326.4px, calc(28.8vw / var(--penecho-page-scale, 1)), 441.6px); }
+/* It lies over the right of the Canvas; the Canvas's own floating controls keep to its left. */
+.project-lines-panel { position:absolute; z-index:60; top:var(--studio-toolbar-height, 0px); right:0; bottom:0; width:var(--project-lines-panel-width); max-width:100%; overflow:hidden; background:#fff; border-left:1px solid rgba(31,36,45,.14); border-radius:0 0 9px 0; box-shadow:-10px 0 28px rgba(15,23,42,.08); }
+.project-lines-panel[hidden] { display:none; }
+.project-lines-panel iframe { display:block; width:100%; height:100%; border:0; background:#fff; }
+/* The Canvas's own controls move over, as they did for the Agent panel. */
+body[data-theme="studio"].project-lines-panel-open .canvas-frame { --studio-agent-edge-shift: calc(var(--project-lines-panel-width) - 4px) !important; }
+/* The pen tools stay in the middle of what is left of the Canvas (studio-shell.js lays them out in that space), and the Canvas AI bar sits at the top, just left of the panel. */
+@media (min-width: 901px) {
+  body[data-theme="studio"].project-lines-panel-open .primary-tools > .ai-tools-section,
+  body[data-theme="studio"].project-lines-panel-open .canvas-auto-paused-notice.shell-geometry { right:calc(var(--project-lines-panel-width) + 12px); }
+}
+/* An empty Canvas's welcome keeps to what is left of the Canvas too. */
+@media (min-width: 901px) { body[data-theme="studio"].project-lines-panel-open .canvas-welcome { right:var(--project-lines-panel-width); } }
+@media (max-width: 900px) {
+  .project-lines-panel-button span { display:none; }
+  .project-lines-panel-button { width:32px; padding:0; }
+  body { --project-lines-panel-width: min(calc(100vw / var(--penecho-page-scale, 1)), 420px); }
+  body.project-lines-panel-open :is(.primary-tools, #aiToolsSection, .page-hint-slot) { visibility:hidden; }
+  /* Beside a project's Canvas the bar also holds the rail and Notes & AI, so Collaborate and Share keep only their icons, as on a phone. */
+  body[data-theme="studio"].project-lines-canvas .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) .canvas-share-label { display:none; }
+  body[data-theme="studio"].project-lines-canvas .topbar :is(#collaborateCanvasBtn, #shareCanvasBtn) { width:28px; min-width:28px; padding:0; }
+}
+body.project-lines-canvas :is(#canvasAgentToggle, [data-shell-forward="#canvasAgentToggle"], [data-shell-mirror="#canvasAgentToggle"]) { display:none !important; }
+
+/* Another page saved this Canvas: this page's work waits here until you choose. */
+.project-lines-elsewhere { position:absolute; z-index:70; top:calc(var(--studio-toolbar-height, 0px) + 12px); left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:10px; max-width:calc(100% - 32px); padding:9px 10px 9px 16px; border:1px solid #f3d9a8; border-radius:12px; background:#fdf8ee; color:#6b3f0a; font:500 14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif; box-shadow:0 10px 30px rgba(15,23,42,.16); }
+.project-lines-elsewhere span { flex:1; min-width:0; }
+.project-lines-elsewhere button { flex:none; height:32px; padding:0 12px; border:1px solid rgba(31,36,45,.24); border-radius:8px; background:#fff; color:#0f172a; font:inherit; font-weight:550; cursor:pointer; white-space:nowrap; }
+.project-lines-elsewhere button.primary { border-color:#2563eb; background:#2563eb; color:#fff; }
+.project-lines-elsewhere button:disabled { opacity:.5; cursor:default; }
+@media (max-width:640px) { .project-lines-elsewhere { flex-wrap:wrap; } }
+
+/* The rail to the left of a project's Canvas (src/client/app/project-lines-bridge.js): the Projects page drawn with only its rail, in a frame.
+   The frame is as large as the window, so the rail inside is as wide as on the Projects page; this box shows only that much of it. */
+html { --project-lines-rail-width:280px; }
+@media (max-width:1100px) { html { --project-lines-rail-width:58px; } }
+@media (max-width:860px) { html { --project-lines-rail-width:52px; } }
+.project-lines-rail { position:fixed; z-index:40; inset:0 auto 0 0; width:var(--project-lines-rail-width); overflow:hidden; background:#fff; box-shadow:inset -1px 0 rgba(31,36,45,.14); }
+.project-lines-rail[hidden] { display:none; }
+/* Going between the Projects pages and a Canvas changes page. The browser keeps the page you leave on screen until the next one has
+   drawn itself, then crossfades, so it never flashes blank like a web page loading; the sidebar, on both, stays still (PE-586). */
+@view-transition { navigation:auto; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration:.2s; }
+.project-lines-rail { view-transition-name:pe-rail; }
+.project-lines-rail iframe { position:absolute; inset:0 auto 0 0; display:block; width:calc(100vw / var(--penecho-page-scale, 1)); height:100%; border:0; background:transparent; }
+/* A menu or a dialog opened from the rail has the whole window while it is open. */
+.project-lines-rail.over { z-index:2147482000; width:calc(100vw / var(--penecho-page-scale, 1)); background:transparent; box-shadow:none; }
+/* The Canvas, its bar and its floating tools all start where the rail ends. */
+html.project-lines-rail-open main { width:calc(100% - var(--project-lines-rail-width)); margin-left:var(--project-lines-rail-width); margin-right:0; }
+html.project-lines-rail-open body[data-theme="studio"] .shell-geometry { --pe-shell-left:var(--project-lines-rail-width); }
+html.project-lines-rail-open #projectLinesCover { left:var(--project-lines-rail-width); }
+/* The rail is the way around, so the Canvas's own sidebar is not here, and its button's place is the rail's. */
+html.project-lines-railed :is(#studioNavigatorToggle, [data-shell-forward="#studioNavigatorToggle"], #studioNavigator, #studioNavigatorScrim) { display:none !important; }
+.toolbar > .project-lines-rail-show { display:grid; }
+.project-lines-rail-show[hidden] { display:none !important; }
+/* The rail carries the name, so the bar starts with the Canvas's own. */
+html.project-lines-rail-open body[data-theme="studio"] .topbar .brand,
+html.project-lines-in-shell:not(.shell-rail-hidden) body[data-theme="studio"]:not(.project-lines-draft) .topbar .brand { display:none; }
+html.project-lines-rail-open body[data-theme="studio"] .topbar .canvas-document-meta,
+html.project-lines-in-shell:not(.shell-rail-hidden) body[data-theme="studio"]:not(.project-lines-draft) .topbar .canvas-document-meta { margin-left:0; padding-left:4px; border-left:0; }
+
+/* ---------- Contextual Add-to-Line strip & Draw-mode top-right Done ---------- */
+.project-lines-context-strip[hidden] { display:none !important; }
+.project-lines-context-strip {
+  position:absolute; z-index:44; top:calc(var(--studio-toolbar-height, 0px) + 10px); left:calc(var(--pe-shell-left, 0px) + 14px); right:calc(var(--project-lines-open-right, 0px) + 14px);
+  display:flex; justify-content:center; pointer-events:none;
+}
+body.project-lines-panel-open .project-lines-context-strip { --project-lines-open-right: var(--project-lines-panel-width, 0px); }
+/* The Canvas AI bar holds the top right (studio-shell.css), so the strip sits in the row under it. */
+@media (min-width: 701px) { body[data-theme="studio"] .project-lines-context-strip { top:calc(var(--studio-toolbar-height, 0px) + 62px); } }
+.project-lines-strip-bar {
+  display:inline-flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px 12px; max-width:100%;
+  padding:6px 10px 6px 13px; border:1px solid var(--studio-line, #d9dde5); border-radius:11px;
+  background:var(--studio-panel, #ffffff); color:var(--studio-text, #20242c);
+  font-size:13px; line-height:1.35; box-shadow:0 8px 22px rgba(17, 24, 39, .10); pointer-events:auto;
+}
+.project-lines-strip-status { display:inline-flex; align-items:center; gap:7px; min-width:0; font-weight:500; }
+.project-lines-strip-dot { width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:#d97706; }
+.project-lines-strip-bar[data-state="added"] .project-lines-strip-dot { background:#16a34a; }
+.project-lines-strip-bar[data-state="error"] .project-lines-strip-dot { background:#dc2626; }
+.project-lines-strip-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:340px; }
+.project-lines-strip-error { color:#b91c1c; font-size:12.5px; }
+.project-lines-strip-actions { display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; }
+.project-lines-strip-btn {
+  display:inline-flex; align-items:center; justify-content:center; height:28px; padding:0 11px; border-radius:7px;
+  border:1px solid var(--studio-line, #d9dde5); background:var(--studio-panel, #ffffff); color:var(--studio-text, #20242c);
+  font:550 12.5px/1 inherit; cursor:pointer; white-space:nowrap;
+}
+.project-lines-strip-btn:hover:not(:disabled) { background:#f3f4f6; }
+.project-lines-strip-btn.primary { border-color:var(--pe-accent, #2563eb); background:var(--pe-accent, #2563eb); color:#fff; font-weight:600; }
+.project-lines-strip-btn.primary:hover:not(:disabled) { background:var(--pe-accent-strong, #1d4ed8); }
+.project-lines-strip-btn:disabled { opacity:.48; cursor:default; }
+.project-lines-strip-btn:focus-visible { outline:2px solid var(--studio-accent, #4f46e5); outline-offset:2px; }
+@media (max-width: 900px) {
+  body.project-lines-panel-open .project-lines-context-strip { display:none; }
+  .project-lines-strip-text { max-width:210px; }
+}
+@media (max-width: 600px) {
+  .project-lines-context-strip { left:8px; right:8px; }
+  .project-lines-strip-bar { width:100%; justify-content:space-between; }
+  .project-lines-strip-text { max-width:none; white-space:normal; }
+}
+
+body.project-lines-draft .topbar :is(.canvas-share-control, .canvas-more-control, #canvasFileActions) { display:none !important; }
+body.project-lines-draft .topbar .project-lines-link {
+  order:6; margin-left:auto; height:30px; padding:0 14px; border-radius:7px;
+  background:var(--pe-accent, #2563eb); border:1px solid var(--pe-accent, #2563eb); color:#fff; font-weight:600;
+}
+body.project-lines-draft .topbar .project-lines-link:hover { background:var(--pe-accent-strong, #1d4ed8); }
+body.project-lines-draft .topbar .project-lines-link svg { stroke:currentColor; }

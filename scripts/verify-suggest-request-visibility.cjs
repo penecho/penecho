@@ -15,7 +15,7 @@ fs.createReadStream = function(file, ...args) {
     if (${cloud}) Object.assign(window.PENECHO_CONFIG,{runtime:'cloud',connectionAccountId:'test-only',linkedDeviceId:'test-only',linkedDeviceOnline:true});
     requireAiConnectionSelection=()=>true;hasSelectedAiConnection=()=>true;selectedAiConnectionId=()=>"test-connection";aiConnectionScope=()=>"test-scope";
     allAiConnections=()=>[{id:'test-connection',provider:'api'}];
-    window.visibilityTest={state,smartSuggest,canvasAgent,canvasDocumentsReady,canvasDocumentsCurrent,smartSuggestSyncDocument,smartSuggestRecordStroke,smartSuggestCluster,assistRefresh,renderAssist,hideAssist,clearDirtyContributionTracking,stroke,tiles,requestAI,executeAssistAction,assistAsk,captureSelection,cancelSelection,canvasAgentSubmitMessage,canvasAgentHandleEvent,canvasAgentBeginRequest,canvasAgentRequestDidNotSend,assistAgentFinishResult,assistAgent,restoreWidgets,acceptPending,dirtyInputSnapshots,assistDirtyClusterAtPoint,t};
+    window.visibilityTest={state,smartSuggest,canvasAgent,canvasDocumentsReady,canvasDocumentsCurrent,smartSuggestSyncDocument,smartSuggestRecordStroke,smartSuggestCluster,assistRefresh,renderAssist,hideAssist,clearDirtyContributionTracking,stroke,tiles,requestAI,executeAssistAction,assistAsk,captureSelection,cancelSelection,canvasAgentSubmitMessage,canvasAgentHandleEvent,canvasAgentStopTurn,canvasAgentBeginRequest,canvasAgentRequestDidNotSend,assistAgentFinishResult,assistAgent,restoreWidgets,acceptPending,dirtyInputSnapshots,assistDirtyClusterAtPoint,t};
     window.visibilityCommands=[];window.nextActions='none';window.commandResult='widget';
     const originalFetch=window.fetch;
     window.fetch=(url,options)=>{
@@ -147,14 +147,14 @@ app.whenReady().then(async () => {
       before=seed();const sent=await t.canvasAgentSubmitMessage({textOverride:'Test request',omitInitialCapture:true,clearInput:false,includeDraftMedia:false});
       check(sent&&visible(),'Agent submission keeps suggestions visible while awaiting turn_start');
       t.canvasAgentHandleEvent({kind:'turn_start',turn:1});check(visible(),'Agent running keeps suggestions visible');
-      document.querySelector('#canvasAgentStop').click();assertRestored(before,'Agent Stop');
+      t.canvasAgentStopTurn();assertRestored(before,'Agent Stop');
       check(agentMessages.at(-1).type==='cancel','Agent Stop still sends cancellation');
 
       before=seed();await t.executeAssistAction({id:'animate'},a.bar.target);
       check(t.canvasAgent.requestPending&&!visible(),'suggestion Agent handoff hides suggestions after image capture');
       await new Promise(resolve=>setTimeout(resolve,600));check(!visible(),'suggestion Agent handoff stays hidden while awaiting the turn');
       check(a.consumedStrokeId===0,'suggestion Agent submission keeps the old suggestion recoverable');
-      t.canvasAgentHandleEvent({kind:'turn_start',turn:1});document.querySelector('#canvasAgentStop').click();
+      t.canvasAgentHandleEvent({kind:'turn_start',turn:1});t.canvasAgentStopTurn();
       assertRestored(before,'suggestion Agent Stop');
 
       seed();const original=a.strokes.at(-1);

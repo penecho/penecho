@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const NOTE = require("../public/note-card.js"), SELECT = require("../public/selection.js");
 const read = file => fs.readFileSync(require.resolve(file), "utf8");

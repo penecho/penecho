@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const source = fs.readFileSync(require("node:path").join(__dirname, "../public/widget-host.js"), "utf8");
 function boot(remoteCanvas) {

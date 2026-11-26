@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -797,135 +798,6 @@ test("a device can select a shared CLI connection while the server default remai
   }
 });
 
-test("process-lifetime PIN gates the Canvas and local APIs, then clears on restart", { timeout:30000 }, async () => {
-  const stateDir=testStateDir({}),
-    env=serverEnv({PENECHO_STATE_DIR:stateDir,PENECHO_TEST_OPEN_ACCESS:"0"});
-  let running=await startServer(env);
-  try {
-    const firstPage=await fetch(running.origin),firstHtml=await firstPage.text();
-    assert.equal(firstPage.headers.get("set-cookie"),null);
-    assert.match(firstHtml,/Set a 6-digit security code/);
-    assert.match(firstHtml,/Instance-wide protection/);
-
-    const initial=await fetch(`${running.origin}/api/local-access/status`).then(response=>response.json());
-    assert.equal(initial.mode,"undecided");
-    assert.equal(initial.setupRequired,true);
-    assert.equal(initial.unlocked,false);
-    const lockedConfigScript=await fetch(`${running.origin}/api/config.js`).then(response=>response.text());
-    assert.doesNotMatch(lockedConfigScript,/accessSessionToken/);
-
-    const lockedPluginWrite=await fetch(`${running.origin}/api/plugins`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:running.origin},
-      body:JSON.stringify({document:"invalid"}),
-    });
-    assert.equal(lockedPluginWrite.status,403);
-
-    const setup=await fetch(`${running.origin}/api/local-access/setup-pin`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:running.origin},
-      body:JSON.stringify({pin:"271828",confirmation:"271828"}),
-    });
-    const setupBody=await setup.json();
-    assert.equal(setup.status,200,JSON.stringify(setupBody));
-    assert.match(setupBody.accessSessionToken,/^[A-Za-z0-9_-]{40,}$/);
-    const setupCookie=setup.headers.get("set-cookie");
-    assert.match(setupCookie,/; Path=\/;/);
-    assert.match(setupCookie,/; HttpOnly;/);
-    assert.match(setupCookie,/; SameSite=Strict/);
-    const browserACookie=setupCookie?.split(";",1)[0];
-    assert.ok(browserACookie);
-    const unlockedConfigScript=await fetch(`${running.origin}/api/config.js`,{headers:{Cookie:browserACookie}}).then(response=>response.text());
-    assert.match(unlockedConfigScript,new RegExp(setupBody.accessSessionToken));
-    const pinModeRequest=await fetch(`${running.origin}/api/ai/command`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:running.origin},
-      body:"{}",
-    });
-    assert.equal(pinModeRequest.status,403);
-    const authenticatedPinRequest=await fetch(`${running.origin}/api/ai/command`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:running.origin,"X-PenEcho-Session":setupBody.accessSessionToken},
-      body:"{}",
-    });
-    assert.equal(authenticatedPinRequest.status,400);
-
-    const unlockedPage=await fetch(running.origin,{headers:{Cookie:browserACookie}});
-    assert.match(await unlockedPage.text(),/Handwritten AI Canvas/);
-    const browserBStatus=await fetch(`${running.origin}/api/local-access/status`).then(response=>response.json());
-    assert.equal(browserBStatus.mode,"pin");
-    assert.equal(browserBStatus.unlocked,false);
-
-    const unlock=await fetch(`${running.origin}/api/local-access/unlock`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:running.origin},
-      body:JSON.stringify({pin:"271828"}),
-    });
-    assert.equal(unlock.status,200,await unlock.text());
-    assert.ok(unlock.headers.get("set-cookie"));
-
-    for(let attempt=1;attempt<=5;attempt++) {
-      const wrong=await fetch(`${running.origin}/api/local-access/unlock`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json",Origin:running.origin},
-        body:JSON.stringify({pin:"000000"}),
-      });
-      assert.equal(wrong.status,attempt===5?429:401);
-    }
-  } finally {
-    await stopServer(running.child);
-  }
-
-  running=await startServer(env);
-  try {
-    const restarted=await fetch(`${running.origin}/api/local-access/status`).then(response=>response.json());
-    assert.equal(restarted.mode,"undecided");
-    assert.equal(restarted.unlocked,false);
-    const open=await fetch(`${running.origin}/api/local-access/open`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:running.origin},
-      body:JSON.stringify({acknowledgeRisk:true}),
-    });
-    const openBody=await open.json();
-    assert.equal(open.status,200,JSON.stringify(openBody));
-    assert.match(openBody.accessSessionToken,/^[A-Za-z0-9_-]{40,}$/);
-    assert.ok(open.headers.get("set-cookie"));
-    const authenticatedOpenRequest=await fetch(`${running.origin}/api/ai/command`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:running.origin,"X-PenEcho-Session":openBody.accessSessionToken},
-      body:"{}",
-    });
-    assert.equal(authenticatedOpenRequest.status,400);
-    const laterPage=await fetch(running.origin),laterHtml=await laterPage.text();
-    assert.ok(laterPage.headers.get("set-cookie"));
-    assert.match(laterHtml,/Handwritten AI Canvas/);
-  } finally {
-    await stopServer(running.child);
-  }
-});
-
-test("concurrent first-run PIN choices cannot overwrite each other", { timeout:20000 }, async () => {
-  const {child,origin}=await startServer(serverEnv({PENECHO_TEST_OPEN_ACCESS:"0"}));
-  try {
-    const submit=pin=>fetch(`${origin}/api/local-access/setup-pin`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:origin},
-      body:JSON.stringify({pin,confirmation:pin}),
-    });
-    const pins=["135790","246802"],responses=await Promise.all(pins.map(submit)),statuses=responses.map(response=>response.status);
-    assert.deepEqual([...statuses].sort((a,b)=>a-b),[200,409]);
-    const winnerIndex=statuses.indexOf(200);
-    const unlock=await fetch(`${origin}/api/local-access/unlock`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:origin},
-      body:JSON.stringify({pin:pins[winnerIndex]}),
-    });
-    assert.equal(unlock.status,200,await unlock.text());
-  } finally {
-    await stopServer(child);
-  }
-});
-
 test("Claude CLI mode sends the canvas to the authenticated local CLI with the selected model and effort", { timeout:20000 }, async () => {
   const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-server-claude-")),fakeCli=path.join(directory,"fake-claude.js"),record=path.join(directory,"record.json");
   await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),args=process.argv.slice(2),input=JSON.parse(fs.readFileSync(0,"utf8").trim()),image=input.message.content.find(part=>part.type==="image"),buffer=Buffer.from(image?.source?.data||"","base64");fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({args,mediaType:image?.source?.media_type,signature:buffer.toString("ascii",0,4)}));const result={intent:"answer",observedText:"hi",message:"hello",commands:[]};process.stdout.write(JSON.stringify({type:"result",subtype:"success",result:JSON.stringify(result)}));\n`);
@@ -1248,31 +1120,6 @@ test("open Codex mode keeps its original same-origin request behavior", { timeou
   }
 });
 
-test("PIN authentication leaves the API provider request behavior unchanged", { timeout: 20000 }, async () => {
-  const upstream = await startApiServer(), { child, origin } = await startServer(apiServerEnv(upstream.origin,{PENECHO_TEST_OPEN_ACCESS:"0"}));
-  try {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    assert.equal(upstream.requests.length, 0);
-    const setup=await fetch(`${origin}/api/local-access/setup-pin`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Origin:origin},
-      body:JSON.stringify({pin:"271828",confirmation:"271828"}),
-    });
-    const setupBody=await setup.json();
-    assert.equal(setup.status,200,JSON.stringify(setupBody));
-    const page = await httpRequest(origin,{headers:{Host:"my-pc:3888"}}), before = upstream.requests.length, body=JSON.stringify(validPayload());
-    assert.equal(page.status,200);
-    assert.equal(page.headers["set-cookie"],undefined);
-    const remote = await httpRequest(origin,{method:"POST",pathText:"/api/ai/command",headers:{Host:"my-pc:3888",Origin:"http://my-pc:3888","X-PenEcho-Session":setupBody.accessSessionToken,"Content-Type":"text/plain","Content-Length":Buffer.byteLength(body)},body});
-    assert.equal(remote.status,200);
-    assert.equal(upstream.requests.length, before + 1);
-    assert.doesNotMatch(upstream.requests[0],new RegExp(setupBody.accessSessionToken));
-  } finally {
-    await stopServer(child);
-    await new Promise(resolve => upstream.server.close(resolve));
-  }
-});
-
 test("shared PenEcho server canvases support authorized metadata-first CRUD", { timeout:20000 }, async () => {
   const stateDir=testStateDir({}),
     {child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
@@ -1353,9 +1200,9 @@ test("Canvas metadata-only lists validated document identity without content and
     const metadataResponse=await fetch(`${origin}/api/canvases?metadataOnly=1`),metadata=await metadataResponse.json();
     assert.equal(metadataResponse.status,200);
     const legacyEntry=metadata.canvases.find(item=>item.id===legacy.id),modernEntry=metadata.canvases.find(item=>item.id===base.id),invalidEntry=metadata.canvases.find(item=>item.id===invalidBase.id);
-    assert.deepEqual(Object.keys(legacyEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
+    assert.deepEqual(Object.keys(legacyEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","revisionId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
     assert.equal(legacyEntry.documentId,null,"legacy snapshots without document identity remain valid");
-    assert.deepEqual(Object.keys(modernEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
+    assert.deepEqual(Object.keys(modernEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","revisionId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
     assert.equal(modernEntry.documentId,documentId);
     for (const [entry, version, widgetCount] of [[legacyEntry,1,0],[modernEntry,2,1],[invalidEntry,2,1]]) {
       assert.equal(entry.version,version);
@@ -1510,30 +1357,6 @@ test("shared PenEcho server canvases retain up to one hundred widgets, images, a
   }
 });
 
-test("shared server canvases obey the process-lifetime PenEcho PIN session", { timeout:20000 }, async () => {
-  const {child,origin}=await startServer(serverEnv({PENECHO_TEST_OPEN_ACCESS:"0"})),
-    snapshot=validSharedCanvas();
-  try {
-    assert.equal((await fetch(`${origin}/api/canvases`)).status,403);
-    const setup=await fetch(`${origin}/api/local-access/setup-pin`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json",Origin:origin},
-        body:JSON.stringify({pin:"271828",confirmation:"271828"}),
-      }),
-      setupBody=await setup.json(),
-      sessionHeaders={"X-PenEcho-Session":setupBody.accessSessionToken},
-      mutationHeaders={...sessionHeaders,"Content-Type":"application/json",Origin:origin};
-    assert.equal(setup.status,200,JSON.stringify(setupBody));
-    const created=await fetch(`${origin}/api/canvases`,{method:"POST",headers:mutationHeaders,body:JSON.stringify(snapshot)});
-    assert.equal(created.status,201,await created.text());
-    assert.equal((await fetch(`${origin}/api/canvases`,{headers:sessionHeaders})).status,200);
-    assert.equal((await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`,{headers:sessionHeaders})).status,200);
-    assert.equal((await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`)).status,403);
-  } finally {
-    await stopServer(child);
-  }
-});
-
 test("enabled plugin documents reach the model and gate html_widget commands", { timeout:20000 }, async () => {
   const command = (pluginId="weather", html="<!doctype html><title>Weather</title>", placement = {}) => JSON.stringify({ intent:"answer", commands:[{ tool:"html_widget", pluginId, x:100, y:200, w:1200, h:700, title:"Weather", refreshSeconds:900, html, ...placement }] }),
     upstream = await startApiServer("", { response:({index}) => {
@@ -1642,7 +1465,7 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     const rejected = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(malformed) });
     assert.equal(rejected.status, 400);
     const oversized = validPayload();
-    oversized.plugins = [{ ...descriptor, document:"x".repeat(12001) }];
+    oversized.plugins = [{ ...descriptor, document:"x".repeat(100001) }];
     const oversizedResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(oversized) });
     assert.equal(oversizedResponse.status, 400);
     assert.equal(upstream.requests.length, 10);
@@ -2435,7 +2258,7 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /function deleteLocalPlugin\([\s\S]*?path\.join\(PRIVATE_PLUGIN_DIRECTORY/);
   assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?url\.searchParams\.get\("scope"\) === "private"[\s\S]*?localPluginCatalog\(scope\)/);
   assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document, body\.styles \|\| ""\)/);
-  assert.match(source, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?under 12000 UTF-8 bytes[\s\S]*?under 32000 UTF-8 bytes/);
+  assert.match(source, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?under 100000 UTF-8 bytes[\s\S]*?under 32000 UTF-8 bytes/);
   assert.match(source, /url\.pathname === "\/api\/plugins\/improve"[\s\S]*?improvePluginDocument/);
 });
 
@@ -3647,4 +3470,226 @@ test("client and server contain no aggregate draft rejection budget", () => {
   const app=fs.readFileSync(path.join(ROOT,"public","app.js"),"utf8"),server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8");
   for(const source of [app,server])assert.doesNotMatch(source,/Draft destination budget|Draft raster budget|MAX_DRAFT_RASTER_PIXELS|MAX_LOGICAL_PIXELS|MAX_DESTINATION_TILES/);
   assert.doesNotMatch(server,/padded union bounds may total at most|intersect at most 64/);
+});
+
+// F5. "Another device" here is a request from loopback that a proxy forwarded (X-Forwarded-For), or that names a host which is not this
+// computer: the rule counts both as another device. Its remembered-device cookie is what a tablet's browser would keep.
+const OTHER = { "X-Forwarded-For":"192.168.1.50" };
+const cookiesOf = response => (typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [response.headers.get("set-cookie")].filter(Boolean)).map(cookie => cookie.split(";", 1)[0]);
+const deviceCookieOf = response => cookiesOf(response).find(cookie => cookie.startsWith("penecho_device_"));
+
+test("F5: this computer is never asked, also after a restart; another device needs the code, is remembered across restarts, and New code forgets it", { timeout:40000 }, async () => {
+  const stateDir=testStateDir({}),env=serverEnv({PENECHO_STATE_DIR:stateDir,PENECHO_TEST_OPEN_ACCESS:"0"});
+  let running=await startServer(env),code,device,session;
+  try {
+    const page=await fetch(running.origin);
+    assert.match(await page.text(),/Handwritten AI Canvas/,"this computer opens on its first page");
+    assert.ok(cookiesOf(page).some(cookie=>cookie.startsWith("penecho_ai_session_")));
+    const mine=await fetch(`${running.origin}/api/local-access/status`).then(r=>r.json());
+    assert.deepEqual([mine.unlocked,mine.thisComputer,mine.setupRequired,mine.mode],[true,true,false,"pin"]);
+    const network=await fetch(`${running.origin}/api/local-access/network`).then(r=>r.json());
+    assert.match(network.code,/^\d{6}$/);
+    assert.deepEqual([network.on,network.askCode,network.devices],[true,true,[]]);
+    code=network.code;
+    // Another device: the code page, nothing else.
+    const theirs=await fetch(running.origin,{headers:OTHER});
+    assert.doesNotMatch(await theirs.text(),/Handwritten AI Canvas/);
+    const locked=await fetch(`${running.origin}/api/local-access/status`,{headers:OTHER}).then(r=>r.json());
+    assert.deepEqual([locked.unlocked,locked.thisComputer,locked.mode,locked.setupRequired],[false,false,"pin",false]);
+    assert.doesNotMatch(await fetch(`${running.origin}/api/config.js`,{headers:OTHER}).then(r=>r.text()),/accessSessionToken/);
+    assert.equal((await fetch(`${running.origin}/api/canvases`,{headers:OTHER})).status,403);
+    assert.equal((await fetch(`${running.origin}/api/local-access/network`,{headers:OTHER})).status,403,"Settings → Other devices is this computer's only");
+    const unlock=await fetch(`${running.origin}/api/local-access/unlock`,{method:"POST",headers:{...OTHER,"Content-Type":"application/json",Origin:running.origin},body:JSON.stringify({pin:code})});
+    const unlocked=await unlock.json();
+    assert.equal(unlock.status,200,JSON.stringify(unlocked));
+    device=deviceCookieOf(unlock);
+    assert.ok(device,"the device is remembered");
+    const raw=(unlock.headers.getSetCookie?.()||[]).find(cookie=>cookie.startsWith("penecho_device_"));
+    assert.match(raw,/; Max-Age=7776000; HttpOnly; SameSite=Strict/);
+    session=unlocked.accessSessionToken;
+    const withDevice={...OTHER,Cookie:device};
+    assert.match(await fetch(running.origin,{headers:withDevice}).then(r=>r.text()),/Handwritten AI Canvas/);
+    assert.equal((await fetch(`${running.origin}/api/canvases`,{headers:{...withDevice,"X-PenEcho-Session":session}})).status,200);
+    assert.equal((await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{...withDevice,"X-PenEcho-Session":session,"Content-Type":"application/json",Origin:running.origin},body:"{}"})).status,400,"past the access check");
+    // Wrong codes: the limits as before (five in five minutes, then a wait).
+    const statuses=[];
+    for(let attempt=1;attempt<=5;attempt++)statuses.push((await fetch(`${running.origin}/api/local-access/unlock`,{method:"POST",headers:{...OTHER,"Content-Type":"application/json",Origin:running.origin},body:JSON.stringify({pin:code==="000000"?"111111":"000000"})})).status);
+    assert.deepEqual(statuses,[401,401,401,401,429]);
+    assert.equal((await fetch(running.origin+"/api/local-access/unlock",{method:"POST",headers:{...OTHER,"Content-Type":"application/json",Origin:running.origin},body:JSON.stringify({pin:code})})).status,429,"even the right code waits");
+  } finally { await stopServer(running.child); }
+  // The same address after the restart, as PenEcho always has (3888): the browser's cookies belong to it.
+  running=await startServer({...env,PORT:new URL(running.origin).port});
+  try {
+    const mine=await fetch(`${running.origin}/api/local-access/status`).then(r=>r.json());
+    assert.deepEqual([mine.unlocked,mine.thisComputer,mine.setupRequired],[true,true,false],"never asked, also after a restart");
+    const network=await fetch(`${running.origin}/api/local-access/network`).then(r=>r.json());
+    assert.equal(network.code,code,"the same code");
+    assert.equal(network.devices.length,1);
+    const withDevice={...OTHER,Cookie:device};
+    const back=await fetch(`${running.origin}/api/local-access/status`,{headers:withDevice});
+    assert.equal((await back.json()).unlocked,true,"the device is still remembered");
+    assert.match(await fetch(running.origin,{headers:withDevice}).then(r=>r.text()),/Handwritten AI Canvas/);
+    const fresh=await fetch(`${running.origin}/api/local-access/network`,{method:"POST",headers:{"Content-Type":"application/json",Origin:running.origin},body:JSON.stringify({newCode:true})}).then(r=>r.json());
+    assert.notEqual(fresh.code,code);
+    assert.deepEqual(fresh.devices,[]);
+    assert.equal((await fetch(`${running.origin}/api/local-access/status`,{headers:withDevice}).then(r=>r.json())).unlocked,false,"New code forgets every device");
+    assert.equal((await fetch(`${running.origin}/api/canvases`,{headers:{...withDevice,"X-PenEcho-Session":session}})).status,403);
+  } finally { await stopServer(running.child); }
+});
+
+test("F5: a loopback connection with a forwarding header or a foreign Host counts as another device", { timeout:20000 }, async () => {
+  const running=await startServer(serverEnv({PENECHO_TEST_OPEN_ACCESS:"0"})),port=new URL(running.origin).port;
+  try {
+    for(const header of ["X-Forwarded-For","Forwarded","X-Real-IP","CF-Connecting-IP"]) {
+      const status=await fetch(`${running.origin}/api/local-access/status`,{headers:{[header]:header==="Forwarded"?"for=192.168.1.50":"192.168.1.50"}}).then(r=>r.json());
+      assert.deepEqual([status.thisComputer,status.unlocked],[false,false],header);
+    }
+    // A Host that is not this computer (a tunnel that passes its public name, or DNS rebinding) is not served at all.
+    for(const pathText of ["/api/local-access/status","/api/local-access/network","/api/local-access/network/key","/"]) {
+      const foreign=await httpRequest(running.origin,{pathText,headers:{Host:`attacker.example:${port}`}});
+      assert.ok([403,421].includes(foreign.status),`${pathText} ${foreign.status}`);
+      assert.doesNotMatch(foreign.body,/"code"|Handwritten AI Canvas|k=/,pathText);
+    }
+    const plain=await fetch(`${running.origin}/api/local-access/status`).then(r=>r.json());
+    assert.deepEqual([plain.thisComputer,plain.unlocked],[true,true]);
+    // Another site's page that includes config.js as a script does not get the session token.
+    assert.doesNotMatch(await fetch(`${running.origin}/api/config.js`,{headers:{"Sec-Fetch-Site":"cross-site"}}).then(r=>r.text()),/accessSessionToken/);
+    assert.match(await fetch(`${running.origin}/api/config.js`,{headers:{"Sec-Fetch-Site":"same-origin"}}).then(r=>r.text()),/accessSessionToken/);
+    // Another site's page in this computer's browser cannot trigger Settings → Other devices.
+    assert.equal((await fetch(`${running.origin}/api/local-access/network`,{headers:{"Sec-Fetch-Site":"cross-site"}})).status,403);
+    assert.equal((await fetch(`${running.origin}/api/local-access/network`,{headers:{Origin:"https://evil.example"}})).status,403);
+    assert.equal((await fetch(`${running.origin}/api/local-access/network`,{method:"POST",headers:{"Content-Type":"application/json",Origin:"https://evil.example"},body:JSON.stringify({on:false})})).status,403);
+    assert.equal((await fetch(`${running.origin}/api/local-access/network`,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({askCode:false})})).status,403,"no Origin: a form post from nowhere is refused");
+    // setup-pin and open answer this computer only.
+    assert.equal((await fetch(`${running.origin}/api/local-access/open`,{method:"POST",headers:{...OTHER,"Content-Type":"application/json",Origin:running.origin},body:JSON.stringify({acknowledgeRisk:true})})).status,403);
+    assert.equal((await fetch(`${running.origin}/api/local-access/setup-pin`,{method:"POST",headers:{...OTHER,"Content-Type":"application/json",Origin:running.origin},body:JSON.stringify({pin:"271828",confirmation:"271828"})})).status,403);
+  } finally { await stopServer(running.child); }
+});
+
+test("F5: the QR key opens PenEcho on a tablet once, remembers it, and leaves no key in the address", { timeout:20000 }, async () => {
+  const running=await startServer(serverEnv({PENECHO_TEST_OPEN_ACCESS:"0",PENECHO_TEST_LAN_HOSTS:"192.168.1.23"})),port=new URL(running.origin).port;
+  try {
+    const network=await fetch(`${running.origin}/api/local-access/network`).then(r=>r.json());
+    assert.deepEqual(network.addresses,[`http://192.168.1.23:${port}`]);
+    const issued=await fetch(`${running.origin}/api/local-access/network/key`).then(r=>r.json());
+    assert.match(issued.url,new RegExp(`^http://192\\.168\\.1\\.23:${port}/\\?k=[A-Za-z0-9_-]{24}$`));
+    assert.ok(issued.expiresAt-Date.now()>9*60_000&&issued.expiresAt-Date.now()<=10*60_000);
+    assert.equal((await fetch(`${running.origin}/api/local-access/network/key`,{headers:OTHER})).status,403);
+    const qr=await fetch(`${running.origin}/api/local-access/network/qr.svg?u=${encodeURIComponent(issued.url)}`);
+    assert.equal(qr.status,200);
+    assert.match(qr.headers.get("content-type"),/^image\/svg\+xml/);
+    assert.match(await qr.text(),/^<svg /);
+    for(const elsewhere of ["https://evil.example/?k=x","http://10.9.9.9:1/",`http://192.168.1.23:${port}/other`,`http://192.168.1.23:${port}/?k=a&x=1`])
+      assert.equal((await fetch(`${running.origin}/api/local-access/network/qr.svg?u=${encodeURIComponent(elsewhere)}`)).status,400,elsewhere);
+    const key=new URL(issued.url).searchParams.get("k");
+    const opened=await fetch(`${running.origin}/?k=${key}`,{headers:OTHER,redirect:"manual"});
+    assert.equal(opened.status,303);
+    assert.equal(opened.headers.get("location"),"/","sent on without the key");
+    const device=deviceCookieOf(opened);
+    assert.ok(device,"remembered");
+    assert.equal((await fetch(`${running.origin}/api/local-access/status`,{headers:{...OTHER,Cookie:device}}).then(r=>r.json())).unlocked,true);
+    for(const sneaky of ["/.//evil.example","/x/..//evil.example","/%2e//evil.example"]) {
+      const bounced=await httpRequest(running.origin,{pathText:`${sneaky}?k=${"A".repeat(24)}`,headers:OTHER});
+      assert.equal(bounced.status,303);
+      assert.match(bounced.headers.location,/^\/(?![/\\])/,`${sneaky} stays on this PenEcho: ${bounced.headers.location}`);
+    }
+    const again=await fetch(`${running.origin}/?k=${key}`,{headers:OTHER,redirect:"manual"});
+    assert.equal(again.status,303);
+    assert.equal(deviceCookieOf(again),undefined,"a key works once");
+  } finally { await stopServer(running.child); }
+});
+
+test("F5: network access off and on without a restart; this computer's page keeps working; Without a code", { timeout:20000 }, async () => {
+  const running=await startServer(serverEnv({PENECHO_TEST_OPEN_ACCESS:"0"}));
+  const set=body=>fetch(`${running.origin}/api/local-access/network`,{method:"POST",headers:{"Content-Type":"application/json",Origin:running.origin},body:JSON.stringify(body)}).then(r=>r.json());
+  try {
+    // A tablet's open connection (keep-alive here, a live socket alike) is closed when access is turned off.
+    const agent=new http.Agent({keepAlive:true,maxSockets:1}),port=new URL(running.origin).port;
+    const tablet=()=>new Promise((resolve,reject)=>{const r=http.get({host:"127.0.0.1",port,path:"/api/local-access/status",headers:OTHER,agent},res=>{res.resume();res.on("end",()=>resolve(r.socket));});r.on("error",reject);});
+    const socket=await tablet();
+    const closed=new Promise(resolve=>socket.once("close",resolve));
+    assert.equal((await set({on:false})).on,false);
+    assert.equal(await Promise.race([closed.then(()=>"closed"),new Promise(r=>setTimeout(()=>r("still open"),1500))]),"closed","at once, not at the keep-alive timeout");
+    agent.destroy();
+    const refused=await fetch(running.origin,{headers:OTHER});
+    assert.equal(refused.status,403);
+    assert.match(await refused.text(),/not open to other devices/);
+    assert.equal((await fetch(`${running.origin}/api/local-access/status`,{headers:OTHER})).status,403);
+    assert.match(await fetch(running.origin).then(r=>r.text()),/Handwritten AI Canvas/,"this computer is not cut off");
+    assert.equal((await fetch(`${running.origin}/api/canvases`)).status,200);
+    assert.equal((await set({on:true})).on,true);
+    assert.equal((await fetch(`${running.origin}/api/local-access/status`,{headers:OTHER}).then(r=>r.json())).mode,"pin");
+    // Without a code: any device on the network.
+    await set({askCode:false});
+    const open=await fetch(`${running.origin}/api/local-access/status`,{headers:OTHER}).then(r=>r.json());
+    assert.deepEqual([open.mode,open.unlocked],["open",true]);
+    assert.equal((await fetch(`${running.origin}/api/canvases`,{headers:OTHER})).status,200);
+  } finally { await stopServer(running.child); }
+});
+
+test("F5: PENECHO_ACCESS_CODE sets the code, and the server prints the address and the code once at start", { timeout:20000 }, async () => {
+  const env=serverEnv({PENECHO_TEST_OPEN_ACCESS:"0",PENECHO_ACCESS_CODE:"314159",PENECHO_TEST_LAN_HOSTS:"192.168.1.23"});
+  const child=spawn(process.execPath,[path.join(ROOT,"server.js")],{cwd:ROOT,env,stdio:["ignore","pipe","pipe"]});
+  let out="";
+  child.stdout.on("data",chunk=>{out+=chunk;});
+  try {
+    const start=Date.now();
+    while(!/Other devices:/.test(out)&&Date.now()-start<10000)await new Promise(r=>setTimeout(r,50));
+    const port=/PenEcho: http:\/\/[^:]+:(\d+)/.exec(out)[1];
+    assert.match(out,new RegExp(`Other devices: open http://192\\.168\\.1\\.23:${port} and enter the code 314159\\.`));
+    assert.equal(out.match(/Other devices:/g).length,1);
+    const unlock=await fetch(`http://127.0.0.1:${port}/api/local-access/unlock`,{method:"POST",headers:{...OTHER,"Content-Type":"application/json",Origin:`http://127.0.0.1:${port}`},body:JSON.stringify({pin:"314159"})});
+    assert.equal(unlock.status,200);
+    const network=await fetch(`http://127.0.0.1:${port}/api/local-access/network`).then(r=>r.json());
+    assert.deepEqual([network.code,network.codeFromEnvironment],["314159",true]);
+  } finally { await stopServer(child); }
+});
+
+test("F5: a device that used the code keeps working with the API provider as before, and the session never reaches the provider", { timeout:20000 }, async () => {
+  const upstream=await startApiServer(),{child,origin}=await startServer(apiServerEnv(upstream.origin,{PENECHO_TEST_OPEN_ACCESS:"0"})),port=new URL(origin).port;
+  try {
+    const code=(await fetch(`${origin}/api/local-access/network`).then(r=>r.json())).code,host=`127.0.0.1:${port}`,remoteOrigin=origin;
+    const unlock=await httpRequest(origin,{method:"POST",pathText:"/api/local-access/unlock",headers:{...OTHER,Host:host,Origin:remoteOrigin,"Content-Type":"application/json"},body:JSON.stringify({pin:code})});
+    assert.equal(unlock.status,200,unlock.body);
+    const token=JSON.parse(unlock.body).accessSessionToken,cookies=unlock.headers["set-cookie"].map(cookie=>cookie.split(";",1)[0]).join("; ");
+    const before=upstream.requests.length,body=JSON.stringify(validPayload());
+    const remote=await httpRequest(origin,{method:"POST",pathText:"/api/ai/command",headers:{...OTHER,Host:host,Origin:remoteOrigin,Cookie:cookies,"X-PenEcho-Session":token,"Content-Type":"text/plain","Content-Length":Buffer.byteLength(body)},body});
+    assert.equal(remote.status,200,remote.body);
+    assert.equal(upstream.requests.length,before+1);
+    assert.doesNotMatch(upstream.requests.at(-1),new RegExp(token));
+    const without=await httpRequest(origin,{method:"POST",pathText:"/api/ai/command",headers:{...OTHER,Host:host,Origin:remoteOrigin,"X-PenEcho-Session":token,"Content-Type":"text/plain","Content-Length":Buffer.byteLength(body)},body});
+    assert.equal(without.status,403,"the session alone, without the remembered device, is not enough");
+  } finally { await stopServer(child); await new Promise(resolve=>upstream.server.close(resolve)); }
+});
+
+test("F5: the folder list starts with Desktop, Documents, Downloads and the last project's folder, dot-names last; Agent setup answers another device", { timeout:60000 }, async () => {
+  const home=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-f5-home-"));
+  for(const name of ["zeta","Downloads",".config","alpha","Documents","Work/Notes","Desktop","beta"])fs.mkdirSync(path.join(home,name),{recursive:true});
+  const running=await startServer(serverEnv({HOME:home,USERPROFILE:home}));
+  try {
+    const session=await fetch(`${running.origin}/api/local-access/status`).then(r=>r.json()).then(s=>s.accessSessionToken);
+    const headers={"X-PenEcho-Session":session,"Content-Type":"application/json",Origin:running.origin};
+    const made=await fetch(`${running.origin}/api/lines/projects`,{method:"POST",headers,body:JSON.stringify({name:"Notes",docsPath:path.join(home,"Work","Notes")})});
+    assert.equal(made.status,200,await made.clone().text());
+    const roots=(await fetch(`${running.origin}/api/lines/folders`,{headers}).then(r=>r.json())).roots;
+    const homeRoot=roots.find(root=>root.name==="Home");
+    const listing=await fetch(`${running.origin}/api/lines/folders/${homeRoot.id}`,{headers}).then(r=>r.json());
+    assert.deepEqual(listing.entries.map(entry=>entry.name),["Desktop","Documents","Downloads","Work","alpha","beta","zeta",".config"]);
+    assert.deepEqual(listing.recent,{path:"Work",name:"Work"});
+    const inside=await fetch(`${running.origin}/api/lines/folders/${homeRoot.id}?path=Work`,{headers}).then(r=>r.json());
+    assert.deepEqual(inside.entries.map(entry=>entry.name),["Notes"]);
+    // Another device (open to the network in this test server): Agent setup's check and the skill answer it.
+    const check=await fetch(`${running.origin}/api/lines/agents/check`,{headers:{...headers,...OTHER}}).then(r=>r.json());
+    assert.notEqual(check.unavailable,true);
+    assert.ok(Array.isArray(check.agents)||typeof check==="object");
+    const skill=await fetch(`${running.origin}/api/lines/agents/skill`,{headers:{...headers,...OTHER}}).then(r=>r.json());
+    assert.notEqual(skill.unavailable,true);
+    const agents=await fetch(`${running.origin}/api/lines/agents`,{headers:{...headers,...OTHER}}).then(r=>r.json());
+    assert.equal(agents.thisComputer,false);
+    // Cloud sign-in from another device: the link to open there; the account then lives on this computer.
+    const sign=await fetch(`${running.origin}/api/lines/cloud/sign-in`,{method:"POST",headers:{...headers,...OTHER},body:"{}"});
+    const link=await sign.json();
+    assert.equal(sign.status,200,JSON.stringify(link));
+    assert.equal(new URL(new URL(link.authorizationUrl).searchParams.get("local_callback")).origin,running.origin);
+  } finally { await stopServer(running.child); fs.rmSync(home,{recursive:true,force:true}); }
 });

@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ANIMATED_EXPLANATION_ROUTING, NATIVE_DRAWING_ROUTING, CANVAS_RENDERING_ROUTING, VISUAL_EXPLORER_SELECTION, getAuthoringGuidance } = require('../src/server/mcp/authoring-guidance.js');

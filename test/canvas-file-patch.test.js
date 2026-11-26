@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm');
 const nodeApi=require('../src/shared/canvas-file-patch'),{canvasFilePatchBundle}=require('../scripts/build-canvas-file-patch'),{createTwoFilesPatch}=require('diff');
 const context=vm.createContext({TextEncoder});vm.runInContext(canvasFilePatchBundle(),context);const browserApi=context.PenEchoCanvasFilePatch;

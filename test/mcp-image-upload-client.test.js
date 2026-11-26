@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto'),https=require('node:https');
 const {uploadImage,uploadName,MAX_INPUT,main}=require('../src/server/mcp/image-upload-client.js');
 const {sessionClientBundle}=require('../src/server/mcp/session-client-bundle.js');

@@ -1,4 +1,5 @@
 "use strict";
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict');
 test('native public progress projects only complete leading lines and completion does not repeat them',async()=>{
   const {CodexNativeHost}=await import('../src/server/canvas-agent/codex-native-host.mjs');

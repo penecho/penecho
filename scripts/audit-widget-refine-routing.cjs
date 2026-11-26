@@ -4,8 +4,8 @@ const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),cryp
 const SMART=require("../public/smart-suggest.js");
 const traces=path.join(os.homedir(),".penecho/logs/requests");
 const reviewed={
-  "1ad6e191-0b03-44e3-8ea1-bb3e81d56656":{expected:"penecho_agent",request:"Strike marks over IndexedDB snapshot",issue:"The historical observedText names cloud-* / mcp-settings.js, but the captured marks cover IndexedDB snapshot. Routing alone cannot guarantee mark interpretation."},
-  "a44c8207-e898-41b8-bc75-10b3d963d98f":{expected:"penecho_agent",request:"Circle and emphasis over IndexedDB snapshot"},
+  "1ad6e191-0b03-44e3-8ea1-bb3e81d56656":{expected:"sidebar_task",request:"Strike marks over IndexedDB snapshot",issue:"The historical observedText names cloud-* / mcp-settings.js, but the captured marks cover IndexedDB snapshot. Routing alone cannot guarantee mark interpretation."},
+  "a44c8207-e898-41b8-bc75-10b3d963d98f":{expected:"sidebar_task",request:"Circle and emphasis over IndexedDB snapshot"},
   "2ebd772a-ef41-4791-9126-2ff9e15b6ded":{expected:"canvas_ai",request:"Remove crossed-out New York clock content"},
   "c9b16601-9508-425a-83e1-d17b5dd9604e":{expected:"canvas_ai",request:"Date: add local dates to the three clocks"},
   "8c5ef3a8-324d-404d-b902-79f16d8b6d66":{expected:"canvas_ai",request:"Colorful: adjust clock colors"},

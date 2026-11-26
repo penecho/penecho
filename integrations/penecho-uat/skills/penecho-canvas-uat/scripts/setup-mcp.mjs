@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +14,9 @@ export function runCli(command, args, { interactive = false } = {}) {
   return new Promise(resolveResult => {
     const child = spawn(command, args, {
       shell: false,
+      // Claude Code reads .mcp.json from parent folders; the unpacked package has
+      // its own, which would read as a pending project connection.
+      cwd: tmpdir(),
       stdio: interactive ? 'inherit' : ['ignore', 'pipe', 'pipe'],
       ...(interactive ? {} : { timeout: 45000 }),
     });

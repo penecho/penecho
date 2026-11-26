@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("node:vm");
 const source=fs.readFileSync(require("node:path").join(__dirname,"../src/client/app/persistence.js"),"utf8");
 function extract(name){const start=source.indexOf(`function ${name}(`);let depth=0;for(let i=source.indexOf("{",start);i<source.length;i++){if(source[i]==="{")depth++;else if(source[i]==="}"&&--depth===0)return (source.slice(start-6,start)==="async "?"async ":"")+source.slice(start,i+1);}throw Error(name);}

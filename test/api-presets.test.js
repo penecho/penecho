@@ -17,7 +17,7 @@ function sourceFunction(source, name, indent = "") {
   return rest.slice(0, end + indent.length + 2);
 }
 function uiContext() {
-  const { document } = require("linkedom").parseHTML(fs.readFileSync(require.resolve("../public/index.html"), "utf8"));
+  const { document } = require("./helpers/dom.js").parseHTML(fs.readFileSync(require.resolve("../public/index.html"), "utf8"));
   const c = { document, PenEchoApiPresets:presets, t:key => key, peButton:()=>{}, settings:{ configurationMode:"api", fetchedApiModels:[], cli:{} } };
   for (const element of document.querySelectorAll('[id^="settings"]')) {
     c[element.id] = element;
@@ -256,7 +256,7 @@ test("actual Agent adapters send OpenCode session headers on Chat and Messages r
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init), body = JSON.parse(await request.clone().text());
     requests.push({ url:request.url, headers:Object.fromEntries(request.headers), body });
-    if (request.url.endsWith("/messages")) {
+    if (new URL(request.url).pathname.endsWith("/messages")) {
       const events = [
         { type:"message_start", message:{ id:"msg-fixture", type:"message", role:"assistant", model:body.model, content:[], usage:{ input_tokens:1, output_tokens:0 } } },
         { type:"content_block_start", index:0, content_block:{ type:"text", text:"" } },
@@ -287,7 +287,8 @@ test("actual Agent adapters send OpenCode session headers on Chat and Messages r
   for (let i = 0; i < requests.length; i++) {
     assert.equal(requests[i].headers["x-opencode-session"], sessionIds[Math.floor(i / 2)]);
     assert.match(requests[i].headers["user-agent"], /(?:PenEcho|deepseek-harness)\//);
-    assert.equal(requests[i].url, `https://opencode.ai/zen/go/v1/${i < 2 ? "chat/completions" : "messages"}`);
+    const url = new URL(requests[i].url);
+    assert.equal(`${url.origin}${url.pathname}`, `https://opencode.ai/zen/go/v1/${i < 2 ? "chat/completions" : "messages"}`);
   }
   assert.notEqual(sessionIds[0], sessionIds[1]);
 });

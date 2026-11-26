@@ -65,7 +65,8 @@ module.exports = {
     appVersion:DESKTOP_VERSION,
     buildVersion:DESKTOP_VERSION,
     icon:ICON,
-    asar:{ unpack:"**/node_modules/{sharp,@img,@vscode}/**/*" },
+    // Unpack native binaries plus zero-dependency helper scripts that external agents run with plain `node`.
+    asar:{ unpack:"**/{node_modules/{sharp,@img,@vscode}/**/*,src/server/project-lines/{browser-call,orch-call}.js}" },
     prune:true,
     appBundleId:"app.penecho.desktop",
     appCategoryType:"public.app-category.productivity",
@@ -84,6 +85,11 @@ module.exports = {
     } : {}),
     ignore:[
       /^\/\./,
+      // Hidden folders anywhere outside node_modules: a browser profile left in proto/ (History, Cookies) was taken into a local build (PE-692).
+      /^\/(?!node_modules\/).*\/\./,
+      // Prototypes, local working data and notes that the app never reads.
+      /^\/(?:proto|local|friendship-practice|third_party|integrations)(?:\/|$)/,
+      /^\/hand_off\.md$/,
       /^\/build\/(?!icons(?:\/|$)).+/,
       /^\/build\/icons\/(?!penecho\.png$).+/,
       /^\/docs\/(?!(?:mcp-setup\.md|mcp-agent-instructions\.md)$).+/,

@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("node:vm"),path=require("node:path");
 const source=fs.readFileSync(path.join(__dirname,"../src/server/main.js"),"utf8");
 function extract(name){const start=source.indexOf(`function ${name}(`),end=source.indexOf("\nfunction ",start+1);assert.ok(start>=0);return source.slice(start,end);}

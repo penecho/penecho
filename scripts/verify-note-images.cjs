@@ -12,7 +12,7 @@ const oldEncode=extract("noteEncodeCanvas").replace("function noteEncodeCanvas("
 const originalRead=fs.createReadStream;
 fs.createReadStream=function(file,...args){if(path.resolve(String(file))===path.join(root,"public/app.js"))return Readable.from([fs.readFileSync(file,"utf8").replace(/\}\)\(\);\s*$/,`
 ${oldEncode}\n${oldInk}
-window.noteImagesTest={state,noteCards,canvasDocumentsReady,loadCanvasSettings,noteCardInsert,noteCaptureSelection,noteSelectionInk,noteEncodeCanvas,oldNoteEncodeCanvas,oldNoteSelectionInk,noteLibraryReadEntry,noteLibraryPersist,noteImageOpen,setCanvasMode,closeCanvasAgent,enterWidgetInteraction,setWidgetMaximized,setWidgetInteraction,render,applyLanguage};
+window.noteImagesTest={state,noteCards,canvasDocumentsReady,loadCanvasSettings,noteCardInsert,noteCaptureSelection,noteSelectionInk,noteEncodeCanvas,oldNoteEncodeCanvas,oldNoteSelectionInk,noteLibraryReadEntry,noteLibraryPersist,noteImageOpen,setCanvasMode,enterWidgetInteraction,setWidgetMaximized,setWidgetInteraction,render,applyLanguage};
 })();`)]);return originalRead.call(this,file,...args);};
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),report={checks:[],errors:[],layouts:[]};let server,win;
 async function until(check,label,attempts=120){for(let i=0;i<attempts;i++){if(await check())return;await pause(100);}throw Error(`Timed out: ${label}`);}
@@ -23,7 +23,7 @@ app.whenReady().then(async()=>{try{
   const js=code=>win.webContents.executeJavaScript(code,true),shot=async name=>fs.writeFileSync(path.join(output,`${name}.png`),(await win.webContents.capturePage()).toPNG());
   await win.loadURL(`http://127.0.0.1:${server.address().port}`);
   win.setTitle("PenEcho Note Image Verification");
-  await js(`(async()=>{const t=noteImagesTest;await t.canvasDocumentsReady();await t.loadCanvasSettings();t.state.auto=false;t.state.language='zh';t.applyLanguage();t.closeCanvasAgent();t.setCanvasMode('hand');document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();})()`);
+  await js(`(async()=>{const t=noteImagesTest;await t.canvasDocumentsReady();await t.loadCanvasSettings();t.state.auto=false;t.state.language='zh';t.applyLanguage();t.setCanvasMode('hand');document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();})()`);
   report.capture=await js(`(async()=>{
     const t=noteImagesTest,c=document.createElement('canvas');c.width=3000;c.height=2200;const ctx=c.getContext('2d');
     ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#1d2330';ctx.font='32px serif';

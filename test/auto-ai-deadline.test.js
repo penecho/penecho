@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -41,7 +42,8 @@ function fixture(delay = 1000) {
     ["clearPenGesture", "dismissPenGestureOffer", "releasePenGestureInk", "resolvePenGesture"].map(name => functionSource(pen, name)).join("\n"), ctx);
   const tick = ms => {
     const end = now + ms;
-    while (true) {
+    for (let steps = 0; ; steps++) {
+      if (steps > 100000) throw new Error("fake timers never settle: a timer keeps re-arming itself");
       const due = [...timers].filter(([, timer]) => timer.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
       if (!due) break;
       now = due[1].at; timers.delete(due[0]); due[1].fn();

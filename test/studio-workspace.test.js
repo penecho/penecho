@@ -1,5 +1,7 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("node:vm"),path=require("node:path");
+const {parseHTML}=require("./helpers/dom.js");
 const root=path.join(__dirname,".."),source=fs.readFileSync(path.join(root,"src/client/app/studio-navigator.js"),"utf8");
 function extract(name,input=source){
   const start=input.indexOf(`function ${name}(`);assert.ok(start>=0);
@@ -8,13 +10,14 @@ function extract(name,input=source){
   throw Error(name);
 }
 function welcomeHarness() {
-  const element=()=>({hidden:false,dataset:{},setAttribute(){}}),
+  const {document,window}=parseHTML("<html><body></body></html>");
+  const element=()=>document.createElement("div"),
     state={theme:"studio",viewMode:false,images:[],textBoxes:[],preservedSnapshotAnimations:[],animations:[],widgets:[],plugins:{},widgetMessageHooked:false},
     context=vm.createContext({state,tiles:new Map(),pluginManifests:new Map(),
       widgetRuntimeEnabled:()=>state.widgetMessageHooked,pluginEnabled:id=>id==="general"||state.plugins[id]===true,
       studioNavigatorIsStudio:()=>state.theme==="studio",canvasHasUnsavedChanges:()=>false,
       snapshotSaveInProgress:false,currentCanvasDisplayName:()=>"Test canvas",t:key=>key,
-      document:{getElementById:()=>null},
+      document,window,
     });
   for(const name of ["canvasDocumentMeta","canvasDocumentNameLabel","canvasDocumentName","canvasDocumentNameInput","canvasDocumentNameConfirm","canvasDocumentSaveState","canvasDocumentSaveLabel","saveCanvasLabel","canvasWelcome"])context[name]=element();
   const runtime=fs.readFileSync(path.join(root,"src/client/app/canvas-runtime.js"),"utf8");
@@ -31,6 +34,12 @@ test("Widget-only snapshots hide the welcome before the plugin catalog finishes 
   h.pluginManifests.set("general",{});h.state.widgetMessageHooked=true;
   assert.equal(h.visibleWidgets().length,1);
   assert.equal(h.canvasWelcome.hidden,true,"mounting the Widget later must not leave a stale welcome");
+  h.window.projectLinesWelcomeOpen=true;h.updateStudioDocumentState();
+  assert.equal(h.canvasWelcome.hidden,false,"the opening page can cover a recovered Canvas");
+  assert.equal(h.canvasWelcome.classList.contains("pls-kept"),true);
+  h.window.projectLinesWelcomeOpen=false;h.updateStudioDocumentState();
+  assert.equal(h.canvasWelcome.hidden,true,"returning to the Canvas shows its recovered content");
+  assert.equal(h.canvasWelcome.classList.contains("pls-kept"),false);
   h.state.widgets=[];h.updateStudioDocumentState();
   assert.equal(h.canvasWelcome.hidden,false,"removing the final object restores the welcome");
 });
@@ -64,22 +73,6 @@ test("welcome changes no document state as content is removed and restored",()=>
     assert.equal(h.canvasWelcome.hidden,widgets.length>0);
     assert.equal(JSON.stringify(h.state),before,"welcome updates must not mutate saved content or revisions");
   }
-});
-test("welcome-only Mod+K routing ends once a stored Widget exists",()=>{
-  const h=welcomeHarness(),performed=[];
-  Object.assign(h,{
-    keyboardShortcutRecordingId:"",keyboardShortcutChordFromEvent:()=>"Mod+k",
-    document:{querySelector:()=>h.canvasWelcome,getElementById:()=>null},
-    keyboardShortcutCommand:id=>({id}),KEYBOARD_SHORTCUT_COMMANDS:[{id:"custom-command"}],
-    keyboardShortcutBindings:{"custom-command":"Mod+k"},keyboardShortcutCanRun:()=>true,
-    keyboardShortcutPerform:id=>performed.push(id),
-  });
-  const keyboard=fs.readFileSync(path.join(root,"src/client/app/keyboard-shortcuts.js"),"utf8");
-  vm.runInContext(extract("handleKeyboardShortcutKeydown",keyboard),h);
-  const event={preventDefault(){},stopImmediatePropagation(){}};
-  h.updateStudioDocumentState();h.handleKeyboardShortcutKeydown(event);
-  h.state.widgets=[{id:"widget-1",pluginId:"general"}];h.updateStudioDocumentState();h.handleKeyboardShortcutKeydown(event);
-  assert.deepEqual(performed,["focus-agent","custom-command"]);
 });
 test("Recent Work merges saved documents once and sorts by last save",()=>{
   const records=new Map([
@@ -145,22 +138,22 @@ test("background MCP activity does not highlight the visible Canvas",()=>{
 
 test("MCP connection opens its tab once, preserves Follow latest and clears pending on disconnect",()=>{
   const actions=[],search={value:"stale"},tab={hidden:true,dataset:{}};
-  const context=vm.createContext({studioNavigatorMcpEnabled:false,studioNavigatorSuspendedAgent:true,studioNavigatorActiveTab:"agent",studioNavigatorMcpTab:tab,studioNavigatorSearch:search,
+  const context=vm.createContext({studioNavigatorMcpEnabled:false,studioNavigatorActiveTab:"all",studioNavigatorMcpTab:tab,studioNavigatorSearch:search,
     studioMcpFollowLatest:true,studioMcpLatestDocumentId:null,studioMcpLatestRegion:null,studioMcpPendingDocumentId:"stale",studioMcpPendingRegion:{x:1,y:2,w:3,h:4},
     syncStudioMcpActions:()=>actions.push(["follow",context.studioMcpFollowLatest]),
     selectCanvasToolMode:mode=>actions.push(["tool",mode]),
-    closeCanvasAgent:options=>actions.push(["close",options.focus]),setStudioNavigatorTab:value=>{context.studioNavigatorActiveTab=value;actions.push(["tab",value]);},setStudioNavigatorOpen:value=>actions.push(["open",value]),
+    setStudioNavigatorTab:value=>{context.studioNavigatorActiveTab=value;actions.push(["tab",value]);},setStudioNavigatorOpen:value=>actions.push(["open",value]),
   });
   vm.runInContext(extract("syncStudioNavigatorMcp"),context);
   context.syncStudioNavigatorMcp(true);
-  assert.deepEqual(actions,[["tool","hand"],["close",false],["tab","mcp"],["open",true],["follow",true]]);assert.equal(tab.hidden,false);assert.equal(search.value,"");assert.equal(context.studioNavigatorSuspendedAgent,false);
+  assert.deepEqual(actions,[["tool","hand"],["tab","mcp"],["open",true],["follow",true]]);assert.equal(tab.hidden,false);assert.equal(search.value,"");
   assert.equal(context.studioMcpFollowLatest,true,"Follow latest is on by default for a live MCP connection");
   assert.equal(context.studioMcpPendingDocumentId,null);assert.equal(context.studioMcpPendingRegion,null);
-  context.syncStudioNavigatorMcp(true);assert.equal(actions.length,5,"heartbeat/status renders must not reopen navigation");
+  context.syncStudioNavigatorMcp(true);assert.equal(actions.length,4,"heartbeat/status renders must not reopen navigation");
   context.syncStudioNavigatorMcp(false);assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"mcp");assert.equal(context.studioMcpFollowLatest,true);
   const before=actions.length;context.syncStudioNavigatorMcp(true);assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"mcp");
-  assert.deepEqual(actions.slice(before),[["tool","hand"],["close",false],["tab","mcp"],["open",true],["follow",true]],"a recovered connection reveals the MCP sidebar again");
-  context.syncStudioNavigatorMcp(true);assert.equal(actions.length,before+5,"connected status refreshes must not reopen navigation");
+  assert.deepEqual(actions.slice(before),[["tool","hand"],["tab","mcp"],["open",true],["follow",true]],"a recovered connection reveals the MCP sidebar again");
+  context.syncStudioNavigatorMcp(true);assert.equal(actions.length,before+4,"connected status refreshes must not reopen navigation");
 });
 test("MCP list contains AI canvases only in saved order independent of catalog selection",()=>{
   const docs=[{id:"ordinary"},{id:"bound",bindings:[{}]},{id:"retained",sessions:[{}]},{id:"live"}];
@@ -195,24 +188,12 @@ test("MCP dock stays open during workspace focus and compact Canvas selection",(
     assert.equal(closed.length,docked?0:2);
   }
 });
-test("Canvas changes suppress automatic Agent opening only while MCP is docked",()=>{
-  const agentSource=fs.readFileSync(path.join(root,"src/client/app/canvas-agent-runtime.js"),"utf8");
+test("the Library closes the navigator in a narrow window, and preserves the MCP dock",()=>{
   for(const docked of [false,true]){
-    let opened=0;
-    const context={window:{PenEchoStudioNavigator:{isMcpDocked:()=>docked}},canvasDocuments:{},canvasAgent:{},state:{canvasAgentAutoOpen:true},canvasAgentPanel:{hidden:true},WebSocket:{OPEN:1},
-      canvasAgentReconcileCloudCanvas(){},canvasAgentCancelInitialAutoHide(){},canvasAgentPersistCurrentConversation(){},canvasAgentCanvasIdentity:()=>"test",canvasAgentBeginLocalConversation(){},canvasAgentRestoreLocalConversation:()=>false,canvasAgentDropSessionIdentity(){},canvasAgentSyncPromptSuggestions(){},openCanvasAgent:()=>opened++,
-    };
-    vm.runInNewContext(`(${extract("canvasAgentCanvasDidChange",agentSource)})()`,context);
-    assert.equal(opened,docked?0:1);
-  }
-});
-
-test("compact Agent opening reserves usable canvas space while Library preserves the MCP dock",()=>{
-  for(const docked of [false,true])for(const name of ["studioNavigatorAgentWillOpen","historyManagerWillOpen"]){
     let closed=0;
-    const context={studioNavigatorIsCompact:()=>true,studioNavigatorIsOpen:()=>true,studioNavigatorIsMcpDocked:()=>docked,studioNavigatorSuspendedAgent:false,setStudioNavigatorOpen:()=>closed++};
-    vm.runInNewContext(`(${extract(name)})()`,context);
-    assert.equal(closed,name==="studioNavigatorAgentWillOpen"?1:docked?0:1,`${name}: compact panels retain enough canvas space`);
+    const context={studioNavigatorIsCompact:()=>true,studioNavigatorIsOpen:()=>true,studioNavigatorIsMcpDocked:()=>docked,setStudioNavigatorOpen:()=>closed++};
+    vm.runInNewContext(`(${extract("historyManagerWillOpen")})()`,context);
+    assert.equal(closed,docked?0:1,"compact panels retain enough canvas space");
   }
 });
 test("manually closing and reopening MCP preserves its selected tab and persistence",()=>{

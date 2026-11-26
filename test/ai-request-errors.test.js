@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -110,6 +111,22 @@ for (const streamed of [false,true]) test(`hosted cancellation preserves input a
   h.context.fetch=async()=>new Response(JSON.stringify({commands:[],message:"Completed"}),{headers:{"content-type":"application/json"}});
   await h.run();
   assert.equal(h.statuses.at(-1),"aiNoVisibleResponse","the next request can proceed without reloading and reports its empty result");
+});
+test("a guest whose free AI is used up keeps the ink, loses AI and is asked to sign in",async()=>{
+  const data={error:"guest_limit",scope:"guest",limit:50,used:50,resetsAt:"2026-11-14T00:00:00.000Z",message:"You have used today's 50 free AI requests. Sign in to keep going."};
+  const h=fixture(async()=>new Response(JSON.stringify(data),{status:429,headers:{"content-type":"application/json"}}));
+  const offers=[],hints=[];
+  h.context.PENECHO_CONFIG={guestCanvas:true,guestAiModelId:"free"};
+  h.context.setCanvasGuestAi=offer=>{offers.push(JSON.parse(JSON.stringify(offer)));h.context.PENECHO_CONFIG.guestAiModelId="";};
+  h.context.showCanvasGuestAiHint=options=>{hints.push(JSON.parse(JSON.stringify(options)));return true;};
+  await h.run();
+  assert.deepEqual(offers,[{available:false,reason:"guest_limit"}]);
+  assert.deepEqual(hints,[{explicit:true}]);
+  assert.equal(h.statuses.at(-1),"ready","no error line: the hint says what happened");
+  assert.deepEqual(JSON.parse(JSON.stringify(h.state.dirty)),packed.changedBox);
+  assert.equal(h.state.busy,false);
+  assert.equal(h.state.autoEligible,false);
+  assert.equal(h.logs.some(([kind])=>kind==="ai-error"),false);
 });
 for (const streamed of [false,true]) test(`a stale connection opens the chooser and preserves ink (${streamed?"stream":"JSON"})`,async()=>{
   const data={error:"AI service rejected the request (HTTP 409). Please retry or check the AI service configuration.",errorCode:"CONNECTION_STALE"};

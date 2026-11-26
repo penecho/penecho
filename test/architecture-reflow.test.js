@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs');
 const fixture = name => JSON.parse(fs.readFileSync(`test/fixtures/diagrams/architecture/${name}`,'utf8'));
 

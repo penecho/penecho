@@ -2,17 +2,13 @@
 
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 const net = require("net");
 const { createHash, randomBytes, timingSafeEqual } = require("crypto");
-const { WebSocket } = require("ws");
 const { forwardModelEvaluation } = require("./model-evaluation.js");
 const { localUsageRecord } = require("./local-request-usage.js");
 const { createSuggestionTransport } = require("./suggestion-transport.js");
 
-const MAX_RELAY_MESSAGE_BYTES = 140 * 1024 * 1024;
 const MAX_CLOUD_BUNDLE_BYTES = 32 * 1024 * 1024;
-const DEFAULT_HEARTBEAT_SECONDS = 60;
 const ACCOUNT_REFRESH_INTERVAL_MS = 5 * 60_000;
 const ACCOUNT_SIGNOUT_TIMEOUT_MS = 5_000;
 const CLOUD_REQUEST_TIMEOUT_MS = 30_000;
@@ -21,29 +17,17 @@ const PUBLIC_MESSAGE_TIMEOUT_MS = 3_500;
 const MODEL_EVALUATION_QUEUE_TTL_MS = 10_000;
 const MODEL_EVALUATION_QUEUE_LIMIT = 32;
 const BROWSER_CALLBACK_PATH = "/api/cloud/sign-in/callback";
-const CLOUD_AI_CONTEXT_KEY = "__penechoCloudAi";
-const LOCAL_CONNECTION_ID_PATTERN = /^(?:hosted:)?[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Cloud did not answer this time: a busy or restarting server (502-504), or Cloudflare's own pages in front of penecho.ai when it
+// could not reach it in time (520-524; 524 is a request not answered within 100 s) or the tunnel to it was down (530).
+const TEMPORARY_CLOUD_STATUSES = new Set([502, 503, 504, 520, 521, 522, 523, 524, 530]);
+// Linked Device was retired on 2026-11-13. Older installs saved these fields beside
+// the Cloud sign-in; they are removed once on start and never written again.
+const RETIRED_DEVICE_FIELDS = Object.freeze(["deviceToken", "token", "enabled", "cloudMcpEnabled", "deviceId", "deviceName", "platform", "pairedAt", "legacyAccountAccess"]);
 
-function normalizedCloudAiConnectionId(value) {
-  const connectionId = typeof value === "string" ? value.trim() : "";
-  return LOCAL_CONNECTION_ID_PATTERN.test(connectionId) ? connectionId : null;
-}
-
-function cloudAiRelayRequest(payload) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !Object.hasOwn(payload, CLOUD_AI_CONTEXT_KEY)) {
-    return { payload, connectionId:null };
-  }
-  const context = payload[CLOUD_AI_CONTEXT_KEY], cleanPayload = { ...payload };
-  delete cleanPayload[CLOUD_AI_CONTEXT_KEY];
-  const connectionId = context && typeof context === "object" && !Array.isArray(context) && context.version === 1
-    ? normalizedCloudAiConnectionId(context.connectionId)
-    : null;
-  return { payload:cleanPayload, connectionId };
-}
-
-function cloudAiConnectionHeaders(context) {
-  const connectionId = normalizedCloudAiConnectionId(context?.connectionId);
-  return connectionId ? { "x-penecho-connection":connectionId } : {};
+function withoutRetiredDeviceFields(value) {
+  const cleaned = { ...value };
+  for (const field of RETIRED_DEVICE_FIELDS) delete cleaned[field];
+  return cleaned;
 }
 
 function normalizedOrigin(value) {
@@ -52,14 +36,6 @@ function normalizedOrigin(value) {
   if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) throw new Error("Cloud origin must use HTTPS.");
   if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("Cloud origin must be an origin without a path, query, or credentials.");
   return url.origin;
-}
-
-function defaultDeviceName() {
-  return `${os.hostname()} PenEcho server`;
-}
-
-function defaultPlatform() {
-  return `${os.platform()} ${os.release()}`;
 }
 
 function safeMessage(error) {
@@ -78,13 +54,6 @@ function temporaryCloudError(error, origin) {
 
 function cloudSignInRequiredError(message) {
   return Object.assign(new Error(message), { status:401, code:"cloud_sign_in_required" });
-}
-
-function reconnectDelayMs(attempt, random = Math.random) {
-  const retry = Math.max(0, Math.floor(Number(attempt) || 0));
-  const base = retry < 3 ? 10_000 : retry < 8 ? 60_000 : 300_000;
-  const sample = Math.max(0, Math.min(1, Number(random()) || 0));
-  return Math.round(base * (0.8 + sample * 0.4));
 }
 
 function isPrivateHost(hostname) {
@@ -158,16 +127,12 @@ function publicCanvasMessage(value) {
   return { title, body, actionLabel, actionUrl, updatedAt:Number(value.updatedAt) || null };
 }
 
-function deviceToken(configuration) {
-  return configuration?.deviceToken || configuration?.token || null;
-}
-
 function accountToken(configuration) {
-  return configuration?.accountToken || (configuration?.legacyAccountAccess ? deviceToken(configuration) : null);
+  return configuration?.accountToken || null;
 }
 
 function accountSessionExpired(configuration, now = Date.now()) {
-  if (!configuration?.accountToken || configuration.legacyAccountAccess || !configuration.accountExpiresAt) return false;
+  if (!configuration?.accountToken || !configuration.accountExpiresAt) return false;
   const expiresAt = Date.parse(configuration.accountExpiresAt);
   // Malformed local metadata is not proof that the Cloud session expired.
   // Preserve the credential and let the authoritative session endpoint
@@ -176,43 +141,21 @@ function accountSessionExpired(configuration, now = Date.now()) {
 }
 
 class CloudConnector {
-  constructor({ stateDir, executeRequest, executeHttpRequest = null, executeCanvasAgentRequest = null, executeMcpRequest = null, closeMcpChannels = null, logger = null, defaultOrigin = "https://penecho.ai", capabilities = null, heartbeatTimeoutMs = null, helloTimeoutMs = 15_000, suggestionTransport = null }) {
+  constructor({ stateDir, logger = null, defaultOrigin = "https://penecho.ai", suggestionTransport = null }) {
     this.stateDir = stateDir;
+    // The file keeps its old name: it holds the Cloud sign-in of every install.
     this.file = path.join(stateDir, "cloud-device.json");
-    this.executeRequest = executeRequest;
-    this.executeHttpRequest = executeHttpRequest;
-    this.executeCanvasAgentRequest = executeCanvasAgentRequest;
-    this.executeMcpRequest = executeMcpRequest;
-    this.closeMcpChannels = typeof closeMcpChannels === "function" ? closeMcpChannels : () => {};
-    this.cloudMcpBridge = new (require('./cloud-mcp-bridge.js').CloudMcpBridge)();
     this.logger = logger;
     this.defaultOrigin = normalizedOrigin(defaultOrigin);
     this.suggestionTransport = suggestionTransport;
-    this.helloTimeoutMs = Math.max(1, Number(helloTimeoutMs) || 15_000);
-    this.capabilities = Object.freeze({ modelConfigured:Boolean(capabilities?.modelConfigured), ...(typeof executeMcpRequest === "function" ? { mcp:true } : {}), ...(typeof executeCanvasAgentRequest === "function" ? { canvasAgent:true } : {}) });
     this.configuration = this.readConfiguration();
-    this.socket = null;
-    this.heartbeatTimer = null;
-    this.heartbeatDeadlineTimer = null;
-    this.heartbeatTimeoutOverrideMs = Number.isFinite(heartbeatTimeoutMs) && heartbeatTimeoutMs > 0 ? heartbeatTimeoutMs : null;
-    this.heartbeatTimedOutSocket = null;
-    this.helloTimer = null;
-    this.reconnectTimer = null;
     this.accountRefreshTimer = null;
-    this.reconnectAttempt = 0;
-    this.stopped = false;
     this.closed = false;
-    this.connectionState = "disconnected";
-    this.lastConnectedAt = null;
-    this.lastSeenAt = null;
-    this.lastError = null;
     this.account = publicAccount(this.configuration?.account);
     this.accountUpdatedAt = Number(this.configuration?.accountUpdatedAt || 0) || null;
     this.accountLastError = null;
     this.browserAuthorizations = new Map();
     this.accountSignInSeq = 0;
-    this.deviceOperationSeq = 0;
-    this.mcpAccessSeq = 0;
     this.modelEvaluationQueue = [];
     this.modelEvaluationQueueRunning = false;
     this.expireAccountSessionIfNeeded();
@@ -223,54 +166,63 @@ class CloudConnector {
   }
 
   readConfiguration() {
+    let value;
     try {
       const contents = fs.readFileSync(this.file, "utf8");
       try { fs.chmodSync(this.file, 0o600); } catch {}
-      const value = JSON.parse(contents);
-      if (!value || typeof value !== "object" || !value.origin) return null;
-      const legacyDeviceToken = typeof value.token === "string" && value.token ? value.token : null;
-      const configuration = {
-        ...value,
-        version: 2,
-        origin: normalizedOrigin(value.origin),
-        deviceToken: value.deviceToken || legacyDeviceToken,
-        legacyAccountAccess: Boolean(value.legacyAccountAccess || (legacyDeviceToken && !value.accountToken)),
-        enabled: value.enabled !== false,
-        account: publicAccount(value.account),
-      };
-      delete configuration.token;
-      if (!configuration.deviceToken && !configuration.accountToken) return null;
-      return configuration;
+      value = JSON.parse(contents);
+    } catch {
+      return null;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    if (RETIRED_DEVICE_FIELDS.some(field => Object.hasOwn(value, field))) value = this.removeRetiredDevice(value);
+    if (!value.origin || !value.accountToken) return null;
+    try {
+      return { ...value, version: 2, origin: normalizedOrigin(value.origin), account: publicAccount(value.account) };
     } catch {
       return null;
     }
   }
 
+  // Runs once, on the first start after Linked Device was retired: the device leaves
+  // the file and the Cloud sign-in beside it is written back exactly as it was. An old
+  // install that signed in only through its device has no sign-in left and is signed out.
+  removeRetiredDevice(saved) {
+    const cleaned = withoutRetiredDeviceFields(saved), signedIn = Boolean(cleaned.origin && cleaned.accountToken);
+    try {
+      if (signedIn) this.writeFile(cleaned);
+      else fs.rmSync(this.file, { force: true });
+      this.log("linked-device-removed", { signedIn });
+    } catch (error) {
+      this.log("linked-device-remove-failed", { error: safeMessage(error) });
+    }
+    return cleaned;
+  }
+
+  writeFile(value) {
+    fs.mkdirSync(this.stateDir, { recursive: true });
+    const temporary = `${this.file}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    fs.renameSync(temporary, this.file);
+    try { fs.chmodSync(this.file, 0o600); } catch {}
+  }
+
   writeConfiguration(configuration) {
-    const nextOrigin = configuration?.origin && (deviceToken(configuration) || configuration.accountToken) ? normalizedOrigin(configuration.origin) : this.defaultOrigin;
+    const nextOrigin = configuration?.origin && configuration.accountToken ? normalizedOrigin(configuration.origin) : this.defaultOrigin;
     if ((this.configuration?.origin || this.defaultOrigin) !== nextOrigin || (this.configuration?.accountToken || null) !== (configuration?.accountToken || null)) this.invalidateSuggestionStatus();
-    if(!configuration?.cloudMcpEnabled||!configuration?.enabled||!configuration?.accountToken||configuration.origin!==this.configuration?.origin||deviceToken(configuration)!==deviceToken(this.configuration)||configuration.accountToken!==this.configuration?.accountToken)this.cloudMcpBridge?.close();
-    if (!configuration?.origin || (!deviceToken(configuration) && !configuration.accountToken)) {
+    if (!configuration?.origin || !configuration.accountToken) {
       this.configuration = null;
       try { fs.unlinkSync(this.file); } catch (error) { if (error.code !== "ENOENT") throw error; }
       return;
     }
     const normalized = {
-      ...configuration,
+      ...withoutRetiredDeviceFields(configuration),
       version: 2,
       origin: normalizedOrigin(configuration.origin),
-      deviceToken: deviceToken(configuration),
-      legacyAccountAccess: Boolean(configuration.legacyAccountAccess || (configuration.token && !configuration.accountToken)),
       account: publicAccount(configuration.account),
     };
-    if (!normalized.deviceToken) delete normalized.deviceToken;
     if (!normalized.account) delete normalized.account;
-    delete normalized.token;
-    fs.mkdirSync(this.stateDir, { recursive: true });
-    const temporary = `${this.file}.${process.pid}.tmp`;
-    fs.writeFileSync(temporary, `${JSON.stringify(normalized, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    fs.renameSync(temporary, this.file);
-    try { fs.chmodSync(this.file, 0o600); } catch {}
+    this.writeFile(normalized);
     this.configuration = normalized;
   }
 
@@ -288,47 +240,29 @@ class CloudConnector {
   status() {
     this.expireAccountSessionIfNeeded();
     const pending = this.pendingBrowserAuthorization();
-    const configured = Boolean(deviceToken(this.configuration));
-    const accountSignedIn = Boolean(this.configuration?.accountToken || this.configuration?.legacyAccountAccess);
+    const accountSignedIn = Boolean(this.configuration?.accountToken);
     const accountStale = Boolean(this.account && (!this.accountUpdatedAt || Date.now() - this.accountUpdatedAt > ACCOUNT_REFRESH_INTERVAL_MS * 2));
     return {
-      configured,
-      enabled: configured && Boolean(this.configuration?.enabled),
-      connected: this.connectionState === "connected",
-      state: this.connectionState,
       origin: this.configuration?.origin || null,
-      deviceId: this.configuration?.deviceId || null,
-      deviceName: this.configuration?.deviceName || null,
-      lastConnectedAt: this.lastConnectedAt,
-      lastSeenAt: this.lastSeenAt,
-      lastError: this.lastError,
       account: publicAccount(this.account),
-      cloudMcpEnabled: Boolean(this.configuration?.cloudMcpEnabled && this.configuration?.enabled && accountSignedIn),
       accountSession: {
         signedIn: accountSignedIn,
         expiresAt: this.configuration?.accountExpiresAt || null,
         updatedAt: this.accountUpdatedAt,
         stale: accountStale,
         lastError: this.accountLastError,
-        credential: this.configuration?.legacyAccountAccess ? "legacy-device" : accountSignedIn ? "opaque-local-session" : null,
+        credential: accountSignedIn ? "opaque-local-session" : null,
       },
       browserSignIn: {
         pending: Boolean(pending),
         expiresAt: pending?.expiresAt || null,
       },
-      device: {
-        configured,
-        enabled: configured && Boolean(this.configuration?.enabled),
-        connected: this.connectionState === "connected",
-        state: this.connectionState,
-        id: this.configuration?.deviceId || null,
-        name: this.configuration?.deviceName || null,
-      },
-      privacy: {
-        apiKeysLeaveDevice: false,
-        requestContentUsesCloudRelay: true,
-        endToEndEncrypted: false,
-      },
+      // Linked Device is retired. Today's Cloud and MCP settings pages still read these
+      // fields; they always say "not linked, not online, Cloud MCP off" until those pages are cleaned.
+      state: "disconnected",
+      lastError: null,
+      cloudMcpEnabled: false,
+      device: { configured: false, enabled: false, connected: false, state: "disconnected", id: null, name: null },
     };
   }
 
@@ -341,22 +275,46 @@ class CloudConnector {
     return { ...this.configuration, accountToken: token };
   }
 
-  async cloudRequest(pathname, { method = "GET", body, signal, timeoutMs = CLOUD_REQUEST_TIMEOUT_MS, responseTrace } = {}) {
+  // A link Canvas needs no account: this computer starts and ends one on the
+  // Cloud it uses, proving ownership with the key Cloud returned at the start.
+  async linkRequest(pathname, { method = "POST", body, ownerKey, origin } = {}) {
+    if (!(method === "POST" && pathname === "/api/v1/live/links" || method === "DELETE" && /^\/api\/v1\/live\/links\/[0-9a-f-]{36}$/i.test(pathname))) throw new Error("Unsupported link Canvas request.");
+    const cloudOrigin = normalizedOrigin(this.configuration?.origin || origin);
+    let response;
+    try {
+      response = await fetch(`${cloudOrigin}${pathname}`, {
+        method, redirect:"error",
+        headers:{ accept:"application/json", ...(body === undefined ? {} : { "content-type":"application/json" }), ...(ownerKey ? { "x-penecho-owner-key":ownerKey } : {}) },
+        body:body === undefined ? undefined : JSON.stringify(body),
+        signal:AbortSignal.timeout(60_000),
+      });
+    } catch (error) {
+      throw temporaryCloudError(error, cloudOrigin);
+    }
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(response.status === 413 ? "This Canvas is too large to collaborate on without an account. Sign in to collaborate on it." : payload.message || `PenEcho Cloud refused this link (HTTP ${response.status}).`), { status:response.status, code:payload.error || "cloud_link_failed" });
+    return { ...payload, origin:cloudOrigin };
+  }
+
+  // bytes: a raw file body (a Lines project file) instead of JSON.
+  async cloudRequest(pathname, { method = "GET", body, bytes, headers = {}, signal, timeoutMs = CLOUD_REQUEST_TIMEOUT_MS, responseTrace } = {}) {
     const configuration = this.requireCloudAccount();
     const notesRequest = method === "GET" && /^\/api\/v1\/notes(?:\?cursor=[^&#]+)?$/.test(pathname)
       || ["GET", "PUT"].includes(method) && /^\/api\/v1\/notes\/[^/?#]+$/.test(pathname);
-    if (!notesRequest && !(/^\/api\/v1\/canvases\/[0-9a-f-]{36}\/share(?:\?widgetId=[0-9a-f-]{36})?$/i.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !(/^\/api\/v1\/mcp(?:\/(?:tokens|canvases)|\/grants\/[0-9a-f-]{36})?$/.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix)) && !(method === "GET" && ["/api/v1/models", "/api/v1/credits"].includes(pathname))) throw new Error("Unsupported cloud account request.");
+    const linkAdoption = method === "POST" && /^\/api\/v1\/live\/links\/[0-9a-f-]{36}\/adopt$/i.test(pathname);
+    if (!notesRequest && !linkAdoption && !(/^\/api\/v1\/canvases\/[0-9a-f-]{36}\/(?:share(?:\?widgetId=[0-9a-f-]{36})?|collaboration)$/i.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !(/^\/api\/v1\/mcp(?:\/(?:tokens|canvases)|\/grants\/[0-9a-f-]{36})?$/.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix)) && !(method === "GET" && ["/api/v1/models", "/api/v1/credits"].includes(pathname))) throw new Error("Unsupported cloud account request.");
     let response;
     try {
       response = await fetch(`${configuration.origin}${pathname}`, {
         method,
         redirect: "error",
         headers: {
+          ...headers,
           authorization: `Bearer ${configuration.accountToken}`,
           accept: "application/json",
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          ...(bytes !== undefined ? { "content-type": "application/octet-stream" } : body === undefined ? {} : { "content-type": "application/json" }),
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: bytes !== undefined ? bytes : body === undefined ? undefined : JSON.stringify(body),
         signal:signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
@@ -373,23 +331,39 @@ class CloudConnector {
     } else payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 401) {
-        if (!configuration.legacyAccountAccess) {
-          await this.confirmAccountSessionAfterUnauthorized(configuration.accountToken, payload.message);
-        }
+        await this.confirmAccountSessionAfterUnauthorized(configuration.accountToken, payload.message);
         throw Object.assign(new Error(payload.message || "PenEcho Cloud rejected this account request."), {
           status:403,
           code:payload.error || "cloud_request_not_authorized",
         });
       }
-      const temporary = [502, 503, 504].includes(response.status);
+      const temporary = TEMPORARY_CLOUD_STATUSES.has(response.status);
       const error = new Error(temporary
         ? `${configuration.origin.includes("internaltest.penecho.ai") ? "UAT Cloud" : "PenEcho Cloud"} is temporarily unavailable (HTTP ${response.status}). Your Canvas is still safe on this device. Try Save again in a moment.`
         : payload.message || `Cloud account request failed (HTTP ${response.status}).`);
       error.status = response.status;
       error.code = temporary ? "cloud_temporarily_unavailable" : payload.error || "cloud_request_failed";
+      if (payload.details) error.details = payload.details;
       throw error;
     }
     return payload;
+  }
+
+  // The raw answer of one account request for Lines: a project's files and pages, a file's bytes, meetings and credits.
+  // Only these paths, only for the signed-in account. The caller reads the status and the body itself.
+  async accountFetch(pathname, { method = "GET", headers = {}, body, signal, timeoutMs = CLOUD_REQUEST_TIMEOUT_MS } = {}) {
+    const where = String(pathname);
+    if (where.includes("..") || !/^\/api\/v1\/(?:device-sync\/line-projects|line-projects|meetcue|credits)(?:[/?]|$)/.test(where)) throw new Error("Unsupported cloud account request.");
+    const configuration = this.requireCloudAccount();
+    const pass = Object.fromEntries(Object.entries(headers || {}).filter(([name, value]) => /^(?:content-type|accept)$/i.test(name) && typeof value === "string"));
+    try {
+      return await fetch(`${configuration.origin}${where}`, { method, redirect:"error", headers:{ accept:"application/json", ...pass, authorization:`Bearer ${configuration.accountToken}` }, body:body === undefined || ["GET", "HEAD"].includes(method) ? undefined : body,
+        signal:signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason;
+      if (error.name === "TimeoutError") throw Object.assign(error, { status:504 });
+      throw temporaryCloudError(error, configuration.origin);
+    }
   }
 
   invalidateSuggestionStatus() {
@@ -532,9 +506,10 @@ class CloudConnector {
 
   async hostedModels({ refresh = false } = {}) {
     const configuration = this.requireCloudAccount();
-    const [catalog, wallet] = await Promise.all([this.refreshHostedCatalog({ force:refresh }), this.cloudRequest("/api/v1/credits")]);
+    // The models are what is asked for: a wallet Cloud does not answer leaves credits unknown, not the list empty.
+    const [catalog, wallet] = await Promise.all([this.refreshHostedCatalog({ force:refresh }), this.cloudRequest("/api/v1/credits").catch(() => null)]);
     if (accountToken(this.configuration) !== configuration.accountToken || this.configuration?.origin !== configuration.origin) throw cloudSignInRequiredError("Cloud account changed. Refresh the model list.");
-    return { models:catalog.models, credits:wallet.credits, origin:configuration.origin, accountId:this.account?.id || null };
+    return { models:catalog.models, credits:wallet?.credits ?? null, origin:configuration.origin, accountId:this.account?.id || null };
   }
 
   async prepareHostedConnection(connectionId) {
@@ -556,7 +531,8 @@ class CloudConnector {
     if (catalog && !model) return null;
     // Keep synchronous callers synchronous. Only inference preparation may
     // resolve a cold catalog, and it must do so before selecting a backend.
-    return { id:connectionId, provider:"api", apiFormat:model?.apiFormat || null, apiUrl:`${configuration.origin}/api/v1/hosted`, apiKey:configuration.accountToken, apiModel:connectionId.slice(7), effort:"medium", hosted:true };
+    const effort = typeof model?.defaultEffort === "string" && model.defaultEffort.trim() ? model.defaultEffort.trim().toLowerCase() : "medium";
+    return { id:connectionId, provider:"api", apiFormat:model?.apiFormat || null, apiUrl:`${configuration.origin}/api/v1/hosted`, apiKey:configuration.accountToken, apiModel:connectionId.slice(7), effort, ...(model?.defaultEffort ? { defaultEffort:model.defaultEffort } : {}), hosted:true };
   }
 
   hostedConnections() {
@@ -568,14 +544,14 @@ class CloudConnector {
 
   async reportModelEvaluation(event, timeoutMs = 10_000) {
     this.expireAccountSessionIfNeeded();
-    const configuration = this.configuration, token = accountToken(configuration) || deviceToken(configuration);
-    if (!configuration?.origin || !token) throw cloudSignInRequiredError("Sign in to or pair this PenEcho server with PenEcho Cloud before reporting model evaluation feedback.");
+    const configuration = this.configuration, token = accountToken(configuration);
+    if (!configuration?.origin || !token) throw cloudSignInRequiredError("Sign in to PenEcho Cloud on this computer before reporting model evaluation feedback.");
     return forwardModelEvaluation(fetch, configuration.origin, token, event, timeoutMs);
   }
 
   reportLocalModelUsage(event) {
     const record = localUsageRecord(event), configuration = this.configuration;
-    const token = accountToken(configuration) || deviceToken(configuration);
+    const token = accountToken(configuration);
     if (!record || this.closed || !configuration?.origin || !token || (this.usageReportsPending || 0) >= 32) return false;
     this.usageReportsPending = (this.usageReportsPending || 0) + 1;
     // Capture the account at admission. A later sign-in must not reassign usage.
@@ -613,13 +589,13 @@ class CloudConnector {
   async communityRequest(pathname) {
     if(!String(pathname).startsWith("/api/v1/community/"))throw new Error("Unsupported public community request.");
     this.expireAccountSessionIfNeeded();
-    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),legacyAccountAccess=Boolean(this.configuration?.legacyAccountAccess),response=await fetch(`${origin}${pathname}`,{
+    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),response=await fetch(`${origin}${pathname}`,{
       method:"GET",
       redirect:"error",
       headers:{accept:"application/json",...(token?{authorization:`Bearer ${token}`}:{})},
     }),payload=await response.json().catch(()=>({}));
     if(!response.ok){
-      if(response.status===401&&token&&!legacyAccountAccess)await this.confirmAccountSessionAfterUnauthorized(token,payload.message);
+      if(response.status===401&&token)await this.confirmAccountSessionAfterUnauthorized(token,payload.message);
       const error=new Error(payload.message||`Community request failed (HTTP ${response.status}).`);
       error.status=response.status===401&&token?403:response.status;
       error.code=response.status===401&&token?(payload.error||"cloud_request_not_authorized"):(payload.error||"community_request_failed");
@@ -657,7 +633,7 @@ class CloudConnector {
     }
     if (!response.ok) {
       const error = new Error(`Cloud storage transfer failed (HTTP ${response.status}). Your Canvas is still safe on this device; try Save again.`);
-      error.status = [502, 503, 504].includes(response.status) ? 503 : response.status;
+      error.status = TEMPORARY_CLOUD_STATUSES.has(response.status) ? 503 : response.status;
       error.code = "cloud_storage_transfer_failed";
       throw error;
     }
@@ -667,9 +643,6 @@ class CloudConnector {
   async signIn({ origin, code, callback = null }) {
     const signInSeq = ++this.accountSignInSeq;
     const cloudOrigin = normalizedOrigin(origin);
-    if (this.configuration?.origin && this.configuration.origin !== cloudOrigin && deviceToken(this.configuration)) {
-      throw new Error("Disconnect or revoke the device linked to the current Cloud address before signing in to another address.");
-    }
     const response = await fetch(`${cloudOrigin}/api/v1/local-access/session`, {
       method: "POST",
       redirect: "error",
@@ -697,7 +670,6 @@ class CloudConnector {
       accountExpiresAt: payload.expiresAt || null,
       account,
       accountUpdatedAt,
-      legacyAccountAccess: false,
     });
     this.startAccountRefresh();
     return this.status();
@@ -709,9 +681,6 @@ class CloudConnector {
     if (callback.protocol !== "http:" || !isLocalCanvasHost(callback.hostname) || callback.username || callback.password || callback.pathname !== BROWSER_CALLBACK_PATH || callback.search || callback.hash) {
       throw new Error("Cloud sign-in callback must use this local PenEcho server.");
     }
-    if (this.configuration?.origin && this.configuration.origin !== cloudOrigin && deviceToken(this.configuration)) {
-      throw new Error("Disconnect or revoke the device linked to the current Cloud address before signing in to another address.");
-    }
     for (const [pendingState, pending] of this.browserAuthorizations) if (pending.expiresAt <= Date.now()) this.browserAuthorizations.delete(pendingState);
     const state = randomBytes(32).toString("base64url");
     const expiresAt = Date.now() + BROWSER_AUTHORIZATION_MS;
@@ -719,7 +688,6 @@ class CloudConnector {
     const authorizationUrl = new URL("/dashboard.html", cloudOrigin);
     authorizationUrl.searchParams.set("local_callback", callback.toString());
     authorizationUrl.searchParams.set("local_client", "penecho-canvas");
-    authorizationUrl.hash = "devices";
     this.browserAuthorizations.set(state, { state, origin: cloudOrigin, callback:callback.toString(), callbackOrigin: callback.origin, expiresAt });
     return { authorizationUrl: authorizationUrl.toString(), expiresAt };
   }
@@ -745,10 +713,6 @@ class CloudConnector {
   async refreshAccount({ force = false } = {}) {
     if (!force && this.accountUpdatedAt && Date.now() - this.accountUpdatedAt < ACCOUNT_REFRESH_INTERVAL_MS) return this.status();
     const current = this.requireCloudAccount();
-    if (current.legacyAccountAccess) {
-      await this.library();
-      return this.status();
-    }
     try {
       const response = await fetch(`${current.origin}/api/v1/local-access/session`, {
         method: "GET",
@@ -781,7 +745,8 @@ class CloudConnector {
       this.account = publicAccount(payload.account);
       this.accountUpdatedAt = Date.now();
       this.accountLastError = null;
-      this.writeConfiguration({ ...this.configuration, account:this.account, accountExpiresAt:payload.expiresAt || this.configuration.accountExpiresAt || null, accountUpdatedAt:this.accountUpdatedAt });
+      const accountExpiresAt = payload.expiresAt !== undefined ? (payload.expiresAt || null) : (this.configuration.accountExpiresAt || null);
+      this.writeConfiguration({ ...this.configuration, account:this.account, accountExpiresAt, accountUpdatedAt:this.accountUpdatedAt });
       return this.status();
     } catch (error) {
       this.accountLastError = safeMessage(error);
@@ -816,7 +781,6 @@ class CloudConnector {
     delete configuration.accountExpiresAt;
     delete configuration.account;
     delete configuration.accountUpdatedAt;
-    configuration.legacyAccountAccess = false;
     this.writeConfiguration(configuration);
   }
 
@@ -903,11 +867,11 @@ class CloudConnector {
 
   async widgetFavoriteThumbnail(favoriteId) {
     this.expireAccountSessionIfNeeded();
-    const configuration=this.configuration,token=accountToken(configuration),legacyAccountAccess=Boolean(configuration?.legacyAccountAccess);
+    const configuration=this.configuration,token=accountToken(configuration);
     if(!configuration?.origin||!token)throw Object.assign(new Error("Sign in to PenEcho Cloud on this computer first."),{status:401,code:"cloud_account_required"});
     const response=await fetch(`${configuration.origin}/api/v1/favorites/${encodeURIComponent(favoriteId)}/thumbnail`,{method:"GET",redirect:"error",headers:{accept:"image/webp",authorization:`Bearer ${token}`}});
     if(!response.ok){
-      if(response.status===401&&!legacyAccountAccess)await this.confirmAccountSessionAfterUnauthorized(token,"PenEcho Cloud rejected this favorite thumbnail request.");
+      if(response.status===401)await this.confirmAccountSessionAfterUnauthorized(token,"PenEcho Cloud rejected this favorite thumbnail request.");
       throw Object.assign(new Error(`Favorite thumbnail request failed (HTTP ${response.status}).`),{status:response.status===401?403:response.status,code:response.status===401?"cloud_request_not_authorized":"favorite_thumbnail_failed"});
     }
     const contentType=String(response.headers.get("content-type")||"").split(";",1)[0].toLowerCase(),bytes=Buffer.from(await response.arrayBuffer());
@@ -936,10 +900,10 @@ class CloudConnector {
 
   async communityImage(itemId,variant="preview") {
     this.expireAccountSessionIfNeeded();
-    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),legacyAccountAccess=Boolean(this.configuration?.legacyAccountAccess),suffix=variant==="thumbnail"?"thumbnail":"preview";
+    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),suffix=variant==="thumbnail"?"thumbnail":"preview";
     const response = await fetch(`${origin}/api/v1/community/items/${encodeURIComponent(itemId)}/${suffix}`, { method:"GET", redirect:"error", headers:{ accept:"image/webp",...(token?{authorization:`Bearer ${token}`}:{}) } });
     if (!response.ok) {
-      if(response.status===401&&token&&!legacyAccountAccess)await this.confirmAccountSessionAfterUnauthorized(token,"PenEcho Cloud rejected this community image request.");
+      if(response.status===401&&token)await this.confirmAccountSessionAfterUnauthorized(token,"PenEcho Cloud rejected this community image request.");
       throw Object.assign(new Error(`Community preview request failed (HTTP ${response.status}).`), {
         status:response.status===401&&token?403:response.status,
         code:response.status===401&&token?"cloud_request_not_authorized":"community_image_failed",
@@ -1010,6 +974,16 @@ class CloudConnector {
     return this.cloudRequest(`/api/v1/device-sync/projects/${encodeURIComponent(projectId)}`, { method:"DELETE" });
   }
 
+  // The account's Cloud project for a folder on this computer; project is the
+  // folder's link, shared with Cloud's agents here.
+  folderProject(folder, { signal, project } = {}) {
+    return this.cloudRequest("/api/v1/device-sync/folder-projects", { method:"POST", body:{ folder, ...(project ? { project } : {}) }, signal });
+  }
+
+  folderProjectTabs(folder, change) {
+    return this.cloudRequest("/api/v1/device-sync/folder-projects/tabs", { method:"POST", body:{ folder, ...change } });
+  }
+
   createCloudCanvas(projectId, input) {
     return this.cloudRequest(`/api/v1/device-sync/projects/${encodeURIComponent(projectId)}/canvases`, { method: "POST", body: input });
   }
@@ -1031,7 +1005,7 @@ class CloudConnector {
     });
     if (response.status === 404) return null;
     if (!response.ok) {
-      if (response.status === 401 && configuration.accountToken && !configuration.legacyAccountAccess) {
+      if (response.status === 401 && configuration.accountToken) {
         await this.confirmAccountSessionAfterUnauthorized(configuration.accountToken, "PenEcho Cloud rejected this Canvas thumbnail request.");
       }
       throw Object.assign(new Error(`Cloud thumbnail request failed (HTTP ${response.status}).`), {
@@ -1045,7 +1019,9 @@ class CloudConnector {
     return { bytes, contentType };
   }
 
-  async saveCloudCanvas({ canvasId, baseRevisionId = null, bundle }) {
+  // replace: the save takes the place of the one it starts from (no versions),
+  // under the bundle's name.
+  async saveCloudCanvas({ canvasId, baseRevisionId = null, bundle, replace = false }) {
     if (!canvasId || bundle?.bundleVersion !== 2 || !bundle.manifest || !Array.isArray(bundle.assets)) throw new Error("The cloud Canvas bundle is invalid.");
     const bundleBytes = Buffer.from(JSON.stringify(bundle));
     if (!bundleBytes.length || bundleBytes.length > MAX_CLOUD_BUNDLE_BYTES) throw new Error("The cloud Canvas bundle is too large for local synchronization.");
@@ -1061,7 +1037,8 @@ class CloudConnector {
     });
     try {
       await this.assetRequest(reservation.bundle.upload, { method: "PUT", bytes: bundleBytes });
-      return await this.completeCloudCanvasRevision(canvasId, reservation.revisionId);
+      const name = typeof bundle.name === "string" ? bundle.name.trim().slice(0, 160) : "";
+      return await this.completeCloudCanvasRevision(canvasId, reservation.revisionId, { replace, name });
     } catch (error) {
       // A best-effort cancel releases the Cloud quota reservation. If completion
       // actually succeeded, Cloud treats this as a no-op and keeps the revision.
@@ -1085,11 +1062,11 @@ class CloudConnector {
     }
   }
 
-  async completeCloudCanvasRevision(canvasId, revisionId) {
+  async completeCloudCanvasRevision(canvasId, revisionId, { replace = false, name = "" } = {}) {
     let lastError = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const completed = await this.cloudRequest(`/api/v1/device-sync/canvas-revisions/${encodeURIComponent(revisionId)}/complete`, { method: "POST", body: {} });
+        const completed = await this.cloudRequest(`/api/v1/device-sync/canvas-revisions/${encodeURIComponent(revisionId)}/complete`, { method: "POST", body: replace ? { replace:true, ...(name ? { name } : {}) } : {} });
         if (completed?.revision?.id === revisionId) return completed;
         lastError = new Error("PenEcho Cloud returned an invalid Canvas revision confirmation.");
       } catch (error) {
@@ -1116,61 +1093,9 @@ class CloudConnector {
     if (bundle?.bundleVersion !== 2 || !Array.isArray(bundle.assets)) throw new Error("The cloud Canvas bundle is invalid.");
     return { revision: latest.revision, bundle };
   }
-  async pair({ origin, code, name = defaultDeviceName(), platform = defaultPlatform(), publicKey = null }) {
-    const deviceOperationSeq = ++this.deviceOperationSeq;
-    const cloudOrigin = normalizedOrigin(origin);
-    const accountConfiguration = this.requireCloudAccount();
-    if (accountConfiguration.origin !== cloudOrigin) {
-      throw new Error("Use the PenEcho Cloud account that is signed in on this computer.");
-    }
-    const response = await fetch(`${cloudOrigin}/api/v1/device/${code ? 'pair' : 'link'}`, {
-      method: "POST",
-      redirect: "error",
-      headers: { "content-type": "application/json", accept: "application/json", authorization: `Bearer ${accountConfiguration.accountToken}` },
-      body: JSON.stringify(code ? { code, name, platform, publicKey } : { name, platform, ...(deviceToken(this.configuration) ? { deviceToken:deviceToken(this.configuration) } : {}) }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.token || !payload.device?.id) throw new Error(payload.message || `Could not enable Linked Device (HTTP ${response.status}).`);
-    if (deviceOperationSeq !== this.deviceOperationSeq) throw Object.assign(new Error("A newer device-link action replaced this request."), { code:"cloud_device_action_superseded" });
-    if (accountToken(this.configuration) !== accountConfiguration.accountToken || this.configuration?.origin !== accountConfiguration.origin) {
-      throw cloudSignInRequiredError("The local PenEcho Cloud account changed while this device was linking. Start Link device again.");
-    }
-    const existing = this.configuration;
-    const configuration = {
-      ...(existing || {}),
-      version: 2,
-      origin: cloudOrigin,
-      deviceToken: payload.token,
-      deviceId: payload.device.id,
-      deviceName: payload.device.name || name,
-      platform: payload.device.platform || platform,
-      enabled: true,
-      pairedAt: new Date().toISOString(),
-      legacyAccountAccess: false,
-    };
-    // A successful replacement invalidates the previous device credential.
-    // Detach its socket before connect() checks readyState, otherwise an open
-    // old relay can prevent the newly paired credential from ever connecting.
-    const previousSocket = this.socket;
-    this.closeMcpChannels();
-    this.socket = null;
-    this.clearTimers();
-    this.connectionState = "disconnected";
-    if (previousSocket) {
-      try { previousSocket.close(1000, "device re-paired"); } catch {}
-    }
-    this.writeConfiguration(configuration);
-    if (configuration.accountToken) try { await this.refreshAccount({ force: true }); } catch {}
-    this.stopped = false;
-    this.reconnectAttempt = 0;
-    this.connect();
-    return this.status();
-  }
 
   start() {
-    this.stopped = false;
     this.startAccountRefresh();
-    if (this.configuration?.enabled && deviceToken(this.configuration)) this.connect();
   }
 
   startAccountRefresh() {
@@ -1182,281 +1107,14 @@ class CloudConnector {
     this.accountRefreshTimer.unref?.();
   }
 
-  stop() {
-    this.cloudMcpBridge.close();
-    this.closeMcpChannels();
-    this.stopped = true;
-    this.modelEvaluationQueue.length = 0;
-    this.clearTimers();
-    if (this.socket) {
-      try { this.socket.close(1001, "local server stopping"); } catch {}
-      this.socket = null;
-    }
-    this.connectionState = "disconnected";
-  }
-
   close() {
-    this.stop();
     this.closed = true;
+    this.modelEvaluationQueue.length = 0;
     this.invalidateSuggestionStatus();
     this.suggestionTransport?.close?.();
     clearInterval(this.accountRefreshTimer);
     this.accountRefreshTimer = null;
   }
-
-  disconnect({ forget = false } = {}) {
-    this.deviceOperationSeq++;
-    this.mcpAccessSeq++;
-    this.stop();
-    if (forget) {
-      const configuration = { ...this.configuration };
-      for (const field of ["deviceToken", "deviceId", "deviceName", "platform", "enabled", "pairedAt"]) delete configuration[field];
-      configuration.legacyAccountAccess = false;
-      this.writeConfiguration(configuration);
-    } else if (this.configuration) {
-      this.writeConfiguration({ ...this.configuration, enabled: false });
-    }
-    return this.status();
-  }
-
-  enable() {
-    if (!deviceToken(this.configuration)) throw new Error("Enable Linked Device to connect this PenEcho server.");
-    this.writeConfiguration({ ...this.configuration, enabled: true });
-    this.stopped = false;
-    this.reconnectAttempt = 0;
-    this.connect();
-    return this.status();
-  }
-
-  async enableLinkedDevice({ reclaim = true } = {}) {
-    this.requireCloudAccount();
-    const accessSequence = reclaim ? ++this.mcpAccessSeq : this.mcpAccessSeq;
-    // Explicit enable validates and reuses a current credential, or claims
-    // ownership if a disconnected host missed its revocation. Automatic
-    // reconnects never come here and cannot reclaim an invalidated device.
-    if(!reclaim && this.configuration.enabled && this.connectionState==='connected' && deviceToken(this.configuration))return this.status();
-    if(!this.linkInFlight)this.linkInFlight=this.pair({origin:this.configuration.origin}).finally(()=>{this.linkInFlight=null;});
-    const linked = await this.linkInFlight;
-    // Explicitly enabling the link includes Cloud access to browsers that have
-    // already opted into MCP. Merely starting the host still exposes no Canvas.
-    // A later disable/disconnect must win over this asynchronous enable.
-    if(reclaim && accessSequence===this.mcpAccessSeq && this.configuration?.enabled) {
-      this.writeConfiguration({...this.configuration,cloudMcpEnabled:true});
-      return this.status();
-    }
-    return linked;
-  }
-
-  async setCloudMcpAccess(enabled) {
-    if(typeof enabled!=='boolean')throw Error('Choose whether to enable Cloud MCP.');
-    const sequence=++this.mcpAccessSeq;
-    if(enabled)await this.enableLinkedDevice({reclaim:false});
-    if(sequence!==this.mcpAccessSeq)throw Object.assign(Error('A newer Cloud MCP setting replaced this request.'),{status:409});
-    if(this.configuration)this.writeConfiguration({...this.configuration,cloudMcpEnabled:enabled});
-    return this.status();
-  }
-
-  attachCloudMcpBrowser(socket) {
-    const configuration=this.requireCloudAccount();
-    if(!configuration.cloudMcpEnabled||!configuration.enabled||!deviceToken(configuration))throw Error('Enable Cloud MCP first.');
-    this.cloudMcpBridge.attach(socket,{origin:configuration.origin,token:deviceToken(configuration)});
-  }
-
-  async revokeDevice() {
-    const deviceOperationSeq = ++this.deviceOperationSeq;
-    const configuration = this.configuration;
-    const token = deviceToken(configuration);
-    if (!token || !configuration?.origin) return this.disconnect({forget:true});
-    const response = await fetch(`${configuration.origin}/api/v1/device-sync/device`, {
-      method: "DELETE",
-      redirect: "error",
-      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
-    });
-    if (!response.ok && ![401, 404].includes(response.status)) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.message || `Device revocation failed (HTTP ${response.status}).`);
-    }
-    if (deviceOperationSeq !== this.deviceOperationSeq || deviceToken(this.configuration) !== token) return this.status();
-    this.disconnect({ forget: true });
-    return this.status();
-  }
-
-  clearTimers() {
-    clearInterval(this.heartbeatTimer);
-    clearTimeout(this.heartbeatDeadlineTimer);
-    clearTimeout(this.helloTimer);
-    clearTimeout(this.reconnectTimer);
-    this.heartbeatTimer = null;
-    this.heartbeatDeadlineTimer = null;
-    this.helloTimer = null;
-    this.reconnectTimer = null;
-  }
-
-  relayUrl() {
-    const url = new URL(this.configuration.origin);
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    url.pathname = "/relay/device";
-    return url.toString();
-  }
-
-  connect() {
-    const token = deviceToken(this.configuration);
-    if (this.stopped || !this.configuration?.enabled || !token) return;
-    if (this.socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(this.socket.readyState)) return;
-    this.clearTimers();
-    this.connectionState = "connecting";
-    const socket = new WebSocket(this.relayUrl(), {
-      headers: { authorization: `Bearer ${token}` },
-      handshakeTimeout: 15_000,
-      maxPayload: MAX_RELAY_MESSAGE_BYTES,
-      perMessageDeflate: false,
-    });
-    this.socket = socket;
-
-    socket.on("open", () => {
-      if (this.socket !== socket) return socket.close();
-      clearTimeout(this.helloTimer);
-      this.helloTimer = setTimeout(() => {
-        if (this.socket === socket && this.connectionState === "connecting") socket.close(4008, "relay authentication timed out");
-      }, this.helloTimeoutMs);
-      this.helloTimer.unref?.();
-      this.log("socket-open", { deviceId: this.configuration.deviceId });
-    });
-
-    let relayHello = null;
-    const markReady = () => {
-      if (this.socket !== socket || this.connectionState !== "connecting" || !relayHello) return;
-      clearTimeout(this.helloTimer);
-      this.helloTimer = null;
-      this.connectionState = "connected";
-      this.lastConnectedAt = Date.now();
-      this.lastSeenAt = Date.now();
-      this.lastError = null;
-      this.reconnectAttempt = 0;
-      this.startHeartbeat(Number(relayHello.heartbeatSeconds) || DEFAULT_HEARTBEAT_SECONDS, Number(relayHello.heartbeatTimeoutSeconds) || null, socket);
-      if (accountToken(this.configuration)) this.refreshAccount({ force:true }).catch(error => this.log("account-refresh-failed", { error:safeMessage(error) }));
-      this.log("connected", { deviceId:this.configuration.deviceId });
-    };
-    socket.on("message", (data) => {
-      if (this.socket !== socket) return;
-      if (data.length > MAX_RELAY_MESSAGE_BYTES) return socket.close(4009, "message too large");
-      let message;
-      try { message = JSON.parse(data.toString("utf8")); } catch { return socket.close(4002, "invalid message"); }
-      if (message.type === "hello") {
-        if (this.socket !== socket) return;
-        if (message.protocol !== 1 || message.deviceId !== this.configuration?.deviceId) return socket.close(4002, "invalid relay hello");
-        if (relayHello) return socket.close(4002, "duplicate relay hello");
-        relayHello = message;
-        socket.send(JSON.stringify({ type:"capabilities", capabilities:this.capabilities }));
-        if (message.capabilitiesAck !== true) markReady();
-        return;
-      }
-      if (message.type === "capabilities_ack") {
-        if (!relayHello || relayHello.capabilitiesAck !== true || message.deviceId !== this.configuration?.deviceId) return socket.close(4002, "invalid capabilities acknowledgement");
-        markReady();
-        return;
-      }
-      if (this.connectionState === "connected") this.noteRelayActivity(socket);
-      if (message.type === "heartbeat_ack") return;
-      if (message.type === "request" && this.connectionState !== "connected") return socket.close(4002, "request before relay authentication");
-      if (message.type === "request" && typeof message.requestId === "string") this.handleRequest(socket, message);
-    });
-
-    socket.on("close", (code, reason) => {
-      if (this.socket !== socket) return;
-      this.closeMcpChannels();
-      this.socket = null;
-      this.clearTimers();
-      // Socket replacement (4001) keeps the credential valid; only revocation is terminal.
-      const credentialInvalid = code === 4003;
-      if (credentialInvalid) {
-        const configuration = { ...this.configuration, enabled:false, cloudMcpEnabled:false, legacyAccountAccess:false };
-        for (const field of ["deviceToken", "token", "deviceId", "deviceName", "platform", "pairedAt"]) delete configuration[field];
-        this.writeConfiguration(configuration);
-      }
-      const heartbeatTimedOut = this.heartbeatTimedOutSocket === socket;
-      if (heartbeatTimedOut) this.heartbeatTimedOutSocket = null;
-      this.connectionState = credentialInvalid ? "invalid" : "disconnected";
-      this.lastError = heartbeatTimedOut ? "Relay heartbeat acknowledgement timed out."
-        : code === 1000 ? null : `Connection closed (${code}): ${String(reason || "")}`.trim();
-      this.log("closed", { code });
-      if (!credentialInvalid) this.scheduleReconnect();
-    });
-
-    socket.on("error", (error) => {
-      if (this.socket !== socket) return;
-      this.lastError = safeMessage(error);
-      this.log("error", { error: this.lastError });
-    });
-  }
-
-  noteRelayActivity(socket) {
-    if (this.socket !== socket || this.connectionState !== "connected") return;
-    this.lastSeenAt = Date.now();
-    clearTimeout(this.heartbeatDeadlineTimer);
-    const timeoutMs = this.activeHeartbeatTimeoutMs;
-    if (!timeoutMs) return;
-    this.heartbeatDeadlineTimer = setTimeout(() => {
-      if (this.socket !== socket || this.connectionState !== "connected") return;
-      this.heartbeatTimedOutSocket = socket;
-      this.lastError = "Relay heartbeat acknowledgement timed out.";
-      this.log("heartbeat-timeout", { timeoutMs });
-      if (typeof socket.terminate === "function") socket.terminate();
-      else socket.close(4008, "relay heartbeat timed out");
-    }, timeoutMs);
-    this.heartbeatDeadlineTimer.unref?.();
-  }
-
-  startHeartbeat(seconds, timeoutSeconds = null, socket = this.socket) {
-    clearInterval(this.heartbeatTimer);
-    const interval = Math.max(5, Math.min(120, seconds)) * 1000;
-    const configuredTimeout = Number.isFinite(timeoutSeconds) && timeoutSeconds > 0
-      ? Math.max(15, Math.min(600, timeoutSeconds)) * 1000
-      : null;
-    // Old Cloud versions do not advertise or acknowledge a heartbeat timeout.
-    // Keep those rolling-upgrade connections compatible until Cloud opts in.
-    this.activeHeartbeatTimeoutMs = configuredTimeout ? this.heartbeatTimeoutOverrideMs || Math.max(interval + 5_000, configuredTimeout) : null;
-    this.noteRelayActivity(socket);
-    this.heartbeatTimer = setInterval(() => {
-      if (this.socket === socket && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "heartbeat", sentAt: Date.now() }));
-    }, interval);
-    this.heartbeatTimer.unref?.();
-  }
-
-  scheduleReconnect() {
-    if (this.stopped || !this.configuration?.enabled || !deviceToken(this.configuration)) return;
-    const delay = reconnectDelayMs(this.reconnectAttempt++);
-    this.connectionState = "waiting";
-    this.reconnectTimer = setTimeout(() => this.connect(), delay);
-    this.reconnectTimer.unref?.();
-  }
-
-  async handleRequest(socket, message) {
-    try {
-      const operation = message.payload?.operation,
-        remoteCanvas = operation === "canvas.http",
-        canvasAgent = typeof operation === "string" && operation.startsWith("canvas.agent."),
-        canvasMcp = typeof operation === "string" && operation.startsWith("canvas.mcp."),
-        canvasAi = operation === undefined,
-        executor = canvasMcp ? this.executeMcpRequest : canvasAgent ? this.executeCanvasAgentRequest : remoteCanvas ? this.executeHttpRequest : this.executeRequest,
-        timeoutMs = Number(message.timeoutMs) || 210_000;
-      if (typeof executor !== "function") throw Object.assign(new Error("This PenEcho version does not support Remote Canvas."), { code:"remote_canvas_unsupported" });
-      const relayRequest = canvasAi ? cloudAiRelayRequest(message.payload) : null,
-        payload = relayRequest?.connectionId
-          ? await executor(relayRequest.payload, timeoutMs, { connectionId:relayRequest.connectionId })
-          : await executor(relayRequest ? relayRequest.payload : message.payload, timeoutMs);
-      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "response", requestId: message.requestId, ok: true, payload }));
-    } catch (error) {
-      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({
-        type: "response",
-        requestId: message.requestId,
-        ok: false,
-        error: error.code || "local_device_error",
-        ...(Number.isInteger(error.status) ? { status:error.status } : {}),
-        message: safeMessage(error),
-      }));
-    }
-  }
 }
 
-module.exports = { CloudConnector, accountSessionExpired, cloudAiConnectionHeaders, cloudAiRelayRequest, normalizedOrigin, publicCanvasMessage, reconnectDelayMs };
+module.exports = { CloudConnector, accountSessionExpired, normalizedOrigin, publicCanvasMessage };

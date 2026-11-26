@@ -36,17 +36,16 @@ fs.mkdirSync(out, { recursive: true });
       await page.screenshot({ path: path.join(out, `${width}-toolbar.png`), clip: { x: 0, y: 700, width, height: 200 } });
       assert.ok(layout.ai.right <= width, 'AI controls stay in viewport');
       const close = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1, `${label}: ${actual} vs ${expected}`);
-      close(layout.ai.right, layout.space.right, 'AI anchors to right edge');
+      // The Canvas AI bar sits at the top right, 12px in from the Canvas's right edge and under the 48px title bar.
+      close(layout.ai.right, width - 12, 'AI anchors to the top right');
+      close(layout.ai.y, 60, 'AI sits under the title bar');
       close(layout.zoom.x, layout.space.x, 'view anchors to left edge');
       assert.ok(layout.dock.x >= layout.space.x && layout.dock.right <= layout.space.right, 'drawing dock stays in available canvas');
       const viewCenter = (layout.zoom.y + layout.zoom.bottom) / 2;
-      close((layout.ai.y + layout.ai.bottom) / 2, viewCenter, 'side groups share a center line');
-      if (layout.mode !== 'rows') close((layout.dock.y + layout.dock.bottom) / 2, viewCenter, 'all three groups share a center line');
+      if (layout.mode !== 'rows') close((layout.dock.y + layout.dock.bottom) / 2, viewCenter, 'view and dock share a center line');
       assert.equal(await page.locator('.primary-tools .view-tools').evaluate(node => getComputedStyle(node).borderRightWidth), '0px');
-      if (layout.mode !== 'rows') {
-        assert.ok(layout.zoom.right <= layout.dock.x, 'left controls do not overlap dock');
-        assert.ok(layout.dock.right <= layout.ai.x, 'dock does not overlap AI');
-      } else assert.ok(layout.ai.bottom < layout.dock.y, 'second row clears dock');
+      if (layout.mode !== 'rows') assert.ok(layout.zoom.right <= layout.dock.x, 'left controls do not overlap dock');
+      assert.ok(layout.ai.bottom < layout.dock.y, 'AI bar clears the dock');
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     for (const scenario of ["sidebar", "scale125"]) {
@@ -61,11 +60,10 @@ fs.mkdirSync(out, { recursive: true });
         const box = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { x: r.x, right: r.right, y: r.y, bottom: r.bottom }; };
         return { ai: box('#aiToolsSection'), dock: box('.primary-tools'), zoom: box('#canvasZoomControls'), space: box('.shell-dock-space'), mode: document.body.dataset.shellDockLayout };
       });
-      assert.ok(bounds.ai.right <= bounds.space.right + 1, `${scenario}: AI stays in available canvas`);
+      assert.ok(bounds.ai.right <= bounds.space.right + 17, `${scenario}: AI stays in available canvas`);
       assert.ok(bounds.zoom.x >= bounds.space.x - 1, `${scenario}: zoom stays in available canvas`);
-      if (bounds.mode !== 'rows') {
-        assert.ok(bounds.zoom.right <= bounds.dock.x && bounds.dock.right <= bounds.ai.x, `${scenario}: groups do not overlap`);
-      }
+      if (bounds.mode !== 'rows') assert.ok(bounds.zoom.right <= bounds.dock.x, `${scenario}: groups do not overlap`);
+      assert.ok(bounds.ai.bottom < bounds.dock.y, `${scenario}: AI bar clears the dock`);
       await page.screenshot({ path: path.join(out, `${scenario}.png`) });
     }
     await page.evaluate(() => window.PenEchoPageScale.apply(1, { persist: false }));
@@ -90,7 +88,7 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.evaluate(() => window.manualAIClicks), 2);
     await page.locator('#aiEffortButton').click();
     const menu = await page.locator('#effortPopover').boundingBox(), ai = await page.locator('#aiToolsSection').boundingBox();
-    assert.ok(menu && menu.y + menu.height <= ai.y, 'effort menu opens above AI controls');
+    assert.ok(menu && menu.y >= ai.y + ai.height && menu.x + menu.width <= ai.x + ai.width + 1, 'effort menu opens below the AI bar, within its right edge');
     assert.deepEqual(errors, []);
     console.log('Compact dock layout and merged AI action checks passed.');
   } finally { await browser.close(); }

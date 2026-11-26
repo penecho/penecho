@@ -1,25 +1,34 @@
 "use strict";
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
-const {parseHTML}=require("linkedom");
+const {parseHTML}=require("./helpers/dom.js");
 const root=path.resolve(__dirname,".."),source=fs.readFileSync(path.join(root,"src/client/app/core.js"),"utf8");
-function extract(name){const start=source.indexOf(`function ${name}(`),body=source.indexOf("{",start);assert.ok(start>=0,name);let depth=0;for(let i=body;i<source.length;i++){if(source[i]==="{")depth++;else if(source[i]==="}"&&!--depth)return source.slice(start,i+1);}throw Error(name);}
+function extract(name){
+ const start=source.indexOf(`  function ${name}(`),end=source.indexOf("\n  }",start);
+ assert.ok(start>=0 && end>start,name);
+ return source.slice(start,end+4);
+}
 function harness(){
  const {document,window}=parseHTML(fs.readFileSync(path.join(root,"public/index.html"),"utf8"));
  window.PENECHO_CONFIG={cloudOrigin:"https://example.test"};
  const settings={connections:[],editingConnectionId:null,connectionLimit:10},hostedSettings={models:[],credits:null,signedIn:false,loading:false,error:false};
  let selected="default";
- const context=vm.createContext({document,window,location:{origin:"https://example.test"},settings,hostedSettings,selectedAiConnectionId:()=>selected,t:key=>key});
+ const context=vm.createContext({document,window,location:{origin:"https://example.test"},state:{reasoningEffort:"config"},settings,hostedSettings,selectedAiConnectionId:()=>selected,t:key=>key});
  for(const id of ["settingsOpenApi","settingsOpenSearch","settingsOpenSystem","settingsConnectionList","settingsConnectionQuickList","connectionLimitText","settingsAddConnection"])context[id]=document.getElementById(id);
- vm.runInContext(["peButton","peChoice","hostedMultiplierLabel","renderHostedModels","connectionProviderLabel","connectionTitle","connectionSummary","renderConnectionLists"].map(extract).join("\n"),context);
+ vm.runInContext([
+  "peButton","peChoice","canvasGuest","aiConnectionScope","allAiConnections","hostedMultiplierLabel","effortLevelLabel",
+  "activeModelDefaultEffort","normalizeToolbarReasoningEffort","updateEffortControl","renderHostedModels",
+  "connectionProviderLabel","connectionTitle","connectionSummary","renderConnectionLists",
+ ].map(extract).join("\n"),context);
  return {document,window,settings,hostedSettings,context,select:id=>{selected=id;}};
 }
 test("connection page switches cloud invitation to account summary and selectable hosted models",()=>{
  const h=harness(),get=id=>h.document.getElementById(id);
  h.context.renderConnectionLists();
  assert.equal(get("settingsCloudSetup").hidden,false);assert.equal(get("settingsCloudAccount").hidden,true);assert.equal(get("settingsHostedSection").hidden,true);assert.equal(get("settingsLocalConnectionsEmpty").hidden,false);
- h.hostedSettings.signedIn=true;h.hostedSettings.credits=1240;h.hostedSettings.models=[{id:"model-a",displayName:"<model label>",multiplier:0.8}];h.select("hosted:model-a");h.context.renderHostedModels();
+ h.hostedSettings.signedIn=true;h.hostedSettings.credits=1240;h.hostedSettings.models=[{id:"model-a",displayName:"<model label>",multiplier:0.8,defaultEffort:"high"}];h.select("hosted:model-a");h.context.renderHostedModels();
  assert.equal(get("settingsCloudSetup").hidden,true);assert.equal(get("settingsCloudAccount").hidden,false);assert.equal(get("settingsHostedSection").hidden,false);
- const button=get("settingsHostedList").querySelector("button");assert.equal(button.getAttribute("aria-pressed"),"true");assert.equal(button.querySelector("strong").textContent,"<model label>");assert.equal(button.querySelector("strong").children.length,0);assert.equal(button.querySelector("small").textContent,"0.8×");
+ const button=get("settingsHostedList").querySelector("button");assert.equal(button.getAttribute("aria-pressed"),"true");assert.equal(button.querySelector("strong").textContent,"<model label>");assert.equal(button.querySelector("strong").children.length,0);assert.equal(button.querySelector("small").textContent,"effortHigh · 0.8×");
+ assert.equal(get("effortControl").dataset.effort,"high");
  assert.equal(get("settingsHostedBilling").getAttribute("href"),"https://example.test/dashboard.html#billing");
  h.hostedSettings.signedIn=false;h.hostedSettings.models=[];h.context.renderHostedModels();assert.equal(get("settingsCloudAccount").hidden,true);assert.equal(get("settingsHostedList").children.length,0);
 });
@@ -46,7 +55,7 @@ test("loading and errors remain recoverable; browser-only Canvas cannot configur
  h.hostedSettings.loading=false;h.hostedSettings.error=true;h.context.renderHostedModels();assert.equal(get("settingsHostedSection").hidden,false);assert.equal(get("settingsHostedRefresh").disabled,false);assert.equal(get("settingsHostedStatus").textContent,"settingsHostedError");
  h.window.PENECHO_CONFIG.browserCanvasEditing=true;h.context.renderHostedModels();
  for(const id of ["settingsOpenApi","settingsOpenSearch","settingsOpenSystem"]){assert.equal(get(id).disabled,true);assert.equal(get(id).getAttribute("aria-describedby"),"settingsHostedBrowserNotice");}
- assert.equal(get("settingsHostedBrowserNotice").hidden,false);assert.equal(get("settingsHostedLinkDevice").hidden,false);
+ assert.equal(get("settingsHostedBrowserNotice").hidden,false);assert.equal(get("settingsHostedBrowserNotice").textContent,"settingsHostedBrowserNotice");assert.equal(get("settingsHostedLinkDevice"),null);
 });
 test("local connection rows preserve model, endpoint, and accessible selection state",()=>{
  const h=harness();h.settings.connections=[{id:"default",provider:"api",apiModel:"model one",apiUrl:"https://example.test/v1",active:true},{id:"second",provider:"codex-cli",cliModel:"model two",active:false}];h.context.renderConnectionLists();
@@ -54,30 +63,18 @@ test("local connection rows preserve model, endpoint, and accessible selection s
  assert.equal(h.document.getElementById("settingsLocalConnectionsEmpty").hidden,true);
 });
 
-test("online linked device adds local connections without removing hosted models or account controls",()=>{
+test("a Canvas on penecho.ai keeps hosted models and the account, whatever an old status says: the linked device is retired",()=>{
  const h=harness(),get=id=>h.document.getElementById(id);
  Object.assign(h.window.PENECHO_CONFIG,{runtime:"cloud",browserCanvasEditing:true,linkedDeviceLinked:true,linkedDeviceOnline:true});
  h.hostedSettings.signedIn=true;h.hostedSettings.models=[{id:"model-a",displayName:"Cloud model",multiplier:1}];
- h.settings.connections=[{id:"default",provider:"api",apiModel:"Local model",apiUrl:"https://local-provider.test/v1",active:true}];
  h.context.renderConnectionLists();
  assert.equal(get("settingsHostedList").querySelectorAll("button").length,1);
- assert.equal(get("settingsConnectionQuickList").querySelectorAll("button").length,1);
  assert.equal(get("settingsCloudAccount").hidden,false);
- for(const id of ["settingsOpenApi","settingsOpenSearch","settingsOpenSystem"]){assert.equal(get(id).disabled,false);assert.equal(get(id).hasAttribute("aria-describedby"),false);}
- assert.equal(get("settingsHostedBrowserNotice").hidden,true);
- assert.equal(get("settingsHostedLinkDevice").hidden,true);
-});
-
-test("linked offline state explains recovery instead of claiming no connections or asking to link again",()=>{
- const h=harness(),get=id=>h.document.getElementById(id);
- Object.assign(h.window.PENECHO_CONFIG,{runtime:"cloud",browserCanvasEditing:true,linkedDeviceLinked:true,linkedDeviceOnline:false});
- h.hostedSettings.signedIn=true;h.hostedSettings.models=[{id:"model-a",displayName:"Cloud model",multiplier:1}];
- h.context.renderConnectionLists();
- assert.equal(get("settingsHostedBrowserNotice").textContent,"settingsLinkedDeviceOffline");
+ for(const id of ["settingsOpenApi","settingsOpenSearch","settingsOpenSystem"]){assert.equal(get(id).disabled,true);assert.equal(get(id).getAttribute("aria-describedby"),"settingsHostedBrowserNotice");}
+ assert.equal(get("settingsHostedBrowserNotice").textContent,"settingsHostedBrowserNotice");
  assert.equal(get("settingsHostedBrowserNotice").hidden,false);
- assert.equal(get("settingsHostedLinkDevice").hidden,true);
  assert.equal(get("settingsLocalConnectionsEmpty").hidden,true);
- assert.equal(get("settingsHostedList").querySelectorAll("button").length,1);
+ assert.doesNotMatch(source,/settingsLinkedDeviceOffline|settingsHostedLinkDevice/);
 });
 
 test("sign-in opens the local Cloud account area and retains web authentication fallback",()=>{

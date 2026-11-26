@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { normalizeLocalTokenUsage, localUsageRecord } = require("../src/server/local-request-usage.js");

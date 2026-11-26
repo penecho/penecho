@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 const SMART=require("../public/smart-suggest.js"),html=SMART.graphWidgetHtml({expressions:["z=a*sin(x)*cos(y)"],mode:"3d"}),
   scheduler=html.slice(html.indexOf("    let animationFrame="),html.indexOf("    function nice("));

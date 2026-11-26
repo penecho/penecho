@@ -1,4 +1,5 @@
 "use strict";
+require('./helpers/safety.js');
 const assert=require('node:assert/strict'),test=require('node:test');
 
 test('native diagnostics separate byte traffic from activity and reset counters between turns',async()=>{

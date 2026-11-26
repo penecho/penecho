@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test} = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const source = fs.readFileSync(require.resolve("../src/client/app/note-cards.js"), "utf8");
 const share = source.slice(source.indexOf("  async function noteLibraryShareEntry("), source.indexOf("  // Open above either maximized surface"));

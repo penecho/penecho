@@ -75,7 +75,7 @@ function send(res, status, value, headers = {}) {
   res.writeHead(status, {'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff', ...headers});
   res.end(value === undefined ? undefined : JSON.stringify(value));
 }
-function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const host=require('node:os').hostname().toLowerCase().replace(/\.$/,'');return host.endsWith('.local')?[host]:[host,host+'.local'];},stateDirectory, callTool, uploadImage, uploadTimeoutMs = 30000, uploadCancelGraceMs = 1000, requestCancelGraceMs = 1000, requestBodyTimeoutMs = 15000, disposeOwner, getAddresses = lanAddresses, announce = createAnnouncer, now = Date.now, onChange = () => {}, sessionIdleMs = 30 * 60 * 1000, maxSessions = 256, maxSessionRequests = 8, maxRequests = 32}) {
+function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const host=require('node:os').hostname().toLowerCase().replace(/\.$/,'');return host.endsWith('.local')?[host]:[host,host+'.local'];},stateDirectory, callTool, tools = TOOLS, uploadImage, uploadTimeoutMs = 30000, uploadCancelGraceMs = 1000, requestCancelGraceMs = 1000, requestBodyTimeoutMs = 15000, disposeOwner, getAddresses = lanAddresses, announce = createAnnouncer, now = Date.now, onChange = () => {}, sessionIdleMs = 30 * 60 * 1000, maxSessions = 256, maxSessionRequests = 8, maxRequests = 32}) {
   if(!Number.isInteger(preferredPort)||preferredPort<0||preferredPort>65535)throw new TypeError('Invalid preferred MCP port');
   const hostnames=[...new Set(getHostnames())].filter(host=>typeof host==='string'&&/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.local)?$/i.test(host)).map(host=>host.toLowerCase());
   let identity, server, announcer, timer, startedAt, addresses = [], transition = Promise.resolve(), active = 0;
@@ -135,7 +135,7 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
     if (error.details !== undefined) { try { failure.details = clean(error.details); if (Buffer.byteLength(JSON.stringify(failure.details) || '') > 16384) failure.details = '[truncated]'; } catch { failure.details = '[unavailable]'; } }
     return failure;
   }
-  const rpc = require("./rpc.js").createMcpRpc({callTool,toolFailure});
+  const rpc = require("./rpc.js").createMcpRpc({callTool,toolFailure,tools});
   async function imageUpload(req,res,ipDirectRequest = false) {
     if(req.method!=='POST') throw fault(405,'Use POST');
     if(typeof uploadImage!=='function') throw fault(404,'Image upload is unavailable');
@@ -307,7 +307,11 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
       server = https.createServer({...createDirectHttpLeaf(identity,certificateAddresses(addresses),hostnames),minVersion:'TLSv1.2'},handle);
       server.requestTimeout = timeouts.requestUploadMs; server.headersTimeout = timeouts.headersMs; server.keepAliveTimeout = timeouts.keepAliveMs; server.maxConnections = limits.tcpConnections;
       server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
-      await listenMcp(server, preferredPort);
+      // A saved fixed-IP address is the address clients were told to use, so listen on its port too.
+      // An explicit 0 (a test or a throwaway instance) stays ephemeral and must not take that port.
+      const fixed = fixedSettings().get();
+      const wantedPort = preferredPort === 0 ? 0 : fixed.enabled && fixed.host && fixed.port > 0 ? fixed.port : preferredPort;
+      await listenMcp(server, wantedPort);
       startedAt = now();
       announcer = announce({hostId:identity.hostId,port:server.address().port,getAddresses:() => { refresh(); return addresses; },onError:() => {}});
       timer = setInterval(() => { try { refresh(); prune(); } catch {} },10000); timer.unref(); notify();

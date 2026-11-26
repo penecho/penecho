@@ -1,9 +1,11 @@
 param(
     [Parameter(Mandatory=$true)][string]$SourceRoot,
-    [string]$DependencyRoot
+    [string]$DependencyRoot,
+    [string]$Registry = 'https://registry.npmjs.org'
 )
 $ErrorActionPreference = 'Stop'
 Set-Location $SourceRoot
+$env:npm_config_registry = $Registry
 $env:npm_config_cache = 'C:\Users\msi\PenEchoBuild\cache\npm'
 $env:ELECTRON_CACHE = 'C:\Users\msi\PenEchoBuild\cache\electron'
 $env:PENECHO_TARGET_PLATFORM = 'win32'

@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),sharp=require('sharp'),crypto=require('node:crypto');
 const {prepareUploadedImage,MAX_BYTES}=require('../src/server/mcp/image-upload');
 for(const format of ['png','jpeg','webp','gif','tiff','avif']) test(`decodes actual ${format} and normalizes upload`,async()=>{

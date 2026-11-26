@@ -1,11 +1,12 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'../src/client/app/canvas-navigation.js'),'utf8');
 function harness(overrides={}) {
  const changes=[],widgets=[{id:'rear'},{id:'front'}];
  const state={mode:'pen',viewMode:false,viewTool:'hand',spacePan:false,interactingWidgetId:null,navigationLocked:false,scale:1,panX:0,panY:0,widgets,...overrides};
  const classList={toggle(name,value){changes.push([name,value]);}},view={classList},screen={};
- const ctx={setCanvasMode(mode){state.mode=mode;},state,view,screen,Math,Number,Boolean,document:{querySelector:()=>null,activeElement:null},window:{PenEchoStudioNavigator:{flushMcpFollow(){changes.push(['flush']);}}},syncWidgetHostStates(){},resetCanvasCursor(){},requestInteractionLayerRender(){},visibleWidgets:()=>widgets,clientPoint:e=>({x:e.clientX,y:e.clientY}),handObjectToolbarTargetAtPoint:()=>({kind:'widget',object:widgets[1]}),canvasViewportMetrics:()=>({width:1000,height:800}),moveCanvas:(dx,dy)=>{state.panX+=dx;state.panY+=dy;},zoomCanvasAt:(x,y,delta)=>{changes.push(['zoom',x,y,delta]);},requestCoordinatesUpdate(){},wheelNavigating(){}};
+ const ctx={setCanvasMode(mode){state.mode=mode;},state,view,screen,Math,Number,Boolean,document:{querySelector:()=>null,activeElement:null},window:{PenEchoStudioNavigator:{flushMcpFollow(){changes.push(['flush']);}}},syncWidgetHostStates(){},syncCanvasPlacedInputRegions(){},resetCanvasCursor(){},requestInteractionLayerRender(){},visibleWidgets:()=>widgets,clientPoint:e=>({x:e.clientX,y:e.clientY}),handObjectToolbarTargetAtPoint:()=>({kind:'widget',object:widgets[1]}),canvasViewportMetrics:()=>({width:1000,height:800}),moveCanvas:(dx,dy)=>{state.panX+=dx;state.panY+=dy;},zoomCanvasAt:(x,y,delta)=>{changes.push(['zoom',x,y,delta]);},requestCoordinatesUpdate(){},wheelNavigating(){}};
  const api=vm.runInNewContext(`${source.slice(0,source.indexOf("\n  document.querySelector('#canvasViewHand')"))};({enterWidgetInteraction,canvasWidgetSelectionEnabled,canvasWidgetInteractive,canvasWidgetAtEvent,setWidgetInteraction,setCanvasViewTool,setSpacePan,handleCanvasWheel,beginCanvasTrackpadGesture,updateCanvasTrackpadGesture,endCanvasTrackpadGesture})`,ctx);
  const wheel=(values={})=>{let prevented=false;const event={target:view,deltaX:0,deltaY:0,deltaMode:0,clientX:200,clientY:300,preventDefault(){prevented=true;},...values};api.handleCanvasWheel(event);return prevented;};
  return {api,state,changes,widgets,wheel,view,ctx};
@@ -24,9 +25,12 @@ test('wheel never steals panel scrolling and cannot change camera during drawing
  const h=harness();assert.equal(h.wheel({target:{closest:()=>null},deltaY:30}),false);assert.equal(h.state.panY,0);
  for(const state of [{navigationLocked:true},{drawing:{}},{widgetGesture:{}},{selectionGesture:{}},{trackpadGesture:{}}]){const h=harness(state);h.wheel({deltaY:30,ctrlKey:true});assert.equal(h.changes.length,0);assert.equal(h.state.panY,0);}
 });
-test('Hand and Pen never enable iframe interaction; View requires its own Select tool',()=>{
+test('Hand uses native widget input while View requires its own Select tool',()=>{
  const h=harness();assert.equal(h.api.setWidgetInteraction(h.widgets[1]),false);
+ assert.equal(h.api.canvasWidgetInteractive(h.widgets[1]),false);
  h.state.mode='hand';assert.equal(h.api.canvasWidgetSelectionEnabled(),false);
+ assert.equal(h.api.canvasWidgetInteractive(h.widgets[0]),true);assert.equal(h.api.canvasWidgetInteractive(h.widgets[1]),true);
+ assert.equal(h.state.interactingWidgetId,null,'native Hand input does not enter presentation');
  h.state.viewMode=true;h.state.mode='select';assert.equal(h.api.canvasWidgetSelectionEnabled(),false);
  h.api.setCanvasViewTool('select');assert.equal(h.api.canvasWidgetSelectionEnabled(),true);assert.equal(h.api.setWidgetInteraction(h.widgets[1]),true);
  assert.equal(h.api.canvasWidgetInteractive(h.widgets[0]),false);assert.equal(h.api.canvasWidgetInteractive(h.widgets[1]),true);
@@ -78,7 +82,7 @@ function gestureHarness(overrides={}) {
   document:{querySelector:()=>null,activeElement:null},
   window:{addEventListener(){},PenEchoStudioNavigator:{flushMcpFollow(){}}},
   localStorage:{setItem(){},getItem:()=>null},
-  syncWidgetHostStates(){},resetCanvasCursor(){},requestInteractionLayerRender(){},requestCoordinatesUpdate(){},wheelNavigating(){},
+  syncWidgetHostStates(){},syncCanvasPlacedInputRegions(){},resetCanvasCursor(){},requestInteractionLayerRender(){},requestCoordinatesUpdate(){},wheelNavigating(){},
   visibleWidgets:()=>widgets,clientPoint:e=>({x:e.clientX,y:e.clientY}),
   widgetPointerHit:()=>null, // This harness exercises Widget body activation, outside resize zones.
   handObjectToolbarTargetAtPoint:()=>({kind:'widget',object:widgets[1]}),
@@ -119,13 +123,13 @@ test('right-click lists the Widget toolbar and double-click enters interaction i
  assert.deepEqual(active.calls,[]);assert.equal(active.state.interactingWidgetId,'front');
 });
 
-test('explicit widget Use keeps the editing tool and makes only that Widget live',()=>{
+test('explicit widget Use keeps the editing tool and isolates input outside Hand',()=>{
  for(const mode of ['hand','pen','select','eraser','area-eraser','text']){
   const h=harness({mode});
   assert.equal(h.api.enterWidgetInteraction(h.widgets[0]),true);
   assert.equal(h.state.mode,mode);
   assert.equal(h.api.canvasWidgetInteractive(h.widgets[0]),true);
-  assert.equal(h.api.canvasWidgetInteractive(h.widgets[1]),false);
+  assert.equal(h.api.canvasWidgetInteractive(h.widgets[1]),mode==='hand');
   h.api.enterWidgetInteraction(h.widgets[1]);
   assert.equal(h.api.canvasWidgetInteractive(h.widgets[1]),true);
   h.api.setWidgetInteraction(null);
@@ -134,6 +138,18 @@ test('explicit widget Use keeps the editing tool and makes only that Widget live
   assert.equal(h.state.widgetInteractionInPlace,false);
   assert.equal(h.state.widgetInteractionReturnTool,null);
  }
+});
+test('implicit Hand input excludes pending, replaced and detached widgets and suspends for Space',()=>{
+ const h=harness({mode:'hand'}),widget=h.widgets[0];
+ assert.equal(h.api.canvasWidgetInteractive(widget),true);
+ widget.pending=true;assert.equal(h.api.canvasWidgetInteractive(widget),false);
+ widget.pending=false;widget.hiddenForReplacement=true;assert.equal(h.api.canvasWidgetInteractive(widget),false);
+ widget.hiddenForReplacement=false;assert.equal(h.api.canvasWidgetInteractive({id:'detached'}),false);
+ h.api.setSpacePan(true);assert.equal(h.api.canvasWidgetInteractive(widget),false);
+ h.api.setSpacePan(false);assert.equal(h.api.canvasWidgetInteractive(widget),true);
+ const target={closest:()=>({dataset:{widgetId:widget.id}})};
+ assert.equal(h.wheel({target,deltaY:40}),false,'native widget scrolling does not pan the Canvas');
+ assert.equal(h.state.panY,0);
 });
 test('in-place interaction is suspended by temporary Space pan and never enabled implicitly',()=>{
  const h=harness({mode:'pen'});

@@ -14,7 +14,7 @@ async function benchmark() {
   const origin = "https://internaltest.penecho.ai", endpoint = origin + "/api/v1/apps/penecho-llm/suggest/status";
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-suggest-keepalive-"));
   const transport = createSuggestionTransport();
-  const connector = new CloudConnector({ stateDir:directory, executeRequest:async () => ({}), defaultOrigin:origin, suggestionTransport:transport });
+  const connector = new CloudConnector({ stateDir:directory, defaultOrigin:origin, suggestionTransport:transport });
   const report = { measuredAt:new Date().toISOString(), node:process.version, kind:"Native fetch versus canonical CloudConnector; UAT status GET", samples:[],
     pool:{maxSockets:transport.httpsAgent.maxSockets,maxFreeSockets:transport.httpsAgent.maxFreeSockets,idleTimeoutMs:transport.httpsAgent.options.timeout} };
   const ids = new WeakMap(); let opened = 0, current;

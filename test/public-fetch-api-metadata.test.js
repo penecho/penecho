@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const test = require('node:test');

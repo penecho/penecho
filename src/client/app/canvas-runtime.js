@@ -15,6 +15,8 @@
   const SHOW_DIRTY_MASK_DEBUG_BOUNDS = false;
   const objectChromeButtons = new Map();
   const widgetRefineTouchCandidates = new Map();
+  const placedContentInputRegions = new Map();
+  let placedContentInputLayer = null;
   let widgetRefineConfirmationElement = null;
   let widgetInteractionStatusElement = null;
   let canvasWidgetGestureResetTap = null;
@@ -433,6 +435,52 @@
     if (imageMaterialStyle) imageMaterialStyle.zIndex = widgetInFront ? "1" : "2";
     if (imageStyle) imageStyle.zIndex = widgetInFront ? "1" : "2";
     if (textEditorStyle) textEditorStyle.setProperty("--text-editor-layer-z", "3");
+    syncCanvasPlacedInputRegions();
+  }
+  function syncCanvasPlacedInputRegions() {
+    // Painted objects have no DOM hit target. Block input to Widgets underneath
+    // their visible rectangles without clipping or changing transparent artwork.
+    const enabled = !state.viewMode && state.mode === "hand" && !state.spacePan && !state.interactingWidgetId,
+      targets = enabled && visibleWidgets().length ? [
+        ...(state.frontCanvasObjectKind === "widget" ? [] : visibleImages().map(item => ({key:`image:${item.id}`,box:imageBox(item)}))),
+        ...visibleTextBoxes().map(item => ({key:`text:${item.id}`,box:textBoxBox(item)})),
+      ] : [],
+      keys = new Set(targets.map(target => target.key));
+    for (const [key, element] of placedContentInputRegions) {
+      if (keys.has(key)) continue;
+      element.remove();
+      placedContentInputRegions.delete(key);
+    }
+    if (!targets.length) {
+      if (placedContentInputLayer) placedContentInputLayer.hidden = true;
+      return;
+    }
+    if (!placedContentInputLayer) {
+      placedContentInputLayer = document.createElement("div");
+      placedContentInputLayer.className = "placed-content-input-layer";
+      placedContentInputLayer.setAttribute("aria-hidden", "true");
+      textContentLayer.after(placedContentInputLayer);
+    }
+    placedContentInputLayer.hidden = false;
+    for (const {key,box} of targets) {
+      let element = placedContentInputRegions.get(key);
+      if (!element) {
+        element = document.createElement("div");
+        element.className = "placed-content-input-region";
+        element.addEventListener("pointerdown", handleCanvasPointerDown);
+        element.addEventListener("pointermove", event => {
+          if (event.pointerType !== "touch") updateWidgetRefinePointer(clientPoint(event));
+        });
+        placedContentInputLayer.append(element);
+        placedContentInputRegions.set(key, element);
+      }
+      const style = runtimeElementStyle(element, `placed-content-input-${key}`);
+      if (!style) continue;
+      style.left = `${state.panX + box.x * state.scale}px`;
+      style.top = `${state.panY + box.y * state.scale}px`;
+      style.width = `${box.w * state.scale}px`;
+      style.height = `${box.h * state.scale}px`;
+    }
   }
   function setCanvasObjectFrontKind(kind) {
     if (!["image", "widget", "text-box"].includes(kind)) return false;
@@ -1671,6 +1719,16 @@
     shell.addEventListener("pointerdown", (event) => {
       if (event.target === shell) handleCanvasPointerDown(event);
     });
+    // Native iframe input does not bubble pointer moves into the Canvas. Keep
+    // the attached grip and Interact action discoverable at the shell boundary.
+    shell.addEventListener("pointerenter", (event) => {
+      if (!canvasWidgetInteractive(widget) || state.interactingWidgetId) return;
+      if (event.pointerType === "touch") showHandObjectToolbar("widget", widget);
+      else updateWidgetRefinePointer(clientPoint(event));
+    });
+    shell.addEventListener("pointerleave", (event) => {
+      if (event.pointerType !== "touch" && canvasWidgetInteractive(widget) && !state.interactingWidgetId) updateWidgetRefinePointer(clientPoint(event));
+    });
     shell.addEventListener("keydown", (event) => {
       if (event.target === shell && event.key === "Enter") {
         event.preventDefault();
@@ -1862,12 +1920,14 @@
     // Presentation uses its page scale independently of Canvas zoom.
     if (widget.maximized) scaleX = scaleY = widgetPresentationScale(widget);
     const interactive = canvasWidgetInteractive(widget),
-      selectable = canvasWidgetSelectionEnabled(),
-      selected = !state.viewMode && ["hand", "select"].includes(state.mode) && !interactive && (widget.pending === true || (state.widgetEdit?.id === widget.id && state.selectedWidgetId === widget.id)),
-      inputKey = `${interactive}:${selectable}:${selected}`;
+      explicit = interactive && state.interactingWidgetId === widget.id,
+      selectable = canvasWidgetSelectionEnabled() || (!state.viewMode && state.mode === "hand" && !state.spacePan),
+      selected = !state.viewMode && ["hand", "select"].includes(state.mode) && !explicit && (widget.pending === true || (state.widgetEdit?.id === widget.id && state.selectedWidgetId === widget.id)),
+      inputKey = `${interactive}:${explicit}:${selectable}:${selected}`;
     if (widget.inputPolicyKey !== inputKey) {
       widget.inputPolicyKey = inputKey;
-      widget.shell?.classList.toggle("is-interacting", interactive);
+      widget.shell?.classList.toggle("is-live", interactive);
+      widget.shell?.classList.toggle("is-interacting", explicit);
       widget.shell?.classList.toggle("is-selected", selected);
       if (widget.frame) widget.frame.inert = !interactive;
       if (widget.shell) widget.shell.tabIndex = selectable && !widget.pending ? 0 : -1;
@@ -2059,7 +2119,7 @@
     });
   }
   function handleGraphWidgetChange(widget,message) {
-    if(widget.pending || state.interactingWidgetId !== widget.id)return;
+    if(widget.pending || !canvasWidgetInteractive(widget))return;
     const interaction=message.interaction,
       interactionId=typeof interaction?.id==="string" && /^[a-zA-Z0-9_-]{1,80}$/.test(interaction.id)
         && ["update","end"].includes(interaction.phase) ? interaction.id : null,
@@ -2196,6 +2256,10 @@
       // A pending capture that the host started only after this load event
       // (it reports afterLoad) already shows the loaded document.
       if (message.loaded === true) for (const pending of widgetSnapshotRequests.values()) if (pending.widget === widget) pending.loadedVersion = widget.contentVersion;
+      return;
+    }
+    if (["penecho-widget-slide", "penecho-widget-slide-error"].includes(message.type)) {
+      if (typeof widgetSlideMessage === "function") widgetSlideMessage(widget, message);
       return;
     }
     if (!["penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) return;
@@ -3525,7 +3589,6 @@
   function requestCanvasNavigationPreview(previousPanX, previousPanY, previousScale = state.scale) {
     canvasTextQualityGeneration++;
     noteCanvasChromeInteraction();
-    noteCanvasAgentNavigation();
     if (!view.classList.contains("canvas-navigation-previewing")) {
       canvasNavigationPreviewPanX = previousPanX;
       canvasNavigationPreviewPanY = previousPanY;
@@ -3689,6 +3752,7 @@
     textContentCtx.restore();
   }
   function renderPlacedContentLayer(region = null) {
+    syncCanvasPlacedInputRegions();
     renderTextContentLayer(region);
     const d = devicePixelRatio || 1,
       metrics = canvasViewportMetrics(),
@@ -3836,6 +3900,7 @@
     if (coords.textContent !== text) coords.textContent = text;
     const zoomText = `${Math.round(state.scale * 100)}%`;
     if (canvasZoomLevel && canvasZoomLevel.textContent !== zoomText) canvasZoomLevel.textContent = zoomText;
+    window.projectLinesViewChanged?.();
   }
   function requestCoordinatesUpdate(point = null) {
     coordinatesUpdatePending = true;
@@ -4647,6 +4712,30 @@
       .slice(0, 120);
     return `${title || "penecho-widget"}.png`;
   }
+  // A PDF of the complete Widget content. A note card renders from its note
+  // source, so the whole note is included, not only what fits on the card.
+  async function downloadWidgetPdf(widget) {
+    if (!widget || widget.pdfBusy) return false;
+    widget.pdfBusy = true;
+    syncObjectChrome();
+    setStatusKey("pdfPreparing");
+    try {
+      const note = typeof noteCardWidget === "function" && noteCardWidget(widget) ? noteCardSource(widget) : null,
+        snapshot = note ? await noteCardPdfSnapshot(note) : await requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, null, true, true),
+        pixels = snapshot?.image?.naturalWidth || snapshot?.image?.width;
+      if (!pixels) throw Error(t("widgetExportFailed"));
+      const blob = await PenEchoPdf.fromImage(snapshot.image, { title:widget.title || "", pointsPerPixel:snapshot.contentWidth > 0 ? PenEchoPdf.POINTS_PER_CSS_PIXEL * snapshot.contentWidth / pixels : undefined });
+      PenEchoPdf.save(blob, PenEchoPdf.filename(widget.title, "penecho-widget"));
+      setStatusKey("pdfDownloaded");
+      return true;
+    } catch (error) {
+      setStatus(`${t("pdfFailed")}: ${String(error?.message || error)}`);
+      return false;
+    } finally {
+      widget.pdfBusy = false;
+      syncObjectChrome();
+    }
+  }
   async function downloadWidgetImage(widget) {
     if (!widget || widget.downloadBusy) return false;
     widget.downloadBusy = true;
@@ -4726,14 +4815,23 @@
       };
     const route = window.PENECHO_SMART_SUGGEST.widgetRefineRoute(widget, options);
     debug("widget-refine-route", { widgetId:widget.id, actionId:options.actionId || "apply_marks", ...route });
-    if (route.executor === "penecho_agent") {
-      const instruction = options.instruction || (refineInputBox
-        ? "Apply all pending user content in the captured dirty region as modification instructions for this widget, including distant handwriting, text and images. Update only this widget."
-        : "Refine this widget for readability and correct visible defects, preserving its content and established style.");
-      return assistAgentRun(options.actionId || "apply_marks", {
-        widget, box:route.reason === "widget-variant" ? targetBox : thinkingBox,
-        ...(route.reason === "widget-variant" ? { variant:{guidance:route.guidance} } : { refinement:{ route, instructionMode:effectiveInstructionMode, widgetBox:targetBox } }),
-      }, { label:t("widgetRefine"), instruction }).then(result => result === "submitted");
+    if (route.executor === "sidebar_task") {
+      const variant = route.reason === "widget-variant";
+      if (projectLinesCanAsk()) {
+        const instruction = options.instruction || (refineInputBox
+          ? "Apply all pending user content in the captured dirty region as modification instructions for this widget, including distant handwriting, text and images. Update only this widget."
+          : "Refine this widget for readability and correct visible defects, preserving its content and established style.");
+        return assistSaveSidebarTask({
+          widget, box:variant ? targetBox : thinkingBox,
+          ...(variant ? { variant:true } : { refinement:{ instructionMode:effectiveInstructionMode } }),
+        }, instruction);
+      }
+      // On a Canvas without a project sidebar, a variant creates a new Widget.
+      if (variant) {
+        void requestAI("plot", null, { suggestion:options.actionId, captureRegion:targetBox, captureWholeInput:true,
+          attentionBox:targetBox, focusAttention:true, fromSuggestBar:true });
+        return true;
+      }
     }
     setStatusKey("widgetRefining");
     void requestAI("answer", null, {
@@ -4763,6 +4861,8 @@
     echo:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>',
     share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
     download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>',
+    pptx:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8M7 12l3-3 2 2 4-4"/></svg>',
+    downloadpdf:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M12 10v7M9 14l3 3 3-3"/></svg>',
     notecategory:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5 11 5h8.5v8.5L12 21Z"/><circle cx="15.5" cy="9" r="1.6"/></svg>',
     notebookmark:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11v17L12 16.6l-5.5 3.9Z"/></svg>',
     notelibrary:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="7" height="9.5" rx="1.6"/><rect x="13.5" y="4.5" width="7" height="9.5" rx="1.6"/><path d="M3.5 18h17M3.5 21h11"/></svg>',
@@ -4839,28 +4939,6 @@
       });
     }
     if (options.community && window.PenEchoCommunityUI) {
-      const favoriteLabelKey = widget.favoriteBusy ? "favoriteWidgetSaving" : widget.favorite ? "unfavoriteWidget" : "favoriteWidget";
-      items.push({
-        key:`widget:${widget.id}:tool-favorite`,
-        kind:"favorite",
-        label:window.PenEchoCommunityUI.label?.(favoriteLabelKey) || "Favorite",
-        baseWidth:28,
-        iconOnly:true,
-        pressed:widget.favorite === true,
-        busy:widget.favoriteBusy === true,
-        activate:() => {
-          if (widget.favoriteBusy) return;
-          window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{
-            action:"favorite",
-            widgetId:widget.id,
-            favorite:widget.favorite === true,
-            favoriteArtifactSha256:widget.favoriteArtifactSha256 || null,
-            sourceWidgetId:widget.favoriteSourceId,
-            favoriteCloudId:widget.favoriteCloudId || null,
-            favoriteCommunityItemId:widget.favoriteCommunityItemId || null,
-          } }));
-        },
-      });
       const liveShared = window.PenEchoLiveShareStatus?.widgetShared?.(widget.id, widget.shareSourceId) === true;
       items.push({
         key:`widget:${widget.id}:tool-share`,
@@ -4888,11 +4966,28 @@
       iconOnly:true,
       busy:widget.downloadBusy === true,
       activate:() => void downloadWidgetImage(widget),
+    }, {
+      key:`widget:${widget.id}:tool-download-pdf`,
+      kind:"downloadpdf",
+      label:t("downloadPdf"),
+      baseWidth:28,
+      iconOnly:true,
+      busy:widget.pdfBusy === true,
+      activate:() => void downloadWidgetPdf(widget),
+    });
+    if (options.download && typeof slideWidget === "function" && slideWidget(widget)) items.push({
+      key:`widget:${widget.id}:tool-pptx`,
+      kind:"pptx",
+      label:slideToolbarLabel(widget),
+      baseWidth:28,
+      iconOnly:true,
+      busy:widget.pptxBusy === true,
+      activate:() => void downloadSlidesPptx(widget),
     });
     if (options.objectToolbarKey && !widget.pending) {
       if (typeof noteCardWidget === "function" && noteCardWidget(widget)) items.push(...noteCardToolbarItems(widget));
       items.push({key:`widget:${widget.id}:delete`, kind:"delete", label:t("widgetDelete"), baseWidth:28, iconOnly:true, activate:() => deleteWidget(widget)});
-      const order = ["interact", "suggest", "refine", "notecategory", "notebookmark", "notelibrary", "favorite", "copy", "echo", "share", "download", "delete"];
+      const order = ["interact", "suggest", "refine", "notecategory", "notebookmark", "notelibrary", "favorite", "copy", "echo", "share", "download", "pptx", "downloadpdf", "delete"];
       items.sort((a,b) => order.indexOf(a.kind)-order.indexOf(b.kind));
     }
     if (!items.length) return;
@@ -5151,6 +5246,7 @@
     if (kind === "favorite") return window.PenEchoCommunityUI?.label?.("favoriteWidget") || "Favorite Widget";
     if (kind === "share") return window.PenEchoCommunityUI?.label?.("shareWidget") || "Share Widget";
     if (kind === "download") return t("downloadWidget");
+    if (kind === "downloadpdf") return t("downloadPdf");
     return t("hand");
   }
   // The Refine panel replaces the former yes/no confirmation. It drops down
@@ -5808,6 +5904,7 @@
     positionImageSelectionMaterial();
     syncObjectChrome();
     syncWidgetInteractionStatus();
+    if (typeof liveCanvasPositionPresence === "function") liveCanvasPositionPresence();
   }
   function clientPoint(e) {
     const point = canvasClientPosition(e.clientX, e.clientY);
@@ -6178,13 +6275,8 @@
     return { left: editor.x * state.scale + state.panX, top: editor.y * state.scale + state.panY };
   }
   function textEditorViewportSize() {
-    const { width, height } = canvasViewportMetrics(),
-      agent = document.querySelector("#canvasAgentPanel"),
-      agentRect = agent && !agent.hidden && document.body.classList.contains("studio-agent-docked")
-        ? canvasElementLayoutRect(agent)
-        : null,
-      visibleWidth = agentRect?.left > 0 ? Math.min(width, agentRect.left) : width;
-    return { width:visibleWidth, height };
+    const { width, height } = canvasViewportMetrics();
+    return { width, height };
   }
   function resizeTextEditorDimensions(gesture, hit, dx, dy, minWidth, minHeight, maxWidth, maxHeight) {
     const startWidth = gesture.startWidth,

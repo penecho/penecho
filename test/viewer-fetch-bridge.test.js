@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -72,7 +73,8 @@ class FakeClock {
 
   advance(milliseconds) {
     const target = this.now + milliseconds;
-    while (true) {
+    for (let steps = 0; ; steps++) {
+      if (steps > 100000) throw new Error("fake timers never settle: a timer keeps re-arming itself");
       let next = null;
       for (const [id, timer] of this.timeouts) {
         if (timer.at <= target && (!next || timer.at < next.at)) next = { kind: "timeout", id, ...timer };

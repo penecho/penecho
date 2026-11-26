@@ -13,10 +13,7 @@
     PEN_GESTURE_OFFER_MS = 9000,
     PEN_GESTURE_ICONS = Object.freeze({ explain:"i", typeset:"∑", solve:"=", plot:"∿", animate:"▶", chart:"▥", delete:"⌫" }),
     penIntel = {
-      settings:(() => {
-        const defaults = { gestures:true, stepCheck:true };
-        try { return { ...defaults, ...JSON.parse(localStorage.getItem(PEN_INTEL_STORAGE_KEY) || "{}") }; } catch { return defaults; }
-      })(),
+      settings:penIntelStoredSettings(),
       active:0,
       layer:null,
       frame:0,
@@ -28,6 +25,10 @@
       stepKeys:new Set(),
     };
 
+  function penIntelStoredSettings() {
+    const defaults = { gestures:true, stepCheck:true };
+    try { return { ...defaults, ...JSON.parse(localStorage.getItem(PEN_INTEL_STORAGE_KEY) || "{}") }; } catch { return defaults; }
+  }
   function penIntelCopy(en, zh) { return state.language === "zh" ? zh : en; }
   function penIntelSetting(name) { return penIntel.settings[name] !== false; }
   function setPenIntelSetting(name, value) {

@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const assert=require('node:assert/strict')
 const test=require('node:test')
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm')

@@ -2,12 +2,13 @@
 
 const path = require("node:path");
 const fs = require("node:fs");
+const { randomUUID } = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { fileURLToPath, pathToFileURL } = require("node:url");
 const {
-  app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell, powerSaveBlocker,
+  app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, net, safeStorage, shell, powerSaveBlocker,
 } = require("electron");
-const { COMMANDS, createMenuTemplate, normalizeMenuState, canvasOwnsShortcut } = require("./menu.js");
+const { menuCommandAllowed, createMenuTemplate, normalizeMenuState, canvasOwnsShortcut } = require("./menu.js");
 const { createMcpPowerLease } = require("./mcp-power.js");
 const mcpPowerLease = createMcpPowerLease(powerSaveBlocker);
 const {
@@ -15,14 +16,22 @@ const {
 } = require("../cli.js");
 const { kimiPresetUpdates } = require("./settings-contract.js");
 const { readSecret } = require("./secret-store.js");
-const { inspectCli, installCli } = require("./cli-installer.js");
+const { canInspectCli, inspectCli, installCli } = require("./cli-installer.js");
 const { createUpdateManager } = require("./update-manager.js");
 const { lanUrls } = require("./network-access.js");
 const { desktopConfigurationEnvironment } = require("./config-environment.js");
 const { waitForSquirrelFirstRunExit } = require("./squirrel-first-run.js");
+const { reopenAfterSilentUpdate } = require("./windows-update.js");
+const { createWindowRecovery, keepsRunning } = require("./window-recovery.js");
+const { attachWindowCloseGuard, destroyHelperWindows } = require("./window-close.js");
+const { createServerProcess } = require("./server-process.js");
+const { attachBrowserHost } = require("./browser-host.js");
+const { createInitialWindowVisibility, watchInitialWindowLoad } = require("./startup-window.js");
+const { initialDesktopUrl } = require("./startup-route.js");
+const { normalizeThemePreference, resolveWindowColors, readWindowTheme, writeWindowTheme, titleBarOverlay, titleBarOptionsForPlatform } = require("./window-theme.js");
 const { CONNECTION_STORE_VERSION } = require("../src/server/connection-store.js");
-const { issueNativePickerGrant } = require("../src/server/canvas-agent/native-picker-grants.js");
 const { CanvasAgentProjectStore } = require("../src/server/canvas-agent/project-store.js");
+const { isPictureWindow } = require("../src/server/project-lines/page-picture.js");
 const { CANVAS_PAGE_SCALE, normalizeCanvasPageScale } = require("../public/page-scale.js");
 const pkg = require("../package.json");
 const DESKTOP_VERSION = pkg.config?.desktopVersion || pkg.version;
@@ -39,28 +48,35 @@ function handleSquirrelStartup() {
   }
   const updateExe = path.resolve(path.dirname(process.execPath), "..", "Update.exe"),
     operation = event === "--squirrel-uninstall" ? "--removeShortcut" : "--createShortcut",
-    timeout = setTimeout(() => app.quit(), 1500);
+    pending = new Set(["shortcut"]),
+    finish = part => { pending.delete(part); if (!pending.size) app.quit(); },
+    timeout = setTimeout(() => finish("shortcut"), 1500);
+  if (event === "--squirrel-install") {
+    pending.add("reopen");
+    reopenAfterSilentUpdate({ updateExe, exeName:path.basename(process.execPath), done:() => finish("reopen") });
+  }
   try {
     const child = spawn(updateExe, [operation, path.basename(process.execPath)], { detached:true, stdio:"ignore", windowsHide:true });
     child.once("exit", () => {
       clearTimeout(timeout);
-      app.quit();
+      finish("shortcut");
     });
     child.once("error", () => {
       clearTimeout(timeout);
-      app.quit();
+      finish("shortcut");
     });
     child.unref();
   } catch {
     clearTimeout(timeout);
-    app.quit();
+    finish("shortcut");
   }
   return true;
 }
 
 const squirrelStartup = handleSquirrelStartup(),
   gotLock = !squirrelStartup && app.requestSingleInstanceLock();
-if (!gotLock) app.quit();
+// A Squirrel event quits when its own work is done.
+if (!gotLock && !squirrelStartup) app.quit();
 const squirrelFirstRunComplete = waitForSquirrelFirstRunExit();
 
 const ROOT = path.resolve(__dirname, ".."),
@@ -68,18 +84,37 @@ const ROOT = path.resolve(__dirname, ".."),
   UPDATE_WINDOW_PRELOAD = path.join(__dirname, "update-window-preload.js"),
   UPDATE_WINDOW_HTML = path.join(__dirname, "update-window.html"),
   WINDOW_ICON = path.join(ROOT, "build", "icons", "penecho.png"),
-  HELP_URL = "https://github.com/penecho/penecho#quick-start";
+  HELP_URL = "https://github.com/penecho/penecho#quick-start",
+  ISSUE_URL = "https://github.com/penecho/penecho/issues",
+  WEBSITE_URL = "https://penecho.ai";
 
 let mainWindow = null,
+  mainWindowVisibility = null,
+  mainUrl = "",
   updateWindow = null,
-  server = null,
+  serverProcess = null,
   updateManager = null,
   currentLanUrls = [],
+  networkAccessOff = false,
   desktopLanguage = "en",
   desktopMenuState = normalizeMenuState(null),
-  cliOperation = null,
+  windowThemePref = "system",
+  cliOperations = new Set(),
   quitting = false,
+  servicesShutDown = false,
+  openAgain = false,
+  pageFailed = false,
+  endNow = false,
   desktopProjectStore = null;
+
+function shutdownServices() {
+  if (servicesShutDown) return;
+  servicesShutDown = true;
+  mcpPowerLease.release();
+  updateManager?.stop();
+  destroyHelperWindows(BrowserWindow.getAllWindows(), isPictureWindow);
+  void serverProcess?.stop();
+}
 
 const credentialProtector = process.platform === "darwin" ? null : safeStorage;
 
@@ -130,18 +165,6 @@ function hasUnifiedConnections(stateDir) {
   }
 }
 
-function applyEnvironment(configuration) {
-  for (const [key, value] of Object.entries(configuration.env)) {
-    if (value === undefined || value === null) delete process.env[key];
-    else process.env[key] = String(value);
-  }
-  const paths = userPaths();
-  process.env.PENECHO_STATE_DIR = paths.stateDir;
-  process.env.PENECHO_PRIVATE_PLUGIN_DIR = paths.privatePlugins;
-  process.env.HOST ||= "0.0.0.0";
-  process.env.PORT ||= "3888";
-}
-
 function secureWindowOptions(extra = {}) {
   const { webPreferences = {}, ...windowOptions } = extra;
   return {
@@ -158,9 +181,14 @@ function secureWindowOptions(extra = {}) {
   };
 }
 
+function canOpenExternalWindowUrl(url, allowed) {
+  if (/^https:\/\//i.test(url)) return true;
+  return /^http:\/\//i.test(url) && Boolean(allowed(url));
+}
+
 function restrictNavigation(window, allowed) {
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\//i.test(url)) void shell.openExternal(url);
+    if (canOpenExternalWindowUrl(url, allowed)) void shell.openExternal(url);
     return { action:"deny" };
   });
   window.webContents.on("will-navigate", (event, url) => {
@@ -178,8 +206,8 @@ async function revealMainWindow(window, focus = false) {
 }
 
 function dispatchCanvasCommand(command) {
-  if (!COMMANDS.includes(command) || !mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused()) return;
-  if (desktopMenuState.enabled[command]) mainWindow.webContents.send("penecho:menu-command", command);
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused()) return;
+  if (menuCommandAllowed(command, desktopMenuState)) mainWindow.webContents.send("penecho:menu-command", command);
 }
 
 function editFromMenu(command, window) {
@@ -187,84 +215,185 @@ function editFromMenu(command, window) {
   else if (window && !window.isDestroyed()) window.webContents[command]();
 }
 
+function applyMainWindowTheme() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const colors = resolveWindowColors(windowThemePref, nativeTheme.shouldUseDarkColors);
+  try { mainWindow.setBackgroundColor(colors.backgroundColor); } catch {}
+  if (process.platform === "win32" && typeof mainWindow.setTitleBarOverlay === "function") {
+    try { mainWindow.setTitleBarOverlay(titleBarOverlay(colors, mainWindow.webContents.getZoomFactor())); } catch {}
+  }
+}
+
 function createMainWindow(url) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     void revealMainWindow(mainWindow, true);
     return mainWindow;
   }
-  const origin = new URL(url).origin;
+  const stateDir = userPaths().stateDir;
+  windowThemePref = readWindowTheme(stateDir);
+  const colors = resolveWindowColors(windowThemePref, nativeTheme.shouldUseDarkColors);
+  const launch = new URL(initialDesktopUrl(url, { stateDir, desktopLaunch:randomUUID() })), origin = launch.origin;
+  mainUrl = url;
   mainWindow = new BrowserWindow(secureWindowOptions({
     width:1440,
     height:920,
     minWidth:820,
     minHeight:620,
     title:"PenEcho",
+    backgroundColor:colors.backgroundColor,
+    ...titleBarOptionsForPlatform(process.platform, colors),
     webPreferences:{ preload:CANVAS_PRELOAD, zoomFactor:CANVAS_PAGE_SCALE },
   }));
+  desktopMenuState = normalizeMenuState({ page:menuPageFor(launch.href) });
+  installMenu();
   restrictNavigation(mainWindow, candidate => {
     try { return new URL(candidate).origin === origin; } catch { return false; }
   });
   mainWindow.on("focus", installMenu);
   mainWindow.on("blur", installMenu);
+  mainWindow.on("enter-full-screen", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("penecho:fullscreen-change", true);
+  });
+  mainWindow.on("leave-full-screen", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("penecho:fullscreen-change", false);
+  });
   mainWindow.webContents.on("before-input-event", (_event, input) => {
     // Let the existing renderer shortcut system retain text/modal guards and
     // user-customized bindings; menu clicks still use the command bridge.
     mainWindow.webContents.setIgnoreMenuShortcuts(canvasOwnsShortcut(input, desktopMenuState));
   });
-  mainWindow.webContents.on("did-start-navigation", (_event, _url, inPlace, isMainFrame) => {
+  mainWindow.webContents.on("did-start-navigation", (_event, address, inPlace, isMainFrame) => {
     if (!isMainFrame || inPlace) return;
-    desktopMenuState = normalizeMenuState(null);
+    desktopMenuState = normalizeMenuState({ page:menuPageFor(address) });
     installMenu();
   });
-  mainWindow.once("ready-to-show", () => void revealMainWindow(mainWindow));
+  const window = mainWindow, startedAt = Date.now();
+  const startupEvent = (event, detail = {}) => {
+    try {
+      const directory = path.join(app.getPath("userData"), "logs"), file = path.join(directory, "desktop-startup.log");
+      fs.mkdirSync(directory, { recursive:true });
+      if (fs.existsSync(file) && fs.statSync(file).size > 65536) fs.truncateSync(file, 0);
+      fs.appendFileSync(file, JSON.stringify({ time:new Date().toISOString(), pid:process.pid, windowId:window.id, elapsedMs:Date.now() - startedAt, event, ...detail }) + "\n");
+    } catch { /* Diagnostics must never prevent opening the app. */ }
+  };
+  const startupOptions = { window, app, gate:squirrelFirstRunComplete, isQuitting:() => quitting, onEvent:startupEvent };
+  mainWindowVisibility = createInitialWindowVisibility(startupOptions);
+  const initialLoad = watchInitialWindowLoad({
+    ...startupOptions,
+    load:() => window.loadURL(launch.href),
+    showDialog:(kind, signal) => dialog.showMessageBox(window, {
+      type:kind === "failed" ? "error" : "warning",
+      title:"PenEcho could not open",
+      message:kind === "failed" ? "PenEcho could not load its window." : "PenEcho is taking longer than expected to open.",
+      detail:kind === "failed" ? "Reload to try again, or close PenEcho and open it later." : "You can keep waiting or reload the window.",
+      buttons:kind === "failed" ? ["Reload", "Close PenEcho"] : ["Keep Waiting", "Reload"],
+      defaultId:0,
+      cancelId:kind === "failed" ? 1 : 0,
+      signal,
+    }),
+  });
   mainWindow.webContents.once("did-finish-load", updateDesktopUpdateUi);
-  mainWindow.webContents.on("render-process-gone",()=>mcpPowerLease.release());
+  // A page asked for while the server was being started again is loaded again once it is there.
+  mainWindow.webContents.on("did-fail-load", (_event, code, _description, _address, isMainFrame) => { if (isMainFrame && code !== -3) pageFailed = true; });
+  mainWindow.webContents.on("did-navigate", () => { pageFailed = false; });
+  mainWindow.webContents.on("render-process-gone",(_event,details)=>{mcpPowerLease.release();windowRecovery.pageGone(mainWindow,details);});
   mainWindow.webContents.on("did-start-navigation",(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace)mcpPowerLease.release();});
-  mainWindow.on("closed", () => { mcpPowerLease.release();mainWindow = null; desktopMenuState = normalizeMenuState(null); installMenu(); });
-  void mainWindow.loadURL(url);
+  attachWindowCloseGuard({
+    window,
+    app,
+    getLanguage:() => desktopLanguage,
+    isQuitting:() => quitting,
+    resetQuitting:stayOpen,
+    shouldForceUnload:() => endNow || updateManager?.getState()?.status === "installing",
+    showDialog:options => dialog.showMessageBox(window, options),
+    showDialogSync:options => dialog.showMessageBoxSync(window, options),
+  });
+  mainWindow.on("closed", () => {
+    mcpPowerLease.release();mainWindow = null; mainWindowVisibility = null; desktopMenuState = normalizeMenuState(null); installMenu();
+    if (process.platform !== "darwin" && !quitting && !keepsRunning(BrowserWindow.getAllWindows(), isPictureWindow)) {
+      destroyHelperWindows(BrowserWindow.getAllWindows(), isPictureWindow);
+      app.quit();
+    }
+  });
+  initialLoad.start();
   return mainWindow;
 }
 
-async function showLanAccessNotice(window) {
-  await squirrelFirstRunComplete;
-  if (!currentLanUrls.length || !window || window.isDestroyed()) return;
-  const result = await dialog.showMessageBox(window, {
-    type:"info",
-    title:"PenEcho on your local network",
-    message:"PenEcho is available to devices on your local network.",
-    detail:`Open this address on another device:\n\n${currentLanUrls.join("\n")}\n\nKeep PenEcho open, and use this only on a trusted network.`,
-    buttons:["Copy address", "Done"],
-    defaultId:1,
-    cancelId:1,
-  });
-  if (result.response === 0) clipboard.writeText(currentLanUrls[0]);
+const windowRecovery = createWindowRecovery({
+  getWindow:() => mainWindow,
+  openWindow:openMainWindow,
+  reveal:window => void revealMainWindow(window, true),
+});
+
+function openMainWindow() {
+  // Opened again while the server is still closing: PenEcho starts again once it has.
+  if (servicesShutDown) { openAgain = true; return null; }
+  return mainUrl && serverProcess?.listening() ? createMainWindow(mainUrl) : null;
 }
 
+// The server runs in a process of its own (server-process.js): however busy it is, the window scrolls and clicks at once.
 function startServer(configuration) {
-  configuration.env.PENECHO_CONFIG_FILE = configuration.configFile;
-  applyEnvironment(configuration);
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const complete = callback => value => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      callback(value);
-    };
-    const succeed = complete(() => {
-      const address = server.address(), port = typeof address === "object" && address ? address.port : Number(process.env.PORT),
-        host = process.env.HOST === "0.0.0.0" ? "127.0.0.1" : process.env.HOST;
-      resolve(`http://${host}:${port}/`);
-    });
-    const fail = complete(reject);
-    const timer = setTimeout(() => fail(new Error("PenEcho server did not become ready.")), 10000);
-    try {
-      server = require("../server.js");
-      server.once("error", fail);
-      if (server.listening) succeed();
-      else server.once("listening", succeed);
-    } catch (error) { fail(error); }
+  let first = configuration;
+  serverProcess = createServerProcess({
+    // This process keeps the environment it was started with: keys among the settings stay out of it, and out of what it starts.
+    settings:() => {
+      const { env, configFile } = first || loadConfiguration().configuration;
+      first = null;
+      return { ...env, PENECHO_CONFIG_FILE:configFile };
+    },
+    inheritOutput:!app.isPackaged,
+    logFile:path.join(app.getPath("userData"), "logs", "desktop-server.log"),
+    attach:link => {
+      attachBrowserHost(link);
+      link.handle("network-access", ({ on }) => { networkAccessOff = !on; installMenu(); });
+    },
+    onUp:serverUp,
+    // Stopped from outside (penecho stop, a signal): PenEcho ends with it, as it did when the two were one process.
+    onEnded:() => app.quit(),
+    onFailed:error => void serverFailed(error),
   });
+  return serverProcess.start().then(serverUrl);
+}
+
+function serverUrl({ host, port }) {
+  return `http://${!host || host === "0.0.0.0" ? "127.0.0.1" : host}:${port}/`;
+}
+
+function serverUp(info) {
+  networkAccessOff = !info.networkAccess;
+  currentLanUrls = info.host === "0.0.0.0" ? lanUrls(info.port) : [];
+  installMenu();
+  if (!info.again || !mainWindow || mainWindow.isDestroyed()) return;
+  // A server started again: the page stays as it is and asks it on, with the pass a page of this server is given.
+  const url = serverUrl(info);
+  if (pageFailed) { mainWindow.webContents.reload(); return; }
+  if (url !== mainUrl) { mainUrl = url; void mainWindow.loadURL(initialDesktopUrl(url, { stateDir:userPaths().stateDir })); return; }
+  void mainWindow.webContents.session.fetch(new URL("/projects.html", url).href, { credentials:"include", cache:"no-store" }).catch(() => {});
+}
+
+// PenEcho stays open after all ("Stay" when asked about unsaved changes): saving them needs the server.
+function stayOpen() {
+  quitting = false;
+  if (!servicesShutDown && serverProcess && !serverProcess.running()) serverProcess.again().catch(error => void serverFailed(error));
+}
+
+async function serverFailed(error) {
+  while (!quitting) {
+    const options = {
+      type:"error",
+      title:"PenEcho stopped working",
+      message:"PenEcho's local service stopped and could not be started again.",
+      detail:error.message || String(error),
+      buttons:["Try Again", "Quit PenEcho"],
+      defaultId:0,
+      cancelId:1,
+    };
+    const { response } = mainWindow && !mainWindow.isDestroyed() ? await dialog.showMessageBox(mainWindow, options) : await dialog.showMessageBox(options);
+    if (quitting) return;
+    if (response === 1) { app.quit(); return; }
+    try { await serverProcess.again(); return; }
+    catch (failure) { error = failure; }
+  }
 }
 
 function sendUpdateState(window, state) {
@@ -313,6 +442,10 @@ function showUpdateWindow() {
     updateWindow.on("closed", () => {
       updateWindow = null;
       updateDesktopUpdateUi();
+      if (process.platform !== "darwin" && !quitting && !keepsRunning(BrowserWindow.getAllWindows(), isPictureWindow)) {
+        destroyHelperWindows(BrowserWindow.getAllWindows(), isPictureWindow);
+        app.quit();
+      }
     });
     void updateWindow.loadFile(UPDATE_WINDOW_HTML);
   }
@@ -321,12 +454,22 @@ function showUpdateWindow() {
   else void updateManager.check(true);
 }
 
+// The Projects page and a Canvas each have their own menus; the page fills them in once it is ready.
+function menuPageFor(address) {
+  try { return new URL(address).pathname === "/projects.html" ? "projects" : "canvas"; } catch { return "canvas"; }
+}
+// Only a folder that exists is opened, in Finder or Explorer.
+function openMenuFolder(folder) {
+  try { if (folder && fs.statSync(folder).isDirectory()) void shell.openPath(folder); } catch { /* It was moved or removed; nothing to show. */ }
+}
+
 function installMenu() {
   const template = createMenuTemplate({
     platform:process.platform, language:desktopLanguage, state:desktopMenuState,
     canvasFocused:Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()),
     dispatch:dispatchCanvasCommand, edit:editFromMenu, checkUpdates:showUpdateWindow,
-    openHelp:() => void shell.openExternal(HELP_URL), lanUrls:currentLanUrls,
+    // The same state the server keeps (Settings → Other devices): off, the menu says so and lists no address.
+    openHelp:() => void shell.openExternal(HELP_URL), openIssue:() => void shell.openExternal(ISSUE_URL), openWebsite:() => void shell.openExternal(WEBSITE_URL), openFolder:openMenuFolder, lanUrls:networkAccessOff ? [] : currentLanUrls, networkOff:networkAccessOff,
     openLan:url => { clipboard.writeText(url); void shell.openExternal(url); },
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -423,6 +566,8 @@ function registerIpc() {
   const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents),
     fromUpdateWindow = event => Boolean(updateWindow && !updateWindow.isDestroyed() && event.sender === updateWindow.webContents),
     fromUpdateSurface = event => fromCanvas(event) || fromUpdateWindow(event);
+  ipcMain.handle("penecho:startup-visible", event =>
+    fromCanvas(event) && event.senderFrame === event.sender.mainFrame ? mainWindowVisibility?.whenShown ?? false : false);
   ipcMain.on("penecho:set-language", (event, language) => {
     if (!fromCanvas(event) || event.senderFrame !== event.sender.mainFrame || !["en", "zh"].includes(language)) return;
     if (desktopLanguage === language) return;
@@ -433,9 +578,18 @@ function registerIpc() {
   });
   ipcMain.on("penecho:menu-state", (event, value) => {
     if (!fromCanvas(event) || event.senderFrame !== event.sender.mainFrame) return;
-    desktopMenuState = normalizeMenuState(value);
+    const obj = value && typeof value === "object" ? value : {};
+    const page = obj.page === "projects" || obj.page === "canvas" ? obj.page : menuPageFor(event.sender.getURL());
+    desktopMenuState = normalizeMenuState({ ...obj, page });
     installMenu();
   });
+  ipcMain.on("penecho:set-theme", (event, preference) => {
+    if (!fromCanvas(event) || event.senderFrame !== event.sender.mainFrame) return;
+    windowThemePref = writeWindowTheme(userPaths().stateDir, normalizeThemePreference(preference));
+    applyMainWindowTheme();
+  });
+  ipcMain.handle("penecho:is-fullscreen", event =>
+    Boolean(fromCanvas(event) && mainWindow && !mainWindow.isDestroyed() && mainWindow.isFullScreen()));
   ipcMain.handle("penecho:menu-native-edit", (event, command) => {
     if (!fromCanvas(event) || event.senderFrame !== event.sender.mainFrame || !["undo", "redo"].includes(command)) return false;
     event.sender[command]();
@@ -493,7 +647,7 @@ function registerIpc() {
     });
     const selectedPath = result.filePaths[0] || "";
     if (result.canceled || !selectedPath) return { canceled:true };
-    return { canceled:false, path:selectedPath, pickerToken:issueNativePickerGrant({ selectedPath, kind:"file" }) };
+    return { canceled:false, path:selectedPath, pickerToken:await serverProcess.request("picker-grant", { selectedPath, kind:"file" }) };
   });
   ipcMain.handle("penecho:get-update-state", event => fromUpdateSurface(event) && updateManager ? { ...updateManager.getState(), language:desktopLanguage } : null);
   ipcMain.handle("penecho:update-show-window", event => {
@@ -518,9 +672,10 @@ function registerIpc() {
     return true;
   });
   ipcMain.handle("penecho:set-page-scale", (event, value) => {
-    if (!fromCanvas(event) || !mainWindow || mainWindow.isDestroyed()) return { ok:false };
+    if (!fromCanvas(event) || event.senderFrame !== event.sender.mainFrame) return { ok:false };
     const scale = normalizeCanvasPageScale(value);
     mainWindow.webContents.setZoomFactor(scale);
+    applyMainWindowTheme();
     return { ok:true, scale };
   });
   ipcMain.handle("penecho:copy-text", (_event, input) => {
@@ -531,24 +686,34 @@ function registerIpc() {
   });
   ipcMain.handle("penecho:install-cli", async (event, provider) => {
     if (!fromCanvas(event)) return { ok:false, error:"CLI installation is available only in the PenEcho desktop application." };
-    if (cliOperation) return { ok:false, error:"Another CLI setup operation is already running." };
-    cliOperation = `install:${provider}`;
+    const key = String(provider || "").trim();
+    if (cliOperations.has(key)) return { ok:false, error:"This CLI setup operation is already running." };
+    cliOperations.add(key);
     try {
-      const paths = userPaths(), result = await installCli(provider, {
-        stateDir:paths.stateDir,
-        home:app.getPath("home"),
-        fetchImpl:(url, options) => net.fetch(url, options),
-      });
-      const loaded = loadConfiguration(), status = await inspectCli(provider, {
+      const paths = userPaths(), loaded = loadConfiguration(), result = await installCli(provider, {
         stateDir:paths.stateDir,
         home:app.getPath("home"),
         env:loaded.configuration.env,
-        configuredPath:result.executable,
+        fetchImpl:(url, options) => net.fetch(url, options),
       });
+      const status = canInspectCli(provider)
+        ? await inspectCli(provider, {
+          stateDir:paths.stateDir,
+          home:app.getPath("home"),
+          env:loaded.configuration.env,
+          configuredPath:result.executable,
+        })
+        : {
+          provider,
+          label:result.label,
+          state:"ready",
+          version:result.version || "",
+          executable:result.executable || "",
+        };
       return { ok:true, ...result, status };
     } catch (error) {
       return { ok:false, error:error.message || "Automatic installation failed." };
-    } finally { cliOperation = null; }
+    } finally { cliOperations.delete(key); }
   });
   ipcMain.handle("penecho:open-help", () => shell.openExternal(HELP_URL));
 }
@@ -563,15 +728,18 @@ async function bootstrap() {
   installMenu();
   registerIpc();
   updateManager.start();
+  if (typeof nativeTheme !== "undefined" && typeof nativeTheme?.on === "function") {
+    nativeTheme.on("updated", () => {
+      if (windowThemePref === "system") applyMainWindowTheme();
+    });
+  }
   const loaded = loadConfiguration();
   try {
     const url = await startServer(loaded.configuration);
-    const address = server.address(), port = typeof address === "object" && address ? address.port : Number(process.env.PORT);
-    currentLanUrls = process.env.HOST === "0.0.0.0" ? lanUrls(port) : [];
-    installMenu();
-    const window = createMainWindow(url);
-    if (currentLanUrls.length) window.webContents.once("did-finish-load", () => void showLanAccessNotice(window));
+    if (quitting) return;
+    createMainWindow(url);
   } catch (error) {
+    if (quitting) return;
     await dialog.showMessageBox({
       type:"error",
       title:"PenEcho could not start",
@@ -583,29 +751,35 @@ async function bootstrap() {
 }
 
 if (gotLock) {
-  app.on("second-instance", () => {
-    const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-    if (!window) return;
-    if (window.isMinimized()) window.restore();
-    void revealMainWindow(window, true);
-  });
-  app.whenReady().then(bootstrap).catch(error => {
+  app.on("second-instance", () => { windowRecovery.reopen(); });
+  app.whenReady().then(() => {
+    // Asked by the system (kill, Ctrl-C), PenEcho ends without asking about unsaved changes. Electron sets its own answer before it is ready.
+    for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { endNow = true; app.quit(); });
+    return bootstrap();
+  }).catch(error => {
     void dialog.showErrorBox("PenEcho startup failed", error.message || String(error));
     app.quit();
   });
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length) return;
-    if (server?.listening) {
-      const address = server.address(), port = typeof address === "object" && address ? address.port : 3888,
-        host = process.env.HOST === "0.0.0.0" ? "127.0.0.1" : process.env.HOST || "127.0.0.1";
-      createMainWindow(`http://${host}:${port}/`);
-    }
+    if (BrowserWindow.getAllWindows().some(window => !isPictureWindow(window))) return;
+    openMainWindow();
   });
   app.on("before-quit", () => {
     quitting = true;
-    mcpPowerLease.release();
-    updateManager?.stop();
-    if (server?.listening) server.close();
+    if (!BrowserWindow.getAllWindows().some(window => !window.isDestroyed() && !isPictureWindow(window))) {
+      shutdownServices();
+    }
+  });
+  // The app stays, with no window, until the server has closed, so one opened right after finds the port free and nothing half written.
+  app.on("will-quit", event => {
+    quitting = true;
+    shutdownServices();
+    if (!serverProcess?.running()) {
+      if (openAgain && updateManager?.getState().status !== "installing") app.relaunch();
+      return;
+    }
+    event.preventDefault();
+    void serverProcess.stop().then(() => app.quit());
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin" && !quitting) app.quit();

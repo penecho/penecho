@@ -83,7 +83,6 @@
   }
   async function playgroundOpen(){
     playground.closeAnimation?.cancel();playground.open=true;playgroundPanel.hidden=false;playgroundTrigger?.setAttribute("aria-expanded","true");
-    if(!document.getElementById("canvasAgentPanel")?.hidden)closeCanvasAgent();
     window.PenEchoStudioNavigator?.setOpen(false);playgroundLabels();
     let widget=playgroundWidget();
     if(!widget)widget=await playgroundApply({version:1,description:"",world:{entities:[],mood:"day",abstract:false}});

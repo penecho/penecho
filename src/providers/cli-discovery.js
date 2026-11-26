@@ -2,6 +2,8 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { commonPosixCodexPaths, commonWindowsCodexPaths, darwinCodexAppPaths, findCodexInApp } = require("./codex-cli.js");
+const { envKey } = require("./agent-env.js");
 
 const CLI_DEFINITIONS = Object.freeze({
   "kimi-cli":Object.freeze({ command:"kimi", envName:"KIMI_CLI_PATH", label:"Kimi", doctor:"kimi" }),
@@ -51,7 +53,11 @@ function desktopStateDirectory(home, platform, env) {
 }
 
 function managedCliPaths(provider, options = {}) {
-  const item = cliDefinition(provider), env = options.env || process.env, platform = options.platform || process.platform,
+  const item = cliDefinition(provider);
+  // PenEcho never retains a private Codex copy under tools/codex: when PenEcho installs Codex for a user
+  // who has none, it installs official latest into the user's standard Codex location (discovered as system).
+  if (provider === "codex-cli") return [];
+  const env = options.env || process.env, platform = options.platform || process.platform,
     home = path.resolve(options.home || env.HOME || env.USERPROFILE || "."), stateDir = options.stateDir ? path.resolve(options.stateDir) : "",
     executable = platform === "win32" ? `${item.command}.exe` : item.command, states = [stateDir, desktopStateDirectory(home, platform, env)].filter(Boolean), values = [];
   if (provider === "claude-cli") values.push(path.join(home, ".local", "bin", executable));
@@ -60,12 +66,52 @@ function managedCliPaths(provider, options = {}) {
 }
 
 function knownSystemCliPaths(provider, options = {}) {
-  const platform = options.platform || process.platform, home = path.resolve(options.home || options.env?.HOME || options.env?.USERPROFILE || ".");
-  if (provider !== "codex-cli" || platform !== "darwin") return [];
-  return [
-    "/Applications/ChatGPT.app/Contents/Resources/codex",
-    path.join(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex"),
-  ];
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  const homeRaw = options.home || env?.[envKey(env, "HOME")] || env?.[envKey(env, "USERPROFILE")] || "";
+  const home = homeRaw ? path.resolve(homeRaw) : "";
+  if (platform === "darwin") {
+    if (provider !== "codex-cli") return [];
+    return [
+      ...commonPosixCodexPaths(env, {
+        platform,
+        home,
+        includeSystemDirs: options.includeSystemDirs,
+        systemDirs: options.systemDirs,
+      }),
+      ...darwinCodexAppPaths({ home, appFolders: options.appFolders }),
+    ];
+  }
+  if (platform === "win32") {
+    const found = [];
+    const appData = env?.[envKey(env, "APPDATA")] || "";
+    const localAppData = env?.[envKey(env, "LOCALAPPDATA")] || "";
+    if (provider === "codex-cli") {
+      found.push(...commonWindowsCodexPaths(env, { platform, home }));
+      const appExe = findCodexInApp(env, {
+        platform,
+        onFound: options.onAppFound,
+        windowsAppsRoot: options.windowsAppsRoot,
+        run: options.run,
+      });
+      if (appExe) found.push(appExe);
+    } else if (provider === "claude-cli") {
+      const dirs = [
+        ...(appData ? [path.join(appData, "npm")] : []),
+        ...(localAppData ? [path.join(localAppData, "pnpm"), path.join(localAppData, "Volta", "bin")] : []),
+        ...(home ? [path.join(home, ".bun", "bin"), path.join(home, "scoop", "shims")] : []),
+      ];
+      for (const dir of dirs) for (const name of ["claude.exe", "claude.cmd"]) found.push(path.join(dir, name));
+    } else if (provider === "kimi-cli") {
+      const dirs = [
+        ...(home ? [path.join(home, ".kimi-code", "bin"), path.join(home, ".local", "bin"), path.join(home, "scoop", "shims")] : []),
+        ...(appData ? [path.join(appData, "npm")] : []),
+      ];
+      for (const dir of dirs) for (const name of ["kimi.exe", "kimi.cmd"]) found.push(path.join(dir, name));
+    }
+    return found;
+  }
+  return [];
 }
 
 function hasDirectory(value) {

@@ -1,12 +1,26 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../src/client/app/persistence.js'),'utf8');
 const canvas=fs.readFileSync(path.join(__dirname,'../src/client/app/canvas-runtime.js'),'utf8');
+const bridge=fs.readFileSync(path.join(__dirname,'../src/client/app/project-lines-bridge.js'),'utf8');
 const start=source.indexOf('  async function renderExportCanvas('),end=source.indexOf('  function exportFilename(',start);
 const fresh=canvas.slice(canvas.indexOf('  function widgetSnapshotFresh('),canvas.indexOf('  function widgetSnapshotDeadlineError('));
 const preparation=canvas.slice(canvas.indexOf('  function selectionPathIntersectsBox('),canvas.indexOf('\n  function animationBox('));
 const SELECT=require('../public/selection.js');
 const intersection=(a,b)=>{const x=Math.max(a.x,b.x),y=Math.max(a.y,b.y),r=Math.min(a.x+a.w,b.x+b.w),bt=Math.min(a.y+a.h,b.y+b.h);return r>x&&bt>y?{x,y,w:r-x,h:bt-y}:null;};
+test('project previews with images use a tight margin around the full content bounds',async()=>{
+  const pictureSource=bridge.slice(bridge.indexOf('  const PROJECT_LINES_PICTURE_PIXELS'),bridge.indexOf('  const PROJECT_LINES_GAVE_WAY'))+
+    bridge.slice(bridge.indexOf('  function projectLinesRenderPicture('),bridge.indexOf('  // This Canvas as the folder keeps it'));
+  const bounds={x:1998.5,y:2000,w:754.2,h:502},images=[{id:'image-1'}];
+  const env={TILE:512,exportInkBounds:()=>bounds,state:{images},renderExportCanvas:async (_selection,_assert,_pixels,padding)=>({...env.exportRegion(padding)})};
+  vm.createContext(env);vm.runInContext(source.slice(source.indexOf('  function exportRegion('),start)+pictureSource,env);
+  assert.deepEqual(await env.projectLinesRenderPicture(),{x:1966,y:1968,w:819,h:566});
+  const regular={x:1486,y:1488,w:1779,h:1526};
+  assert.deepEqual({...env.exportRegion()},regular,'regular downloads keep the standard margin');
+  images.length=0;
+  assert.deepEqual(await env.projectLinesRenderPicture(),regular,'drawings without images keep the standard margin');
+});
 function harness(widgets,request){
   let drawn=false;const ctx={fillRect(){},save(){},setTransform(){},restore(){},clip(){}},out={getContext:()=>ctx},requested=[];
   const env={exportRegion:()=>({x:0,y:0,w:400,h:400}),capturableWidgets:region=>widgets.filter(widget=>!region||intersection(widget,region)),widgetBox:widget=>({x:widget.x,y:widget.y,w:widget.w,h:widget.h}),intersection,SELECT,

@@ -1,4 +1,4 @@
-// Studio-only navigator for recent Agent conversations and saved canvases.
+// Studio-only navigator for saved canvases and the ones an AI is working on over MCP.
   {
     const STUDIO_NAVIGATOR_TAB_KEY = "penecho-studio-navigator-tab",
       STUDIO_EDGE_SWIPE_START_PX = 28,
@@ -15,19 +15,12 @@
       studioNavigatorMcpTab = document.querySelector("#studioNavigatorMcpTab"),
       studioNavigatorMcpPanel = document.querySelector("#studioNavigatorMcpPanel"),
       studioMcpRecentList = document.querySelector("#studioMcpRecentList"),
-      studioNavigatorAgentTab = document.querySelector("#studioNavigatorAgentTab"),
       studioNavigatorCanvasTab = document.querySelector("#studioNavigatorCanvasTab"),
       studioNavigatorAllPanel = document.querySelector("#studioNavigatorAllPanel"),
-      studioNavigatorAgentPanel = document.querySelector("#studioNavigatorAgentPanel"),
       studioNavigatorCanvasPanel = document.querySelector("#studioNavigatorCanvasPanel"),
       studioWorkRecentList = document.querySelector("#studioWorkRecentList"),
-      studioAgentRecentList = document.querySelector("#studioAgentRecentList"),
       studioCanvasRecentList = document.querySelector("#studioCanvasRecentList"),
       studioNavigatorManage = document.querySelector("#studioNavigatorManage"),
-      studioSessionDeleteDialog = document.querySelector("#studioSessionDeleteDialog"),
-      studioSessionDeleteDescription = document.querySelector("#studioSessionDeleteDescription"),
-      studioSessionDeleteCancel = document.querySelector("#studioSessionDeleteCancel"),
-      studioSessionDeleteConfirm = document.querySelector("#studioSessionDeleteConfirm"),
       canvasDocumentMeta = document.querySelector("#canvasDocumentMeta"),
       canvasDocumentName = document.querySelector("#canvasDocumentName"),
       canvasDocumentNameLabel = document.querySelector("#canvasDocumentNameLabel"),
@@ -43,30 +36,24 @@
       studioNavigatorMcpEnabled = false,
       studioNavigatorActiveTab = storedStudioNavigatorTab(),
       studioNavigatorWorkPreviewUrls = new Map(),
-      studioNavigatorAgentPreviewUrls = new Map(),
       studioNavigatorCanvasPreviewUrls = new Map(),
       studioNavigatorCanvasGroupSnapshots = new Map(),
       studioNavigatorCanvasGroupSnapshotLoads = new Map(),
       studioNavigatorCanvasGroupSnapshotRetryAt = new Map(),
       studioNavigatorDraftSnapshot = {canvasKey:"",revision:-1,item:null,request:null,retryAt:0},
       studioNavigatorSourceStates = new Map(["device","server","cloud"].map((location)=>[location,{location,status:"idle",items:[],error:"",signIn:false,loadedAt:0,request:null}])),
-      studioNavigatorPendingConversation = null,
-      studioNavigatorSuspendedAgent = false,
-      studioNavigatorRestoreAgentAfterManager = false,
-      studioSessionDeletePending = null,
       canvasDocumentRenameActive = false,
       canvasDocumentRenameCommitting = false,
       studioNavigatorTransitionHandler = null,
       studioNavigatorOpenTimer = 0,
       studioNavigatorHistoryDirty = true,
       studioEdgeSwipe = null;
-    const studioNavigatorExpandedGroups = new Map();
     let studioNavigatorOpenExpanded=false,studioNavigatorOpenCollapsed=false,studioNavigatorCanvasLocation="all",studioNavigatorCanvasSort="modified",studioNavigatorMcpExpanded=false,studioNavigatorMcpSignature="";
 
     function storedStudioNavigatorTab() {
       try {
         const stored=localStorage.getItem(STUDIO_NAVIGATOR_TAB_KEY);
-        return ["all","canvas","agent","mcp"].includes(stored)?stored:"all";
+        return ["all","canvas","mcp"].includes(stored)?stored:"all";
       }
       catch { return "all"; }
     }
@@ -114,8 +101,15 @@
         sidebarStatus.textContent = [saved ? snapshotLocationLabel(state.currentSnapshotLocation||state.snapshotLocation) : "", t(copyKey)].filter(Boolean).join(" · ");
       }
       saveCanvasLabel.textContent = t(snapshotSaveInProgress ? "snapshotSavingShort" : "saveCurrentSnapshot");
-      canvasWelcome.hidden = !active || state.viewMode || studioCanvasHasContent();
+      // Sidebar and agent additions do not press the Canvas to dismiss its
+      // welcome. Content itself must hide the empty-state examples.
+      // Opening PenEcho is the one exception: PenEcho Lines shows first, covering a Canvas kept from last time.
+      // Back to my Canvas, or a stroke, puts it away, and from then on content hides the welcome as above.
+      const coverKept = studioCanvasHasContent() && Boolean(window.projectLinesWelcomeOpen);
+      canvasWelcome.hidden = !active || state.viewMode || (studioCanvasHasContent() && !coverKept);
+      canvasWelcome.classList.toggle("pls-kept", !canvasWelcome.hidden && coverKept);
     }
+    window.projectLinesWelcomeSync = () => updateStudioDocumentState();
     function finishCanvasDocumentRename({ focus = false } = {}) {
       canvasDocumentRenameActive = false;
       canvasDocumentRenameCommitting = false;
@@ -192,38 +186,23 @@
       studioNavigatorScrim.hidden = true;
       if (!deferSurface) updateStudioNavigatorSurfaceInert();
     }
-    function suspendStudioAgentForNavigator() {
-      if (!studioNavigatorIsCompact() || canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open")) return false;
-      studioNavigatorSuspendedAgent = true;
-      closeCanvasAgent({ focus:false });
-      return true;
-    }
-    function restoreStudioAgentAfterNavigator() {
-      if (!studioNavigatorSuspendedAgent) return false;
-      studioNavigatorSuspendedAgent = false;
-      openCanvasAgent({ focus:false, connect:false, animate:false });
-      return true;
-    }
     function cancelStudioNavigatorOpenWork() {
       if (studioNavigatorTransitionHandler) { studioNavigator.removeEventListener("transitionend", studioNavigatorTransitionHandler);studioNavigator.removeEventListener("penecho-sidebar-motion-end",studioNavigatorTransitionHandler); }
       if (studioNavigatorOpenTimer) clearTimeout(studioNavigatorOpenTimer);
       studioNavigatorTransitionHandler = null;
       studioNavigatorOpenTimer = 0;
     }
-    function scheduleStudioNavigatorOpenWork(open, options) {
-      const restoreAgent = options?.restoreAgent !== false;
+    function scheduleStudioNavigatorOpenWork(open) {
       cancelStudioNavigatorOpenWork();
       const settle = () => {
         cancelStudioNavigatorOpenWork();
         if (studioNavigatorIsOpen() !== Boolean(open)) return;
         updateStudioNavigatorA11y();
+        // Closing keeps the unchanged list and decoded previews for the next opening.
+        // Each renderer releases its previous URLs when the data changes.
         if (open) {
           if(studioNavigatorHistoryDirty)renderStudioNavigator();
           void refreshStudioNavigatorSources();
-        } else {
-          // Keep the unchanged list and decoded previews for the next opening.
-          // Each renderer releases its previous URLs when the data changes.
-          if (restoreAgent) restoreStudioAgentAfterNavigator();
         }
       };
       if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || !studioNavigatorIsStudio()) {
@@ -238,16 +217,17 @@
       studioNavigator.addEventListener("penecho-sidebar-motion-end",studioNavigatorTransitionHandler);
       studioNavigatorOpenTimer = setTimeout(settle, STUDIO_NAVIGATOR_SETTLE_FALLBACK_MS);
     }
-    function setStudioNavigatorOpen(open, { restoreAgent = true } = {}) {
+    function setStudioNavigatorOpen(open) {
+      // A project's Canvas has the rail beside it instead (project-lines-bridge.js): this sidebar never opens there.
+      if (open && window.projectLinesRailed === true) return;
       const motion=window.PenEchoShellMotion?.capture();
       studioNavigatorOpenPreference = Boolean(open);
       if (open) restoreCanvasChromeMaterial();
       document.body.classList.toggle("studio-navigator-open", studioNavigatorIsStudio() && studioNavigatorOpenPreference);
       updateStudioNavigatorA11y({ deferSurface:studioNavigatorIsStudio() });
       if (!open && studioNavigator.contains(document.activeElement)) studioNavigatorToggle.focus({ preventScroll:true });
-      if (open) suspendStudioAgentForNavigator();
       window.PenEchoShellMotion?.play(motion);
-      scheduleStudioNavigatorOpenWork(open, { restoreAgent });
+      scheduleStudioNavigatorOpenWork(open);
     }
     function syncStudioNavigatorTheme(theme = state.theme) {
       const active = theme === "studio", wasActive = document.body.classList.contains("studio-navigator-enabled");
@@ -366,10 +346,6 @@
         list.append(control);
       }
     }
-    function studioNavigatorConversationSummary(conversation) {
-      const item=[...(conversation?.items||[])].reverse().find((entry)=>entry?.type==="message"&&["user","assistant"].includes(entry.role)&&String(entry.text||"").trim());
-      return String(item?.text||"").replace(/\s+/g," ").trim().slice(0,96);
-    }
     function closeStudioNavigatorAfterCompactAction() {
       if (studioNavigatorIsCompact() && !studioNavigatorIsMcpDocked()) setStudioNavigatorOpen(false);
     }
@@ -417,7 +393,7 @@
         if(request===studioNavigatorDraftSnapshot.request)studioNavigatorDraftSnapshot.retryAt=Date.now()+30_000;
       }finally{
         if(request===studioNavigatorDraftSnapshot.request)studioNavigatorDraftSnapshot.request=null;
-        if(studioNavigatorIsStudio())studioNavigatorActiveTab==="agent"?renderStudioAgentHistory():studioNavigatorActiveTab==="all"&&renderStudioWorkHistory();
+        if(studioNavigatorIsStudio()&&studioNavigatorActiveTab==="all")renderStudioWorkHistory();
       }
     }
     function studioNavigatorQueueDraftSnapshot(group) {
@@ -441,7 +417,7 @@
         for(const key of request.ids.values())studioNavigatorCanvasGroupSnapshotRetryAt.set(key,Date.now()+30_000);
       }finally{
         studioNavigatorCanvasGroupSnapshotLoads.delete(location);
-        if(studioNavigatorIsStudio())studioNavigatorActiveTab==="agent"?renderStudioAgentHistory():studioNavigatorActiveTab==="all"&&renderStudioWorkHistory();
+        if(studioNavigatorIsStudio()&&studioNavigatorActiveTab==="all")renderStudioWorkHistory();
       }
     }
     function studioNavigatorQueueCanvasGroupSnapshots(groups) {
@@ -462,25 +438,15 @@
         void studioNavigatorLoadCanvasGroupSnapshots(location,request);
       }
     }
-    function studioNavigatorCanvasGroupName(group) {
-      if(group.canvasKey===state.canvasAgentCanvasKey)return currentCanvasDisplayName()||t("canvasUntitledName");
-      const metadata=studioNavigatorCanvasGroupSnapshot(group);
-      return group.name||(metadata?snapshotName(metadata):t("studioNavigatorUnknownCanvas"));
-    }
     function studioNavigatorWorkGroups() {
-      const histories=new Map(canvasAgentStoredHistoryGroups().map((group)=>[group.canvasKey,group])),groups=new Map();
+      const groups=new Map();
       for(const item of studioNavigatorSnapshots()){
-        const canvasKey=`${item.location}:${item.id}`,history=histories.get(canvasKey);
-        groups.set(canvasKey,{canvasKey,location:item.location,item,name:snapshotName(item),savedAt:Number(item.updatedAt||item.createdAt)||0,firstSeenAt:Number(item.createdAt)||0,updatedAt:Math.max(Number(item.updatedAt||item.createdAt)||0,Number(history?.updatedAt)||0),conversations:history?.conversations||[]});
-        histories.delete(canvasKey);
-      }
-      for(const history of histories.values()){
-        const identity=studioNavigatorCanvasIdentity(history.canvasKey),item=studioNavigatorCanvasGroupSnapshot(history);
-        groups.set(history.canvasKey,{...history,location:identity?.location||"",item,name:studioNavigatorCanvasGroupName(history),savedAt:Number(item?.updatedAt||item?.createdAt)||0});
+        const canvasKey=`${item.location}:${item.id}`;
+        groups.set(canvasKey,{canvasKey,location:item.location,item,name:snapshotName(item),savedAt:Number(item.updatedAt||item.createdAt)||0,firstSeenAt:Number(item.createdAt)||0,updatedAt:Number(item.updatedAt||item.createdAt)||0});
       }
       if(state.canvasAgentCanvasKey&&!groups.has(state.canvasAgentCanvasKey)){
         const identity=studioNavigatorCanvasIdentity(state.canvasAgentCanvasKey),item=studioNavigatorCanvasGroupSnapshot({canvasKey:state.canvasAgentCanvasKey});
-        groups.set(state.canvasAgentCanvasKey,{canvasKey:state.canvasAgentCanvasKey,location:identity?.location||"",item,name:currentCanvasDisplayName()||t("canvasUntitledName"),savedAt:Number(item?.updatedAt||item?.createdAt)||0,updatedAt:Number(item?.updatedAt||item?.createdAt)||0,conversations:canvasAgentHistoryForCanvas(state.canvasAgentCanvasKey)});
+        groups.set(state.canvasAgentCanvasKey,{canvasKey:state.canvasAgentCanvasKey,location:identity?.location||"",item,name:currentCanvasDisplayName()||t("canvasUntitledName"),savedAt:Number(item?.updatedAt||item?.createdAt)||0,updatedAt:Number(item?.updatedAt||item?.createdAt)||0});
       }
       if(typeof canvasDocuments!=="undefined")for(const [index,doc] of [...canvasDocuments.records.values()].entries()){
         const current=doc.id===canvasDocuments.activeId,
@@ -488,13 +454,13 @@
           previous=groups.get(canvasKey),item=previous?.item||doc.stored?.item||null;
         groups.set(canvasKey,{...previous,canvasKey,documentId:doc.id,location:doc.locator?.location||"",item,
           name:doc.title||t("canvasUntitledName"),firstSeenAt:Number(doc.firstSeenAt)||index+1,savedAt:Math.max(Number(doc.savedAt)||0,Number(previous?.savedAt)||0),updatedAt:Math.max(Number(previous?.updatedAt)||0,Number(item?.updatedAt||item?.createdAt)||0,...(doc.changes||[]).map(change=>Number(change.at)||0))||Number(doc.firstSeenAt)||0,
-          conversations:previous?.conversations||[],current,unseen:doc.unseen>0});
+          current,unseen:doc.unseen>0});
       }
       return [...groups.values()].map((group)=>({...group,current:group.documentId?group.current:group.canvasKey===state.canvasAgentCanvasKey})).sort((a,b)=>(b.savedAt||b.firstSeenAt||0)-(a.savedAt||a.firstSeenAt||0)||String(a.documentId||a.canvasKey).localeCompare(String(b.documentId||b.canvasKey)));
     }
     function studioNavigatorGroupMatches(group,query) {
       if(!query)return true;
-      const haystack=[group.name,group.location?snapshotLocationLabel(group.location):"",...group.conversations.flatMap((conversation)=>[conversation.title,studioNavigatorConversationSummary(conversation)])].filter(Boolean).join(" ").toLocaleLowerCase(state.language==="zh"?"zh-CN":"en");
+      const haystack=[group.name,group.location?snapshotLocationLabel(group.location):""].filter(Boolean).join(" ").toLocaleLowerCase(state.language==="zh"?"zh-CN":"en");
       return haystack.includes(query);
     }
     function studioNavigatorSectionLabel(key) {
@@ -503,41 +469,7 @@
       label.textContent=t(key);
       return label;
     }
-    function studioNavigatorConversationEntry(group,conversation,options) {
-      const standalone=Boolean(options?.standalone);
-      const entry=document.createElement("div"),row=document.createElement("button"),remove=document.createElement("button"),body=document.createElement("span"),title=document.createElement("strong"),current=Boolean(group.current&&conversation.id===canvasAgent.currentConversation?.id),conversationName=conversation.title||t("canvasAgentHistoryUntitled"),deleteLabel=t("studioNavigatorDeleteSession").replace("{name}",conversationName);
-      entry.className="studio-navigator-conversation-entry";
-      row.type="button";row.className="studio-navigator-item studio-navigator-conversation";row.dataset.conversationId=conversation.id;row.classList.toggle("current",current);
-      peChoice(row);
-      if(current)row.setAttribute("aria-current","page");
-      body.className="studio-navigator-item-body";
-      title.className="studio-navigator-conversation-name";
-      title.textContent=conversationName;
-      title.title=conversationName;
-      const icon=document.createElement("span"),time=document.createElement("small");
-      icon.className="studio-navigator-chat-icon";
-      icon.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4Z"/></svg>';
-      time.className="studio-navigator-chat-time";
-      time.textContent=studioNavigatorMetaTime(conversation.updatedAt||conversation.createdAt);
-      body.append(title);row.append(icon,body,time);
-      if(standalone){
-        entry.classList.add("studio-navigator-chat-card");
-        const summary=document.createElement("span"),context=document.createElement("span"),preview=studioNavigatorCanvasPreview(group.item||studioNavigatorCanvasGroupSnapshot(group),studioNavigatorAgentPreviewUrls,group.location),label=document.createElement("span");
-        summary.className="studio-navigator-chat-summary";summary.textContent=studioNavigatorConversationSummary(conversation);
-        context.className="studio-navigator-chat-context";
-        const count=(conversation.items||[]).filter(item=>item.type==="message").length;
-        label.textContent=`${group.name} · ${t(count===1?"studioNavigatorOneMessage":"studioNavigatorMessageCount").replace("{count}",String(count))}`;
-        label.title=label.textContent;context.append(preview,label);body.append(summary,context);icon.remove();
-      }
-      row.addEventListener("click",()=>void openStudioConversation(group,conversation,row));
-      remove.type="button";remove.className="studio-navigator-session-delete";remove.setAttribute("aria-label",deleteLabel);remove.title=deleteLabel;
-      peButton(remove,"toolbar","compact");
-      remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>';
-      remove.addEventListener("click",()=>openStudioSessionDeleteDialog(group,conversation));
-      entry.append(row,remove);
-      return entry;
-    }
-    function studioNavigatorGroupSection(group,{includeConversations=true,previewUrls=studioNavigatorWorkPreviewUrls}={}) {
+    function studioNavigatorGroupSection(group,{previewUrls=studioNavigatorWorkPreviewUrls}={}) {
       const section=document.createElement("section"),heading=document.createElement("button"),canvasPreview=studioNavigatorCanvasPreview(group.item||studioNavigatorCanvasGroupSnapshot(group),previewUrls,group.location),headingBody=document.createElement("span"),name=document.createElement("strong"),meta=document.createElement("small"),identity=studioNavigatorCanvasIdentity(group.canvasKey);
       section.className="studio-navigator-group";
       section.dataset.canvasKey=group.canvasKey;
@@ -566,28 +498,6 @@
       });
       section.append(heading);
       queueMicrotask(()=>mcpRenderSidebarBadges());
-      if(includeConversations&&group.conversations.length){
-        const list=document.createElement("div"),toggle=document.createElement("button");
-        list.className="studio-navigator-group-conversations";
-        const query=studioNavigatorSearchQuery();
-        const conversations=query?group.conversations.filter(conversation=>`${conversation.title||""} ${studioNavigatorConversationSummary(conversation)}`.toLocaleLowerCase(state.language==="zh"?"zh-CN":"en").includes(query)):group.conversations;
-        const expanded=Boolean(query)||studioNavigatorExpandedGroups.get(group.canvasKey)===true;
-        list.hidden=!expanded;
-        for(const conversation of conversations)list.append(studioNavigatorConversationEntry(group,conversation));
-        toggle.type="button";toggle.className="studio-navigator-chat-toggle";
-        peButton(toggle,"ghost","compact");
-        toggle.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4Z"/></svg><span></span><svg class="studio-navigator-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
-        toggle.querySelector("span").textContent=String(conversations.length);
-        toggle.setAttribute("aria-label",t("studioNavigatorSessionCount").replace("{count}",String(conversations.length)));
-        toggle.setAttribute("aria-expanded",String(expanded));
-        toggle.addEventListener("click",()=>{
-          list.hidden=!list.hidden;
-          studioNavigatorExpandedGroups.set(group.canvasKey,!list.hidden);
-          toggle.setAttribute("aria-expanded",String(!list.hidden));
-        });
-        section.classList.add("has-chats");
-        section.append(toggle,list);
-      }
       return section;
     }
     function appendStudioCanvasClose(section,documentId,current,name) {
@@ -603,108 +513,6 @@
         return requestCanvasTransition({type:"close",documentId});
       }));
       section.append(close);
-    }
-    async function openStudioConversationOnCurrentCanvas(pending) {
-      if(!pending||pending.canvasKey!==state.canvasAgentCanvasKey)return false;
-      studioNavigatorPendingConversation=null;
-      studioNavigator.removeAttribute("aria-busy");
-      if(canvasAgent.projectId)await canvasAgentSelectProject("");
-      const conversation=canvasAgentHistoryForCanvas(pending.canvasKey).find(item=>item.id===pending.conversationId);
-      if(!conversation){setStatus(t("studioNavigatorConversationUnavailable"));renderStudioAgentHistory();return false;}
-      if(canvasAgentPanel.hidden)openCanvasAgent({focus:false,connect:false});
-      await canvasAgentViewStoredConversation(conversation.id);
-      setStatus(t("studioNavigatorRestored").replace("{canvas}",pending.canvasName||currentCanvasDisplayName()||t("canvasUntitledName")).replace("{conversation}",pending.conversationName||conversation.title||t("canvasAgentHistoryUntitled")));
-      renderStudioAgentHistory();
-      renderStudioWorkHistory();
-      return true;
-    }
-    function previewStudioConversation(conversation) {
-      studioNavigatorPendingConversation=null;
-      studioNavigator.removeAttribute("aria-busy");
-      if(canvasAgentPanel.hidden)openCanvasAgent({focus:false,connect:false});
-      return canvasAgentPreviewStoredConversation(conversation);
-    }
-    async function openStudioConversation(group,conversation,control) {
-      closeStudioNavigatorAfterCompactAction();
-      const pending={canvasKey:group.canvasKey,conversationId:conversation.id,canvasName:group.name,conversationName:conversation.title||t("canvasAgentHistoryUntitled")};
-      studioNavigatorPendingConversation=pending;
-      studioNavigator.setAttribute("aria-busy","true");
-      control.disabled=true;
-      try{
-        if(group.canvasKey===state.canvasAgentCanvasKey)return await openStudioConversationOnCurrentCanvas(pending);
-        if(group.documentId){
-          await canvasDocumentsShow(group.documentId,null,{markSeen:false});
-          return await openStudioConversationOnCurrentCanvas(pending);
-        }
-        const identity=studioNavigatorCanvasIdentity(group.canvasKey);
-        if(!identity)return previewStudioConversation(conversation);
-        const loaded=await requestLoadSnapshot(identity.id,identity.location);
-        if(!loaded&&!document.querySelector("#newCanvasDialog").open)return previewStudioConversation(conversation);
-        return loaded;
-      }catch(error){
-        return previewStudioConversation(conversation);
-      }finally{control.disabled=false;}
-    }
-    function studioNavigatorCanvasDidLoad(identity) {
-      const key=identity?.id&&identity?.location?`${identity.location}:${identity.id}`:"";
-      if(!studioNavigatorPendingConversation||studioNavigatorPendingConversation.canvasKey!==key)return false;
-      void openStudioConversationOnCurrentCanvas(studioNavigatorPendingConversation).catch(error=>{
-        studioNavigatorPendingConversation=null;
-        studioNavigator.removeAttribute("aria-busy");
-        setStatus(`${t("snapshotError")}${String(error?.message||error)}`);
-      });
-      return true;
-    }
-    function wantsStudioConversationForCanvas(identity) {
-      const key=identity?.id&&identity?.location?`${identity.location}:${identity.id}`:"";
-      return Boolean(key&&studioNavigatorPendingConversation?.canvasKey===key);
-    }
-    function cancelStudioPendingConversation() {
-      studioNavigatorPendingConversation=null;
-      studioNavigator.removeAttribute("aria-busy");
-      renderStudioAgentHistory();
-    }
-    function openStudioSessionDeleteDialog(group,conversation) {
-      const title=conversation.title||t("canvasAgentHistoryUntitled"),current=group.canvasKey===state.canvasAgentCanvasKey&&conversation.id===canvasAgent.currentConversation?.id,busy=current&&(canvasAgent.requestPending||canvasAgent.running);
-      studioSessionDeletePending={canvasKey:group.canvasKey,conversationId:conversation.id};
-      studioSessionDeleteDescription.textContent=t(busy?"studioNavigatorDeleteSessionBusy":"studioNavigatorDeleteSessionConfirm").replace("{name}",title);
-      studioSessionDeleteConfirm.disabled=busy;
-      if(!studioSessionDeleteDialog.open)studioSessionDeleteDialog.showModal();
-      requestAnimationFrame(()=>studioSessionDeleteCancel.focus({preventScroll:true}));
-    }
-    function confirmStudioSessionDelete() {
-      if(!studioSessionDeletePending)return false;
-      const result=canvasAgentDeleteStoredConversation(studioSessionDeletePending.canvasKey,studioSessionDeletePending.conversationId);
-      if(!result.deleted){
-        const key=result.reason==="busy"?"studioNavigatorDeleteSessionBusy":"studioNavigatorDeleteSessionFailed";
-        studioSessionDeleteDescription.textContent=t(key);
-        studioSessionDeleteConfirm.disabled=result.reason==="busy";
-        return false;
-      }
-      studioSessionDeleteDialog.close("deleted");
-      renderStudioAgentHistory();
-      renderStudioWorkHistory();
-      return true;
-    }
-    function renderStudioAgentHistory() {
-      renderStudioNavigatorOpenCanvases();
-      if (!studioAgentRecentList) return;
-      if (!studioNavigatorIsOpen()) {
-        studioNavigatorHistoryDirty = true;
-        return;
-      }
-      studioNavigatorHistoryDirty = false;
-      releaseStudioNavigatorPreviewUrls(studioNavigatorAgentPreviewUrls);
-      const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups(),entries=groups.flatMap(group=>group.conversations.map(conversation=>({group,conversation,updatedAt:Number(conversation.updatedAt||conversation.createdAt)||0}))).filter(({group,conversation})=>!query||`${group.name} ${conversation.title||""} ${studioNavigatorConversationSummary(conversation)}`.toLocaleLowerCase(state.language==="zh"?"zh-CN":"en").includes(query)).sort((a,b)=>b.updatedAt-a.updatedAt);
-      studioNavigatorQueueCanvasGroupSnapshots(groups);
-      studioAgentRecentList.replaceChildren();
-      let previous="";
-      for(const entry of entries){
-        const key=studioNavigatorDateKey(entry.updatedAt);
-        if(!query&&key!==previous){const label=studioNavigatorSectionLabel(key);label.classList.add("studio-navigator-date");studioAgentRecentList.append(label);previous=key;}
-        studioAgentRecentList.append(studioNavigatorConversationEntry(entry.group,entry.conversation,{standalone:true}));
-      }
-      if(!entries.length)studioNavigatorEmpty(studioAgentRecentList,query?"studioNavigatorAgentNoMatch":"studioNavigatorAgentEmpty");
     }
 
     function revokeStudioNavigatorPreviewUrlWhenSettled(url, image) {
@@ -809,7 +617,7 @@
       const yesterday=new Date(today);yesterday.setDate(yesterday.getDate()-1);
       const week=new Date(today);week.setDate(week.getDate()-6);
       for(const group of [...groups].sort((a,b)=>b.updatedAt-a.updatedAt)){
-        if(!group.location&&!group.conversations.length)continue;
+        if(!group.location)continue;
         const timestamp=Number(group.updatedAt)||0;
         const key=timestamp>=+today?"studioNavigatorToday":timestamp>=+yesterday?"studioNavigatorYesterday":timestamp>=+week?"studioNavigatorThisWeek":"studioNavigatorEarlier";
         if(!studioNavigatorSearchQuery()&&key!==previous){
@@ -857,7 +665,7 @@
       studioNavigatorQueueCanvasGroupSnapshots(filtered);
       studioCanvasRecentList.replaceChildren();
       for(const group of filtered){
-        const section=studioNavigatorGroupSection(group,{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls});section.classList.add("studio-navigator-canvas-card");
+        const section=studioNavigatorGroupSection(group,{previewUrls:studioNavigatorCanvasPreviewUrls});section.classList.add("studio-navigator-canvas-card");
         studioNavigatorRenderCanvasMeta(section.querySelector("small"),false,Boolean(group.documentId),group.location,group.savedAt);
         if(group.current||group.documentId){const badge=document.createElement("span");badge.className="studio-navigator-canvas-state";badge.dataset.current=String(Boolean(group.current));badge.textContent=t(group.current?"studioNavigatorCurrent":"studioNavigatorOpened");section.querySelector(".studio-navigator-item-icon").append(badge);}
         studioCanvasRecentList.append(section);
@@ -990,10 +798,6 @@
       const ids=new Set(studioMcpOpenDocumentIds());
       return studioNavigatorWorkGroups().filter(group=>group.documentId&&ids.has(group.documentId));
     }
-    function studioNavigatorDateKey(value) {
-      const today=new Date();today.setHours(0,0,0,0);const week=new Date(today);week.setDate(week.getDate()-6);
-      return Number(value)>=+today?"studioNavigatorToday":Number(value)>=+week?"studioNavigatorThisWeek":"studioNavigatorEarlier";
-    }
     function studioNavigatorMcpUpdating(documentId) { return Boolean(mcpRuntime.ready&&mcpRuntime.activeMutation&&mcpRuntime.mutationDocumentId===documentId); }
     function studioNavigatorMcpClient(group) {
       const doc=canvasDocuments.records.get(group.documentId),session=[...mcpRuntime.sessions.values()].find(session=>session.documentId===group.documentId&&!session.closed);
@@ -1024,7 +828,7 @@
       let previous="";
       for(const {key,group} of studioNavigatorMcpExpanded||query?ordered:ordered.slice(0,5)){
         if(key!==previous){const label=studioNavigatorSectionLabel(key);label.classList.add("studio-navigator-date");studioMcpRecentList.append(label);previous=key;}
-        const section=studioNavigatorGroupSection(group,{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls});section.classList.add("studio-navigator-ai-canvas");section.dataset.updating=String(studioNavigatorMcpUpdating(group.documentId));
+        const section=studioNavigatorGroupSection(group,{previewUrls:studioNavigatorCanvasPreviewUrls});section.classList.add("studio-navigator-ai-canvas");section.dataset.updating=String(studioNavigatorMcpUpdating(group.documentId));
         const meta=section.querySelector("small"),client=document.createElement("span"),time=document.createElement("span"),doc=canvasDocuments.records.get(group.documentId);client.className="studio-navigator-ai-client";client.textContent=studioNavigatorMcpClient(group);time.textContent=studioNavigatorMcpUpdating(group.documentId)?t("studioNavigatorUpdating"):studioNavigatorMetaTime(group.updatedAt);meta.replaceChildren(client,time);
         if(doc?.unseen){const count=document.createElement("span");count.className="studio-navigator-unread-count";count.textContent=String(doc.unseen);count.setAttribute("aria-label",t("studioNavigatorNewCount").replace("{count}",String(doc.unseen)));section.append(count);}
         appendStudioCanvasClose(section,group.documentId,group.current,group.name);studioMcpRecentList.append(section);
@@ -1046,9 +850,6 @@
       studioNavigatorMcpTab.hidden=false;studioNavigatorMcpTab.dataset.online=String(enabled);
       if(enabled&&reveal){
         selectCanvasToolMode("hand");
-        studioNavigatorSuspendedAgent=false;
-        studioNavigatorRestoreAgentAfterManager=false;
-        closeCanvasAgent({focus:false});
         studioNavigatorSearch.value="";
         setStudioNavigatorTab("mcp",{persist:false});
         setStudioNavigatorOpen(true);
@@ -1083,16 +884,15 @@
       }
       if(studioNavigatorActiveTab==="mcp")renderStudioMcpHistory();
       else if(studioNavigatorActiveTab==="canvas")renderStudioCanvasHistory();
-      else if(studioNavigatorActiveTab==="agent")renderStudioAgentHistory();
       else renderStudioWorkHistory();
     }
     function setStudioNavigatorTab(tab, { focus = false, persist = true } = {}) {
-      studioNavigatorActiveTab=["all","canvas","agent","mcp"].includes(tab)?tab:"all";
+      studioNavigatorActiveTab=["all","canvas","mcp"].includes(tab)?tab:"all";
       studioNavigator.dataset.tab=studioNavigatorActiveTab;
-      const searchKey={all:"studioNavigatorSearch",canvas:"studioNavigatorSearchCanvases",agent:"studioNavigatorSearchChats",mcp:"studioNavigatorSearchAI"}[studioNavigatorActiveTab];
+      const searchKey={all:"studioNavigatorSearch",canvas:"studioNavigatorSearchCanvases",mcp:"studioNavigatorSearchAI"}[studioNavigatorActiveTab];
       studioNavigatorSearch.dataset.i18nPlaceholder=searchKey;studioNavigatorSearch.dataset.i18nAria=searchKey;studioNavigatorSearch.placeholder=t(searchKey);studioNavigatorSearch.setAttribute("aria-label",t(searchKey));
       const workspace=document.getElementById("canvasWorkspace"),host=document.getElementById(studioNavigatorActiveTab==="mcp"?"studioNavigatorMcpMenuHost":"studioNavigatorOpenSection");if(workspace&&host)host.append(workspace);
-      const tabs={all:studioNavigatorAllTab,mcp:studioNavigatorMcpTab,canvas:studioNavigatorCanvasTab,agent:studioNavigatorAgentTab},panels={all:studioNavigatorAllPanel,mcp:studioNavigatorMcpPanel,canvas:studioNavigatorCanvasPanel,agent:studioNavigatorAgentPanel};
+      const tabs={all:studioNavigatorAllTab,mcp:studioNavigatorMcpTab,canvas:studioNavigatorCanvasTab},panels={all:studioNavigatorAllPanel,mcp:studioNavigatorMcpPanel,canvas:studioNavigatorCanvasPanel};
       for(const [key,control] of Object.entries(tabs)){
         const active=key===studioNavigatorActiveTab;
         control.setAttribute("aria-selected",String(active));
@@ -1120,38 +920,14 @@
     function handleStudioNavigatorTabKeydown(event) {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
       event.preventDefault();
-      const order=["all","canvas","agent","mcp"],current=order.indexOf(studioNavigatorActiveTab),index=event.key==="Home"?0:event.key==="End"?order.length-1:event.key==="ArrowRight"?(current+1)%order.length:(current+order.length-1)%order.length;
+      const order=["all","canvas","mcp"],current=order.indexOf(studioNavigatorActiveTab),index=event.key==="Home"?0:event.key==="End"?order.length-1:event.key==="ArrowRight"?(current+1)%order.length:(current+order.length-1)%order.length;
       setStudioNavigatorTab(order[index],{focus:true});
     }
+    // A narrow window has no room for the list of Canvases and its manager at once.
     function historyManagerWillOpen() {
-      studioNavigatorRestoreAgentAfterManager=false;
-      if(!studioNavigatorIsCompact()||studioNavigatorIsMcpDocked())return;
-      if(studioNavigatorIsOpen()){
-        studioNavigatorRestoreAgentAfterManager=studioNavigatorSuspendedAgent;
-        setStudioNavigatorOpen(false,{restoreAgent:false});
-      }else if(!canvasAgentPanel.hidden&&document.body.classList.contains("canvas-agent-open")){
-        studioNavigatorRestoreAgentAfterManager=true;
-        closeCanvasAgent({focus:false,animate:false});
-      }
-    }
-    function historyManagerDidClose() {
-      if(!studioNavigatorRestoreAgentAfterManager)return;
-      studioNavigatorRestoreAgentAfterManager=false;
-      studioNavigatorSuspendedAgent=false;
-      openCanvasAgent({focus:false,connect:false,animate:false});
-    }
-    function studioNavigatorAgentWillOpen() {
-      // Compact windows cannot reserve both sidebars and a usable canvas. An
-      // explicit Agent request folds navigation while retaining its MCP tab.
-      if(!studioNavigatorIsCompact()||!studioNavigatorIsOpen())return;
-      studioNavigatorSuspendedAgent=false;
-      setStudioNavigatorOpen(false,{restoreAgent:false});
+      if(studioNavigatorIsCompact()&&!studioNavigatorIsMcpDocked()&&studioNavigatorIsOpen())setStudioNavigatorOpen(false);
     }
     function handleStudioNavigatorCompactChange() {
-      if(studioNavigatorIsOpen()){
-        if(studioNavigatorIsCompact())suspendStudioAgentForNavigator();
-        else restoreStudioAgentAfterNavigator();
-      }
       updateStudioNavigatorA11y();
     }
     function studioEdgeSwipeInteractiveTarget(target) {
@@ -1159,12 +935,8 @@
     }
     function studioEdgeSwipeSide(event) {
       if (studioEdgeSwipe || event.pointerType !== "touch" || event.isPrimary === false || state.viewMode || !studioNavigatorIsStudio() || studioEdgeSwipeInteractiveTarget(event.target)) return "";
-      const bounds = view.getBoundingClientRect(),
-        leftInset = event.clientX - bounds.left,
-        rightInset = bounds.right - event.clientX;
-      if (leftInset >= 0 && leftInset <= STUDIO_EDGE_SWIPE_START_PX && !studioNavigatorIsOpen()) return "left";
-      if (rightInset >= 0 && rightInset <= STUDIO_EDGE_SWIPE_START_PX && canvasAgentAvailable() && canvasAgentPanel.hidden && canvasAgentDockedPanel()) return "right";
-      return "";
+      const leftInset = event.clientX - view.getBoundingClientRect().left;
+      return leftInset >= 0 && leftInset <= STUDIO_EDGE_SWIPE_START_PX && !studioNavigatorIsOpen() ? "left" : "";
     }
     function consumeStudioEdgeSwipe(event) {
       if (event.cancelable) event.preventDefault();
@@ -1192,15 +964,14 @@
       if (gesture.cancelled || gesture.committed) return;
       const deltaX = event.clientX - gesture.startX,
         deltaY = Math.abs(event.clientY - gesture.startY),
-        inward = gesture.side === "left" ? deltaX : -deltaX;
+        inward = deltaX;
       if (inward < -STUDIO_EDGE_SWIPE_START_PX / 2 || deltaY > STUDIO_EDGE_SWIPE_CANCEL_PX && deltaY > Math.max(0, inward)) {
         gesture.cancelled = true;
         return;
       }
       if (inward < STUDIO_EDGE_SWIPE_COMMIT_PX || inward < deltaY * STUDIO_EDGE_SWIPE_DIRECTION_RATIO) return;
       gesture.committed = true;
-      if (gesture.side === "left") setStudioNavigatorOpen(true);
-      else openCanvasAgent({ focus:false });
+      setStudioNavigatorOpen(true);
     }
     function finishStudioEdgeSwipe(event) {
       const gesture = studioEdgeSwipe;
@@ -1246,12 +1017,11 @@
     studioNavigatorSearch.addEventListener("input", renderActiveStudioNavigatorHistory);
     studioNavigatorSearch.addEventListener("keydown", event => {
       if(event.key==="Escape"&&studioNavigatorSearch.value){event.preventDefault();event.stopPropagation();studioNavigatorSearch.value="";renderActiveStudioNavigatorHistory();}
-      else if(event.key==="Enter"){event.preventDefault();studioNavigator.querySelector('.studio-navigator-panel:not([hidden]) :is(.studio-navigator-group-heading,.studio-navigator-conversation)')?.click();}
+      else if(event.key==="Enter"){event.preventDefault();studioNavigator.querySelector('.studio-navigator-panel:not([hidden]) .studio-navigator-group-heading')?.click();}
     });
     document.getElementById("studioNavigatorOpenToggle").addEventListener("click",()=>{studioNavigatorOpenCollapsed=!studioNavigatorOpenCollapsed;renderStudioNavigatorOpenCanvases();});
     document.getElementById("studioNavigatorOpenMore").addEventListener("click",()=>{studioNavigatorOpenExpanded=!studioNavigatorOpenExpanded;renderStudioNavigatorOpenCanvases();});
     document.getElementById("studioNavigatorSort").addEventListener("change",event=>{studioNavigatorCanvasSort=event.target.value;renderStudioCanvasHistory();});
-    document.getElementById("studioNavigatorNewChat").addEventListener("click",()=>{openCanvasAgent({focus:true});canvasAgentNew.click();});
     studioNavigatorMcpTab.addEventListener("click",()=>setStudioNavigatorTab("mcp"));
     document.getElementById("studioMcpCloseAll")?.addEventListener("click",()=>canvasDocumentsUiAction(closeAllStudioMcpCanvases));
     document.getElementById("studioMcpFollowLatest")?.addEventListener("click",()=>{
@@ -1267,10 +1037,8 @@
     document.addEventListener("visibilitychange",resumeMcpFollow);
     studioNavigatorMcpTab.addEventListener("keydown",handleStudioNavigatorTabKeydown);
     studioNavigatorAllTab.addEventListener("click", () => setStudioNavigatorTab("all"));
-    studioNavigatorAgentTab.addEventListener("click", () => setStudioNavigatorTab("agent"));
     studioNavigatorCanvasTab.addEventListener("click", () => setStudioNavigatorTab("canvas"));
     studioNavigatorAllTab.addEventListener("keydown", handleStudioNavigatorTabKeydown);
-    studioNavigatorAgentTab.addEventListener("keydown", handleStudioNavigatorTabKeydown);
     studioNavigatorCanvasTab.addEventListener("keydown", handleStudioNavigatorTabKeydown);
     studioNavigatorManage.addEventListener("click", openStudioCanvasHistoryManager);
     canvasDocumentName.addEventListener("click", beginCanvasDocumentRename);
@@ -1287,11 +1055,6 @@
         event.preventDefault();
         finishCanvasDocumentRename({ focus:true });
       }
-    });
-    studioSessionDeleteConfirm.addEventListener("click",confirmStudioSessionDelete);
-    studioSessionDeleteDialog.addEventListener("close",()=>{
-      studioSessionDeletePending=null;
-      studioSessionDeleteConfirm.disabled=false;
     });
     view.addEventListener("pointerdown", beginStudioEdgeSwipe, true);
     view.addEventListener("pointermove", moveStudioEdgeSwipe, true);
@@ -1310,10 +1073,9 @@
     window.addEventListener("penecho:languagechange", renderStudioNavigator);
     window.PenEchoStudioNavigator = Object.freeze({
       render:renderStudioNavigator,
-      focusSearch:()=>{setStudioNavigatorOpen(true,{restoreAgent:false});requestAnimationFrame(()=>studioNavigatorSearch.focus({preventScroll:true}));},
+      focusSearch:()=>{setStudioNavigatorOpen(true);requestAnimationFrame(()=>studioNavigatorSearch.focus({preventScroll:true}));},
       renderMcpStatus:syncStudioNavigatorMcpPresentation,
       renderWork:()=>{if(studioNavigatorActiveTab==="all")renderStudioWorkHistory();},
-      renderAgent:()=>{studioNavigatorActiveTab==="agent"?renderStudioAgentHistory():studioNavigatorActiveTab==="all"&&renderStudioWorkHistory();},
       renderCanvases:renderActiveStudioNavigatorHistory,
       updateDocument:updateStudioDocumentState,
       workspaceChanged:studioWorkspaceChanged,
@@ -1322,14 +1084,9 @@
       mcpFollowEnabled:()=>studioMcpFollowLatest,
       syncMcp:syncStudioNavigatorMcp,
       isMcpDocked:studioNavigatorIsMcpDocked,
-      canvasDidLoad:studioNavigatorCanvasDidLoad,
-      wantsConversationForCanvas:wantsStudioConversationForCanvas,
-      cancelPendingConversation:cancelStudioPendingConversation,
       open:(tab="all")=>{setStudioNavigatorTab(tab);setStudioNavigatorOpen(true);},
       refreshSource:refreshStudioNavigatorSource,
       historyManagerWillOpen,
-      historyManagerDidClose,
-      agentWillOpen:studioNavigatorAgentWillOpen,
       setOpen:setStudioNavigatorOpen,
       syncCanvasView:setStudioNavigatorCanvasView,
       syncTheme:syncStudioNavigatorTheme,

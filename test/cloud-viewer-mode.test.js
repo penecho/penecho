@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -37,9 +38,9 @@ test("the read-only viewer mode ships inert locally and activates only on /canva
   assert.match(css, /pointer-events: none !important/);
   assert.match(css, /viewer-topbar/);
   assert.match(core, /window\.PENECHO_CONFIG\?\.runtime === "viewer"[\s\S]*?\? "device"/);
-  assert.match(bootstrap, /window\.PENECHO_CONFIG\?\.runtime !== "viewer"\s*&& !\(window\.PENECHO_CONFIG\?\.runtime === "cloud" && window\.PENECHO_CONFIG\?\.remoteCanvasNativeReads === true\)\) refreshSnapshots\(\)\.catch/);
+  assert.match(bootstrap, /window\.PENECHO_CONFIG\?\.runtime !== "viewer"\s*&& !\(projectLinesTarget && projectLinesLocal\(\)\)\s*&& !\(window\.PENECHO_CONFIG\?\.runtime === "cloud" && window\.PENECHO_CONFIG\?\.remoteCanvasNativeReads === true\)\) refreshSnapshots\(\)\.catch/);
   assert.match(built, /window\.PENECHO_CONFIG\?\.runtime === "viewer"[\s\S]*?\? "device"/);
-  assert.match(built, /window\.PENECHO_CONFIG\?\.runtime !== "viewer"\s*&& !\(window\.PENECHO_CONFIG\?\.runtime === "cloud" && window\.PENECHO_CONFIG\?\.remoteCanvasNativeReads === true\)\) refreshSnapshots\(\)\.catch/);
+  assert.match(built, /window\.PENECHO_CONFIG\?\.runtime !== "viewer"\s*&& !\(projectLinesTarget && projectLinesLocal\(\)\)\s*&& !\(window\.PENECHO_CONFIG\?\.runtime === "cloud" && window\.PENECHO_CONFIG\?\.remoteCanvasNativeReads === true\)\) refreshSnapshots\(\)\.catch/);
 });
 
 test("startup history stays private in Viewer and defers native Cloud reads to Library", () => {
@@ -58,6 +59,7 @@ test("startup history stays private in Viewer and defers native Cloud reads to L
       let refreshes = 0;
       vm.runInNewContext(guard, {
         window:{ PENECHO_CONFIG:config },
+        projectLinesTarget:null,
         refreshSnapshots() { refreshes++; return Promise.resolve(); },
       });
       assert.equal(refreshes, expected, `${file}: ${JSON.stringify(config)}`);
@@ -69,8 +71,8 @@ test("the viewer localizes its actions and responsively frames Widgets and compl
   const js = read("public/viewer.js"), css = read("public/viewer.css"), canvas = read("src/client/app/canvas-runtime.js"),
     persistence = read("src/client/app/persistence.js"), bootstrap = read("src/client/app/ui-bootstrap.js");
   assert.equal((js.match(/takeFurther:"Echo"/g) || []).length, 2);
-  assert.match(js, /backTitle:"Back to Echoes"/);
-  assert.match(js, /backTitle:"返回 Echoes"/);
+  assert.match(js, /backTitle:"Back to PenEcho"/);
+  assert.match(js, /backTitle:"返回 PenEcho"/);
   assert.match(js, /penecho-site-language/);
   assert.match(js, /penecho:languagechange/);
   assert.match(js, /fitViewport:true/);
@@ -402,34 +404,16 @@ test("Live Clay viewer reflows the iframe at screen size so its playback control
   assert.deepEqual(hostScales, [[1, 1]]);
 });
 
-test("Viewer skips onboarding observers and hidden plugin preview hosts, with a real-Node observer guard", () => {
-  const core = read("src/client/app/core.js"),
-    targetSource = functionSource(core, "featureTourObserverTarget"),
-    activeObserver = functionSource(core, "observeActiveFeatureTour"),
-    pendingObserver = functionSource(core, "watchForPendingFeatureTour"),
-    onboardingSource = functionSource(core, "maybeStartOnboarding"),
-    previewSource = functionSource(core, "updatePluginStylesPreview"),
-    TestNode = class TestNode {},
-    body = new TestNode();
-
-  const deviceWindow = { PENECHO_CONFIG:{ runtime:"device" } };
-  assert.equal(vm.runInNewContext(`(${targetSource})`, { document:{ body }, Node:TestNode, window:deviceWindow })(), body);
-  assert.equal(vm.runInNewContext(`(${targetSource})`, { document:{ body:{} }, Node:TestNode, window:deviceWindow })(), null);
-  assert.equal(vm.runInNewContext(`(${targetSource})`, { document:{ body:null }, Node:TestNode, window:deviceWindow })(), null);
-  assert.equal(vm.runInNewContext(`(${targetSource})`, { document:{ body:{} }, window:deviceWindow })(), null);
-  assert.equal(vm.runInNewContext(`(${targetSource})`, { document:{ body }, Node:TestNode, window:{ PENECHO_CONFIG:{ runtime:"viewer" } } })(), null);
-  assert.match(activeObserver, /const target = featureTourObserverTarget\(\);[\s\S]*?!target[\s\S]*?\.observe\(target,/);
-  assert.match(pendingObserver, /const target = featureTourObserverTarget\(\);[\s\S]*?!target[\s\S]*?\.observe\(target,/);
-
-  let featureTourStarts = 0, changelogStarts = 0;
-  const startViewerOnboarding = vm.runInNewContext(`(${onboardingSource})`, {
+test("Viewer skips the first-use hint and hidden plugin preview hosts", () => {
+  const core = read("src/client/app/core.js"), onboardingSource = functionSource(core, "maybeStartOnboarding"),
+    previewSource = functionSource(core, "updatePluginStylesPreview");
+  let hints = 0;
+  const start = vm.runInNewContext(`(${onboardingSource})`, {
     window:{ PENECHO_CONFIG:{ runtime:"viewer" } },
-    maybeStartFeatureTour:() => { featureTourStarts++; return false; },
-    maybeShowChangelog:() => { changelogStarts++; },
+    maybeShowCanvasHint:() => { hints++; },
   });
-  assert.equal(startViewerOnboarding(), false);
-  assert.equal(featureTourStarts, 0);
-  assert.equal(changelogStarts, 0);
+  assert.equal(start(), false);
+  assert.equal(hints, 0);
   assert.match(previewSource, /window\.PENECHO_CONFIG\?\.runtime === "viewer"\) return;/);
 });
 

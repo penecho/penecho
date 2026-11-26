@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 
 function harness(fetchImpl) {
@@ -213,7 +214,7 @@ test("manual setup tools are disclosed together and the toolbar precedes Agent",
   const manual=html.slice(html.indexOf('<details id="mcpManual"'),html.indexOf('</details>',html.indexOf('<details id="mcpManual"')));
   assert.ok(manual.includes('id="mcpCopyInstructions"'));
   for(const id of ["mcpCopyConfig","mcpCopySkill","mcpCopyGuide","mcpConfig"])assert.ok(!manual.includes(`id="${id}"`));
-  assert.ok(html.indexOf('id="mcpToolbarToggle"')<html.indexOf('id="canvasAgentToggle"'));
+  assert.ok(html.indexOf('id="canvasAgentControl"')<html.indexOf('id="mcpToolbarToggle"'),"the MCP button sits in the group at the end of the toolbar");
   assert.match(html,/Connect your AI Agent/);
   assert.ok(manual.includes('id="mcpResetCertificate"'));
   assert.ok(!html.includes('id="mcpLanCopy"'));
@@ -449,7 +450,9 @@ test("native HTTP setup exposes discovery and certificate trust without a stdio 
   const h=harness(url=>response(200,url.endsWith("/configure")?{configured:true,trustRequired:true}:{http,config:{type:"http",url:http.localUrl},canConfigureLocalClients:true}));
   await h.mcpRefreshSettings();assert.equal(h.mcpRuntime.loadError,null);
   await h.nodes.get("mcpCopyInstructions").listeners.click();
-  assert.match(h.clipboard[0],/native Streamable HTTP/);assert.match(h.clipboard[0],/CODEX_CA_CERTIFICATE/);
+  assert.match(h.clipboard[0],/native Streamable HTTP/);
+  // A certificate variable set for the whole computer once stopped the Codex desktop app (PE-1131).
+  assert.match(h.clipboard[0],/Never set CODEX_CA_CERTIFICATE, SSL_CERT_FILE, NODE_EXTRA_CA_CERTS/);assert.doesNotMatch(h.clipboard[0],/persistent trust/);
   assert.match(h.clipboard[0],/Never configure the helper itself as a stdio MCP server/);
   await h.nodes.get("mcpConfigure").listeners.click();
   assert.equal(h.mcpRuntime.configureResult.kind,"trust");assert.match(h.nodes.get("mcpConfigureStatus").textContent,/certificate setup required/);
@@ -502,6 +505,7 @@ test("default setup uses the session CLI without changing global AI trust",async
   assert.match(prompt,/sessionKey/);assert.match(prompt,/documentId/);
   assert.match(prompt,/192\.168\.1\.2:3922/);
   assert.doesNotMatch(prompt,/CODEX_CA_CERTIFICATE/);
+  assert.match(prompt,/Do not [^.]*set any user or system environment variable or trusted certificate/);
   await h.nodes.get("mcpConfigure").listeners.click();
   assert.notEqual(h.mcpRuntime.configureResult.kind,"trust");
   assert.doesNotMatch(h.nodes.get("mcpConfigureStatus").textContent,/certificate setup required/);
@@ -540,20 +544,20 @@ test("troubleshoot coalesces clicks only while clipboard write is pending",async
   assert.equal(button.disabled,false);
 });
 
-test("Cloud MCP explains missing or offline linked devices in the top status bar and permits retry", async()=>{
+test("Cloud MCP says in plain words when a Canvas is on a computer, links nowhere, and permits retry", async()=>{
   for(const language of ["en","zh"]){
     let code="linked_device_required";
     const h=harness(()=>code?response(409,{error:code}):response(200,{canConfigureLocalClients:false,config:null}));
     h.state.language=language;h.context.window.PENECHO_CONFIG.runtime="cloud";h.context.WebSocket=CanvasSocket;
     try{
       await h.mcpToolbarClick();
-      assert.match(h.ui.status,language==="zh"?/MCP 需要关联设备.*连接设备/:/MCP needs a linked device.*Linked Devices/);
-      assert.equal(h.nodes.get("status").children[0].href,"/dashboard.html#devices");
-      assert.equal(h.nodes.get("status").children[0].textContent,h.ui.status);
+      assert.match(h.ui.status,language==="zh"?/请在那台电脑的 PenEcho 里配置 MCP/:/set up in PenEcho on that computer/);
+      assert.doesNotMatch(h.ui.status,/Linked Device|连接设备/);
+      assert.equal((h.nodes.get("status").children||[]).length,0,"the status links to no devices page");
       assert.equal(h.mcpRuntime.socket,null);assert.equal(h.mcpRuntime.wanted,false);
       assert.equal(h.mcpRuntime.reconnectTimer,0);assert.equal(h.nodes.get("mcpToolbarToggle").disabled,false);
       code="device_offline";await h.mcpToolbarClick();
-      assert.match(h.ui.status,language==="zh"?/Linked Device 不可用/:/Linked Device is unavailable/);
+      assert.match(h.ui.status,language==="zh"?/请在那台电脑的 PenEcho 里配置 MCP/:/set up in PenEcho on that computer/);
       assert.equal(h.mcpRuntime.socket,null);
       code=null;await h.mcpToolbarClick();assert.ok(h.mcpRuntime.socket);
     }finally{h.mcpDisconnect();}

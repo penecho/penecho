@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const SMART = require("../public/smart-suggest.js"), PEN = require("../public/pen-intel.js"), SELECT = require("../public/selection.js");
 const NOTE = require("../public/note-card.js");

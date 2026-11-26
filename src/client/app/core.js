@@ -29,10 +29,42 @@
   function canvasCompanionMinimal() {
     return canvasCompanionView === "minimal";
   }
-  function canvasGuestAiRestricted() {
+  // A visitor to penecho.ai who is not signed in. Such a guest has AI on the Canvas only while PenEcho offers a free model
+  // there (GET /api/v1/guest/ai: one model, an allowance for the day); without it the Canvas is for drawing, and AI asks to sign in.
+  // The free model's id is kept on PENECHO_CONFIG.guestAiModelId ("" = no free AI), beside guestCanvas.
+  const canvasGuestAi = { checked:false, usedUp:false, defaultModelId:"", remaining:null, limit:null };
+  function canvasGuest() {
     return window.PENECHO_CONFIG?.guestCanvas === true;
   }
-  if (canvasGuestAiRestricted()) document.documentElement.dataset.penechoGuestAi = "true";
+  function canvasTrialDraft() {
+    const config = window.PENECHO_CONFIG || {};
+    return config.runtime === "cloud" && Boolean(config.browserDraftId) && config.browserCanvasEditing
+      && !CANVAS_COMPANION_REQUESTED && !config.browserDraftConnected && !config.browserDraftBlocked
+      && !config.folderProject && !config.liveShare && !config.playground;
+  }
+  function canvasGuestAiRestricted() {
+    return window.PENECHO_CONFIG?.guestCanvas === true && !window.PENECHO_CONFIG.guestAiModelId;
+  }
+  function setCanvasGuestAi(offer) {
+    const on = offer?.available === true && Boolean(offer.model?.id);
+    canvasGuestAi.checked = true;
+    canvasGuestAi.usedUp = !on && ["guest_limit", "network_limit", "budget"].includes(offer?.reason);
+    canvasGuestAi.defaultModelId = on ? String(offer.model.id) : "";
+    canvasGuestAi.remaining = Number.isFinite(Number(offer?.remaining)) ? Number(offer.remaining) : null;
+    canvasGuestAi.limit = Number.isFinite(Number(offer?.limit)) ? Number(offer.limit) : null;
+    if (!on) {
+      window.PENECHO_CONFIG.guestAiModelId = "";
+    } else {
+      const stored = localStorage.getItem(`${AI_CONNECTION_STORAGE_KEY}:${location.origin}:guest:cloud:hosted`) || "";
+      const match = stored.match(/^hosted:([0-9a-f]{8}-[0-9a-f-]{27})$/i);
+      window.PENECHO_CONFIG.guestAiModelId = match && (!hostedSettings.models.length || hostedSettings.models.some(model => model.id === match[1]))
+        ? match[1]
+        : canvasGuestAi.defaultModelId;
+    }
+    if (on) document.documentElement.dataset.penechoGuestAiOn = "true";
+    else delete document.documentElement.dataset.penechoGuestAiOn;
+  }
+  if (canvasGuest()) document.documentElement.dataset.penechoGuestAi = "true";
   const SIZE = 20000,
     TILE = 512,
     DIRTY_MASK_SCALE = 0.25,
@@ -130,22 +162,7 @@
     imageSelectionMaterial = document.querySelector("#imageSelectionMaterial"),
     textEditorLayer = document.querySelector("#textEditorLayer"),
     textInputHint = document.querySelector("#textInputHint"),
-    tourMain = document.querySelector("main"),
-    tourLayer = document.querySelector("#tourLayer"),
-    tourHighlight = document.querySelector("#tourHighlight"),
-    tourCard = document.querySelector("#tourCard"),
-    tourBadge = document.querySelector(".tour-badge"),
-    tourProgress = document.querySelector("#tourProgress"),
-    tourProgressTrack = document.querySelector("#tourProgressTrack"),
-    tourProgressBar = document.querySelector("#tourProgressBar"),
-    tourTitle = document.querySelector("#tourTitle"),
-    tourBody = document.querySelector("#tourBody"),
-    tourBackButton = document.querySelector("#tourBack"),
-    tourNextButton = document.querySelector("#tourNext"),
-    tourSkipButton = document.querySelector("#tourSkip"),
-    changelogLayer = document.querySelector("#changelogLayer"),
-    changelogDialog = document.querySelector("#changelogDialog"),
-    changelogCloseButton = document.querySelector("#changelogClose"),
+    canvasMain = document.querySelector("main"),
     settingsLayer = document.querySelector("#settingsLayer"),
     settingsBackdrop = document.querySelector("#settingsBackdrop"),
     settingsPanel = document.querySelector("#settingsPanel"),
@@ -222,11 +239,8 @@
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
     settingsCanvasHintsToggle = document.querySelector("#settingsCanvasHintsToggle"),
-    settingsCanvasAgentAutoOpenToggle = document.querySelector("#settingsCanvasAgentAutoOpenToggle"),
     settingsWidgetShadowToggle = document.querySelector("#settingsWidgetShadowToggle"),
-    summonToggle = document.querySelector("#summonToggle"),
-    settingsTourButton = document.querySelector("#settingsTourBtn"),
-    settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
+    summonToggle = document.querySelector("#summonToggle");
 
   function clampPenWidth(value) {
     const width = Number(value);
@@ -294,7 +308,6 @@
     COPY_STATUS_MS = 1600,
     NAVIGATION_HINT_VISIBLE_MS = 5000,
     CANVAS_CHROME_MATERIAL_RESTORE_MS = 1000,
-    CANVAS_AGENT_NAVIGATION_RESTORE_MS = 500,
     ANIMATION_CONTROLS_VISIBLE_MS = 10000;
   function normalizeToolbarReasoningEffort(value) {
     if (typeof value !== "string") return "";
@@ -382,13 +395,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasZoomReset: "Zoom to 100%",
       canvasMoreActions: "More canvas actions",
       canvasMoreShort: "More",
-      canvasEchoPublish: "Publish to Echoes",
+      canvasEchoPublish: "Publish publicly",
       libraryFavorites: "Favorites",
       libraryFavoritesTitle: "Favorite Canvases and Widgets",
       canvasWheelZoom: "Use scrolling to zoom",
       canvasWheelZoomHelp: "Off: scroll to pan; pinch or Ctrl/Cmd + scroll to zoom. Turning this on also changes trackpad scrolling.",
       hand: "Hand: move the canvas (H)",
-      handAutoAIManual: "Hand mode pauses Auto AI · Use the AI button to run it manually.",
+      handAutoAIManual: "Hand mode pauses Auto AI. Choose Run AI to start a request.",
       handAutoAIResume: "Auto AI resumes when you leave Hand mode.",
       handWidgetConfirmedHint: "Widget confirmed · Tap it again to reveal its controls.",
       handImageConfirmedHint: "Placed as a movable image · It stays separate from the canvas and can be moved again.",
@@ -454,13 +467,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       autoDelay: "Auto AI delay",
       autoToolboxPending: "Auto AI paused: settle the open toolbox or trigger AI manually",
       aiTools: "AI tools",
+      aiModelPick: "Model for Canvas AI",
+      aiModelChoose: "Choose a model",
+      aiModelNone: "No models yet",
+      aiModelCloud: "PenEcho Cloud",
+      aiModelKeys: "Your API keys",
+      aiModelSettings: "Canvas AI settings",
       grid: "Canvas grid",
       gridOn: "Show canvas grid",
       gridOff: "Hide canvas grid",
       canvasLockNavigation: "Lock canvas navigation",
       canvasUnlockNavigation: "Unlock canvas navigation",
       canvasNavigationLockedHint: "Canvas view locked · Click the bottom-left lock to unlock",
-      researchGridDefault: "Research grid (off by default)",
       font: "Font",
       aiFont: "AI handwriting",
       illustrationStyle: "Illustration style",
@@ -475,12 +493,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       effortCustomPlaceholder: "Custom value",
       effortApplyCustom: "Use custom reasoning effort",
       effortConfigured: "Configured",
+      effortConfiguredDefault: "Configured ({level})",
       effortConfiguredShort: "Conf",
       effortNone: "None",
+      effortMinimal: "Minimal",
       effortLow: "Low",
       effortMedium: "Medium",
       effortMediumShort: "Med",
       effortHigh: "High",
+      effortXhigh: "XHigh",
       effortMaximum: "Max",
       inkColor: "Ink color",
       customColor: "Custom color",
@@ -510,67 +531,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       debug: "Debug",
       canvas: "Zoomable handwritten AI canvas",
       aiGuide: "AI knowledge guide",
-      triggerAutoAI: "Run Auto AI now",
-      stopAIRequest: "Stop current AI request",
+      triggerAutoAI: "Run AI",
+      stopAIRequest: "Stop AI",
       answer: "Answer",
       hint: "Hint",
       continue: "Continue",
       explain: "Explain",
       plot: "Plot",
       tip: "Pan: two-finger scroll, Hand, or Space + drag · Zoom: pinch or Ctrl/Cmd + scroll",
-      tourReplay: "Feature tour",
-      tourDialog: "PenEcho feature tour",
-      tourBadge: "Quick tour",
-      tourBadgeNew: "What's new",
-      tourProgress: "Tour progress",
-      tourStepCounter: "Step {current} of {total}",
-      tourSkip: "Skip tour",
-      tourBack: "Back",
-      tourNext: "Next",
-      tourDone: "Finish",
-      tourCanvasAgentLauncherTitle: "Open PenEcho Agent",
-      tourMcpTitle: "Bring external AI onto your canvas",
-      tourMcpBody: "Connect Codex, Claude, or another MCP-compatible AI to create and edit canvas content. Set it up in Settings → MCP service, then use this button to connect or disconnect. Give the AI your request in its own app.",
-      tourCanvasAgentLauncherBody: "On larger screens, use the Agent control at the right end of the toolbar. On narrow screens, use the floating button at the lower right. Start multi-step work with folders, files, web research, and the current canvas.",
-      tourCanvasAgentPanelTitle: "Work in the Agent panel",
-      tourCanvasAgentPanelBody: "PenEcho Agent opens as a right sidebar on larger screens and a bottom panel on narrow screens. Type or handwrite a request, add files or a read-only folder project, reference a Widget, and enable web search when available. Resize the desktop sidebar from its left edge.",
-      tourEffortTitle: "Choose how deeply AI reasons",
-      tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
-      tourHandTitle: "Move the canvas anywhere",
-      tourHandBody: "Hand pans the canvas even over large widgets. Click an object to show its toolbar, then use the header to move it or the handles to resize it. Double-click a widget to interact.",
-      tourLassoTitle: "Lasso: circle anything and let AI act on it",
-      tourLassoBody: "Draw a closed loop around handwriting, images or part of a Widget. Choose Solve, Plot, Animate or Organize as Note in the Assist bar, or use Ask for your own question; AI receives only the selected content. Drag or resize the selection to move or scale ink, merged images and enclosed objects. Widgets stay in place. Hold your pen's side button to lasso from any drawing tool.",
-      tourTextTitle: "Add editable text and formulas",
-      tourTextBody: "Choose Text, then click the canvas to create an input box. Markdown and likely LaTeX are formatted automatically; Preview shows the exact placement before confirmation. Confirm with the check button or Ctrl/Cmd + Enter.",
-      tourImageTitle: "Add images and photos",
-      tourImageBody: "Add a picture from your device; large pictures are compressed automatically. In Hand, tap it to reveal move and resize controls. Place keeps it below ink, while Merge makes it erasable.",
-      tourFullscreenTitle: "Give the canvas the whole screen",
-      tourFullscreenBody: "Fullscreen hides surrounding browser space and expands the drawing area. Use the same button—or your browser's fullscreen shortcut—to return.",
-      tourFavoritesTitle: "Add something from Favorites",
-      tourFavoritesBody: "Use the star button to open your saved favorites. Add a favorite Widget to the current Canvas, or open a favorite Canvas here as a new Canvas.",
-      tourNotesCardsTitle: "Keep useful ideas in Notes & Cards",
-      tourNotesCardsBody: "Use Organize as Note on selected content, then save the result to Notes & Cards. Open More → Notes & cards, or Library → Notes & cards, to read, search and add saved notes to another canvas. Saved notes remain available independently of their original canvas.",
-      tourAssistTitle: "Choose your next step with Assist",
-      tourAssistBody: "Pause after writing or adding text and images to see suggested actions near your content. Choose an action, open More for other options, or use Ask to write your own question. You can also lasso existing content to get suggestions for that selection.",
-      tourShareCanvasTitle: "Share this Canvas",
-      tourShareCanvasBody: "Share creates a read-only link to the latest Cloud Canvas. Anyone with the link can see future saved changes. Choose Share publicly to appear on PenEcho after review.",
-      tourCloudTitle: "Keep private work in PenEcho Cloud",
-      tourCloudBody: "Open Cloud to sign in, save and reopen private versioned Canvases by project, and use favorite Canvases or publicly shared Widgets in your current Canvas.",
-      tourManualAITitle: "Run Auto AI on demand",
-      tourManualAIBody: "Click the AI button to run the same prompt used by Auto AI immediately. It uses the current canvas context—or only the lasso selection when one is active.",
-      tourStatusTitle: "Follow every AI request and result",
-      tourStatusBody: "This status indicator reports when AI is observing, writing, finished, delayed, or needs confirmation. When a multi-part draft is ready, nearby controls let you accept or discard the complete response.",
-      tourCanvasTitle: "Navigate the large canvas",
-      tourCanvasBody: "Write with a mouse or stylus. Pan with one finger, the middle mouse button, or Alt-drag. Zoom with a wheel or trackpad, and pinch with two fingers. Your pointer position and zoom level are shown below the canvas.",
-      changelogDialog: "PenEcho release notes",
-      changelogClose: "Close release notes",
-      changelogBadge: "What's new",
-      changelogTitle: "Smarter help, reusable notes",
-      changelogAssist: "Smart Assist suggests useful next steps for handwriting, text and images, with quick actions and your own follow-up questions.",
-      changelogLasso: "Circle handwriting, images or part of a Widget to solve, visualize, animate or organize just the selected content.",
-      changelogNotesCards: "Turn canvas content into reusable notes and knowledge cards. Browse, search and bring saved notes into other canvases.",
-      changelogWidgetRefine: "Refine Widgets with written feedback and contextual actions, with clearer controls and better content fitting.",
-      changelogCanvasPolish: "Improved pen gestures, stroke deletion, navigation and collaboration with Agent and MCP make working on the canvas smoother.",
+      helpMenu: "Help",
+      helpShortcuts: "Keyboard shortcuts",
+      helpFeedback: "Send feedback",
+      aiHint: "Draw anywhere. Then select what you drew and choose Run AI.",
+      aiHintDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsSubtitle: "Choose a category, then adjust its settings without leaving this window.",
@@ -578,6 +551,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsNavAppearance: "Appearance",
       settingsNavConnections: "AI & connections",
       settingsNavCanvas: "Canvas",
+      settingsWhichCanvasTitle: "Canvas AI",
+      settingsWhichCanvasDesc: "Get answers beside your ink when you circle it or choose Run AI.",
+      settingsWhichAppsTitle: "MCP",
+      settingsWhichAppsDesc: "Claude, ChatGPT, or Codex drawing on your Canvases via MCP.",
+      settingsWhichAgentsTitle: "Agents",
+      settingsWhichAgentsDesc: "Working agents that pick up Tasks & Asks on your Lines.",
+      settingsCanvasAiTitle: "Canvas AI model",
+      settingsCanvasAiExplain: "Get answers on the Canvas as you draw. Choose Run AI, circle ink, or use Auto AI.",
+      settingsCanvasAiSelectLabel: "Model for Canvas AI",
+      settingsCanvasAiGuestHint: "Free Canvas AI daily allowance{quota}. Switch among available models anytime.",
+      settingsCanvasAiEmptyHint: "Sign in to PenEcho Cloud or add a connection to pick a Canvas AI model.",
+      settingsCanvasAiUsing: "Using {name}",
       settingsNavShortcuts: "Keyboard shortcuts",
       settingsNavAbout: "Help & about",
       settingsNavCloud: "Account & Cloud",
@@ -600,8 +585,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsShortcutResetDone: "Shortcut reset for {command}.",
       settingsShortcutResetAllDone: "All shortcuts were reset.",
       settingsShortcutCancelled: "Shortcut change cancelled.",
-      shortcutFocusAgent: "Toggle PenEcho Agent",
-      shortcutFocusAgentHelp: "Open or close Agent while Canvas has focus.",
       shortcutSaveCanvasHelp: "Save or overwrite the current Canvas using its existing location.",
       shortcutNewCanvasHelp: "Create a new Canvas and keep the current one in your workspace.",
       shortcutUndoHelp: "Undo the latest Canvas change.",
@@ -619,8 +602,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsAppearanceHelp: "Studio stays consistent while its accent and supporting neutrals change together.",
       settingsColorScheme: "Color scheme",
       settingsColorSchemeHelp: "Twelve restrained, professional Studio palettes.",
-      settingsInterfaceScale: "Interface scale",
-      settingsInterfaceScaleHelp: "Scale the application text and controls.",
+      settingsInterfaceScale: "Page zoom",
+      settingsInterfaceScaleHelp: "Adjust the size of the page.",
       studioPaletteIndigo: "Indigo",
       studioPaletteIndigoHelp: "Creative and balanced",
       studioPaletteGraphite: "Graphite",
@@ -686,14 +669,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsHostedPricing: "How credits are calculated",
       settingsHostedPricingHelp: "Input, cache reads, cache writes and output have separate rates. The displayed multiplier applies to each base rate. Your own connections do not spend PenEcho credits.",
       settingsHostedBilling: "Account & credits ↗",
-      settingsHostedBrowserNotice: "Use PenEcho models to edit this Canvas and save to Cloud. Your own connections, local files and device settings need a linked device.",
-      settingsLinkedDeviceOffline: "Your linked device is offline. Open PenEcho on that device, then refresh. Cloud models and Cloud Library remain available.",
-      canvasAgentCloudContext: "Cloud Canvas",
-      canvasAgentCloudContextHelp: "This connection works with the current Canvas. Use a device connection for local folders and files.",
-      canvasAgentCloudFileFormats: "Cloud documents: PDF text layer, DOCX, XLSX, CSV, TXT, MD, JSON; up to 8 MiB each. No scanned PDFs or OCR. Files expire 30 days after upload.",
-      canvasAgentCloudFileScopeChanged: "This file belongs to another Agent connection or conversation. Remove it and attach it again here. Your draft is kept.",
-      canvasAgentCloudFilesHelp: "Cloud Agent accepts images and the current Canvas. For documents or local files, select a device connection. Your draft is kept.",
-      settingsHostedLinkDevice: "Link a device ↗",
+      settingsHostedBrowserNotice: "Use PenEcho models to edit this Canvas and save to Cloud. Your own connections and local files are in PenEcho on your computer.",
       settingsHostedLoading: "Loading available models…",
       settingsHostedEmpty: "No PenEcho models are available right now.",
       settingsHostedError: "Could not refresh PenEcho models. Try again.",
@@ -831,11 +807,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsProviderApplied: "Saved and applied. New AI requests will use this connection immediately—no restart required.",
       settingsSystemSaved: "Saved. Restart PenEcho to apply these system changes.",
       settingsCanvasSection: "Canvas preferences",
-      settingsCanvasAgentAutoOpen: "Open PenEcho Agent with each canvas",
       settingsWidgetShadow: "Widget & image shadows",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
-      settingsChangelog: "What's new",
       settingsHelpSection: "Help & about",
       settingsDownloadMac: "Download for macOS",
       settingsDownloadWin: "Download for Windows",
@@ -864,7 +838,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       summonTip9: "Tip: remote images remain included when you save the canvas or export a PNG.",
       summonTip10: "Tip: save a canvas to the PenEcho server so other authorized devices can open it.",
       summonTip11: "Tip: pause a few seconds after writing and AI replies on its own; auto mode can be toggled in Settings.",
-      summonTip12: "Tip: click the AI button to run Auto AI immediately; click it again while AI is working to stop the request.",
+      summonTip12: "Tip: choose Run AI to start a request. Choose Stop AI to cancel it.",
       summonTip13: "Tip: circle content with the lasso and AI will work only on that selection.",
       summonTip14: "Tip: the text tool understands Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
       summonTip15: "Tip: AI drafts can be moved as a group, or accepted and discarded item by item.",
@@ -928,9 +902,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       studioNavigatorOpen: "Open recent work",
       studioNavigatorClose: "Close recent work",
       studioNavigatorDevice: "Device",
-      studioNavigatorOneMessage: "1 message",
       studioNavigatorRetrySource: "Couldn’t load. Click to retry.",
-      studioNavigatorNewChat: "New chat on this canvas",
       studioNavigatorLastModified: "Last modified",
       studioNavigatorNewest: "Newest first",
       studioNavigatorName: "Name",
@@ -949,7 +921,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       studioNavigatorNewForYou: "New for you",
       studioNavigatorNewCount: "{count} new updates",
       studioNavigatorSearchCanvases: "Search canvases…",
-      studioNavigatorSearchChats: "Search chats…",
       studioNavigatorSearchAI: "Search AI canvases…",
       studioNavigatorLocation: "Canvas location",
       studioNavigatorSort: "Sort canvases",
@@ -959,7 +930,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       shortcutCanvasContentSearchHelp: "Find formulas, diagrams and sketches across canvases by word or drawing.",
       studioNavigatorSearch: "Search canvases, chats…",
       studioNavigatorAll: "All",
-      studioNavigatorAgents: "Chats",
       studioNavigatorCanvases: "Canvases",
       studioNavigatorCurrent: "Current",
       studioNavigatorOpened: "Open",
@@ -967,27 +937,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       studioNavigatorRecent: "Recent",
       studioNavigatorEmpty: "Nothing saved yet. Canvases you save or open appear here with their chats.",
       studioNavigatorNoMatch: "No matching recent work.",
-      studioNavigatorAgentEmpty: "No saved Canvas conversations yet.",
-      studioNavigatorAgentNoMatch: "No matching conversations.",
-      studioNavigatorUnknownCanvas: "Saved canvas",
       studioNavigatorDraftCanvas: "Unsaved canvas",
-      studioNavigatorSessionCount: "{count} sessions",
       studioNavigatorCanvasUnavailable: "This conversation's canvas is no longer available.",
-      studioNavigatorConversationUnavailable: "This conversation is no longer available for the selected canvas.",
       studioNavigatorCanvasEmpty: "No canvases saved in this location yet.",
       studioNavigatorCanvasNoMatch: "No matching canvases.",
       studioNavigatorCanvasLoading: "Loading canvases…",
-      studioNavigatorMessageCount: "{count} messages",
       studioNavigatorManageAgents: "View all recent work",
       studioNavigatorManageCanvases: "Manage Canvas Library",
       studioNavigatorLibraryShort: "Library",
-      studioNavigatorRestored: "Restored {canvas} · continuing {conversation}",
-      studioNavigatorDeleteSession: "Delete session “{name}”",
-      studioNavigatorDeleteSessionTitle: "Delete session?",
-      studioNavigatorDeleteSessionAction: "Delete",
-      studioNavigatorDeleteSessionConfirm: "“{name}” will be permanently deleted. This cannot be undone.",
-      studioNavigatorDeleteSessionBusy: "Stop the current Agent session before deleting it.",
-      studioNavigatorDeleteSessionFailed: "This session could not be deleted. Try again.",
       saveLocation: "Location",
       storageThisDevice: "This device",
       storagePenEchoServer: "Server",
@@ -1010,6 +967,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       newCanvas: "New",
       saveCanvas: "Save canvas",
       saveCurrentSnapshot: "Save",
+      guestSignIn: "Sign in",
+      guestSignUp: "Sign up",
       canvasUntitledName: "Untitled canvas",
       canvasRename: "Rename",
       canvasRenameCurrent: "Rename current canvas",
@@ -1025,8 +984,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasWelcomeKicker: "start here",
       canvasWelcomeDraw: "Draw by hand",
       canvasWelcomeDrawBody: "Ink, text and images. Choose a suggestion or ask AI.",
-      canvasWelcomeAgent: "Ask PenEcho Agent",
-      canvasWelcomeAgentBody: "Describe a diagram, plan, prototype or quiz.",
       canvasWelcomeMcp: "Connect your AI",
       canvasWelcomeMcpBody: "Codex, Claude, Kimi and other MCP clients.",
       canvasWelcomeMcpAction: "Set up MCP",
@@ -1040,24 +997,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsThinkingHelp: "Show a quiet pulse while AI is working.",
       settingsCanvasHints: "Tool and shortcut hints",
       settingsCanvasHintsHelp: "Show tool tips and keyboard shortcuts at the bottom of the canvas.",
-      settingsAgentAutoOpenHelp: "Auto AI pauses while the Agent panel is open.",
       settingsWheelHelp: "Off: scroll pans; pinch or Ctrl/⌘ + scroll zooms.",
       settingsGridHelp: "Choose the background for your canvas.",
       settingsWidgetShadowHelp: "Lift widgets off the canvas with a soft shadow.",
       gridNone: "None",
       gridDots: "Dots",
       gridLines: "Lines",
-      canvasAgentConnectionTitle: "No AI connection yet",
-      canvasAgentConnectionHelp: "Use PenEcho Cloud models, or add your own API key.",
-      canvasAgentAddConnection: "Add connection",
-      canvasAgentSignIn: "Sign in to Cloud",
-      canvasAgentNewCanvasStatus: "New conversation · this canvas",
       widgetDelete: "Delete widget",
       widgetAskAgent: "Ask Agent",
-      canvasWelcomeTitle: "Start with a sketch, or ask AI",
-      canvasWelcomeBody: "Write anywhere on the canvas. PenEcho Agent or your own AI assistant turns it into diagrams, notes and working widgets.",
+      canvasWelcomeTitle: "Start with a sketch, or try one of these",
+      canvasWelcomeBody: "Write or draw anywhere. Select your work and choose Run AI.",
       canvasBrowserWelcomeTitle: "Start sketching on your Cloud Canvas",
-      canvasBrowserWelcomeBody: "Choose a PenEcho cloud model in Settings to work with this Canvas online. Connect a device to use local files and connections.",
+      canvasGuestWelcomeBody: "Draw or write here. Sign in to save your work.",
+      canvasTrialWelcomeBody: "Draw anywhere. Your draft stays in this browser. Sign in to save it to your account.",
+      canvasBrowserWelcomeBody: "Choose a PenEcho cloud model in Settings to work with this Canvas online. Local files and your own connections are in PenEcho on your computer.",
       exportPng: "Export PNG",
       newCanvasTitle: "New canvas",
       closeCanvasTitle: "Close canvas",
@@ -1111,8 +1064,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       loadSnapshot: "Load",
       deleteSnapshot: "Delete",
       emptyDeviceHistory: "Nothing saved on this device yet",
-      serverHistoryDeviceOffline: "Linked device is offline. Open PenEcho on that device and keep it connected to access its canvases.",
-      serverHistoryDeviceRequired: "No linked device. Link a device to access its canvases.",
+      serverHistoryDeviceOffline: "Canvases on your computer are not shown here. Keep a project in Cloud to open it on penecho.ai.",
+      serverHistoryDeviceRequired: "Canvases on your computer are not shown here. Keep a project in Cloud to open it on penecho.ai.",
       emptyServerHistory: "Nothing saved on this server yet",
       emptyCloudHistory: "Nothing saved to Cloud yet",
       emptyProjectHistory: "Nothing saved in this project yet",
@@ -1137,7 +1090,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintWidgetAdded: "Hover the widget: Interact in place, or open Refine for suggestions.",
       canvasHintWidgetFullscreen: "Double-click a widget to maximize it.",
       canvasHintWidgetInline: "Double-click a widget to interact.",
-      canvasHintShortcutAgent: "{shortcut} Open or close Agent",
       canvasHintShortcutSave: "{shortcut} Save canvas",
       canvasHintShortcutUndoRedo: "{undo} Undo · {redo} Redo",
       canvasHintShortcutLibrary: "{shortcut} Open Canvas Library",
@@ -1145,6 +1097,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintShortcutSettings: "{shortcut} Open Settings",
       canvasHintMcp: "Settings → MCP: connect an AI client.",
       canvasHintGuestAi: "Draw freely. Sign in to use AI.",
+      canvasHintGuestAiUsed: "Today's free AI is used up. Sign in to keep going.",
       canvasHintMcpConnected: "MCP connected: your AI can edit this canvas.",
       canvasHintHand: "Drag to pan · click an object to select",
       canvasHintHandAlt: "{shortcut} Hold to pan temporarily",
@@ -1273,7 +1226,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       savedView: "View",
       savedListView: "List view",
       savedGridView: "Grid view",
-      browseEchoes: "Browse public shares",
       savedCount: "{count} favorites",
       savedLoading: "Loading favorites…",
       savedRefreshing: "Refreshing…",
@@ -1301,9 +1253,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       savedErrorOpen: "This Canvas could not be opened.",
       savedErrorToggle: "The favorite could not be updated. Try again shortly.",
       closeSavedCrafts: "Close Favorites",
+      collaborateCanvasAction: "Collaborate",
+      collaborateCanvas: "Collaborate live",
       shareCanvasAction: "Share",
       shareCanvasCloud: "Share Canvas",
       sharedCanvasCloud: "Canvas shared",
+      shareDrawTogether: "Draw together",
+      shareDrawTogetherDesc: "Anyone with the link can draw with you live",
+      shareViewLink: "View link",
+      shareViewLinkDesc: "Read-only snapshot link in PenEcho Cloud",
+      renameCanvasAction: "Rename",
+      moveCanvasAction: "Move its line to…",
+      openFolderFinderAction: "Open folder in Finder",
+      downloadMenuAction: "Download",
+      presentAction: "Present",
+      mcpDrawHereAction: "MCP can draw here",
+      canvasSettingsAction: "Canvas settings",
+      deleteCanvasAction: "Delete",
+      backLabel: "Back",
+      pngImageAction: "PNG image",
+      pdfAction: "PDF",
       shareWidget: "Share widget",
       sharedWidget: "Widget shared",
       openInNewPage: "Open in a new page",
@@ -1316,93 +1285,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       favoriteCanvases: "Favorite Canvases",
       favoriteWidgets: "Favorite Widgets",
       projects: "Projects",
-      explore: "Public shares",
-      canvasAgentChooseModel: "Choose model",
       shortcutPenHelp: "Select the pen to write on the canvas.",
-      canvasAgentShort: "Agent",
-      canvasAgent: "PenEcho Agent",
-      openCanvasAgent: "Open PenEcho Agent",
-      closeCanvasAgent: "Close PenEcho Agent",
-      newCanvasAgentConversation: "New PenEcho Agent conversation",
-      canvasAgentAutoAIFocusPaused: "Auto AI paused while Agent is open",
       canvasAgentExternalAIPaused: "External conversation selected · Canvas Auto AI is paused. Feedback is kept for the external AI.",
-      canvasAgentProject: "Manage projects and files",
-      canvasAgentProjectClose: "Close project manager",
-      canvasAgentProjectBoundary: "This version supports read access only. For file safety, modifying files is not supported.",
-      canvasAgentWorkspace: "Workspace",
-      canvasAgentProjectManager: "Project manager",
-      canvasAgentProjectManagerDescription: "Projects are folders. Files are added from the PenEcho Agent composer.",
-      canvasAgentProjects: "Projects",
-      canvasAgentProjectsDescription: "A project is a folder the Agent can read while working.",
-      canvasAgentProjectFolders: "project folders",
-      canvasAgentNewProject: "New project",
-      canvasAgentCancelProjectCreate: "Cancel",
-      canvasAgentNoProjects: "No project folders yet. Create one by choosing a folder.",
-      canvasAgentFiles: "Files",
-      canvasAgentFilesDescription: "Files already used with PenEcho Agent appear here.",
-      canvasAgentKnownFiles: "known files",
-      canvasAgentNoFiles: "No files yet. Add one from the chat composer.",
-      canvasAgentFilesAddHint: "Add a file from the chat composer, or paste it with Ctrl/Cmd+V.",
-      canvasAgentFolderProject: "Folder project",
-      canvasAgentUploadedFile: "Uploaded file",
-      canvasAgentLocalFile: "Local file",
-      canvasAgentCurrentResource: "Current",
-      canvasAgentNoProject: "No project",
-      canvasAgentClearResource: "Clear selected resource: {name}",
-      canvasAgentBrowserSpace: "No project",
-      canvasAgentBrowserSpaceDetail: "Use the current canvas without a project or file",
-      canvasAgentUploadEmpty: "Choose a non-empty file.",
-      canvasAgentUploadTooLarge: "Uploads are limited to 32 MB.",
-      canvasAgentFileReadFailed: "The selected file could not be read.",
-      canvasAgentFilePreparing: "Copying the file to PenEcho…",
-      canvasAgentAttachmentLimit: "A message can include at most five files and images in any combination.",
-      canvasAgentFileInstructionRequired: "Add instructions for the attached file or files before sending.",
-      canvasAgentFileReadOnly: "Read only",
-      canvasAgentRemoveProject: "Remove resource",
-      canvasAgentRemoveProjectTitle: "Remove resource?",
-      canvasAgentRemoveFolderConfirm: "Remove “{name}” from PenEcho? The folder and its .penecho conversation history will stay on disk.",
-      canvasAgentRemoveNativeFileConfirm: "Remove “{name}” from PenEcho? The original file will stay on disk, but its saved project conversations will be deleted.",
-      canvasAgentRemoveUploadConfirm: "Delete the uploaded copy “{name}” and its saved project conversations from PenEcho? This cannot be undone.",
-      canvasAgentServerFolders: "Choose a project folder",
-      canvasAgentServerFoldersDetail: "Select a host folder to register it as a read-only project.",
-      canvasAgentNoHostFolders: "No host folders are available",
-      canvasAgentRootBack: "Back",
-      canvasAgentRootSelect: "Use this folder",
-      canvasAgentRootTruncated: "Some folders are not shown.",
-      canvasAgentRootLoading: "Loading folders…",
-      canvasAgentRootApprovalRequired: "Approval required",
-      canvasAgentRootApprovalTitle: "Approve private folder access?",
-      canvasAgentRootApprovalDetail: "Allow PenEcho to browse “{name}” for this folder-selection session.",
-      canvasAgentRootApprovalReject: "Cancel",
-      canvasAgentRootApprovalAllow: "Allow once",
-      canvasAgentRootPermissionDenied: "The system denied access. Change the folder's system permissions to use it.",
-      canvasAgentApproval: "Authorize project command",
-      canvasAgentApprovalTitle: "Authorize critical command?",
-      canvasAgentApprovalReject: "Reject",
-      canvasAgentApprovalAllow: "Allow once",
-      canvasAgentHistory: "Sessions on this Canvas",
-      canvasAgentHistoryManageAll: "View all recent work",
-      canvasAgentResizeTop: "Resize PenEcho Agent from the top edge",
-      canvasAgentResizeBottom: "Resize PenEcho Agent from the bottom edge",
-      canvasAgentResizeLeft: "Resize PenEcho Agent from the left edge",
-      canvasAgentResizeRight: "Resize PenEcho Agent from the right edge",
-      canvasAgentHistoryEmpty: "No saved conversations for this canvas",
-      canvasAgentHistoryCurrent: "Current",
-      canvasAgentHistoryViewing: "Viewing saved conversation",
-      canvasAgentHistorySaveFailed: "Agent history could not be saved in this browser. Free device storage and retry before closing this page.",
-      canvasAgentHistoryReturn: "Back to current conversation",
-      canvasAgentHistoryUntitled: "New conversation",
-      canvasAgentHistoryAttachments: "{count} attachments",
       canvasAgentReadyConnect: "Ready to connect",
       canvasAgentReady: "Ready",
       canvasAgentNoConnections: "No available connections",
-      canvasAgentConnectionStale: "This connection is no longer available on the linked device. Choose an AI connection; your draft is kept.",
+      canvasAgentConnectionStale: "This connection is no longer available. Choose an AI connection; your draft is kept.",
       canvasAgentConnecting: "Connecting…",
       canvasAgentResumed: "Conversation resumed",
       canvasAgentWorking: "Agent is working…",
-      canvasAgentCheckingCodex: "Checking Codex setup…",
-      canvasAgentSettingUpCodex: "Setting up Codex for first use…",
-      canvasAgentRepairingCodex: "Repairing Codex setup…",
       canvasAgentInitialStatePreparing: "Preparing the initial Canvas state…",
       canvasAgentDisconnected: "Disconnected — send to reconnect",
       canvasAgentErrorBusy: "The AI service is busy, so processing stopped early. Continue shortly.",
@@ -1415,322 +1306,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentErrorConnection: "The AI service could not be reached. Check the connection and try again.",
       canvasAgentErrorGeneric: "The Agent could not finish this request. Open the error details for more information.",
       canvasAgentErrorRequestRejected: "The model service rejected this request (HTTP 400). Open details for the reason; repeating the same request may fail again.",
-      canvasAgentErrorViewDetails: "View details",
-      canvasAgentErrorCode: "Error code",
-      canvasAgentErrorMessage: "Original message",
-      canvasAgentEmptyTitle: "Turn your ideas into professional diagrams.",
-      canvasAgentEmptyBody: "Describe your content and include a diagram type, such as architecture diagram, sequence diagram, or workflow diagram. Agent will draw it on Canvas.",
-      canvasAgentPlaceholder: "Describe what to make, or write on the canvas and ask about it",
-      canvasAgentMessage: "Message PenEcho Agent",
       canvasAgentChooseConnection: "Choose AI connection",
-      canvasAgentModel: "AI model",
-      canvasAgentThinking: "Thinking",
-      canvasAgentThinkingOff: "Off",
-      canvasAgentThinkingOffHelp: "Answer directly, no extra reasoning",
-      canvasAgentThinkingLowHelp: "Quick edits and short questions",
-      canvasAgentThinkingMediumHelp: "Balanced — good for most canvas work",
-      canvasAgentThinkingHighHelp: "Complex diagrams, maths, handwriting",
-      canvasAgentThinkingMaxHelp: "Hardest problems; slowest, uses most credits",
-      canvasAgentThinkingDefault: "Model default",
-      canvasAgentThinkingDefaultHelp: "from connection settings",
-      canvasAgentThinkingCustom: "Custom",
-      canvasAgentThinkingCustomPlaceholder: "e.g. xhigh, 8000 tokens",
-      canvasAgentThinkingFootnote: "Also used by Auto AI on the canvas. Higher levels are slower and use more credits.",
-      canvasAgentThinkingUnavailable: "This model does not support thinking levels",
-      canvasAgentThinkingNextMessage: "Thinking set to {level} · applies from your next message",
-      canvasAgentPromptSuggestions: "Suggested prompts",
-      canvasAgentPromptSuggestionsTitle: "Try asking",
-      canvasAgentPromptSuggestionsHint: "Suggestions adapt to the current context.",
-      canvasAgentPromptCategories: "Prompt categories",
-      canvasAgentPromptCategoryNotes: "Notes",
-      canvasAgentPromptCategoryFiles: "Files & Projects",
-      canvasAgentPromptCategoryCreate: "Diagrams & More",
-      canvasAgentPromptDisclosureMore: "More",
-      canvasAgentPromptDisclosureLess: "Less",
-      canvasAgentPromptMore: "Show suggested prompts",
-      canvasAgentPromptLess: "Hide suggested prompts",
-      canvasAgentPromptFocusVisual: "Visualize",
-      canvasAgentPromptFocusSimplify: "Simplify",
-      canvasAgentPromptFocusOrganize: "Organize",
-      canvasAgentPromptFocusRevise: "Revise",
-      canvasAgentPromptFocusSlides: "Slides",
-      canvasAgentPromptFocusAnalyze: "Analyze",
-      canvasAgentPromptFocusLearn: "Learn",
-      canvasAgentPromptFocusPlan: "Plan",
-      canvasAgentPromptFocusExplain: "Explain",
-      canvasAgentPromptFocusArchitecture: "Architecture",
-      canvasAgentPromptFocusSequence: "Sequence",
-      canvasAgentPromptFocusEnhance: "Enhance",
-      canvasAgentPromptFocusLayer: "Layer",
-      canvasAgentPromptFocusPublish: "Publish",
-      canvasAgentPromptFocusFollowCanvasCues: "Follow canvas cues",
-      canvasAgentPromptSimpleDiagramTitle: "Simplify the Core Ideas",
-      canvasAgentPromptSequenceDiagramSourceTitle: "Sequence diagram",
-      canvasAgentPromptWorkflowTitle: "Workflow diagram",
-      canvasAgentPromptOrganizeTitle: "Organize the Current Canvas",
-      canvasAgentPromptApplyAnnotationsTitle: "Apply My Canvas Annotations",
-      canvasAgentPromptFollowCanvasCuesTitle: "Follow My Canvas Cues",
-      canvasAgentPromptCheckWorkTitle: "Find and Mark My Mistakes",
-      canvasAgentPromptPptTitle: "Create a Presentation Layout",
-      canvasAgentPromptExcelTitle: "Chart Spreadsheet Insights",
-      canvasAgentPromptCompareFilesTitle: "Compare Related Files",
-      canvasAgentPromptProjectEvidenceTitle: "Find Evidence Across the Project",
-      canvasAgentPromptReleaseReadinessTitle: "Review the Project for Release",
-      canvasAgentPromptTransformerTitle: "Explain Transformer Architecture",
-      canvasAgentPromptUkTripTitle: "Plan a UK Journey",
-      canvasAgentPromptInteractivePrototypeTitle: "Clickable prototype",
-      canvasAgentPromptInteractiveCalculatorTitle: "Create an Interactive Calculator",
-      canvasAgentPromptSelfCheckQuizTitle: "Self-check quiz",
-      canvasAgentPromptFileTitle: "Explain the Current File",
-      canvasAgentPromptArchitectureTitle: "Architecture diagram",
-      canvasAgentPromptHandwritingTitle: "Enhance My Handwritten Notes",
-      canvasAgentPromptImageVisualTitle: "Explain the Current Image",
-      canvasAgentPromptImageLayerTitle: "Annotate the Image Clearly",
-      canvasAgentPromptImagePublishTitle: "Publish Insights from Image",
-      canvasAgentPromptSpreadsheetVisualTitle: "Visualize Key Spreadsheet Trends",
-      canvasAgentPromptSpreadsheetLayerTitle: "Build a Canvas Dashboard",
-      canvasAgentPromptSpreadsheetPublishTitle: "Publish Spreadsheet Findings",
-      canvasAgentPromptPresentationVisualTitle: "Map the Presentation Story",
-      canvasAgentPromptPresentationLayerTitle: "Improve the Presentation Structure",
-      canvasAgentPromptPresentationPublishTitle: "Publish the Presentation Summary",
-      canvasAgentPromptDocumentVisualTitle: "Map the Document Argument",
-      canvasAgentPromptDocumentStudyTitle: "Create Study Notes",
-      canvasAgentPromptDocumentPublishTitle: "Publish the Document Findings",
-      canvasAgentPromptCodeVisualTitle: "Map the Code Architecture",
-      canvasAgentPromptCodeLayerTitle: "Explain the Code Layers",
-      canvasAgentPromptCodePlanTitle: "Plan the Next Changes",
-      canvasAgentPromptFileLayerTitle: "Add a File Overview",
-      canvasAgentPromptFilePublishTitle: "Publish the File Findings",
-      canvasAgentPromptProjectPlanTitle: "Plan the Project Work",
-      canvasAgentPromptProjectPublishTitle: "Publish the Project Summary",
-      canvasAgentPromptSelectionVisualTitle: "Explain the Selected Content",
-      canvasAgentPromptSelectionLayerTitle: "Add Context to Selection",
-      canvasAgentPromptSelectionPublishTitle: "Publish the Selection Summary",
-      canvasAgentPromptNotesVisualTitle: "Structure My Handwritten Notes",
-      canvasAgentPromptNotesPublishTitle: "Organize and Publish Notes",
-      canvasAgentPromptCanvasVisualTitle: "Explain the Current Canvas",
-      canvasAgentPromptCanvasLayerTitle: "Add a Canvas Overview",
-      canvasAgentPromptCanvasPublishTitle: "Publish the Canvas Summary",
-      canvasAgentPromptFile: "Do not return only a written explanation. Create and display a visual file overview on Canvas showing its purpose, structure, key relationships, and important details. If there is no file, create a visual overview of the current Canvas instead.",
-      canvasAgentPromptArchitecture: "Do not return only text. Use my description, the current Canvas, or the selected project to draw and display a professional architecture diagram on Canvas, clearly showing system layers, core modules, dependencies, and data flow.",
-      canvasAgentPromptSimpleDiagram: "Do not only describe the content. Create and display a separate, simple visual diagram on Canvas showing the core concepts, relationships, and essential labels.",
-      canvasAgentPromptSequenceDiagramSource: "Do not return only text or source code. Use my description or the current content to draw and display a professional sequence diagram on Canvas, clearly showing participants, call order, responses, and exception branches.",
-      canvasAgentPromptWorkflow: "Do not return only text. Use my description or the current content to draw and display a professional workflow diagram on Canvas, clearly showing the start, steps, decision branches, responsible roles, and outcomes.",
-      canvasAgentPromptPpt: "Turn the current view into a presentation-ready layout and send the final image in chat.",
-      canvasAgentPromptHandwriting: "Keep the current handwriting completely unchanged—do not edit, erase, or move it. Add a transparent explanatory layer over it; overlap is acceptable only if the original strokes remain clearly visible, and use annotations, connectors, links, graphics, or motion where appropriate to make the notes more vivid and intuitive.",
-      canvasAgentPromptExcel: "Do not return only a written analysis. Create and display visual charts on Canvas for the attached spreadsheet's key metrics, trends, anomalies, and conclusions, then summarize the findings in chat.",
-      canvasAgentPromptCompareFiles: "Compare the selected or related files. Do not stop at a written explanation: create a visual comparison on Canvas using a table, relationship map, or annotated highlights. Show meaningful differences, conflicting facts, and missing information, then add a concise chat summary of what to keep or reconcile.",
-      canvasAgentPromptProjectEvidence: "Search the current project for evidence related to my question. Do not return only text: create a visual evidence map on Canvas that connects exact files and relevant sections to the findings. Clearly separate confirmed facts from assumptions, then summarize the key conclusions in chat.",
-      canvasAgentPromptReleaseReadiness: "Review the current project's changed code, configuration, tests, and documentation. Do not return only a written checklist: create a visual release-readiness board on Canvas that links each prioritized blocker to the affected area. Explain the impact and provide the smallest verification checklist in chat.",
-      canvasAgentPromptTransformer: "Do not only explain Transformer in chat. Create and display a layered visual diagram on Canvas with pseudocode, key data flow, and tensor shapes.",
-      canvasAgentPromptUkTrip: "Do not return only itinerary text. Create and display a visual 15-day UK travel map on Canvas with daily routes, transport, stays, and highlights.",
-      canvasAgentPromptInteractivePrototype: "Do not only describe the design: build and display a working interface prototype on Canvas from the current sketch or requirements. Show the main states visually and include navigation, realistic sample content, essential interactions, and concise supporting annotations.",
-      canvasAgentPromptInteractiveCalculator: "Do not only explain how it works: build and display a working interactive calculator on Canvas from the formulas or rules I provide. Use a clear visual layout with labeled inputs, live results, validation, concise explanations, and reset.",
-      canvasAgentPromptSelfCheckQuiz: "Do not only outline the questions: build and display an interactive self-check quiz on Canvas from the current notes or attached material. Use a clear visual layout with varied questions, immediate explanations, progress feedback, and retry.",
-      canvasAgentPromptOrganize: "Do not only describe how to organize it. Reorganize and display the current Canvas as clear visual notes with themes, hierarchy, and information gaps.",
-      canvasAgentPromptApplyAnnotations: "Apply my new Canvas annotations and sketches: add, remove, move, resize, or reconnect only clearly marked content, and ask about ambiguity first.",
-      canvasAgentPromptFollowCanvasCues: "Follow my latest Canvas drawings, images, text boxes, and annotations. Continue and refine the work without changing unmarked content; ask if unclear.",
-      canvasAgentPromptCheckWork: "Keep my original content unchanged—do not edit, erase, or move it. Review the current page and find every mistake: mark each error in place with a clear, compact annotation, and write the correct answer or steps in a suitable open space nearby, visually linked to its error. Briefly summarize in chat what was wrong and why.",
-      canvasAgentPromptImageVisual: "Do not return only text. Create and display a visual analysis on Canvas of the current image's subjects, structure, relationships, important details, and uncertainties.",
-      canvasAgentPromptImageLayer: "Keep the image unchanged and add a transparent explanation layer with labels, links, graphics, or motion.",
-      canvasAgentPromptImagePublish: "Extract the image's key information; publish visuals to Canvas and send the summary in chat.",
-      canvasAgentPromptSpreadsheetVisual: "Do not return only a written analysis. Create and display visual charts on Canvas showing the spreadsheet's metrics, trends, anomalies, field relationships, and data quality.",
-      canvasAgentPromptSpreadsheetLayer: "Keep the source data and add a Canvas dashboard with metric cards, charts, and explanations.",
-      canvasAgentPromptSpreadsheetPublish: "Organize conclusions, risks, and next steps; put charts on Canvas and the summary in chat.",
-      canvasAgentPromptPresentationVisual: "Do not only summarize the presentation in chat. Create and display a visual overview diagram on Canvas connecting its structure and key conclusions.",
-      canvasAgentPromptPresentationLayer: "Preserve the meaning, unify the deck, and add essential diagrams and explanation layers.",
-      canvasAgentPromptPresentationPublish: "Create a speaking outline, slide revision list, and summary; put visuals on Canvas.",
-      canvasAgentPromptDocumentVisual: "Do not only summarize the document or paper in chat. Create and display a visual explanation on Canvas of its topic, structure, arguments, key concepts, and conclusions.",
-      canvasAgentPromptDocumentStudy: "Do not return only written notes. Create and display visual study notes on Canvas with terminology, difficult ideas, examples, diagrams, and review points.",
-      canvasAgentPromptDocumentPublish: "Create a summary, action items, and open questions; publish useful diagrams to Canvas.",
-      canvasAgentPromptCodeVisual: "Do not only explain the code in chat. Create and display a visual code map on Canvas showing entry points, core logic, dependencies, data flow, and key boundaries.",
-      canvasAgentPromptCodeLayer: "Do not return only written suggestions. Keep code behavior unchanged, and create and display a visual module map on Canvas with key flows, comment ideas, risks, and relevant links.",
-      canvasAgentPromptCodePlan: "Create an implementation summary, risk list, and phased plan, with architecture on Canvas.",
-      canvasAgentPromptFileLayer: "Keep the file unchanged and add a transparent visual explanation in open Canvas space.",
-      canvasAgentPromptFilePublish: "Organize the file's structure, summary, conclusions, and actions; put diagrams on Canvas.",
-      canvasAgentPromptProjectPlan: "Do not return only a written plan. Create and display a visual project plan on Canvas showing goals, milestones, dependencies, risks, and acceptance criteria, then add a concise chat summary.",
-      canvasAgentPromptProjectPublish: "Do not return only handoff text. Create and display a visual project map on Canvas showing entry points, directory responsibilities, dependencies, risks, and run steps, then provide the handoff summary in chat.",
-      canvasAgentPromptSelectionVisual: "Do not only explain the selection in chat. Create and display a visual explanation on Canvas of only the selected or referenced content's purpose, structure, relationships, and key details.",
-      canvasAgentPromptSelectionLayer: "Keep the selection unchanged and add a transparent explanation layer with labels and links nearby.",
-      canvasAgentPromptSelectionPublish: "Organize conclusions and next steps; put visuals on Canvas and the summary in chat.",
-      canvasAgentPromptNotesVisual: "Do not only explain the handwritten notes in chat. Keep the original handwriting unchanged, and create and display a visual knowledge map on Canvas showing its themes, hierarchy, relationships, and questions.",
-      canvasAgentPromptNotesPublish: "Do not return only a written summary. Create and display visual notes on Canvas with a transcription, knowledge map, tasks, and review points, then send a concise summary in chat.",
-      canvasAgentPromptCanvasVisual: "Do not only describe the current Canvas in chat. Create and display a visual overview on Canvas showing its content, structure, relationships, and information gaps.",
-      canvasAgentPromptCanvasLayer: "Keep the canvas meaning and objects, improve layout, and add transparent explanations in open space.",
-      canvasAgentPromptCanvasPublish: "Do not return only a copy-ready recap. Create and display a visual summary board on Canvas showing the key conclusions and actions, then send the concise copy-ready recap in chat.",
-      canvasAgentPromptSimpleDiagramSummary: "Draw a simple diagram of the core concepts and relationships.",
-      canvasAgentPromptSequenceDiagramSourceSummary: "Who calls whom, when, and in what order.",
-      canvasAgentPromptWorkflowSummary: "Steps, decisions and hand-offs.",
-      canvasAgentPromptOrganizeSummary: "Organize the canvas into clear visual notes and surface gaps.",
-      canvasAgentPromptApplyAnnotationsSummary: "Apply only clearly marked Canvas changes; ask if anything is unclear.",
-      canvasAgentPromptFollowCanvasCuesSummary: "Continue from the latest cues without changing unmarked content.",
-      canvasAgentPromptCheckWorkSummary: "Mark each error in place and write the correct answer or steps nearby.",
-      canvasAgentPromptPptSummary: "Turn this view into a presentation layout and return the final image.",
-      canvasAgentPromptExcelSummary: "Chart the spreadsheet's key metrics, trends, anomalies, and conclusions.",
-      canvasAgentPromptCompareFilesSummary: "Create a visual Canvas comparison, then summarize differences, conflicts, gaps, and resolutions.",
-      canvasAgentPromptProjectEvidenceSummary: "Map project evidence visually on Canvas, cite exact sources, and separate facts from assumptions.",
-      canvasAgentPromptReleaseReadinessSummary: "Build a visual Canvas release-readiness board with prioritized blockers and verification steps.",
-      canvasAgentPromptTransformerSummary: "Explain Transformer with layers, data flow, shapes, and pseudocode.",
-      canvasAgentPromptUkTripSummary: "Map a 15-day UK trip with routes, transport, stays, and highlights.",
-      canvasAgentPromptInteractivePrototypeSummary: "A working UI mock you can try on the canvas.",
-      canvasAgentPromptInteractiveCalculatorSummary: "Build and display a visual Canvas calculator with live results and validation.",
-      canvasAgentPromptSelfCheckQuizSummary: "Questions with instant feedback.",
-      canvasAgentPromptFileSummary: "Explain this file's purpose, structure, relationships, and details visually.",
-      canvasAgentPromptArchitectureSummary: "Services, data stores and traffic, laid out cleanly.",
-      canvasAgentPromptHandwritingSummary: "Preserve the handwriting and add a transparent visual explanation layer.",
-      canvasAgentPromptImageVisualSummary: "Explain the image's subjects, structure, relationships, and key details.",
-      canvasAgentPromptImageLayerSummary: "Keep the image unchanged and add a transparent explanation layer.",
-      canvasAgentPromptImagePublishSummary: "Extract key image information; put visuals on Canvas and summary in chat.",
-      canvasAgentPromptSpreadsheetVisualSummary: "Chart key metrics, trends, anomalies, relationships, and data quality.",
-      canvasAgentPromptSpreadsheetLayerSummary: "Keep source data and add a Canvas dashboard with charts and context.",
-      canvasAgentPromptSpreadsheetPublishSummary: "Put conclusions and risks in chat, with supporting charts on Canvas.",
-      canvasAgentPromptPresentationVisualSummary: "Connect the presentation's structure and conclusions in one diagram.",
-      canvasAgentPromptPresentationLayerSummary: "Preserve the meaning, unify the deck, and add essential diagrams.",
-      canvasAgentPromptPresentationPublishSummary: "Create a speaking outline, revision list, summary, and Canvas visuals.",
-      canvasAgentPromptDocumentVisualSummary: "Explain the document's structure, arguments, concepts, and conclusions.",
-      canvasAgentPromptDocumentStudySummary: "Turn the document into study notes with examples and review points.",
-      canvasAgentPromptDocumentPublishSummary: "Summarize actions and open questions; put useful diagrams on Canvas.",
-      canvasAgentPromptCodeVisualSummary: "Explain code entry points, logic, dependencies, data flow, and boundaries.",
-      canvasAgentPromptCodeLayerSummary: "Keep behavior unchanged; add a module map, flows, risks, and links.",
-      canvasAgentPromptCodePlanSummary: "Create an implementation summary, risks, phases, and architecture.",
-      canvasAgentPromptFileLayerSummary: "Keep the file unchanged and explain it visually in open Canvas space.",
-      canvasAgentPromptFilePublishSummary: "Organize the file's structure, conclusions, actions, and diagrams.",
-      canvasAgentPromptProjectPlanSummary: "Plan goals, milestones, dependencies, risks, and acceptance criteria.",
-      canvasAgentPromptProjectPublishSummary: "Map project entry points, directories, dependencies, risks, and run steps.",
-      canvasAgentPromptSelectionVisualSummary: "Explain only the selected content's purpose, structure, and relationships.",
-      canvasAgentPromptSelectionLayerSummary: "Keep the selection unchanged and add a nearby explanation layer.",
-      canvasAgentPromptSelectionPublishSummary: "Put selection conclusions in chat and supporting visuals on Canvas.",
-      canvasAgentPromptNotesVisualSummary: "Explain the notes' themes, hierarchy, relationships, and questions.",
-      canvasAgentPromptNotesPublishSummary: "Turn handwriting into a transcript, knowledge map, tasks, and review points.",
-      canvasAgentPromptCanvasVisualSummary: "Explain the canvas content, structure, relationships, and gaps at a glance.",
-      canvasAgentPromptCanvasLayerSummary: "Preserve canvas meaning, improve layout, and add explanations in open space.",
-      canvasAgentPromptCanvasPublishSummary: "Organize the canvas summary, conclusions, actions, and copy-ready recap.",
-      canvasAgentPromptSolveProblemTitle: "Solve It Step by Step",
-      canvasAgentPromptSolveProblem: "Keep my original work unchanged. Solve the problem shown on the current Canvas or selection step by step: write each step and the final answer clearly next to the problem on Canvas, then briefly explain the method in chat.",
-      canvasAgentPromptSolveProblemSummary: "Work through the problem on Canvas with clear steps and a final answer.",
-      canvasAgentPromptExplainStepTitle: "Explain This Step by Step",
-      canvasAgentPromptExplainStep: "Do not return only text. Explain the selected or most recent dense content (notation, code, or a diagram) on Canvas step by step: annotate each part in plain language, define the symbols, and connect it to the overall idea.",
-      canvasAgentPromptExplainStepSummary: "Unpack dense notation, code, or a diagram in plain language.",
-      canvasAgentPromptAnswerQuestionTitle: "Answer My Question on Canvas",
-      canvasAgentPromptAnswerQuestion: "Answer the question or request I wrote on the current Canvas or selection. Place a clear answer next to it on Canvas, using math, a sketch, or a small diagram where it helps, and keep my original writing unchanged.",
-      canvasAgentPromptAnswerQuestionSummary: "Answer the written question beside it, with visuals where helpful.",
-      canvasAgentPromptHintTitle: "Give Me a Hint",
-      canvasAgentPromptHint: "Do not solve it for me. Look at my current problem and attempt on Canvas and give one helpful hint or approach next to it, without revealing the final answer or the full solution.",
-      canvasAgentPromptHintSummary: "A clue for how to continue, without revealing the answer.",
-      canvasAgentPromptNextStepTitle: "Continue with the Next Step",
-      canvasAgentPromptNextStep: "Keep my existing work unchanged. Continue my current derivation, calculation, or proof with only the next step, written in my notation directly below the last line on Canvas, and briefly say why it follows.",
-      canvasAgentPromptNextStepSummary: "Write only the next line of my derivation or calculation.",
-      canvasAgentPromptPracticeProblemsTitle: "Create Practice Problems",
-      canvasAgentPromptPracticeProblems: "Do not only list questions in chat. Create and display 3 new practice problems on Canvas that match the topic and level of my current content, ordered from easier to harder, with the answers in a collapsed section so I can try them first.",
-      canvasAgentPromptPracticeProblemsSummary: "New problems at my level, with answers kept hidden.",
-      canvasAgentPromptTypesetTitle: "Typeset My Handwriting",
-      canvasAgentPromptTypeset: "Typeset my handwritten text, math, or code on the current Canvas or selection into clean, readable content. Preserve its meaning, order, and notation exactly; do not solve, answer, or add new content. Place the result beside the original.",
-      canvasAgentPromptTypesetSummary: "Turn handwriting and math into clean typeset text, same meaning.",
-      canvasAgentPromptTranslateNotesTitle: "Translate My Notes",
-      canvasAgentPromptTranslateNotes: "Keep my original notes unchanged. Translate the text on the current Canvas or selection into English, or into Chinese if it is already in English. Place the translation beside the original, keeping the layout, terms, and formulas aligned.",
-      canvasAgentPromptTranslateNotesSummary: "Place a faithful translation beside the original notes.",
-      canvasAgentPromptActionItemsTitle: "Extract Action Items and Decisions",
-      canvasAgentPromptActionItems: "Do not return only a list in chat. Extract the decisions, action items, owners, and deadlines from the attached files, project, or current Canvas notes, and create and display a visual task board on Canvas grouped by owner or status; flag anything without an owner or date.",
-      canvasAgentPromptActionItemsSummary: "Pull decisions, owners, and deadlines into a visual task board.",
-      canvasAgentPromptTimelineTitle: "Build a Timeline",
-      canvasAgentPromptTimeline: "Do not return only text. Find the dates, events, and milestones in the attached files, project, or current Canvas, and create and display a clear visual timeline on Canvas in chronological order, marking dependencies, gaps, and anything overdue.",
-      canvasAgentPromptTimelineSummary: "Arrange dates, events, and milestones in order on Canvas.",
-      canvasAgentPromptGlossaryTitle: "Build a Key-Term Glossary",
-      canvasAgentPromptGlossary: "Do not return only a list in chat. Build and display a visual glossary on Canvas of the key terms, acronyms, and symbols in the attached files, project, or current notes, with a one-sentence definition and the source of each, grouping related terms.",
-      canvasAgentPromptGlossarySummary: "Key terms with short definitions and where they appear.",
-      canvasAgentPromptCodeReviewTitle: "Review Code for Risks",
-      canvasAgentPromptCodeReview: "Do not return only written comments. Review the attached code or selected project for bugs, security risks, edge cases, and missing tests, and create and display a visual review board on Canvas that ranks each finding by severity and links it to the exact file and location; summarize the top fixes in chat.",
-      canvasAgentPromptCodeReviewSummary: "A visual review board of bugs, risks, and missing tests.",
-      canvasAgentPromptStructureDiagramTitle: "Turn Content into a Diagram",
-      canvasAgentPromptStructureDiagram: "Do not return only text. Turn the current Canvas content or selection into the most fitting structured diagram on Canvas (flowchart, mind map, state, or relationship diagram), preserving every label, relationship, direction, and order from the original.",
-      canvasAgentPromptStructureDiagramSummary: "Convert notes or steps into a clean flowchart or mind map.",
-      canvasAgentPromptPlotGraphTitle: "Plot Functions and Graphs",
-      canvasAgentPromptPlotGraph: "Do not only describe the graph. Plot the functions or equations on the current Canvas or selection as an interactive graph on Canvas with labeled axes, key points such as intercepts, extrema, and intersections, and a short legend.",
-      canvasAgentPromptPlotGraphSummary: "Draw an interactive graph of the functions or equations shown.",
-      canvasAgentPromptAnimateConceptTitle: "Explain with an Animation",
-      canvasAgentPromptAnimateConcept: "Do not return only text. Create and display an animated explanation on Canvas that teaches how the concept, process, or problem in the current content works, using timed stages, motion, or changing quantities, with play controls and short captions.",
-      canvasAgentPromptAnimateConceptSummary: "Teach the idea through timed visual stages and motion.",
-      canvasAgentPromptCreateVisualTitle: "Create the Visual I Described",
-      canvasAgentPromptCreateVisual: "Do not return only text. Using my notes as the brief, create and display the visual I described or requested (an illustration, chart, scene, or figure) in open space on Canvas without changing existing content.",
-      canvasAgentPromptCreateVisualSummary: "Draw the picture, chart, or scene described on Canvas.",
-      canvasAgentPromptIllustrateTitle: "Illustrate My Sketch",
-      canvasAgentPromptIllustrate: "Keep my original sketch unchanged. Beside it on Canvas, create and display a cute children's picture-book illustration of the same subject, pose and drawn details, with soft pastel colors, thin hand-drawn outlines and a simple background that suits the subject.",
-      canvasAgentPromptIllustrate3d: "Keep my original sketch unchanged. Beside it on Canvas, create and display a soft 3D illustration of the same subject, pose and drawn details, like a glossy toy figure, with a simple studio backdrop.",
-      canvasAgentPromptIllustrateSummary: "A finished illustration with the same subject and pose, in your illustration style.",
-      canvasAgentPromptAnimateSketchTitle: "Bring My Drawing to Life",
-      canvasAgentPromptAnimateSketch: "Keep my original drawing unchanged. Create and display an animated version of it on Canvas in which the drawn subject itself moves naturally (walking, flying, swaying, or blinking) while keeping its look and line style.",
-      canvasAgentPromptAnimateSketchSummary: "Animate the drawn character or object itself.",
-      canvasAgentPromptFinishDrawingTitle: "Finish My Drawing",
-      canvasAgentPromptFinishDrawing: "Complete my unfinished drawing on the current Canvas in place: add only the missing contours and features in the same line style, stroke weight, and composition, without redrawing what is already there.",
-      canvasAgentPromptFinishDrawingSummary: "Complete missing contours in the same line style.",
-      canvasAgentPromptCleanShapesTitle: "Clean Up My Shapes",
-      canvasAgentPromptCleanShapes: "Clean up the rough hand-drawn shapes on the current Canvas or selection: turn them into precise boxes, circles, triangles, lines, and arrows at the same positions and sizes, keeping their connections and labels.",
-      canvasAgentPromptCleanShapesSummary: "Straighten rough boxes, circles, lines, and arrows.",
-      canvasAgentPromptComparisonTableTitle: "Compare Options in a Table",
-      canvasAgentPromptComparisonTable: "Do not return only text. Create and display a visual comparison table on Canvas of the options, products, or approaches in my notes or files, with clear criteria, pros and cons, highlighted differences, and a short recommendation.",
-      canvasAgentPromptComparisonTableSummary: "Weigh options side by side with a clear recommendation.",
-      canvasAgentPromptFlashcardsTitle: "Create Review Flashcards",
-      canvasAgentPromptFlashcards: "Do not only list terms in chat. Build and display interactive review flashcards on Canvas from the current notes or attached material, one key term, formula, or fact per card, with flip-to-reveal answers, shuffle, and progress.",
-      canvasAgentPromptFlashcardsSummary: "Interactive cards for terms, formulas, and facts.",
-      canvasAgentPromptCategorySuggest: "Suggest",
-      canvasAgentPromptCategoryFilesShort: "Files",
-      canvasAgentPromptCategoryCreateShort: "Diagrams",
-      canvasAgentSuggestLoading: "PenEchoLLM is reading your Canvas, files, and project…",
-      canvasAgentSuggestRefreshing: "Updating for the latest changes…",
-      canvasAgentSuggestIdle: "Click the message box to get suggestions for the current Canvas, files, and project.",
-      canvasAgentSuggestStale: "The Canvas, files, or project changed since these suggestions.",
-      canvasAgentSuggestRefresh: "Refresh",
-      canvasAgentSuggestEmpty: "No strong suggestions for this context. Try the other tabs, or add ink, a file, or a project.",
-      canvasAgentSuggestFailed: "PenEchoLLM did not answer. Click Refresh to try again.",
-      canvasAgentSuggestBlocked: "Today's PenEchoLLM allowance is used.",
-      canvasAgentSuggestOff: "Smart suggestions are off. Turn them on in Settings to rank requests for this context.",
-      canvasAgentSuggestRecommended: "Recommended",
-      canvasAgentSuggestUsage: "PenEchoLLM usage",
-      canvasAgentType: "Type with keyboard",
-      canvasAgentHandwrite: "Write by hand",
-      canvasAgentClearInk: "Clear",
-      canvasAgentInkPrompt: "The attached image named canvas-agent-message.webp, or canvas-agent-message.png when WebP is unavailable, is additional user-authored message text, not an image-analysis request. Transcribe it internally and treat the transcription as if the user typed it after any text above; then respond to or carry out the resulting request. Do not describe the handwriting image or any automatically supplied canvas-state image unless the resulting request asks you to. Ask one concise clarification only if important handwriting is ambiguous.",
-      canvasAgentInkOnly: "Extract as a regular prompt and execute",
-      canvasAgentInkImageLimit: "Extracting handwriting as a regular prompt uses one image slot. Remove one attachment before sending.",
-      canvasAgentSend: "Send",
-      canvasAgentSteer: "Steer",
-      canvasAgentStop: "Stop",
-      canvasAgentSelected: "Selected",
-      canvasAgentReferenced: "Referenced",
-      canvasAgentReferences: "Referenced canvas objects",
-      canvasAgentReferenceWidget: "Reference a Widget",
-      canvasAgentReferenceWidgetTitle: "Pick a Widget to reference",
-      canvasAgentReferenceHelp: "Choose one from the list, or click it directly on the canvas.",
-      canvasAgentReferenceSearch: "Search canvas Widgets",
-      canvasAgentReferenceCollapse: "Collapse Widget picker",
-      canvasAgentReferenceAdd: "Reference",
-      canvasAgentRemoveReference: "Remove reference",
-      canvasAgentReferenceLimit: "You can reference up to 20 Widgets in one message.",
-      canvasAgentReferenceEmpty: "There are no Widgets on this canvas yet.",
-      canvasAgentReferenceNoMatch: "No matching Widgets.",
-      canvasAgentReferencePickMiss: "No Widget there — click directly on a Widget or choose one from the list.",
-      canvasAgentReferenceCountOne: "1 Widget",
-      canvasAgentReferenceCount: "{count} Widgets",
-      canvasAgentMove: "Drag to move PenEcho Agent",
-      canvasAgentAttach: "Attach files and images",
-      canvasAgentAttachTitle: "Attach up to five files and images",
-      canvasAgentSearchOn: "Internet search on",
-      canvasAgentSearchOff: "Turn on internet search",
-      canvasAgentSearchUnavailable: "Internet search is unavailable in this build",
-      canvasAgentAttachments: "Attachments",
-      canvasAgentRemoveAttachment: "Remove attachment",
-      canvasAgentOpenFile: "Double-click to open {name} with the system app",
-      canvasAgentOpenFileFailed: "The system could not open this file.",
-      canvasAgentOpenFileUnavailable: "This file is no longer available.",
-      canvasAgentImageSourceTooLarge: "The original image is larger than 12 MB. Choose a smaller image.",
-      canvasAgentImageCompressionTooLarge: "PenEcho could not resize and convert this image to a WebP below 5 MB. Choose a smaller image.",
-      canvasAgentImagesTooLarge: "Images in one message can total at most 25 MB.",
-      canvasAgentImageUnsupported: "This image format is not supported.",
-      canvasAgentImagePreparing: "Preparing attachments…",
-      canvasAgentImagePrompt: "Please inspect the attached image or images.",
-      canvasAgentImageOnly: "Attached image",
-      canvasAgentScreenshot: "Canvas screenshot",
-      canvasAgentScreenshotDownload: "Download {name}",
       canvasAgentToolInspect: "Inspect canvas",
       canvasAgentToolRead: "Read canvas object",
       canvasAgentToolCapture: "Capture canvas",
@@ -1764,23 +1340,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentToolTargetSelection: "selection",
       canvasAgentToolTargetRegion: "canvas region",
       canvasAgentToolUse: "Use canvas tool",
-      canvasAgentToolRunning: "Working…",
-      canvasAgentToolDone: "Done",
-      canvasAgentToolFailed: "Failed",
-      canvasAgentToolArguments: "Request details",
-      canvasAgentToolResult: "Result details",
-      canvasAgentCopyBlock: "Copy",
-      canvasAgentBlockCopied: "Copied",
-      canvasAgentBlockCopyFailed: "Copy failed",
-      canvasAgentCopyResponse: "Copy response",
-      canvasAgentResponseCopied: "Copied",
-      canvasAgentResponseCopyFailed: "Copy failed",
-      canvasAgentLikeResponse: "Helpful",
-      canvasAgentCriticizeResponse: "Needs improvement",
-      canvasAgentRetryResponse: "Retry response",
-      canvasAgentRetryMessage: "Retry response",
-      canvasAgentCodeBlock: "Code",
-      canvasAgentTextBlock: "Text",
       pluginManagerTitle: "Plugin manager",
       pluginManagerDescription: "Choose which capabilities the AI can use. Disabled plugins add no prompt or canvas widget runtime.",
       closePlugins: "Close plugins",
@@ -1847,7 +1406,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       improvePluginWithAi: "Improve with AI",
       saveAndEnablePlugin: "Save and enable",
       pluginMarketplaceNote: "The future Community library will let authors share plugins for everyone to use free.",
-      pluginBytes: "{bytes} / 12000 bytes",
+      pluginBytes: "{bytes} / 100000 bytes",
       pluginStylesBytes: "{bytes} / 32000 bytes",
       pluginDraftValid: "Ready to save as {name}",
       pluginDraftInvalid: "Fix the plugin document: {error}",
@@ -1888,6 +1447,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetDownloading: "Preparing Widget image…",
       widgetDownloaded: "Widget image downloaded",
       widgetDownloadFailed: "Widget image could not be downloaded",
+      downloadPdf: "Download PDF",
+      pdfPreparing: "Preparing PDF…",
+      pdfDownloaded: "PDF downloaded",
+      pdfFailed: "PDF could not be created",
       favoriteWidget: "Favorite widget",
       favoriteWidgetSaving: "Saving favorite…",
       unfavoriteWidget: "Remove widget favorite",
@@ -1896,7 +1459,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetRefine: "Refine",
       widgetRefinePanelTitle: "Refine this widget",
       widgetRefineApplyMarks: "Refine with my marks",
-      assistAgentExpand: "Expand PenEcho Agent",
       assistAgentClose: "Stop and close",
       assistAgentBusy: "PenEcho Agent is already working. Finish or stop that task before starting this suggestion.",
       assistAgentUnavailable: "This task needs PenEcho Agent. Connect an AI model on an editable Canvas to continue.",
@@ -2009,7 +1571,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
     storedCanvasHintsEnabled = localStorage.getItem("penecho-canvas-hints-enabled"),
-    storedCanvasAgentAutoOpen = localStorage.getItem("penecho-canvas-agent-auto-open"),
     storedWidgetShadowEnabled = localStorage.getItem("penecho-widget-shadow"),
     storedAiFont = localStorage.getItem(AI_FONT_STORAGE_KEY),
     storedIllustrationStyle = localStorage.getItem(ILLUSTRATION_STYLE_STORAGE_KEY),
@@ -2026,16 +1587,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     configuredAutoDelay = Number(window.PENECHO_CONFIG?.autoAiDelayMs),
     configuredAiTimeout = Number(window.PENECHO_CONFIG?.aiRequestTimeoutMs),
     configuredAiEffort = normalizeToolbarReasoningEffort(window.PENECHO_CONFIG?.aiEffort),
-    configuredCanvasAgentAutoOpen = typeof window.PENECHO_CONFIG?.canvasAgentAutoOpen === "boolean" ? window.PENECHO_CONFIG.canvasAgentAutoOpen : null,
     configuredAccessSession = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || ""),
     serverAutoDelay = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 ? configuredAutoDelay : DEFAULT_AUTO_DELAY,
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
     initialCanvasHintsEnabled = storedCanvasHintsEnabled !== "false",
-    initialCanvasAgentAutoOpen = window.PENECHO_CONFIG?.desktopApp === true && configuredCanvasAgentAutoOpen !== null
-      ? configuredCanvasAgentAutoOpen
-      : storedCanvasAgentAutoOpen === null ? configuredCanvasAgentAutoOpen === true : storedCanvasAgentAutoOpen === "true",
     initialWidgetShadowEnabled = storedWidgetShadowEnabled === "true",
     initialAiFont = normalizeAiFont(storedAiFont),
     initialEraserMode = ["eraser", "area-eraser"].includes(storedEraserMode) ? storedEraserMode : "eraser",
@@ -2045,7 +1602,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialSnapshotLocation = window.PENECHO_CONFIG?.browserDraftId ? "device" : window.PENECHO_CONFIG?.runtime === "viewer"
       ? "device"
       : ["device", "server", "cloud"].includes(storedSnapshotLocation) ? storedSnapshotLocation : window.PENECHO_CONFIG?.runtime === "cloud" ? "cloud" : "server",
-    initialAiEffort = storedAiEffort || configuredAiEffort || (window.PENECHO_CONFIG?.runtime === "cloud" && !window.PENECHO_CONFIG?.guestCanvas ? "high" : "config"),
+    initialAiEffort = storedAiEffort || configuredAiEffort || "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function canvasClientId() {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -2060,7 +1617,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const config = window.PENECHO_CONFIG || {}, cloud = config.runtime === "cloud";
     const account = String(config.connectionAccountId || "");
     if (cloud || hosted) {
-      if (!account) return "";
+      // A guest with free AI has one connection, the free model; nothing is chosen and nothing is stored.
+      if (!account) return cloud && hosted && config.guestCanvas === true && config.guestAiModelId ? `${location.origin}:guest:cloud:hosted` : "";
       const origin = cloud ? location.origin : String(config.cloudOrigin || "https://penecho.ai");
       const owner = `${origin}:${account}:${cloud ? "cloud" : "local"}`;
       return hosted ? `${owner}:hosted` : config.linkedDeviceId ? `${owner}:device:${config.linkedDeviceId}` : "";
@@ -2072,6 +1630,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return scope ? `${AI_CONNECTION_STORAGE_KEY}:${scope}` : "";
   }
   function selectedAiConnectionId() {
+    if (window.PENECHO_CONFIG?.guestCanvas === true) {
+      const key = aiConnectionStorageKey(true), stored = key ? String(localStorage.getItem(key) || "").trim() : "";
+      if (/^hosted:[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(stored)
+        && (!hostedSettings.models.length || hostedSettings.models.some(model => `hosted:${model.id}` === stored))) {
+        return stored;
+      }
+      return window.PENECHO_CONFIG.guestAiModelId ? `hosted:${window.PENECHO_CONFIG.guestAiModelId}` : "default";
+    }
     const hostedKey = aiConnectionStorageKey(true), localKey = aiConnectionStorageKey();
     const hosted = hostedKey && localStorage.getItem(`${hostedKey}:selected`) === "true";
     const key = hosted ? hostedKey : localKey;
@@ -2084,6 +1650,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!key) return false;
     localStorage.setItem(key, id);
     if (hostedKey) localStorage.setItem(`${hostedKey}:selected`, String(hosted));
+    if (window.PENECHO_CONFIG?.guestCanvas === true && hosted) window.PENECHO_CONFIG.guestAiModelId = id.slice(7);
     return true;
   }
   function aiConnectionSelectionError() {
@@ -2253,9 +1820,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       set auto(value) { this.autoPreference = Boolean(value); },
       summonEnabled: initialSummonEnabled,
       canvasHintsEnabled: initialCanvasHintsEnabled,
-      canvasAgentAutoOpenPreference: initialCanvasAgentAutoOpen,
-      get canvasAgentAutoOpen() { return this.canvasAgentAutoOpenPreference && !canvasCompanionMinimal(); },
-      set canvasAgentAutoOpen(value) { this.canvasAgentAutoOpenPreference = Boolean(value); },
       widgetShadowEnabled: initialWidgetShadowEnabled,
       summonAnchor: null,
       timer: 0,
@@ -2321,10 +1885,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasChromeMaterialTimer: 0,
       canvasChromeMaterialDeadline: 0,
       canvasChromeMaterialActive: false,
-      canvasAgentNavigationActive: false,
-      canvasAgentNavigationWasOpen: false,
-      canvasAgentNavigationRestoreTimer: 0,
-      canvasAgentNavigationRestoreDeadline: 0,
+      // The pointers that are moving the Canvas right now. MCP waits for them before it moves the view itself.
       canvasAgentNavigationPointerIds: new Set(),
       aiOrbIdleTimer: 0,
       statusKey: "ready",
@@ -2338,53 +1899,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_CANCELLED = "AI_CANCELLED";
   const AI_REJECTED = "AI_REJECTED";
   const AI_SUPERSEDED = "AI_SUPERSEDED";
-  const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
-  const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "1.4.0";
-  // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
-  const FEATURE_TOUR_STEPS = Object.freeze([
-    { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
-    { id: "favorites-add-v1", targets: ["#craftsButton"], titleKey: "tourFavoritesTitle", bodyKey: "tourFavoritesBody", placement: "bottom", radius: 8 },
-    { id: "notes-cards-v1", targets: ["#canvasMoreBtn", "#historyBtn"], titleKey: "tourNotesCardsTitle", bodyKey: "tourNotesCardsBody", placement: "bottom", radius: 8 },
-    { id: "hand-v1", targets: ["#handToolBtn"], titleKey: "tourHandTitle", bodyKey: "tourHandBody", placement: "bottom", radius: 7 },
-    { id: "core-text-v1", targets: ["#textToolBtn"], titleKey: "tourTextTitle", bodyKey: "tourTextBody", placement: "bottom", radius: 7 },
-    { id: "smart-assist-v1", targets: ["#viewport"], titleKey: "tourAssistTitle", bodyKey: "tourAssistBody", placement: "center", radius: 10, padding: 5 },
-    { id: "core-lasso-v3", targets: ["#lassoToolBtn"], titleKey: "tourLassoTitle", bodyKey: "tourLassoBody", placement: "bottom", radius: 7 },
-    { id: "core-image-v1", targets: ["#imagePickerBtn"], titleKey: "tourImageTitle", bodyKey: "tourImageBody", placement: "bottom", radius: 7 },
-    { id: "core-fullscreen-v1", targets: ["#fullscreenBtn"], titleKey: "tourFullscreenTitle", bodyKey: "tourFullscreenBody", placement: "bottom", radius: 7 },
-    { id: "cloud-share-canvas-v1", targets: ["#shareCanvasBtn"], titleKey: "tourShareCanvasTitle", bodyKey: "tourShareCanvasBody", placement: "bottom", radius: 7 },
-    { id: "cloud-workspace-v1", targets: ["#cloudAccountBtn"], titleKey: "tourCloudTitle", bodyKey: "tourCloudBody", placement: "bottom", radius: 8 },
-    { id: "mcp-canvas-v1", targets: ["#mcpToolbarToggle"], titleKey: "tourMcpTitle", bodyKey: "tourMcpBody", placement: "bottom", radius: 8, padding: 4 },
-    { id: "canvas-agent-launcher-v2", targets: ["#canvasAgentToggle"], titleKey: "tourCanvasAgentLauncherTitle", bodyKey: "tourCanvasAgentLauncherBody", placement: "bottom", radius: 9, padding: 4 },
-    { id: "canvas-agent-panel-v2", targets: ["#canvasAgentPanel"], titleKey: "tourCanvasAgentPanelTitle", bodyKey: "tourCanvasAgentPanelBody", placement: "left", radius: 18, padding: 4, preview: "canvas-agent-panel" },
-    { id: "core-manual-ai-v1", targets: ["#aiToolbarRun", "#aiOrb"], titleKey: "tourManualAITitle", bodyKey: "tourManualAIBody", placement: "left", radius: 50 },
-    { id: "core-status-v1", targets: ["#aiStatusArea"], titleKey: "tourStatusTitle", bodyKey: "tourStatusBody", placement: "bottom", radius: 999 },
-    { id: "core-navigation-v1", targets: ["#viewport"], titleKey: "tourCanvasTitle", bodyKey: "tourCanvasBody", placement: "center", radius: 10, padding: 5 },
-  ]);
-  const featureTour = {
-    active: false,
-    steps: [],
-    index: 0,
-    progress: TOUR.parseProgress(null),
-    replay: false,
-    newOnly: false,
-    restoreFocus: null,
-    restoreScrollX: 0,
-    restoreScrollY: 0,
-    positionFrame: 0,
-    retryFrame: 0,
-    resizeObserver: null,
-    pendingObserver: null,
-    activeObserver: null,
-    targets: [],
-    shownIds: new Set(),
-    autoChecked: false,
-    canvasAgentOpenedForTour: false,
-  };
-  const changelog = {
-    active: false,
-    restoreFocus: null,
-  };
   const COLOR_CLASS = { "#2563eb": "color-blue", "#1f2937": "color-black", "#dc2626": "color-red", "#ea580c": "color-orange", "#ca8a04": "color-gold", "#16a34a": "color-green", "#0891b2": "color-cyan", "#9333ea": "color-purple" };
   const runtimeStyleRules = new Map();
   function runtimeElementStyle(element, key) {
@@ -2524,7 +2038,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         content.append(keycap);
       } else content.append(part);
     }
-    if (state.canvasHintKey === "canvasHintGuestAi") {
+    if (["canvasHintGuestAi", "canvasHintGuestAiUsed"].includes(state.canvasHintKey)) {
       const signIn = document.createElement("button");
       signIn.type = "button";
       signIn.className = "canvas-hint-signin";
@@ -2551,9 +2065,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   let canvasGuestAiHintSeen = false;
   function showCanvasGuestAiHint({ explicit = false } = {}) {
     if (!canvasGuestAiRestricted()) return false;
-    if (explicit || !canvasGuestAiHintSeen) {
+    // Until PenEcho has said whether this guest has free AI, only an AI request itself is answered with the hint.
+    if (explicit || canvasGuestAi.checked && !canvasGuestAiHintSeen) {
       canvasGuestAiHintSeen = true;
-      showCanvasHint("canvasHintGuestAi");
+      showCanvasHint(canvasGuestAi.usedUp ? "canvasHintGuestAiUsed" : "canvasHintGuestAi");
     }
     return true;
   }
@@ -2601,96 +2116,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function hideSummon() {
     summonFX?.hide();
   }
-  function readFeatureTourProgress() {
-    try {
-      const stored = TOUR.parseProgress(localStorage.getItem(FEATURE_TOUR_STORAGE_KEY));
-      featureTour.progress = TOUR.markSeen(stored, featureTour.progress.seen);
-    } catch {
-      featureTour.progress = TOUR.parseProgress(featureTour.progress);
-    }
-    return featureTour.progress;
-  }
-  function markFeatureTourStepsSeen(steps) {
-    featureTour.progress = TOUR.markSeen(featureTour.progress, steps.map((step) => step.id));
-    try {
-      localStorage.setItem(FEATURE_TOUR_STORAGE_KEY, TOUR.serializeProgress(featureTour.progress));
-    } catch {}
-  }
-  function featureTourViewport() {
+  function canvasOverlayViewport() {
     const visual = window.visualViewport,
       scale = pageLayoutScale();
     return visual
       ? { left: visual.offsetLeft / scale, top: visual.offsetTop / scale, width: visual.width / scale, height: visual.height / scale }
       : { left: 0, top: 0, width: window.innerWidth / scale, height: window.innerHeight / scale };
-  }
-  function featureTourElements(step) {
-    return (step?.targets || [])
-      .map((selector) => document.querySelector(selector))
-      .filter((element) => {
-        if (!element?.isConnected || element.hidden || !element.getClientRects().length) return false;
-        const rect = element.getBoundingClientRect(),
-          computed = window.getComputedStyle(element);
-        return TOUR.rectHasArea(rect) && computed.display !== "none" && computed.visibility !== "hidden" && computed.visibility !== "collapse";
-      });
-  }
-  function featureTourTargetRect(step, elements = featureTourElements(step)) {
-    return TOUR.unionRects(elements.map(pageLayoutRect));
-  }
-  function featureTourStepAvailable(step) {
-    if (step?.preview === "canvas-agent-panel") {
-      const panel = document.querySelector("#canvasAgentPanel"),
-        panelRect = featureTourTargetRect(step),
-        toggleRect = featureTourTargetRect({ targets:["#canvasAgentToggle"] });
-      return Boolean(panel?.isConnected && (panelRect || toggleRect));
-    }
-    return Boolean(featureTourTargetRect(step));
-  }
-  function availableFeatureTourSteps(steps) {
-    return (Array.isArray(steps) ? steps : []).filter(featureTourStepAvailable);
-  }
-  function syncFeatureTourPreview(step) {
-    const showCanvasAgent = step?.preview === "canvas-agent-panel";
-    if (showCanvasAgent && canvasAgentPanel.hidden) {
-      featureTour.canvasAgentOpenedForTour = true;
-      openCanvasAgent({ focus:false, connect:false, animate:false });
-    } else if (!showCanvasAgent && featureTour.canvasAgentOpenedForTour) {
-      featureTour.canvasAgentOpenedForTour = false;
-      if (!canvasAgentPanel.hidden) closeCanvasAgent({ focus:false, animate:false });
-    }
-  }
-  function featureTourTargetNeedsScroll(rect) {
-    const viewport = featureTourViewport(),
-      margin = 10;
-    return rect && (rect.top < viewport.top + margin || rect.left < viewport.left + margin || rect.bottom > viewport.top + viewport.height - margin || rect.right > viewport.left + viewport.width - margin);
-  }
-  function observeFeatureTourTargets(elements) {
-    featureTour.resizeObserver?.disconnect();
-    featureTour.resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(scheduleFeatureTourPosition) : null;
-    for (const element of elements) featureTour.resizeObserver?.observe(element);
-  }
-  function stopActiveFeatureTourObserver() {
-    featureTour.activeObserver?.disconnect();
-    featureTour.activeObserver = null;
-  }
-  function featureTourObserverTarget() {
-    if (window.PENECHO_CONFIG?.runtime === "viewer") return null;
-    const target = document.body;
-    return typeof Node === "function" && target instanceof Node ? target : null;
-  }
-  function observeActiveFeatureTour() {
-    stopActiveFeatureTourObserver();
-    const target = featureTourObserverTarget();
-    if (typeof MutationObserver !== "function" || !target) return false;
-    featureTour.activeObserver = new MutationObserver((records) => {
-      if (featureTour.active && records.some((record) => !tourLayer.contains(record.target))) scheduleFeatureTourPosition();
-    });
-    featureTour.activeObserver.observe(target, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["hidden", "class", "style", "aria-hidden", "open"],
-    });
-    return true;
   }
   function focusTargetAvailableOutsideLayer(layer, target) {
     return Boolean(target?.isConnected && typeof target.focus === "function" && target.disabled !== true && target !== document.body && !layer?.contains(target) && !target.closest?.('[hidden], [inert], [aria-hidden="true"]'));
@@ -2707,312 +2138,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     layer.setAttribute("aria-hidden", "true");
     return true;
   }
-  function scheduleFeatureTourPosition() {
-    if (!featureTour.active || featureTour.positionFrame) return;
-    featureTour.positionFrame = requestAnimationFrame(positionFeatureTour);
-  }
-  function handleFeatureTourViewportChange() {
-    if (featureTour.active) scheduleFeatureTourPosition();
-    else if (featureTour.pendingObserver) scheduleFeatureTourPendingRetry();
-  }
-  function positionFeatureTour() {
-    featureTour.positionFrame = 0;
-    if (!featureTour.active) return;
-    const step = featureTour.steps[featureTour.index],
-      elements = featureTourElements(step),
-      target = featureTourTargetRect(step, elements);
-    if (!target) {
-      runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
-      runtimeElementStyle(tourCard, "tour-card")?.setProperty("visibility", "hidden");
-      showFeatureTourStep(featureTour.index + 1, 1);
-      return;
-    }
-    featureTour.targets = elements;
-    const viewport = featureTourViewport(),
-      layerStyle = runtimeElementStyle(tourLayer, "tour-layer"),
-      padding = step.padding ?? 7,
-      viewportRight = viewport.left + viewport.width,
-      viewportBottom = viewport.top + viewport.height,
-      left = Math.max(viewport.left + 2, target.left - padding),
-      top = Math.max(viewport.top + 2, target.top - padding),
-      right = Math.min(viewportRight - 2, target.right + padding),
-      bottom = Math.min(viewportBottom - 2, target.bottom + padding);
-    layerStyle?.setProperty("--tour-viewport-width", `${Math.max(1, Math.floor(viewport.width))}px`);
-    layerStyle?.setProperty("--tour-viewport-height", `${Math.max(1, Math.floor(viewport.height))}px`);
-    tourCard.classList.toggle("tour-compact", viewport.width < 300);
-    const highlightStyle = runtimeElementStyle(tourHighlight, "tour-highlight"),
-      cardStyle = runtimeElementStyle(tourCard, "tour-card");
-    highlightStyle?.setProperty("left", `${Math.round(left)}px`);
-    highlightStyle?.setProperty("top", `${Math.round(top)}px`);
-    highlightStyle?.setProperty("width", `${Math.max(2, Math.round(right - left))}px`);
-    highlightStyle?.setProperty("height", `${Math.max(2, Math.round(bottom - top))}px`);
-    highlightStyle?.setProperty("border-radius", `${step.radius ?? 10}px`);
-    const cardRect = pageLayoutRect(tourCard),
-      coachmarkMargin = viewport.width <= 620 ? 8 : 12,
-      position = TOUR.placeCoachmark(target, { width: cardRect.width, height: cardRect.height }, viewport, step.placement, { margin: coachmarkMargin, gap: 15, arrowMargin: 23 });
-    cardStyle?.setProperty("left", `${Math.round(position.x)}px`);
-    cardStyle?.setProperty("top", `${Math.round(position.y)}px`);
-    cardStyle?.setProperty("--tour-arrow-offset", `${Math.round(position.arrowOffset)}px`);
-    tourCard.dataset.placement = position.placement;
-    highlightStyle?.setProperty("visibility", "visible");
-    cardStyle?.setProperty("visibility", "visible");
-    if (!featureTour.shownIds.has(step.id)) {
-      featureTour.shownIds.add(step.id);
-      markFeatureTourStepsSeen([step]);
-    }
-  }
-  function updateFeatureTourLanguage() {
-    if (!featureTour.active) return;
-    const step = featureTour.steps[featureTour.index],
-      current = featureTour.index + 1,
-      total = featureTour.steps.length,
-      counter = t("tourStepCounter").replace("{current}", String(current)).replace("{total}", String(total));
-    tourBadge.textContent = t(featureTour.newOnly ? "tourBadgeNew" : "tourBadge");
-    tourProgress.textContent = counter;
-    tourTitle.textContent = t(step.titleKey);
-    tourBody.textContent = t(step.bodyKey);
-    tourBackButton.textContent = t("tourBack");
-    tourSkipButton.textContent = t("tourSkip");
-    tourNextButton.textContent = t(current === total ? "tourDone" : "tourNext");
-    tourBackButton.disabled = featureTour.index === 0;
-    tourProgressTrack.setAttribute("aria-label", t("tourProgress"));
-    tourProgressTrack.setAttribute("aria-valuemax", String(total));
-    tourProgressTrack.setAttribute("aria-valuenow", String(current));
-    runtimeElementStyle(tourProgressBar, "tour-progress")?.setProperty("width", `${(current / total) * 100}%`);
-    tourCard.dataset.stepId = step.id;
-    scheduleFeatureTourPosition();
-  }
-  function showFeatureTourStep(index, direction = 1) {
-    let nextIndex = index,
-      elements = [];
-    while (nextIndex >= 0 && nextIndex < featureTour.steps.length) {
-      syncFeatureTourPreview(featureTour.steps[nextIndex]);
-      elements = featureTourElements(featureTour.steps[nextIndex]);
-      if (featureTourTargetRect(featureTour.steps[nextIndex], elements)) break;
-      nextIndex += direction;
-    }
-    if (nextIndex < 0 || nextIndex >= featureTour.steps.length) {
-      closeFeatureTour();
-      return false;
-    }
-    featureTour.index = nextIndex;
-    featureTour.targets = elements;
-    runtimeElementStyle(tourCard, "tour-card")?.setProperty("visibility", "hidden");
-    runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
-    updateFeatureTourLanguage();
-    const rect = featureTourTargetRect(featureTour.steps[nextIndex], elements);
-    if (featureTourTargetNeedsScroll(rect)) elements[0].scrollIntoView({ block: featureTour.steps[nextIndex].placement === "center" ? "center" : "nearest", inline: "nearest", behavior: "auto" });
-    observeFeatureTourTargets(elements);
-    const stepId = featureTour.steps[nextIndex].id;
-    requestAnimationFrame(() => {
-      if (!featureTour.active || featureTour.steps[featureTour.index]?.id !== stepId) return;
-      positionFeatureTour();
-      if (featureTour.active && featureTour.steps[featureTour.index]?.id === stepId) tourTitle.focus({ preventScroll: true });
-    });
-    return true;
-  }
-  function startFeatureTour(steps, options = {}) {
-    const available = availableFeatureTourSteps(steps);
-    if (!available.length || !tourLayer || !TOUR) return false;
-    if (featureTour.active) closeFeatureTour({ restore: false, scroll: false, retry: false, changelog: false });
-    cancelAnimationFrame(featureTour.retryFrame);
-    featureTour.retryFrame = 0;
-    hideAutoDelayControl();
-    hideEffortControl();
-    hidePluginControl();
-    featureTour.active = true;
-    featureTour.steps = available;
-    featureTour.index = 0;
-    featureTour.replay = Boolean(options.replay);
-    featureTour.newOnly = Boolean(options.newOnly);
-    featureTour.shownIds = new Set();
-    featureTour.restoreFocus = options.replay && document.activeElement !== document.body ? document.activeElement : screen;
-    featureTour.restoreScrollX = window.scrollX;
-    featureTour.restoreScrollY = window.scrollY;
-    tourMain.inert = true;
-    document.body.classList.add("tour-open");
-    tourLayer.hidden = false;
-    tourLayer.setAttribute("aria-hidden", "false");
-    runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
-    observeActiveFeatureTour();
-    return showFeatureTourStep(0, 1);
-  }
-  function closeFeatureTour(options = {}) {
-    if (!featureTour.active) return false;
-    const restore = options.restore !== false,
-      restoreScroll = options.scroll !== false,
-      restoreFocus = featureTour.restoreFocus;
-    featureTour.active = false;
-    cancelAnimationFrame(featureTour.positionFrame);
-    featureTour.positionFrame = 0;
-    featureTour.resizeObserver?.disconnect();
-    featureTour.resizeObserver = null;
-    stopActiveFeatureTourObserver();
-    featureTour.targets = [];
-    tourMain.inert = false;
-    const restoreTarget = focusTargetAvailableOutsideLayer(tourLayer, restoreFocus) ? restoreFocus : screen;
-    hideLayerWithoutRetainedFocus(tourLayer, restore ? restoreTarget : screen, screen);
-    syncFeatureTourPreview(null);
-    document.body.classList.remove("tour-open");
-    runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
-    runtimeElementStyle(tourCard, "tour-card")?.setProperty("visibility", "hidden");
-    if (restoreScroll) window.scrollTo({ left: featureTour.restoreScrollX, top: featureTour.restoreScrollY, behavior: "auto" });
-    requestAnimationFrame(() => {
-      if (featureTour.active) return;
-      if (options.changelog !== false && maybeShowChangelog()) return;
-      if (restore && document.activeElement !== restoreTarget) restoreTarget?.focus({ preventScroll: true });
-    });
-    if (options.retry !== false) scheduleFeatureTourPendingRetry();
-    return true;
-  }
-  function nextFeatureTourStep() {
-    if (!featureTour.active) return false;
-    if (featureTour.index >= featureTour.steps.length - 1) return closeFeatureTour();
-    return showFeatureTourStep(featureTour.index + 1, 1);
-  }
-  function previousFeatureTourStep() {
-    if (!featureTour.active || featureTour.index <= 0) return false;
-    return showFeatureTourStep(featureTour.index - 1, -1);
-  }
-  function skipFeatureTour() {
-    if (!featureTour.active) return false;
-    markFeatureTourStepsSeen(availableFeatureTourSteps(FEATURE_TOUR_STEPS));
-    return closeFeatureTour();
-  }
-  function replayFeatureTour() {
-    readFeatureTourProgress();
-    return startFeatureTour(FEATURE_TOUR_STEPS, { replay: true, newOnly: false });
-  }
-  function stopFeatureTourPendingObserver() {
-    featureTour.pendingObserver?.disconnect();
-    featureTour.pendingObserver = null;
-  }
-  function scheduleFeatureTourPendingRetry() {
-    if (featureTour.active || featureTour.retryFrame) return false;
-    featureTour.retryFrame = requestAnimationFrame(() => {
-      featureTour.retryFrame = 0;
-      if (featureTour.active) return;
-      maybeStartFeatureTour(true);
-    });
-    return true;
-  }
-  function watchForPendingFeatureTour() {
-    const target = featureTourObserverTarget();
-    if (featureTour.pendingObserver || typeof MutationObserver !== "function" || !target) return false;
-    featureTour.pendingObserver = new MutationObserver((records) => {
-      if (!featureTour.active && records.some((record) => !tourLayer.contains(record.target))) scheduleFeatureTourPendingRetry();
-    });
-    featureTour.pendingObserver.observe(target, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["hidden", "class", "style", "aria-hidden", "open"],
-    });
-    return true;
-  }
-  function maybeStartFeatureTour(retry = false) {
-    if(window.PENECHO_CONFIG?.browserDraftId||CANVAS_COMPANION_REQUESTED)return false;
-    if (featureTour.active || changelog.active || (featureTour.autoChecked && !retry)) return false;
-    featureTour.autoChecked = true;
-    const progress = readFeatureTourProgress(),
-      pending = TOUR.unseenSteps(FEATURE_TOUR_STEPS, progress),
-      available = availableFeatureTourSteps(pending);
-    if (!pending.length) {
-      stopFeatureTourPendingObserver();
-      return false;
-    }
-    if (available.length < pending.length) watchForPendingFeatureTour();
-    else stopFeatureTourPendingObserver();
-    return available.length ? startFeatureTour(available, { newOnly: progress.seen.length > 0 }) : false;
-  }
-  function featureTourFocusableButtons() {
-    return [tourSkipButton, tourBackButton, tourNextButton].filter((button) => button && !button.disabled && !button.hidden);
-  }
-  function handleFeatureTourKeydown(event) {
-    if (!featureTour.active) return false;
-    if (event.key === "Tab") {
-      const buttons = featureTourFocusableButtons(),
-        current = buttons.indexOf(document.activeElement),
-        next = event.shiftKey ? (current <= 0 ? buttons.length - 1 : current - 1) : current < 0 || current === buttons.length - 1 ? 0 : current + 1;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      buttons[next]?.focus();
-      return true;
-    }
-    if ((event.key === "Enter" || event.key === " ") && event.target instanceof HTMLButtonElement && tourCard.contains(event.target)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      event.target.click();
-      return true;
-    }
-    const action = TOUR.keyAction(event);
-    if (action) event.preventDefault();
-    event.stopImmediatePropagation();
-    if (action === "next") nextFeatureTourStep();
-    else if (action === "back") previousFeatureTourStep();
-    else if (action === "skip") skipFeatureTour();
-    return true;
-  }
-  function changelogSeen() {
+  // Legacy preferences only identify existing installations for the small Canvas AI hint.
+  function usedEarlierVersion() {
     try {
-      return localStorage.getItem(CHANGELOG_STORAGE_KEY) === CHANGELOG_VERSION;
+      return ["penecho-tour-progress", "penecho-examples-v1", "penecho-changelog-seen"].some(key => localStorage.getItem(key) !== null);
     } catch {
       return false;
     }
-  }
-  function markChangelogSeen() {
-    try {
-      localStorage.setItem(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION);
-    } catch {}
-  }
-  function maybeShowChangelog(force = false) {
-    if((window.PENECHO_CONFIG?.browserDraftId||CANVAS_COMPANION_REQUESTED)&&!force)return false;
-    if (!changelogLayer || !changelogDialog || changelog.active || featureTour.active || !pluginPopover.hidden || (!force && changelogSeen())) return false;
-    hideAutoDelayControl();
-    hideEffortControl();
-    hidePluginControl();
-    const active = document.activeElement;
-    changelog.restoreFocus = force && active?.isConnected && active !== document.body && !tourLayer.contains(active) ? active : screen;
-    changelog.active = true;
-    tourMain.inert = true;
-    document.body.classList.add("changelog-open");
-    changelogLayer.hidden = false;
-    changelogLayer.setAttribute("aria-hidden", "false");
-    requestAnimationFrame(() => changelogDialog.focus({ preventScroll: true }));
-    return true;
-  }
-  function closeChangelog() {
-    if (!changelog.active) return false;
-    const restoreFocus = changelog.restoreFocus;
-    changelog.active = false;
-    changelog.restoreFocus = null;
-    markChangelogSeen();
-    document.body.classList.remove("changelog-open");
-    tourMain.inert = featureTour.active || !pluginPopover.hidden;
-    const restoreTarget = focusTargetAvailableOutsideLayer(changelogLayer, restoreFocus) ? restoreFocus : screen;
-    hideLayerWithoutRetainedFocus(changelogLayer, restoreTarget, screen);
-    requestAnimationFrame(() => {
-      if (!featureTour.active && !changelog.active && document.activeElement !== restoreTarget) restoreTarget?.focus({ preventScroll: true });
-    });
-    scheduleFeatureTourPendingRetry();
-    return true;
-  }
-  function handleChangelogKeydown(event) {
-    if (!changelog.active) return false;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      closeChangelog();
-      return true;
-    }
-    if (event.key !== "Tab") return false;
-    const focusable = [changelogCloseButton].filter((button) => button && !button.disabled && !button.hidden),
-      current = focusable.indexOf(document.activeElement),
-      next = event.shiftKey ? (current <= 0 ? focusable.length - 1 : current - 1) : current < 0 || current === focusable.length - 1 ? 0 : current + 1;
-    event.preventDefault();
-    event.stopPropagation();
-    focusable[next]?.focus();
-    return true;
   }
   if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
   const settings = { open:false, activePage:"appearance", restoreFocus:null, requestTrace:false, cli:{}, cliStatuses:{}, cliInspectionGeneration:0, currentProvider:"api", configurationMode:"", startupConnectionsChecked:false, configurationLoad:null, configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, deepSeekSearchProvider:"deepseek-official", hasDeepSeekSearchApiKey:false, hasTavilyApiKey:false, searchTestResults:null, searchTestGeneration:0, searchTestBusy:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
@@ -3021,7 +2153,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return `${Number(value).toLocaleString(undefined, { maximumFractionDigits:1 })}×`;
   }
   function allAiConnections() {
-    return [...hostedSettings.models.map(model => ({ id:`hosted:${model.id}`, provider:"api", apiModel:model.displayName, hosted:true, modelId:model.id, multiplier:model.multiplier, supportsThinking:model.supportsThinking })), ...(settings.connectionScope === aiConnectionScope() ? settings.connections : [])];
+    const localScope = aiConnectionScope();
+    const localConnections = !canvasGuest() && localScope && settings.connectionScope === localScope ? settings.connections : [];
+    return [...hostedSettings.models.map(model => ({ id:`hosted:${model.id}`, provider:"api", apiModel:model.displayName, hosted:true, modelId:model.id, multiplier:model.multiplier, defaultEffort:model.defaultEffort || "", supportsThinking:model.supportsThinking })), ...localConnections];
+  }
+  function effortLevelLabel(value, { short = false } = {}) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized || normalized === "config" || normalized === "default") return "";
+    const keys = { none:"effortNone", minimal:"effortMinimal", low:"effortLow", medium:short ? "effortMediumShort" : "effortMedium", high:"effortHigh", xhigh:"effortXhigh", max:"effortMaximum" };
+    return keys[normalized] ? t(keys[normalized]) : normalized;
+  }
+  function activeModelDefaultEffort() {
+    const selected = selectedAiConnectionId();
+    const active = allAiConnections().find(item => item.id === selected) || null;
+    const raw = String(active?.defaultEffort || (active?.hosted ? "" : active?.effort) || "").trim().toLowerCase();
+    return raw && raw !== "config" && raw !== "default" ? raw : "";
   }
   function renderHostedModels() {
     const section = document.getElementById("settingsHostedSection"), list = document.getElementById("settingsHostedList"), status = document.getElementById("settingsHostedStatus"), rates = document.getElementById("settingsHostedRates");
@@ -3029,13 +2175,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const cloudSetupLink = document.getElementById("settingsCloudSetupLink");
     if (cloudSetupLink) cloudSetupLink.href = `${String(window.PENECHO_CONFIG?.cloudOrigin || (window.PENECHO_CONFIG?.runtime === "cloud" ? location.origin : "https://penecho.ai")).replace(/\/$/, "")}/auth.html`;
     const browserEditing = window.PENECHO_CONFIG?.browserCanvasEditing === true,
-      hostUnavailable = browserEditing && window.PENECHO_CONFIG?.linkedDeviceOnline !== true,
-      deviceLinked = window.PENECHO_CONFIG?.linkedDeviceLinked === true,
+      // On penecho.ai a Canvas works with PenEcho's models; a person's own connections are in PenEcho on their computer.
+      hostUnavailable = browserEditing,
       notice = document.getElementById("settingsHostedBrowserNotice");
     notice.hidden = !hostUnavailable;
-    notice.dataset.i18n = deviceLinked ? "settingsLinkedDeviceOffline" : "settingsHostedBrowserNotice";
-    notice.textContent = t(notice.dataset.i18n);
-    document.getElementById("settingsHostedLinkDevice").hidden = !hostUnavailable || deviceLinked;
+    notice.textContent = t("settingsHostedBrowserNotice");
     document.getElementById("settingsLocalConnectionsEmpty").hidden = hostUnavailable || settings.connections.length > 0;
     for (const control of settingsConnectionQuickList.querySelectorAll("button")) control.disabled = hostUnavailable;
     for (const control of [settingsOpenApi, settingsOpenSearch, settingsOpenSystem]) {
@@ -3043,7 +2187,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (hostUnavailable) control.setAttribute("aria-describedby", "settingsHostedBrowserNotice");
       else control.removeAttribute("aria-describedby");
     }
-    section.hidden = !hostedSettings.signedIn && !hostedSettings.loading && !hostedSettings.error;
+    section.hidden = !hostedSettings.signedIn && !hostedSettings.models.length && !hostedSettings.loading && !hostedSettings.error;
     document.getElementById("settingsCloudAccount").hidden = !hostedSettings.signedIn;
     document.getElementById("settingsCloudSetup").hidden = hostedSettings.signedIn || hostedSettings.loading;
     document.getElementById("settingsCloudAccountStatus").textContent = t("settingsCloudSignedIn").replace("{balance}", t("settingsHostedBalance").replace("{count}", Number(hostedSettings.credits || 0).toLocaleString()));
@@ -3069,7 +2213,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       cloudIcon.setAttribute("aria-hidden", "true");
       cloudIcon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.5-1A4.5 4.5 0 0 0 7 18Z"/></svg>';
       name.textContent = model.displayName;
-      detail.textContent = hostedMultiplierLabel(model.multiplier);
+      const rateText = typeof canvasGuest === "function" && canvasGuest() && Number(model.multiplier || 0) === 0 ? "Free" : hostedMultiplierLabel(model.multiplier);
+      const effortText = effortLevelLabel(model.defaultEffort);
+      detail.textContent = [effortText, rateText].filter(Boolean).join(" · ");
       detail.className = "settings-model-multiplier";
       copy.append(name); button.append(mark, cloudIcon, copy, detail); list.append(button);
     }
@@ -3103,7 +2249,175 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       rates.append(table);
     }
     document.getElementById("settingsHostedBilling").href = `${String(window.PENECHO_CONFIG?.cloudOrigin || (window.PENECHO_CONFIG?.runtime === "cloud" ? location.origin : "https://penecho.ai")).replace(/\/$/, "")}/dashboard.html#billing`;
-    if (typeof canvasAgentUpdateConnectionButton === "function") canvasAgentUpdateConnectionButton();
+    if (typeof renderCanvasAiSelector === "function") renderCanvasAiSelector();
+    if (document.querySelector("#effortControl")) updateEffortControl();
+  }
+  // The model picker in the Canvas AI bar (top right): the same choice as Agents › Canvas AI, one click to switch, and a way to those settings.
+  function canvasAiPickable() {
+    return allAiConnections().filter(item => item.hosted || (item.provider === "api" && item.hasApiKey));
+  }
+  function renderAiModelControl() {
+    const button = document.getElementById("aiModelButton"), label = document.getElementById("aiModelLabel"), menu = document.getElementById("aiModelMenu");
+    if (!button || !label || !menu) return;
+    wireAiModelControl();
+    const list = canvasAiPickable(), selected = selectedAiConnectionId(), active = list.find(item => item.id === selected) || null,
+      name = item => item.apiModel || item.name || item.id;
+    label.textContent = active ? name(active) : t(hostedSettings.loading && !list.length ? "settingsHostedLoading" : "aiModelChoose");
+    button.classList.toggle("is-empty", !active);
+    button.title = active ? `${t("aiModelPick")}: ${name(active)}` : t("aiModelPick");
+    const nodes = [];
+    for (const [heading, items] of [["aiModelCloud", list.filter(item => item.hosted)], ["aiModelKeys", list.filter(item => !item.hosted)]]) {
+      if (!items.length) continue;
+      const head = document.createElement("div");
+      head.className = "ai-model-group";
+      head.setAttribute("role", "presentation");
+      head.textContent = t(heading);
+      nodes.push(head);
+      for (const item of items) {
+        const option = document.createElement("button"), mark = document.createElement("span"), text = document.createElement("span");
+        option.type = "button";
+        option.className = "ai-model-option";
+        option.setAttribute("role", "menuitemradio");
+        option.setAttribute("aria-checked", String(item.id === selected));
+        option.dataset.aiModel = item.id;
+        mark.className = "ai-model-check";
+        mark.setAttribute("aria-hidden", "true");
+        mark.innerHTML = item.id === selected ? '<svg viewBox="0 0 20 20"><path d="m4.5 10.3 3.4 3.4 7.8-8"/></svg>' : "";
+        const defaultEffortText = item.hosted ? effortLevelLabel(item.defaultEffort) : "";
+        text.textContent = defaultEffortText ? `${name(item)} · ${defaultEffortText}` : name(item);
+        option.append(mark, text);
+        nodes.push(option);
+      }
+    }
+    if (!list.length) {
+      const none = document.createElement("p");
+      none.className = "ai-model-none";
+      none.textContent = t(hostedSettings.loading ? "settingsHostedLoading" : "aiModelNone");
+      nodes.push(none);
+    }
+    const settingsLink = document.createElement("button");
+    settingsLink.type = "button";
+    settingsLink.className = "ai-model-settings";
+    settingsLink.setAttribute("role", "menuitem");
+    settingsLink.dataset.aiModelSettings = "";
+    settingsLink.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>';
+    settingsLink.append(document.createTextNode(t("aiModelSettings")));
+    nodes.push(settingsLink);
+    menu.replaceChildren(...nodes);
+    if (document.querySelector("#effortControl")) updateEffortControl();
+  }
+  function showAiModelMenu(open) {
+    const button = document.getElementById("aiModelButton"), menu = document.getElementById("aiModelMenu");
+    if (!button || !menu) return;
+    if (open) {
+      hideAutoDelayControl();
+      hideEffortControl();
+      renderAiModelControl();
+      void loadHostedModels();
+    }
+    menu.hidden = !open;
+    button.setAttribute("aria-expanded", String(open));
+    if (open) (menu.querySelector('[aria-checked="true"]') || menu.querySelector("button"))?.focus({ preventScroll:true });
+  }
+  function openCanvasAiSettings() {
+    showAiModelMenu(false);
+    if (typeof window.projectLinesOpenCanvasAiSettings === "function" && window.projectLinesOpenCanvasAiSettings()) return;
+    if (typeof window.PenEchoOpenSettingsPage === "function") window.PenEchoOpenSettingsPage("canvas-ai");
+    else { selectSettingsPage("canvas-ai"); openSettings(); }
+  }
+  function wireAiModelControl() {
+    const control = document.getElementById("aiModelControl");
+    if (!control || control.dataset.wired === "true") return;
+    control.dataset.wired = "true";
+    const button = document.getElementById("aiModelButton"), menu = document.getElementById("aiModelMenu");
+    button.addEventListener("click", () => showAiModelMenu(menu.hidden));
+    menu.addEventListener("click", (event) => {
+      if (event.target.closest("[data-ai-model-settings]")) { openCanvasAiSettings(); return; }
+      const option = event.target.closest("button[data-ai-model]");
+      if (!option) return;
+      const id = option.dataset.aiModel, chosen = canvasAiPickable().find(item => item.id === id);
+      if (!chosen) return;
+      storeAiConnectionSelection(id);
+      syncLocalConnectionSelection();
+      renderConnectionLists();
+      renderAiModelControl();
+      canvasAgentConnectionDidChange(false, chosen.provider || "");
+      showAiModelMenu(false);
+      button.focus({ preventScroll:true });
+    });
+    menu.addEventListener("keydown", (event) => {
+      const items = [...menu.querySelectorAll("button")], index = items.indexOf(document.activeElement);
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); showAiModelMenu(false); button.focus({ preventScroll:true }); return; }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || !items.length) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      items[next].focus({ preventScroll:true });
+    });
+    document.addEventListener("pointerdown", (event) => { if (!menu.hidden && !control.contains(event.target)) showAiModelMenu(false); }, true);
+    // Settings on the Projects page share this browser's storage: a model or effort chosen there shows here at once.
+    window.addEventListener("storage", (event) => {
+      if (event.key?.startsWith(AI_CONNECTION_STORAGE_KEY)) renderAiModelControl();
+      else if (event.key === "penecho-ai-effort" && normalizeToolbarReasoningEffort(event.newValue)) { state.reasoningEffort = normalizeToolbarReasoningEffort(event.newValue); updateEffortControl(); }
+    });
+  }
+  function renderCanvasAiSelector() {
+    if (typeof renderAiModelControl === "function") renderAiModelControl();
+    const select = document.getElementById("settingsCanvasAiSelect"),
+      tag = document.getElementById("settingsCanvasAiModelTag"),
+      status = document.getElementById("settingsCanvasAiStatus"),
+      signIn = document.getElementById("settingsCanvasAiSignIn");
+    if (!select) return;
+    const list = allAiConnections(), selected = selectedAiConnectionId(), cloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || (window.PENECHO_CONFIG?.runtime === "cloud" ? location.origin : "https://penecho.ai")).replace(/\/$/, "");
+    if (signIn) {
+      signIn.href = `${cloudOrigin}/auth.html`;
+      signIn.hidden = hostedSettings.signedIn || (!canvasGuest() && list.some(c => !c.hosted && c.hasApiKey));
+    }
+    const cloudModels = list.filter(c => c.hosted), ownModels = list.filter(c => !c.hosted);
+    select.replaceChildren();
+    if (!list.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = hostedSettings.loading ? t("settingsHostedLoading") : "No Canvas AI model selected";
+      select.append(opt);
+      select.disabled = true;
+    } else {
+      select.disabled = false;
+      const appendGroup = (label, items) => {
+        if (!items.length) return;
+        const grp = document.createElement("optgroup");
+        grp.label = label;
+        for (const item of items) {
+          const opt = document.createElement("option");
+          opt.value = item.id;
+          opt.textContent = item.apiModel || item.name || item.id;
+          opt.selected = item.id === selected;
+          grp.append(opt);
+        }
+        select.append(grp);
+      };
+      appendGroup("PenEcho Cloud", cloudModels);
+      appendGroup("Your connections", ownModels);
+      if (list.some(item => item.id === selected)) select.value = selected;
+    }
+    const activeItem = list.find(item => item.id === selected) || null;
+    if (tag) {
+      tag.hidden = !activeItem;
+      tag.textContent = activeItem ? (activeItem.apiModel || activeItem.name || "") : "";
+    }
+    if (status) {
+      if (canvasGuest()) {
+        const quota = Number.isFinite(canvasGuestAi.remaining) && Number.isFinite(canvasGuestAi.limit)
+          ? ` (${canvasGuestAi.remaining} / ${canvasGuestAi.limit} left today)`
+          : "";
+        status.textContent = canvasGuestAiRestricted()
+          ? t("settingsCanvasAiEmptyHint")
+          : t("settingsCanvasAiGuestHint").replace("{quota}", quota);
+      } else if (activeItem) {
+        status.textContent = t("settingsCanvasAiUsing").replace("{name}", activeItem.apiModel || activeItem.name || activeItem.id);
+      } else {
+        status.textContent = t("settingsCanvasAiEmptyHint");
+      }
+    }
   }
   function loadHostedModels(options = {}) {
     if (hostedSettings.loadPromise && !options.accountChanged) return hostedSettings.loadPromise;
@@ -3121,12 +2435,36 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const generation = ++hostedSettings.generation, cloud = window.PENECHO_CONFIG?.runtime === "cloud";
     hostedSettings.loading = true; hostedSettings.error = false; renderHostedModels();
     try {
+      if (cloud && window.PENECHO_CONFIG?.guestCanvas === true) {
+        // The free model and what is left of today's allowance. This call also gives a new guest its token, which the model list needs.
+        const offer = await fetch("/api/v1/guest/ai", { headers:{ accept:"application/json" }, credentials:"same-origin", cache:"no-store", signal:AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) })
+          .then(answer => answer.ok ? answer.json() : null).catch(() => null);
+        if (generation !== hostedSettings.generation) return;
+        setCanvasGuestAi(offer);
+        if (!window.PENECHO_CONFIG.guestAiModelId) { hostedSettings.signedIn = false; hostedSettings.models = []; return; }
+      }
       const response = await fetch(cloud ? "/api/v1/models" : `/api/cloud/models${force ? "?refresh=1" : ""}`, { headers:authenticatedApiHeaders(), signal:AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
       if (generation !== hostedSettings.generation) { await response.body?.cancel(); return; }
-      if ([401, 403].includes(response.status)) { await response.body?.cancel(); window.PENECHO_CONFIG.connectionAccountId = ""; hostedSettings.signedIn = false; hostedSettings.models = []; return; }
+      if ([401, 403].includes(response.status)) { await response.body?.cancel(); window.PENECHO_CONFIG.connectionAccountId = ""; hostedSettings.signedIn = false; hostedSettings.models = []; if (window.PENECHO_CONFIG.guestCanvas === true) setCanvasGuestAi(null); return; }
       if (!response.ok) { await response.body?.cancel(); throw new Error("catalog_unavailable"); }
       const body = await response.json();
       if (generation !== hostedSettings.generation) return;
+      if (body.guest === true) {
+        hostedSettings.signedIn = false;
+        hostedSettings.models = (Array.isArray(body.models) ? body.models : [])
+          .filter(model => model.available === true && model.enabled !== false && !model.retiredAt
+            && (model.freeForGuest === true || Number(model.multiplier) === 0 || model.id === canvasGuestAi.defaultModelId || model.id === window.PENECHO_CONFIG.guestAiModelId))
+          .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+        if (!hostedSettings.models.length) {
+          setCanvasGuestAi(null);
+        } else {
+          const chosen = selectedAiConnectionId();
+          const chosenId = chosen.startsWith("hosted:") ? chosen.slice(7) : "";
+          const valid = hostedSettings.models.find(m => m.id === chosenId) || hostedSettings.models.find(m => m.id === canvasGuestAi.defaultModelId) || hostedSettings.models[0];
+          window.PENECHO_CONFIG.guestAiModelId = String(valid.id);
+        }
+        return;
+      }
       window.PENECHO_CONFIG.connectionAccountId = String(body.accountId || window.PENECHO_CONFIG.connectionAccountId || "");
       if (!cloud && body.origin) window.PENECHO_CONFIG.cloudOrigin = body.origin;
       hostedSettings.signedIn = true;
@@ -3152,7 +2490,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         if (balance.ok && generation === hostedSettings.generation) { const payload = await balance.json(); if (generation === hostedSettings.generation) hostedSettings.credits = payload.credits?.availableCredits ?? payload.credits?.available ?? payload.credits?.balance ?? 0; }
         else await balance.body?.cancel();
       }
-    } catch { if (generation === hostedSettings.generation) { hostedSettings.error = true; hostedSettings.models = []; } }
+    } catch { if (generation === hostedSettings.generation) { hostedSettings.error = true; hostedSettings.models = []; if (window.PENECHO_CONFIG?.guestCanvas === true) setCanvasGuestAi(null); } }
     finally { if (generation === hostedSettings.generation) { hostedSettings.controller = null; hostedSettings.loading = false; renderHostedModels(); } }
   }
   function hasSelectedAiConnection() {
@@ -3161,7 +2499,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     // disabled, or belongs to a device that is no longer connected.
     if (selected.startsWith("hosted:")) return hostedSettings.models.some(model => `hosted:${model.id}` === selected);
     if (window.PENECHO_CONFIG?.runtime === "cloud" && (selected === "default" || window.PENECHO_CONFIG?.linkedDeviceOnline !== true)) return false;
-    const connection = settings.connectionScope === aiConnectionScope() && settings.connections.find(item => item.id === selected);
+    const localScope = aiConnectionScope();
+    const connection = !canvasGuest() && localScope && settings.connectionScope === localScope && settings.connections.find(item => item.id === selected);
     return Boolean(connection && (connection.provider === "api"
       ? connection.hasApiKey && connection.apiUrl && connection.apiModel
       : ["kimi-cli", "codex-cli", "claude-cli"].includes(connection.provider)));
@@ -3528,7 +2867,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     connectionLimitText.textContent = t("settingsConnectionCount").replace("{count}", String(settings.connections.length)).replace("{limit}", String(settings.connectionLimit));
     settingsAddConnection.disabled = settings.connections.length >= settings.connectionLimit;
-    if (typeof canvasAgentUpdateConnectionButton === "function") canvasAgentUpdateConnectionButton();
     renderHostedModels();
   }
   function fillConnectionEditor(connection = null) {
@@ -4010,6 +3348,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function selectSettingsPage(page, { focus = false } = {}) {
     if (!settingsPanel) return false;
+    // Global AI configuration lives on the Projects page. Save this Canvas and retain its return address.
+    const projectsPage = page === "connections" ? "#providers" : page === "canvas-ai" ? "#agents/canvas" : "";
+    if (projectsPage && projectLinesLocal()) {
+      settings.leaving = true;
+      try {
+        sessionStorage.setItem("penecho-settings-return", JSON.stringify({
+          url: location.pathname + location.search + location.hash,
+          label: document.querySelector("#canvasDocumentNameLabel")?.textContent?.trim() || "Canvas",
+        }));
+      } catch {}
+      closeSettings(false);
+      // In the shell this page stays under Settings, so its own panel opens again afterwards.
+      projectLinesLeave(`/projects.html${projectsPage}`).then(() => { if (projectLinesInShell) settings.leaving = false; }, (error) => { settings.leaving = false; setStatus(String(error?.message || error)); });
+      return false;
+    }
+    // Cloud/guest Canvases retain their model picker when Projects settings navigation is unavailable.
+    if (page === "canvas-ai") page = "canvas";
     const tabs = [...settingsPanel.querySelectorAll("[data-settings-page-target]")],
       pages = [...settingsPanel.querySelectorAll("[data-settings-page]")],
       available = new Set(pages.map((node) => node.dataset.settingsPage)),
@@ -4052,8 +3407,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsAutoToggle.setAttribute("aria-checked", String(state.autoPreference));
     settingsCanvasHintsToggle.classList.toggle("on", state.canvasHintsEnabled);
     settingsCanvasHintsToggle.setAttribute("aria-checked", String(state.canvasHintsEnabled));
-    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpenPreference);
-    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpenPreference));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
     settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
@@ -4063,10 +3416,93 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (illustrationStyle) illustrationStyle.value = state.illustrationStyle;
     const illustrationBackground = document.querySelector("#illustrationBackground");
     if (illustrationBackground) illustrationBackground.value = state.illustrationBackground;
+    wireCanvasAiSettingsUi();
+    if (typeof renderCanvasAiSelector === "function") renderCanvasAiSelector();
     void loadCanvasSettings();
   }
+  function wireCanvasAiSettingsUi() {
+    if (!settingsPanel || settingsPanel.dataset.canvasAiWired === "true") return;
+    settingsPanel.dataset.canvasAiWired = "true";
+    const select = document.getElementById("settingsCanvasAiSelect");
+    select?.addEventListener("change", () => {
+      const id = select.value;
+      if (!id || !allAiConnections().some(connection => connection.id === id)) return;
+      storeAiConnectionSelection(id);
+      syncLocalConnectionSelection();
+      renderConnectionLists();
+      const chosen = allAiConnections().find(connection => connection.id === id);
+      canvasAgentConnectionDidChange(false, chosen?.provider || "");
+      setConnectionStatus(t("settingsConnectionActivated"), "success");
+    });
+    const which = document.getElementById("settingsCanvasWhichAi");
+    which?.addEventListener("click", (event) => {
+      const card = event.target.closest("button[data-settings-page-jump]");
+      if (!card) return;
+      selectSettingsPage(card.dataset.settingsPageJump, { focus:true });
+    });
+    window.addEventListener("storage", (event) => {
+      if (!event.key) return;
+      if (event.key === "penecho-summon-enabled") setSummonEnabled(event.newValue !== "false");
+      else if (event.key === AI_FONT_STORAGE_KEY) setAiFont(event.newValue);
+      else if (event.key === ILLUSTRATION_STYLE_STORAGE_KEY) setIllustrationStyle(event.newValue);
+      else if (event.key === ILLUSTRATION_BACKGROUND_STORAGE_KEY) setIllustrationBackground(event.newValue);
+      else if (event.key === "penecho-canvas-hints-enabled") setCanvasHintsEnabled(event.newValue !== "false");
+      else if (event.key === "penecho-widget-shadow") setWidgetShadowEnabled(event.newValue === "true");
+      else if (event.key === "penecho-auto-ai") setAutoEnabled(event.newValue === "true", false);
+      else if (event.key === "penecho-language") {
+        const next = event.newValue === "zh" ? "zh" : "en";
+        if (next !== state.language) { state.language = next; applyLanguage(); }
+      }
+      else if (event.key.startsWith(AI_CONNECTION_STORAGE_KEY)) { renderConnectionLists(); syncLocalConnectionSelection(); }
+    });
+  }
+  // Settings on the Projects page write this browser's storage, and a Canvas kept open beside them never loads again. This reads what
+  // the page reads when it starts, and applies what is different now. A Canvas in the Projects shell calls it when Settings closes
+  // and each time a Canvas opens (project-lines-bridge.js).
+  function applySettingsFromStorage() {
+    const stored = key => { try { return localStorage.getItem(key); } catch { return null; } }, on = (key, missing) => { const value = stored(key); return value === null ? missing : value === "true"; };
+    const language = stored("penecho-language");
+    if (["en", "zh"].includes(language) && language !== state.language) { state.language = language; applyLanguage(); }
+    window.PenEchoPageScale?.syncFromStorage();
+    const grid = loadCanvasGridPreference();
+    if (grid.visible !== state.gridVisible || grid.style !== state.gridStyle) {
+      state.gridVisible = grid.visible;
+      state.gridStyle = grid.style;
+      updateGridButton();
+      requestRender();
+    }
+    setWheelZoom(on("penecho-wheel-zoom", false), false);
+    const delayText = stored("penecho-auto-delay-ms"), delay = delayText === null ? NaN : Number(delayText);
+    if (Number.isFinite(delay) && delay >= 0 && delay <= 10000 && delay !== state.autoDelayMs) { state.autoDelayMs = delay; updateAutoControl(); }
+    if (on("penecho-auto-ai", false) !== state.autoPreference) setAutoEnabled(!state.autoPreference);
+    if (on("penecho-summon-enabled", true) !== state.summonEnabled) setSummonEnabled(!state.summonEnabled);
+    if ((stored("penecho-canvas-hints-enabled") !== "false") !== state.canvasHintsEnabled) setCanvasHintsEnabled(!state.canvasHintsEnabled);
+    if (on("penecho-widget-shadow", false) !== state.widgetShadowEnabled) setWidgetShadowEnabled(!state.widgetShadowEnabled);
+    const font = stored(AI_FONT_STORAGE_KEY), style = stored(ILLUSTRATION_STYLE_STORAGE_KEY), background = stored(ILLUSTRATION_BACKGROUND_STORAGE_KEY);
+    if (normalizeAiFont(font) !== state.aiFont) setAiFont(font);
+    if (PenEchoIllustrationStyle.normalize(style) !== state.illustrationStyle) setIllustrationStyle(style);
+    if (PenEchoIllustrationStyle.normalizeBackground(background) !== state.illustrationBackground) setIllustrationBackground(background);
+    const effort = normalizeToolbarReasoningEffort(stored("penecho-ai-effort"));
+    if (effort && effort !== state.reasoningEffort) { state.reasoningEffort = effort; updateEffortControl(); }
+    if ((stored(SMART_SUGGEST_STORAGE_KEY) !== "false") !== smartSuggest.enabled) setSmartSuggestEnabled(!smartSuggest.enabled);
+    const pen = penIntelStoredSettings();
+    for (const name of ["gestures", "stepCheck"]) if ((pen[name] !== false) !== penIntelSetting(name)) setPenIntelSetting(name, pen[name] !== false);
+    void mcpSyncWakeLock();
+    mcpRenderSettings();
+    // The model Canvas AI answers with, and the keys and sign-in it is picked from.
+    renderConnectionLists();
+    syncLocalConnectionSelection();
+    canvasAgentConnectionDidChange();
+    void loadCanvasSettings();
+  }
+  window.PenEchoOpenSettingsPage = (page = "canvas") => {
+    if (page === "canvas") selectSettingsPage("canvas");
+    else if (page) settings.activePage = page;
+    if (!openSettings()) selectSettingsPage(page);
+    else selectSettingsPage(page);
+  };
   function openSettings() {
-    if (settings.open || !settingsLayer) return false;
+    if (settings.open || settings.leaving || !settingsLayer) return false;
     hideAutoDelayControl();
     hideEffortControl();
     hidePluginControl();
@@ -4076,6 +3512,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsLayer.setAttribute("aria-hidden", "false");
     settingsButton.setAttribute("aria-expanded", "true");
     updateSettingsPanel();
+    if (!hostedSettings.models.length && !hostedSettings.loading && window.PENECHO_CONFIG?.runtime === "cloud") void loadHostedModels();
     requestAnimationFrame(() => settingsPanel.focus({ preventScroll: true }));
     return true;
   }
@@ -4116,12 +3553,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const select = document.querySelector("#illustrationBackground");
     if (select) select.value = state.illustrationBackground;
   }
-  function setCanvasAgentAutoOpen(enabled) {
-    state.canvasAgentAutoOpen = Boolean(enabled);
-    localStorage.setItem("penecho-canvas-agent-auto-open", String(state.canvasAgentAutoOpenPreference));
-    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpenPreference);
-    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpenPreference));
-  }
   function setCanvasHintsEnabled(enabled) {
     state.canvasHintsEnabled = Boolean(enabled);
     localStorage.setItem("penecho-canvas-hints-enabled", String(state.canvasHintsEnabled));
@@ -4139,7 +3570,50 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function maybeStartOnboarding() {
     if (window.PENECHO_CONFIG?.runtime === "viewer" || settings.open) return false;
-    if (!maybeStartFeatureTour()) maybeShowChangelog();
+    // PenEcho opened by itself may be on its way to a new Canvas in My Canvases (project-lines-bridge.js). That Canvas greets you; this page waits to know.
+    if (window.projectLinesAlone === true && projectLinesStayed !== true) { if (projectLinesStayed === null) void projectLinesStaying.then(stays => { if (stays) maybeStartOnboarding(); }); return false; }
+    // Only the small first-use Canvas AI hint remains.
+    maybeShowCanvasHint();
+  }
+  // ---------- The one hint on a new install ----------
+  // "new" from the first start of a new install until Got it or the first stroke, then "done". Someone who used an earlier version never gets it.
+  const CANVAS_HINT_STORAGE_KEY = "penecho-canvas-ai-hint";
+  try { if (!localStorage.getItem(CANVAS_HINT_STORAGE_KEY) && !usedEarlierVersion()) localStorage.setItem(CANVAS_HINT_STORAGE_KEY, "new"); } catch { /* No hint, then. */ }
+  const canvasAiHint = document.querySelector("#canvasAiHint");
+  function canvasHintDue() {
+    try { return localStorage.getItem(CANVAS_HINT_STORAGE_KEY) === "new"; } catch { return false; }
+  }
+  function placeCanvasHint() {
+    if (!canvasAiHint || canvasAiHint.hidden) return;
+    const button = [document.querySelector("#aiToolbarRun"), document.querySelector("#aiOrb")].find(element => element?.getClientRects().length),
+      at = button && pageLayoutRect(button), card = pageLayoutRect(canvasAiHint), style = runtimeElementStyle(canvasAiHint, "canvas-ai-hint");
+    if (!at || !card) { canvasAiHint.hidden = true; return; }
+    const viewport = canvasOverlayViewport(), left = Math.max(viewport.left + 8, Math.min(at.right - card.width, viewport.left + viewport.width - card.width - 8));
+    // Above the button, or under it where the button sits near the top (the floating AI button on a phone).
+    const below = at.top - card.height - 12 < viewport.top + 64;
+    canvasAiHint.classList.toggle("below", below);
+    style?.setProperty("left", `${Math.round(left)}px`);
+    style?.setProperty("top", `${Math.round(below ? at.bottom + 12 : at.top - card.height - 12)}px`);
+    style?.setProperty("--canvas-ai-hint-arrow", `${Math.round(Math.max(14, Math.min(card.width - 26, at.left + at.width / 2 - left - 6)))}px`);
+  }
+  function maybeShowCanvasHint() {
+    const config = window.PENECHO_CONFIG || {};
+    if (!canvasAiHint || !canvasHintDue() || config.runtime === "viewer" || config.browserDraftId || CANVAS_COMPANION_REQUESTED || state.viewMode) return false;
+    // Over PenEcho Lines' first page it waits until the Canvas itself is in front.
+    if (window.projectLinesWelcomeOpen) return false;
+    canvasAiHint.hidden = false;
+    placeCanvasHint();
+    return !canvasAiHint.hidden;
+  }
+  function doneCanvasHint() {
+    if (canvasAiHint) canvasAiHint.hidden = true;
+    try { if (canvasHintDue()) localStorage.setItem(CANVAS_HINT_STORAGE_KEY, "done"); } catch { /* It may show once more. */ }
+  }
+  if (canvasAiHint) {
+    document.querySelector("#canvasAiHintDone")?.addEventListener("click", doneCanvasHint);
+    // The first stroke on the Canvas puts it away for good.
+    document.querySelector("#viewport")?.addEventListener("pointerdown", event => { if (!canvasAiHint.hidden && !event.target.closest?.("#projectLinesEntry, #canvasWelcomeExamples")) doneCanvasHint(); }, true);
+    window.addEventListener("resize", placeCanvasHint);
   }
   function autoDelayText() {
     const seconds = state.autoDelayMs / 1000;
@@ -4188,7 +3662,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       controlLeft = (controlRect.left - hostRect.left) / scaleX,
       controlWidth = controlRect.width / scaleX,
       desiredLeft = options.align === "center" ? controlLeft + (controlWidth - popover.offsetWidth) / 2 : controlLeft,
-      maxLeft = Math.max(inset, host.offsetWidth - popover.offsetWidth - inset),
+      // A popover of the Canvas AI bar ends at the bar's right edge, so it never goes under a panel beside the bar.
+      bar = control.closest("#aiToolsSection")?.getBoundingClientRect(),
+      maxLeft = Math.max(inset, Math.min(host.offsetWidth - popover.offsetWidth - inset, bar ? (bar.right - hostRect.left) / scaleX - popover.offsetWidth : Infinity)),
       popoverStyle = runtimeElementStyle(popover, `toolbar-popover-${popover.id}`);
     popover.classList.add("toolbar-anchored-popover");
     popoverStyle?.setProperty("left", `${Math.max(inset, Math.min(desiredLeft, maxLeft))}px`);
@@ -4209,20 +3685,32 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       fullLabel = label.querySelector(".effort-label-full"),
       shortLabel = label.querySelector(".effort-label-short"),
       customInput = document.querySelector("#aiEffortCustomInput"),
-      levelKey = { config:"effortConfigured", none:"effortNone", low:"effortLow", medium:"effortMedium", high:"effortHigh", max:"effortMaximum" }[state.reasoningEffort],
-      level = levelKey ? t({ config:"effortConfiguredShort", medium:"effortMediumShort" }[state.reasoningEffort] || levelKey) : state.reasoningEffort,
-      shortLevel = levelKey ? t({ config:"effortConfiguredShort", medium:"effortMediumShort" }[state.reasoningEffort] || levelKey) : state.reasoningEffort,
-      text = t("reasoningEffortDisplay").replace("{level}", level);
+      defaultEffort = activeModelDefaultEffort(),
+      defaultEffortName = effortLevelLabel(defaultEffort),
+      defaultEffortShort = effortLevelLabel(defaultEffort, { short:true }),
+      levelKey = { config:"effortConfigured", none:"effortNone", minimal:"effortMinimal", low:"effortLow", medium:"effortMedium", high:"effortHigh", xhigh:"effortXhigh", max:"effortMaximum" }[state.reasoningEffort],
+      level = state.reasoningEffort === "config" && defaultEffortShort
+        ? defaultEffortShort
+        : levelKey ? t({ config:"effortConfiguredShort", medium:"effortMediumShort" }[state.reasoningEffort] || levelKey) : state.reasoningEffort,
+      shortLevel = state.reasoningEffort === "config" && defaultEffortShort
+        ? defaultEffortShort
+        : levelKey ? t({ config:"effortConfiguredShort", medium:"effortMediumShort" }[state.reasoningEffort] || levelKey) : state.reasoningEffort,
+      text = t("reasoningEffortDisplay").replace("{level}", level),
+      titleText = state.reasoningEffort === "config" && defaultEffortName
+        ? t("reasoningEffortDisplay").replace("{level}", t("effortConfiguredDefault").replace("{level}", defaultEffortName))
+        : text;
     fullLabel.textContent = text;
     shortLabel.textContent = shortLevel;
-    button.setAttribute("aria-label", text);
-    button.setAttribute("title", text);
+    button.setAttribute("aria-label", titleText);
+    button.setAttribute("title", titleText);
     button.setAttribute("aria-expanded", String(!document.querySelector("#effortPopover").hidden));
-    control.dataset.effort = state.reasoningEffort;
+    control.dataset.effort = state.reasoningEffort === "config" && defaultEffort ? defaultEffort : state.reasoningEffort;
     if (customInput && document.activeElement !== customInput) customInput.value = levelKey ? "" : state.reasoningEffort;
     document.querySelectorAll("#effortOptions .effort-option").forEach((option) => {
-      const optionKey = { config:"effortConfigured", none:"effortNone", low:"effortLow", medium:"effortMedium", high:"effortHigh", max:"effortMaximum" }[option.dataset.effort] || "effortConfigured";
-      option.querySelector("[data-effort-label]").textContent = t(optionKey);
+      const optionKey = { config:"effortConfigured", none:"effortNone", minimal:"effortMinimal", low:"effortLow", medium:"effortMedium", high:"effortHigh", xhigh:"effortXhigh", max:"effortMaximum" }[option.dataset.effort] || "effortConfigured";
+      option.querySelector("[data-effort-label]").textContent = option.dataset.effort === "config" && defaultEffortName
+        ? t("effortConfiguredDefault").replace("{level}", defaultEffortName)
+        : t(optionKey);
       option.setAttribute("aria-selected", String(option.dataset.effort === state.reasoningEffort));
       option.classList.toggle("active", option.dataset.effort === state.reasoningEffort);
     });
@@ -4821,7 +4309,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.disabled = state.pluginAuthoringBusy;
     }
     pluginDocumentBytes.textContent = t("pluginBytes").replace("{bytes}", String(validation.bytes));
-    pluginDocumentBytes.classList.toggle("invalid", validation.bytes > 12000);
+    pluginDocumentBytes.classList.toggle("invalid", validation.bytes > 100000);
     pluginStylesBytes.textContent = t("pluginStylesBytes").replace("{bytes}", String(validation.styleBytes));
     pluginStylesBytes.classList.toggle("invalid", validation.styleBytes > 32000);
     pluginDocumentStatus.textContent = pluginAuthoringText(status);
@@ -4831,7 +4319,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     pluginStylesEditor.disabled = state.pluginAuthoringBusy;
     pluginStylesUploadButton.disabled = state.pluginAuthoringBusy;
     pluginStylesUpload.disabled = state.pluginAuthoringBusy;
-    pluginImprove.disabled = state.pluginAuthoringBusy || !pluginDocumentEditor.value.trim() || validation.bytes > 12000;
+    pluginImprove.disabled = state.pluginAuthoringBusy || !pluginDocumentEditor.value.trim() || validation.bytes > 100000;
     pluginSave.disabled = state.pluginAuthoringBusy || state.pluginCatalogLoading || !validation.manifest;
     for (const tab of [pluginLocalTab, pluginCreateTab, pluginServerTab]) tab.disabled = state.pluginAuthoringBusy;
     updatePluginStylesPreview(validation);
@@ -4895,7 +4383,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.pluginAuthoringBusy) return false;
     const document = pluginDocumentWithTitle(pluginDocumentEditor.value),
       styles = pluginStylesEditor.value;
-    if (!document.trim() || new TextEncoder().encode(document).length > 12000 || new TextEncoder().encode(styles).length > 32000) return false;
+    if (!document.trim() || new TextEncoder().encode(document).length > 100000 || new TextEncoder().encode(styles).length > 32000) return false;
     state.pluginAuthoringBusy = true;
     setPluginAuthoringStatus("pluginImproving");
     try {
@@ -4983,7 +4471,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (pluginPopover.hidden) return;
     const restore = state.pluginDialogRestoreFocus;
     document.body.classList.remove("plugin-open");
-    if (!featureTour.active) tourMain.inert = false;
+    canvasMain.inert = false;
     const restoreTarget = focusTargetAvailableOutsideLayer(pluginPopover, restore) ? restore : settingsButton;
     hideLayerWithoutRetainedFocus(pluginPopover, restoreTarget, settingsButton);
     pluginButton.classList.remove("active");
@@ -5009,7 +4497,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     pluginPopover.hidden = false;
     pluginPopover.setAttribute("aria-hidden", "false");
     document.body.classList.add("plugin-open");
-    tourMain.inert = true;
+    canvasMain.inert = true;
     updatePluginControl();
     setPluginTab("local");
     pluginPopover.querySelector(".plugin-modal")?.focus({ preventScroll:true });
@@ -5095,7 +4583,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.reasoningEffort = effort;
     localStorage.setItem("penecho-ai-effort", state.reasoningEffort);
     updateEffortControl();
-    if (typeof canvasAgentEffortDidChange === "function") canvasAgentEffortDidChange();
     hideEffortControl();
     return true;
   }
@@ -5152,7 +4639,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     else if (state.statusKey) setStatusKey(state.statusKey);
     updateSelectionToolbar();
     updateCanvasAgentLanguage();
-    updateFeatureTourLanguage();
     summonFX?.refreshText();
     positionAnimationControls();
     requestInteractionLayerRender();
@@ -5231,11 +4717,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestRender();
   }
   function applyPageScale(scale) {
-    state.pageScale = window.PenEchoPageScale?.apply?.(scale) || 1;
+    window.PenEchoPageScale?.apply(scale);
+  }
+  window.addEventListener("penecho:page-scale-change", () => {
+    state.pageScale = window.PenEchoPageScale.current();
     updateAppearanceControls();
     fit();
     window.dispatchEvent(new Event("resize"));
-  }
+  });
   function setBusy(value, showThinking = true) {
     state.busy = Boolean(value);
     embodiment.classList.toggle("working", state.busy);
@@ -5278,48 +4767,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.canvasChromeMaterialActive = false;
     view.classList.remove("canvas-chrome-lightweight");
   }
-  function restoreCanvasAgentAfterNavigation() {
-    const restoreMaterial = state.canvasAgentNavigationActive && state.canvasAgentNavigationWasOpen;
-    if (state.canvasAgentNavigationRestoreTimer) clearTimeout(state.canvasAgentNavigationRestoreTimer);
-    state.canvasAgentNavigationRestoreTimer = 0;
-    state.canvasAgentNavigationRestoreDeadline = 0;
-    state.canvasAgentNavigationActive = false;
-    state.canvasAgentNavigationWasOpen = false;
-    if (restoreMaterial) restoreCanvasChromeMaterial();
-    document.body.classList.remove("canvas-agent-navigation-hidden");
-  }
-  function scheduleCanvasAgentNavigationRestore() {
-    if (!state.canvasAgentNavigationActive || state.canvasAgentNavigationRestoreTimer) return;
-    const restore = () => {
-      const remaining = state.canvasAgentNavigationRestoreDeadline - performance.now();
-      if (remaining > 16) {
-        state.canvasAgentNavigationRestoreTimer = setTimeout(restore, remaining);
-        return;
-      }
-      state.canvasAgentNavigationRestoreTimer = 0;
-      if (state.canvasAgentNavigationPointerIds.size) return;
-      restoreCanvasAgentAfterNavigation();
-    };
-    state.canvasAgentNavigationRestoreTimer = setTimeout(restore, CANVAS_AGENT_NAVIGATION_RESTORE_MS);
-  }
-  function noteCanvasAgentNavigation(now = performance.now()) {
-    if (!state.canvasAgentNavigationActive) {
-      state.canvasAgentNavigationActive = true;
-      state.canvasAgentNavigationWasOpen = !canvasAgentPanel.hidden && document.body.classList.contains("canvas-agent-open");
-      if (state.canvasAgentNavigationWasOpen) {
-        if (canvasAgentPanel.contains(document.activeElement)) document.activeElement.blur();
-        document.body.classList.add("canvas-agent-navigation-hidden");
-      }
-    }
-    state.canvasAgentNavigationRestoreDeadline = now + CANVAS_AGENT_NAVIGATION_RESTORE_MS;
-    scheduleCanvasAgentNavigationRestore();
-  }
-  function canvasAgentNavigationPointerDidEnd(pointerId, now = performance.now()) {
-    const released = state.canvasAgentNavigationPointerIds.delete(pointerId);
-    if (!released || !state.canvasAgentNavigationActive || state.canvasAgentNavigationPointerIds.size) return false;
-    state.canvasAgentNavigationRestoreDeadline = now + CANVAS_AGENT_NAVIGATION_RESTORE_MS;
-    scheduleCanvasAgentNavigationRestore();
-    return true;
+  function canvasAgentNavigationPointerDidEnd(pointerId) {
+    return state.canvasAgentNavigationPointerIds.delete(pointerId);
   }
   function setNavigating(value) {
     const now = performance.now();

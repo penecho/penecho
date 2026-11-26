@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../src/client/app/mcp-runtime.js'),'utf8');
 const helper=source.slice(source.indexOf('  function mcpContentUpdateRegion('),source.indexOf('  function mcpViewBlockedBy('));

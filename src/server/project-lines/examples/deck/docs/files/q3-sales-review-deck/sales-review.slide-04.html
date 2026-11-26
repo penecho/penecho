@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Products</title><script src="penecho-slide-charts.js"></script></head><body>
+<div class="slide" data-penecho-slide data-penecho-template="investor" data-penecho-deck="Q3 2026 sales review">
+  <div class="hd"><h1><b>Products:</b> Cloud plan is 41% of Q3 revenue and grew 33% since Q1</h1></div>
+  <div class="body">
+    <div class="col wide"><div class="bar">Revenue by product</div><div class="cap">Q3 revenue ($K), Cloud plan highlighted</div><div id="c1" class="chart"></div></div>
+    <div class="col"><div class="bar">Growth, Q1 to Q3</div><div class="cap">Change (%)</div><div id="c2" class="chart"></div></div>
+  </div>
+  <div class="ft">Source: sales-2026.xlsx (By product sheet); shares and growth computed<span class="co">Brightline</span><span class="pg">4</span></div>
+</div>
+<script>
+SC.bar('#c1', {horizontal:true, categories:['Cloud plan','Desktop app','Support','Training'], series:[{name:'Q3 revenue', values:[690,512,286,190], colors:['#1F6FD1','#9CC3EE','#9CC3EE','#9CC3EE']}], axis:false, format:'${}K'});
+SC.bar('#c2', {categories:['Cloud\nplan','Desktop\napp','Support','Training'], series:[{name:'Growth', values:[32.7,6.7,24.3,35.7], colors:['#4B2A99','#A58BE0','#A58BE0','#A58BE0']}], axis:false, format:'{}%'});
+</script>
+</body></html>

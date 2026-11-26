@@ -76,6 +76,8 @@
     innerDocumentLoaded = false,
     widgetState = { selected:false, active:true, maximized:false, navigationLocked:false, scaleX:1, scaleY:1 };
   const pendingSnapshots = new Map();
+  // Slide descriptions asked for before the Widget document was ready.
+  const pendingSlides = new Map();
   // Authored General HTML imports pinned three.js from jsDelivr, so copied HTML stays
   // standalone. Inside PenEcho the import map points those URLs at this server's copy, so
   // widgets work offline and never depend on the CDN. The module build loads its core
@@ -1051,6 +1053,213 @@
       }
     }
     let activeSnapshot = null, activeSnapshotRender = null;
+    // A slide Widget (data-penecho-slide) describes itself for PowerPoint: positioned text runs stay
+    // editable text, plain boxes become shapes, SC charts carry their data for native charts, and other SVG, canvas, images and gradients become pictures.
+    async function slideExtract(message) {
+      const requestId = message.requestId;
+      try {
+        const root = document.querySelector("[data-penecho-slide]") || document.querySelector(".slide") || document.body;
+        if (message.check) {
+          // The slide's own check (from PenEcho's chart library): what a reader would notice, as plain sentences.
+          let problems = [];
+          try { problems = typeof globalThis.SC?.check === "function" ? globalThis.SC.check().map(text => String(text).slice(0, 300)).slice(0, 12) : []; } catch { problems = []; }
+          parent.postMessage({ type:"penecho-widget-slide", runtimeVersion, requestId, slide:{ version:1, check:problems, items:[] } }, "*");
+          return;
+        }
+        const saved = root.style.transform;
+        root.style.transform = "none";
+        try {
+          const slide = await slideItems(root);
+          parent.postMessage({ type:"penecho-widget-slide", runtimeVersion, requestId, slide }, "*");
+        } finally { root.style.transform = saved; }
+      } catch (error) {
+        parent.postMessage({ type:"penecho-widget-slide-error", runtimeVersion, requestId, error:String(error?.message || error).slice(0, 300) }, "*");
+      }
+    }
+    async function slideItems(root) {
+      const px = value => parseFloat(value) || 0;
+      const color = value => {
+        const match = value && String(value).match(/rgba?\(([^)]+)\)/);
+        if (!match) return null;
+        const parts = match[1].split(/[ ,/]+/).filter(Boolean).map(Number), alpha = parts.length > 3 ? parts[3] : 1;
+        if (!(alpha > 0)) return null;
+        return { hex:parts.slice(0, 3).map(n => Math.round(n).toString(16).padStart(2, "0")).join("").toUpperCase(), alpha };
+      };
+      const font = cs => cs.fontFamily.split(",")[0].replace(/["']/g, "").trim() || "Arial";
+      const cased = (text, cs) => cs.textTransform === "uppercase" ? text.toUpperCase() : cs.textTransform === "lowercase" ? text.toLowerCase() : cs.textTransform === "capitalize" ? text.replace(/\b\w/g, c => c.toUpperCase()) : text;
+      const raster = (url, width, height, scale = 2, type = "image/png") => new Promise(resolve => {
+        const image = new Image();
+        image.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.ceil(width * scale)); canvas.height = Math.max(1, Math.ceil(height * scale));
+            const context = canvas.getContext("2d"); context.scale(scale, scale); context.drawImage(image, 0, 0, width, height);
+            resolve(type === "image/jpeg" ? canvas.toDataURL("image/jpeg", 0.9) : canvas.toDataURL("image/png"));
+          } catch { resolve(null); }
+        };
+        image.onerror = () => resolve(null);
+        image.src = url;
+      });
+      // `leave` names elements kept out of the picture (a chart's marks that PowerPoint gets as shapes on top).
+      const svgPicture = (svg, width, height, leave = null) => {
+        const clone = svg.cloneNode(true), from = svg.querySelectorAll("*"), to = clone.querySelectorAll("*");
+        const props = ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "opacity", "fill-opacity", "stroke-opacity", "font-family", "font-size", "font-weight", "font-style", "text-anchor", "dominant-baseline", "letter-spacing", "paint-order"];
+        for (let index = 0; index < from.length; index++) {
+          const cs = getComputedStyle(from[index]);
+          for (const prop of props) { const value = cs.getPropertyValue(prop); if (value) to[index].style.setProperty(prop, value); }
+        }
+        if (leave) for (let index = 0; index < from.length; index++) if (leave.has(from[index])) to[index].remove();
+        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg"); clone.setAttribute("width", width); clone.setAttribute("height", height);
+        return raster("data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone)), width, height);
+      };
+      // CSS gradients are redrawn as SVG gradients (linear exactly, others as their first colour), then pictured.
+      const backgroundPicture = (element, rect) => {
+        const cs = getComputedStyle(element), image = cs.backgroundImage, width = rect.width, height = rect.height;
+        const linear = /^linear-gradient\((.*)\)$/i.exec(image.trim()), parts = [];
+        let depth = 0, current = "";
+        for (const char of (linear ? linear[1] : /\((.*)\)/.exec(image)?.[1] || "")) {
+          if (char === "(") depth++;
+          if (char === ")") depth--;
+          if (char === "," && depth === 0) { parts.push(current.trim()); current = ""; } else current += char;
+        }
+        if (current.trim()) parts.push(current.trim());
+        let angle = 180;
+        if (parts.length && /^(-?[\d.]+)(deg|turn|rad)$|^to /i.test(parts[0])) {
+          const head = parts.shift(), unit = /^(-?[\d.]+)(deg|turn|rad)$/i.exec(head);
+          if (unit) angle = Number(unit[1]) * (unit[2] === "turn" ? 360 : unit[2] === "rad" ? 180 / Math.PI : 1);
+          else angle = { "to top":0, "to right":90, "to bottom":180, "to left":270, "to top right":45, "to right top":45, "to bottom right":135, "to right bottom":135, "to bottom left":225, "to left bottom":225, "to top left":315, "to left top":315 }[head.toLowerCase()] ?? 180;
+        }
+        const stops = parts.map((part, index) => {
+          const found = /^(rgba?\([^)]*\)|#[0-9a-f]{3,8}|[a-z]+)\s*([\d.]+%)?/i.exec(part);
+          return found ? { color:found[1], at:found[2] || `${parts.length > 1 ? (index / (parts.length - 1)) * 100 : 0}%` } : null;
+        }).filter(Boolean);
+        if (!stops.length) return Promise.resolve(null);
+        const rad = angle * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad), half = Math.abs(width / 2 * dx) + Math.abs(height / 2 * dy);
+        const paint = linear
+          ? `<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="${width / 2 - dx * half}" y1="${height / 2 - dy * half}" x2="${width / 2 + dx * half}" y2="${height / 2 + dy * half}">${stops.map(stop => `<stop offset="${stop.at}" stop-color="${stop.color}"/>`).join("")}</linearGradient></defs>`
+          : "";
+        const radius = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, width / 2, height / 2), base = color(cs.backgroundColor);
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${paint}${base ? `<rect width="${width}" height="${height}" rx="${radius}" fill="rgb(${parseInt(base.hex.slice(0, 2), 16)},${parseInt(base.hex.slice(2, 4), 16)},${parseInt(base.hex.slice(4), 16)})"/>` : ""}<rect width="${width}" height="${height}" rx="${radius}" fill="${linear ? "url(#g)" : stops[0].color}"/></svg>`;
+        return raster("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg), width, height, 2, radius ? "image/png" : "image/jpeg");
+      };
+      const base = root.getBoundingClientRect(), items = [];
+      const place = rect => ({ x:rect.left - base.left, y:rect.top - base.top, w:rect.width, h:rect.height });
+      const runsOf = element => {
+        const runs = [];
+        const walk = node => {
+          for (const child of node.childNodes) {
+            if (child.nodeType === 3) {
+              const text = child.textContent.replace(/\s+/g, " ");
+              if (!text.trim() && !runs.length) continue;
+              const cs = getComputedStyle(child.parentElement);
+              runs.push({ text:cased(text, cs), bold:parseInt(cs.fontWeight) >= 600, italic:cs.fontStyle === "italic", color:(color(cs.color) || { hex:"000000" }).hex, size:px(cs.fontSize), font:font(cs), sup:cs.verticalAlign === "super" });
+            } else if (child.nodeType === 1) {
+              if (child.tagName === "BR") { runs.push({ br:true }); continue; }
+              const cs = getComputedStyle(child);
+              if (cs.display === "none") continue;
+              if (["block", "list-item", "flex"].includes(cs.display)) { if (runs.length) runs.push({ br:true }); walk(child); runs.push({ br:true }); }
+              else walk(child);
+            }
+          }
+        };
+        walk(element);
+        while (runs.length && runs.at(-1).br) runs.pop();
+        if (runs[0]?.text) runs[0].text = runs[0].text.replace(/^\s+/, "");
+        return runs;
+      };
+      const textOnly = element => {
+        let text = false;
+        for (const child of element.childNodes) {
+          if (child.nodeType === 3 && child.textContent.trim()) text = true;
+          if (child.nodeType !== 1) continue;
+          const cs = getComputedStyle(child);
+          if (cs.display === "none") continue;
+          if ((!["inline", "inline-block"].includes(cs.display) && child.tagName !== "BR") || ["svg", "IMG", "CANVAS"].includes(child.tagName)) return false;
+          if (color(cs.backgroundColor) || px(cs.borderTopWidth) || (cs.backgroundImage && cs.backgroundImage !== "none")) return false;
+          if (child.textContent.trim()) text = true;
+        }
+        return text;
+      };
+      const textItem = (element, cs, rect, runs) => {
+        const range = document.createRange(); range.selectNodeContents(element);
+        const textRect = range.getBoundingClientRect(), left = px(cs.paddingLeft), right = px(cs.paddingRight), top = px(cs.paddingTop), bottom = px(cs.paddingBottom);
+        return { type:"text", ...place({ left:rect.left + left, top:rect.top + top, width:rect.width - left - right, height:rect.height - top - bottom }), textTop:textRect.top - base.top, textH:textRect.height, runs,
+          // Flexbox centring counts as centred text, so a number in a circle stays in the middle in PowerPoint.
+          align:cs.textAlign === "center" || (/flex/.test(cs.display) && cs.justifyContent === "center") ? "center" : ["right", "end"].includes(cs.textAlign) ? "right" : "left",
+          valign:/flex/.test(cs.display) && cs.alignItems === "center" ? "middle" : "top", lineHeight:px(cs.lineHeight) || px(cs.fontSize) * 1.2, letterSpacing:px(cs.letterSpacing),
+          vertical:cs.writingMode !== "horizontal-tb" ? cs.writingMode : null, rotate:cs.transform && cs.transform !== "none" ? cs.transform : null };
+      };
+      const visit = async element => {
+        const cs = getComputedStyle(element);
+        if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") return;
+        const rect = element.getBoundingClientRect();
+        if (rect.width < 1 || rect.height < 1) return;
+        const tag = element.tagName.toLowerCase(), box = place(rect);
+        // A chart drawn by PenEcho's chart library carries its specification: PowerPoint rebuilds it as a native chart,
+        // with the picture as a fallback and the marks drawn over the plot (forecast box, callouts) placed on top.
+        const specIndex = element.getAttribute?.("data-sc"), spec = specIndex != null ? globalThis.SC?.specs?.[Number(specIndex)] : null, chartSvg = spec ? element.querySelector("svg") : null;
+        if (spec && chartSvg) {
+          const svgRect = chartSvg.getBoundingClientRect(), overlays = [], placed = new Set();
+          for (const mark of chartSvg.querySelectorAll(".sc-over")) {
+            const markRect = mark.getBoundingClientRect(), markStyle = getComputedStyle(mark), name = mark.tagName.toLowerCase();
+            if (markRect.width < 0.5 && markRect.height < 0.5) continue;
+            const count = overlays.length;
+            if (name === "text") {
+              const anchor = mark.getAttribute("text-anchor");
+              overlays.push({ type:"text", ...place(markRect), textTop:markRect.top - base.top, textH:markRect.height, lineHeight:markRect.height, align:anchor === "middle" ? "center" : anchor === "end" ? "right" : "left",
+                runs:[{ text:mark.textContent, bold:parseInt(markStyle.fontWeight) >= 600, italic:false, color:(color(markStyle.fill) || { hex:"2B333B" }).hex, size:px(markStyle.fontSize) || 12, font:"Arial" }] });
+            } else if (name === "rect" || name === "circle") {
+              const fill = markStyle.fill === "none" ? null : color(markStyle.fill), stroke = markStyle.stroke === "none" ? null : color(markStyle.stroke), opacity = Number(markStyle.fillOpacity || 1);
+              overlays.push({ type:"rect", ...place(markRect), fill:fill?.hex, fillAlpha:fill ? Math.min(fill.alpha, opacity) : undefined, line:stroke ? { color:stroke.hex, width:px(markStyle.strokeWidth) || 1 } : null, radius:name === "circle" ? markRect.width / 2 : 0, ellipse:name === "circle" });
+            } else if (name === "line") {
+              const stroke = color(markStyle.stroke);
+              if (stroke) overlays.push({ type:"line", ...place(markRect), color:stroke.hex, width:px(markStyle.strokeWidth) || 1, dash:markStyle.strokeDasharray && markStyle.strokeDasharray !== "none" });
+            }
+            if (overlays.length > count) placed.add(mark);
+          }
+          // The chart's picture, for apps that cannot draw native charts, leaves out the marks placed on top, so none shows twice.
+          const fallback = await svgPicture(chartSvg, svgRect.width, svgRect.height, placed);
+          const category = chartSvg.querySelector("text.cat");
+          items.push({ type:"chart", ...place(svgRect), spec:JSON.parse(JSON.stringify(spec)), fallback, plain:true, overlays, catBold:category ? parseInt(getComputedStyle(category).fontWeight) >= 600 : false });
+          return;
+        }
+        if (tag === "svg") { const data = await svgPicture(element, rect.width, rect.height); if (data) items.push({ type:"image", ...box, data }); return; }
+        if (tag === "img" || tag === "canvas") {
+          let data = null;
+          try { data = tag === "canvas" ? element.toDataURL("image/png") : await raster(element.currentSrc || element.src, rect.width, rect.height); } catch { data = null; }
+          if (data) items.push({ type:"image", ...box, data });
+          return;
+        }
+        if (element !== root) {
+          const fill = color(cs.backgroundColor), widths = ["Top", "Right", "Bottom", "Left"].map(side => px(cs[`border${side}Width`])), colors = ["Top", "Right", "Bottom", "Left"].map(side => color(cs[`border${side}Color`]));
+          const uniform = widths.every(width => width === widths[0]) && colors.every(value => value?.hex === colors[0]?.hex), radius = /%$/.test(cs.borderTopLeftRadius) ? parseFloat(cs.borderTopLeftRadius) / 100 * Math.min(rect.width, rect.height) : px(cs.borderTopLeftRadius);
+          if (cs.backgroundImage && cs.backgroundImage !== "none") { const data = await backgroundPicture(element, rect); if (data) items.push({ type:"image", ...box, data }); }
+          else if (fill || (uniform && widths[0] > 0 && colors[0])) items.push({ type:"rect", ...box, fill:fill?.hex, fillAlpha:fill?.alpha, line:uniform && widths[0] > 0 && colors[0] ? { color:colors[0].hex, width:widths[0] } : null, radius:Math.min(radius, rect.height / 2, rect.width / 2), ellipse:radius >= Math.min(rect.width, rect.height) / 2 - 0.5 && Math.abs(rect.width - rect.height) < 2 });
+          if (!uniform) [[0, box.x, box.y, box.w, 0], [1, box.x + box.w, box.y, 0, box.h], [2, box.x, box.y + box.h, box.w, 0], [3, box.x, box.y, 0, box.h]].forEach(([side, x, y, w, h]) => { if (widths[side] > 0 && colors[side]) items.push({ type:"line", x, y, w, h, color:colors[side].hex, width:widths[side] }); });
+        }
+        if (textOnly(element)) {
+          const runs = runsOf(element);
+          if (runs.some(run => run.text?.trim())) { items.push(textItem(element, cs, rect, runs)); return; }
+        }
+        for (const child of element.childNodes) {
+          if (child.nodeType === 1) await visit(child);
+          else if (child.nodeType === 3 && child.textContent.trim()) {
+            // Words sitting directly beside other boxes, such as a legend swatch and its label.
+            const range = document.createRange(); range.selectNodeContents(child);
+            const textRect = range.getBoundingClientRect();
+            if (textRect.width < 1) continue;
+            const lineHeight = px(cs.lineHeight) || px(cs.fontSize) * 1.2;
+            items.push({ type:"text", ...place(textRect), textTop:textRect.top - base.top, textH:textRect.height, align:"left", lineHeight:Math.max(px(cs.fontSize), textRect.height / Math.max(1, Math.round(textRect.height / lineHeight))), letterSpacing:px(cs.letterSpacing),
+              runs:[{ text:cased(child.textContent.replace(/\s+/g, " ").trim(), cs), bold:parseInt(cs.fontWeight) >= 600, italic:cs.fontStyle === "italic", color:(color(cs.color) || { hex:"000000" }).hex, size:px(cs.fontSize), font:font(cs) }] });
+          }
+        }
+      };
+      const rootStyle = getComputedStyle(root);
+      if (rootStyle.backgroundImage && rootStyle.backgroundImage !== "none") { const data = await backgroundPicture(root, base); if (data) items.push({ type:"image", x:0, y:0, w:base.width, h:base.height, data }); }
+      await visit(root);
+      const background = color(rootStyle.backgroundColor) || color(getComputedStyle(document.body).backgroundColor);
+      return { version:1, width:base.width, height:base.height, background:background?.hex || "FFFFFF", items:items.slice(0, 4000) };
+    }
     async function snapshot(message) {
       // Captures are serialized. A request that arrives while an earlier
       // render is still draining (for example after its caller gave up) waits
@@ -1551,6 +1760,7 @@
         if (typeof requestId !== "string" || requestId.length > 128 || !["width", "height", "resize"].includes(hit)) return;
         void fitWidgetContent({ requestId, hit, automatic:event.data.automatic === true });
       } else if (event.data?.type === "penecho-widget-snapshot-request") void snapshot(event.data);
+      else if (event.data?.type === "penecho-widget-slide-request" && typeof event.data.requestId === "string" && event.data.requestId.length <= 128) void slideExtract(event.data);
       else if (event.data?.type === "penecho-widget-state" && typeof event.data.selected === "boolean" && typeof event.data.active === "boolean"
         && Number.isFinite(event.data.scaleX) && event.data.scaleX > 0 && Number.isFinite(event.data.scaleY) && event.data.scaleY > 0) {
         const becameVisible = event.data.active && (!widgetStateReceived || !widgetState.active);
@@ -2027,6 +2237,8 @@
     language = normalizeWidgetLanguage(language);
     parsed.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     const mcpPreview = sourceFormat === "penecho-mcp+html";
+    const prototypeAttr = parsed.documentElement.getAttribute("data-penecho-prototype");
+    const prototypePage = prototypeAttr !== null && !/^(?:0|false|no|off)$/i.test(prototypeAttr.trim());
     parsed.querySelectorAll(mcpPreview ? "base, iframe, object, embed, meta[http-equiv]" : "base, iframe, object, embed, form, meta[http-equiv]").forEach((element) => element.remove());
     parsed.querySelectorAll("script[src]").forEach((element) => {
       if(element.getAttribute("src")==="https://penecho.ai/canvas/playground/liveclay-v1.js"){element.src=new URL("playground/liveclay-v1.js",location.href).href;return;}
@@ -2112,8 +2324,9 @@
       parsed.head.insertBefore(pluginStyle, parsed.head.querySelector("style, link"));
     }
     const bridgeStyle = parsed.createElement("style");
-    bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{user-select:none!important}html.penecho-widget-resize-width,html.penecho-widget-resize-width *{cursor:ew-resize!important}html.penecho-widget-resize-height,html.penecho-widget-resize-height *{cursor:ns-resize!important}html.penecho-widget-resize-corner,html.penecho-widget-resize-corner *{cursor:nwse-resize!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
-    if(mcpPreview)bridgeStyle.textContent=bridgeStyle.textContent.replace("background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);","");
+    const bridgeShared = "html.penecho-widget-dragging,html.penecho-widget-dragging *{user-select:none!important}html.penecho-widget-resize-width,html.penecho-widget-resize-width *{cursor:ew-resize!important}html.penecho-widget-resize-height,html.penecho-widget-resize-height *{cursor:ns-resize!important}html.penecho-widget-resize-corner,html.penecho-widget-resize-corner *{cursor:nwse-resize!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
+    bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);overscroll-behavior:contain}" + bridgeShared;
+    if (mcpPreview || prototypePage) bridgeStyle.textContent = "html,body{overscroll-behavior:contain}" + bridgeShared;
     parsed.head.append(bridgeStyle);
     if (localDiagrams.length) {
       const localReady = parsed.createElement("script");
@@ -2244,13 +2457,14 @@
   function forwardWidgetState() {
     inner.contentWindow?.postMessage({ type:"penecho-widget-state", ...widgetState }, "*");
   }
-  function announceWidgetHostReady() {
+  function announceWidgetHostReady(probe = false) {
     snapshotDebugLog("host-ready-announced");
-    parent.postMessage({ type:"penecho-widget-host-ready" }, parentOrigin);
+    // A probe's answer comes from a document that may already have painted.
+    parent.postMessage({ type:"penecho-widget-host-ready", ...(probe ? { probe:true } : {}) }, parentOrigin);
   }
   function respondToWidgetHostProbe(event) {
     if (event.source !== parent || event.origin !== parentOrigin || event.data?.type !== "penecho-widget-host-probe") return false;
-    announceWidgetHostReady();
+    announceWidgetHostReady(true);
     return true;
   }
   function flushDragMove() {
@@ -2339,6 +2553,11 @@
       } else if (message?.type === "penecho-widget-fit-request") {
         if (typeof message.requestId !== "string" || message.requestId.length > 128 || !["width", "height", "resize"].includes(message.hit)) return;
         inner.contentWindow?.postMessage({ type:message.type, requestId:message.requestId, hit:message.hit, automatic:message.automatic === true }, "*");
+      } else if (message?.type === "penecho-widget-slide-request") {
+        if (typeof message.requestId !== "string" || message.requestId.length > 128) return;
+        const send = () => inner.contentWindow?.postMessage({ type:message.type, requestId:message.requestId, check:message.check === true }, "*");
+        if (innerDocumentReady) send();
+        else pendingSlides.set(message.requestId, send);
       } else if (message?.type === "penecho-widget-snapshot-current-frame") {
         const request = pendingSnapshots.get(message.requestId);
         if (request && !request.forwarded) {
@@ -2416,6 +2635,8 @@
       snapshotDebugLog("capture-ready-announced");
       parent.postMessage({ type:"penecho-widget-capture-ready" }, parentOrigin);
       for (const [requestId, request] of pendingSnapshots) forwardSnapshotRequest(requestId, request);
+      for (const send of pendingSlides.values()) send();
+      pendingSlides.clear();
     } else if (validRuntimeDiagnostics(message)) {
       parent.postMessage({ type:message.type, errors:message.errors, truncated:message.truncated }, parentOrigin);
     } else if (validVisualExplainerDiagnostics(message)) {
@@ -2480,6 +2701,11 @@
             overflow:{x:message.overflow?.x===true,y:message.overflow?.y===true}} : {}) }, parentOrigin);
       }
     } else if (message.type === "penecho-widget-snapshot-error" && message.runtimeVersion === runtimeVersion && pendingSnapshots.has(message.requestId)) snapshotError(message.requestId, message.error, message.code, message.details||{});
+    else if (message.type === "penecho-widget-slide" && message.runtimeVersion === runtimeVersion && typeof message.requestId === "string" && message.requestId.length <= 128
+      && message.slide && Array.isArray(message.slide.items) && message.slide.items.length <= 4000 && (message.slide.check === undefined || (Array.isArray(message.slide.check) && message.slide.check.length <= 12 && message.slide.check.every(text => typeof text === "string" && text.length <= 300))))
+      parent.postMessage({ type:message.type, requestId:message.requestId, slide:message.slide }, parentOrigin);
+    else if (message.type === "penecho-widget-slide-error" && message.runtimeVersion === runtimeVersion && typeof message.requestId === "string" && message.requestId.length <= 128)
+      parent.postMessage({ type:message.type, requestId:message.requestId, error:String(message.error || "").slice(0, 300) }, parentOrigin);
     else if (validActivateMessage(message)) parent.postMessage({
       type:message.type,
       pointerId:message.pointerId,

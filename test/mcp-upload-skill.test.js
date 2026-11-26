@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/safety.js');
 // Isolated loopback acceptance of the skill command, not a two-machine/app test.
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto'),vm=require('node:vm');

@@ -2,22 +2,26 @@
 "use strict";
 
 const fs = require("fs");
+const http = require("http");
 const { presetRequestHeaders } = require("../providers/preset-discovery.js");
 const net = require("net");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { isPidAlive, listRegisteredServers, readActiveRunsFallback } = require("../server/instance-control.js");
 const { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig } = require("../server/api-config.js");
 const { isEventStreamResponse, readProviderEventStream } = require("../server/api-stream.js");
 const { apiReasoningParameters, reasoningEffortMapping } = require("../providers/reasoning-effort.js");
-const { callCodexCli, resolveCodexLaunch } = require("../providers/codex-cli.js");
+const { callCodexCli, prepareCodexEnv, resolveCodexLaunch } = require("../providers/codex-cli.js");
+const { prepareAgentEnv } = require("../providers/agent-env.js");
 const { callClaudeCli, resolveClaudeLaunch } = require("../providers/claude-cli.js");
 const { callKimiCli, resolveKimiLaunch } = require("../providers/kimi-cli.js");
 const { cliCandidates, cliDefinition } = require("../providers/cli-discovery.js");
-const { CODEX_CLI_PINNED_VERSION, codexCliVersion, installCli, managedCliPath } = require("../providers/cli-installer.js");
 const { MINIMUM_NODE_VERSION, isSupportedNodeVersion, unsupportedNodeMessage } = require("./node-version.js");
 const { CONNECTION_STORE_VERSION, connectionEnvironment, readConnectionStore } = require("../server/connection-store.js");
 const { maybeUpdateOnStart } = require("./update.js");
+const { browserUrl, canOpenBrowser, openBrowser } = require("./open-browser.js");
+const { readStartupAnswer } = require("./startup-prompt.js");
 
 const PACKAGE_ROOT = path.resolve(__dirname, "../..");
 const PACKAGE_JSON = require("../../package.json");
@@ -30,7 +34,7 @@ const REQUIRED_ASSETS = [
   "src/server/main.js", "src/server/typeset.js", "src/server/api-config.js",
   "src/server/canvas-agent/http.js", "src/server/canvas-agent/protocol.mjs", "src/server/canvas-agent/runtime.mjs",
   "src/cli/update.js", "src/cli/configure-ui.js", "src/cli/node-version.js",
-  "src/providers/cli-discovery.js", "src/providers/cli-inspection.js", "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
+  "src/providers/agent-env.js", "src/providers/cli-discovery.js", "src/providers/cli-inspection.js", "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
   "public/index.html", "public/access.html", "public/access.css", "public/access.js", "public/app.js", "public/draw.js", "public/selection.js", "public/tour.js", "public/style.css",
 ];
 
@@ -65,10 +69,10 @@ function parseTextOption(name, value) {
 }
 
 function parseArgs(argv = []) {
-  const result = { command: "start", provider: null, port: null, model: null, effort: null, config: null, uat: false, help: false, version: false };
+  const result = { command: "start", provider: null, port: null, model: null, effort: null, config: null, uat: false, open: true, help: false, version: false };
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
-    if (argument === "doctor" || argument === "configure") {
+    if (argument === "doctor" || argument === "configure" || argument === "restart") {
       if (result.command !== "start") throw new Error("Only one command may be specified.");
       result.command = argument;
     } else if (argument === "--api") {
@@ -105,6 +109,8 @@ function parseArgs(argv = []) {
       result.config = parseTextOption("--config", argument.slice("--config=".length));
     } else if (argument === "--uat") {
       result.uat = true;
+    } else if (argument === "--no-open") {
+      result.open = false;
     } else if (argument === "--help" || argument === "-h") {
       result.help = true;
     } else if (argument === "--version" || argument === "-v") {
@@ -115,7 +121,7 @@ function parseArgs(argv = []) {
       throw new Error(`Unknown command: ${argument}`);
     }
   }
-  if (result.uat && result.command !== "start") throw new Error("--uat is only supported when starting PenEcho.");
+  if (result.uat && result.command !== "start" && result.command !== "restart") throw new Error("--uat is only supported when starting PenEcho.");
   return result;
 }
 
@@ -312,11 +318,13 @@ async function testApiConnection(env, options = {}) {
 
 function runCaptured(launch, args, options = {}) {
   const timeoutMs = options.timeoutMs || CLI_PREFLIGHT_TIMEOUT_MS;
+  const baseEnv = options.env || process.env;
+  const env = launch.env ? { ...baseEnv, ...launch.env } : baseEnv;
   return new Promise((resolve, reject) => {
     let child;
     try {
       child = spawn(launch.command, [...launch.prefixArgs, ...args], {
-        cwd: options.cwd || process.cwd(), env: options.env || process.env,
+        cwd: options.cwd || process.cwd(), env,
         stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: false,
       });
     } catch (error) { reject(error); return; }
@@ -361,11 +369,12 @@ async function runCodexPreflight(configuration, options = {}) {
   try { launch = resolveCodexLaunch(configuration.env.CODEX_CLI_PATH || "codex", configuration.env); }
   catch (error) { return { ok:false, issue:/not found|not a file/i.test(error.message) ? "missing" : "execution", error:error.message }; }
   let versionText = "";
+  const codexEnv = prepareCodexEnv(configuration.env, null, { platform:process.platform });
   try {
-    const version = await runner(launch, ["--version"], { cwd: configuration.cwd, env: configuration.env, timeoutMs: CLI_PREFLIGHT_TIMEOUT_MS });
+    const version = await runner(launch, ["--version"], { cwd: configuration.cwd, env: codexEnv, timeoutMs: CLI_PREFLIGHT_TIMEOUT_MS });
     if (version.code !== 0) return { ok:false, issue:"execution", error:"Codex CLI could not report its version." };
     versionText = (version.stdout || version.stderr).trim().split(/\r?\n/, 1)[0] || "Codex CLI";
-    const login = await runner(launch, ["login", "status"], { cwd: configuration.cwd, env: configuration.env, timeoutMs: CLI_PREFLIGHT_TIMEOUT_MS });
+    const login = await runner(launch, ["login", "status"], { cwd: configuration.cwd, env: codexEnv, timeoutMs: CLI_PREFLIGHT_TIMEOUT_MS });
     if (login.code !== 0) {
       const diagnostic = `${login.stdout || ""}\n${login.stderr || ""}`;
       if (/not logged in|not authenticated|authentication required|login required/i.test(diagnostic)) return { ok:false, issue:"authentication", error:"Codex CLI is not logged in.", version:versionText };
@@ -380,7 +389,8 @@ async function codexBundledModels(configuration, options = {}) {
   let launch;
   try { launch = resolveCodexLaunch(configuration.env.CODEX_CLI_PATH || "codex", configuration.env); }
   catch (error) { throw new Error(error.message); }
-  const result = await runner(launch, ["debug", "models", "--bundled"], { cwd:configuration.cwd, env:configuration.env, timeoutMs:CLI_PREFLIGHT_TIMEOUT_MS });
+  const codexEnv = prepareCodexEnv(configuration.env, null, { platform:process.platform });
+  const result = await runner(launch, ["debug", "models", "--bundled"], { cwd:configuration.cwd, env:codexEnv, timeoutMs:CLI_PREFLIGHT_TIMEOUT_MS });
   if (result.code !== 0) throw new Error("Codex CLI could not read its bundled model catalog. Upgrade Codex with `npm install -g @openai/codex@latest`.");
   let catalog;
   try { catalog = JSON.parse(result.stdout); }
@@ -394,10 +404,11 @@ async function runClaudePreflight(configuration, options = {}) {
   let launch;
   try { launch = resolveClaudeLaunch(configuration.env.CLAUDE_CLI_PATH || "claude", configuration.env); }
   catch (error) { return { ok:false, issue:/not found|not a file/i.test(error.message) ? "missing" : "execution", error:error.message }; }
+  const claudeEnv = prepareAgentEnv(configuration.env, null, { platform:process.platform });
   try {
-    const version = await runner(launch, ["--version"], { cwd: configuration.cwd, env: configuration.env, timeoutMs: CLI_PREFLIGHT_TIMEOUT_MS });
+    const version = await runner(launch, ["--version"], { cwd: configuration.cwd, env: claudeEnv, timeoutMs: CLI_PREFLIGHT_TIMEOUT_MS });
     if (version.code !== 0) return { ok:false, issue:"execution", error:"Claude CLI could not report its version." };
-    const login = await runner(launch, ["auth", "status"], { cwd: configuration.cwd, env: configuration.env, timeoutMs: CLI_PREFLIGHT_TIMEOUT_MS });
+    const login = await runner(launch, ["auth", "status"], { cwd: configuration.cwd, env: claudeEnv, timeoutMs: CLI_PREFLIGHT_TIMEOUT_MS });
     const authOutputs = [login.stdout, login.stderr].map(value => String(value || "").trim()).filter(Boolean);
     const loggedOut = authOutputs.some(output => {
       try {
@@ -421,7 +432,7 @@ async function runKimiPreflight(configuration, options = {}) {
   try { launch = resolveKimiLaunch(configuration.env.KIMI_CLI_PATH || "kimi", configuration.env); }
   catch (error) { return { ok:false, issue:/not found|not a file/i.test(error.message) ? "missing" : "execution", error:error.message }; }
   try {
-    const env = { ...configuration.env, KIMI_CODE_NO_AUTO_UPDATE:"1" },
+    const env = prepareAgentEnv(configuration.env, { KIMI_CODE_NO_AUTO_UPDATE:"1" }, { platform:process.platform }),
       version = await runner(launch, ["--version"], { cwd:configuration.cwd, env, timeoutMs:CLI_PREFLIGHT_TIMEOUT_MS });
     if (version.code !== 0) return { ok:false, issue:"execution", error:"Kimi Code CLI could not report its version." };
     return { ok:true, version:(version.stdout || version.stderr).trim().split(/\r?\n/, 1)[0] || "Kimi Code CLI" };
@@ -539,77 +550,25 @@ function apiConnectionTestLabel(env, format) {
   return format === "openai" ? "OpenAI-compatible" : format;
 }
 
-function compareSemanticVersions(left, right) {
-  const leftParts = String(left).split(".").map(Number), rightParts = String(right).split(".").map(Number);
-  for (let index = 0; index < 3; index++) {
-    if (leftParts[index] !== rightParts[index]) return leftParts[index] < rightParts[index] ? -1 : 1;
-  }
-  return 0;
-}
-
-function codexVersionOrThrow(preflight) {
-  const version = codexCliVersion(preflight?.version);
-  if (version) return version;
-  const error = new Error(`Codex CLI did not report a semantic version; expected ${CODEX_CLI_PINNED_VERSION} or newer.`);
-  error.code = "CODEX_CLI_VERSION_INCOMPATIBLE";
-  throw error;
-}
-
-async function prepareCodexConnectionTest(configuration, options, resetTimeout, assertNotTimedOut) {
-  let selectedConfiguration = { ...configuration, env:{ ...configuration.env } },
-    preflight = await runCodexPreflight(selectedConfiguration, { runner:options.runner });
-  assertNotTimedOut();
-  if (!preflight.ok) throw new Error(preflight.error);
-  const selectedVersion = codexVersionOrThrow(preflight);
-  if (compareSemanticVersions(selectedVersion, CODEX_CLI_PINNED_VERSION) >= 0) return { configuration:selectedConfiguration, preflight };
-
-  const cwd = path.resolve(configuration.cwd || process.cwd()),
-    home = path.resolve(configuration.home || configuration.env.HOME || configuration.env.USERPROFILE || os.homedir()),
-    stateDir = configuration.stateDir
-      ? path.resolve(configuration.stateDir)
-      : configuration.env.PENECHO_STATE_DIR
-        ? path.resolve(cwd, configuration.env.PENECHO_STATE_DIR)
-        : path.join(home, ".penecho"),
-    managedExecutable = managedCliPath("codex-cli", { home, stateDir, platform:options.platform }),
-    managedConfiguration = { ...configuration, home, stateDir, env:{ ...configuration.env, PENECHO_STATE_DIR:stateDir, CODEX_CLI_PATH:managedExecutable } },
-    managedPreflight = await runCodexPreflight(managedConfiguration, { runner:options.runner });
-  assertNotTimedOut();
-  if (managedPreflight.ok) {
-    const managedVersion = codexVersionOrThrow(managedPreflight);
-    if (compareSemanticVersions(managedVersion, CODEX_CLI_PINNED_VERSION) >= 0) {
-      return { configuration:managedConfiguration, preflight:managedPreflight };
-    }
-  } else {
-    if (managedPreflight.version) {
-      const managedVersion = codexVersionOrThrow(managedPreflight);
-      if (compareSemanticVersions(managedVersion, CODEX_CLI_PINNED_VERSION) >= 0) throw new Error(managedPreflight.error);
-    }
-    if (managedPreflight.issue === "authentication") throw new Error(managedPreflight.error);
-  }
-
-  const installer = options.codexInstaller || installCli;
-  resetTimeout(null);
-  let installed;
+function resolveDefaultCodexConfiguration(configuration, options = {}) {
+  if (configuration?.provider !== "codex-cli") return configuration;
+  const configured = String(configuration.env?.CODEX_CLI_PATH || "").trim();
+  if (configured && configured !== "codex") return configuration;
   try {
-    await options.onCliUpgrade?.({ phase:"start" });
-    installed = await installer("codex-cli", { home, stateDir, env:{ ...configuration.env, PENECHO_STATE_DIR:stateDir }, platform:options.platform });
-  } finally {
-    await options.onCliUpgrade?.({ phase:"complete" });
-  }
-  resetTimeout();
-  selectedConfiguration = {
-    ...configuration,
-    home,
-    stateDir,
-    env:{ ...configuration.env, PENECHO_STATE_DIR:stateDir, CODEX_CLI_PATH:installed.executable || managedExecutable },
-  };
-  preflight = await runCodexPreflight(selectedConfiguration, { runner:options.runner });
-  if (!preflight.ok) throw new Error(preflight.error);
-  const installedVersion = codexVersionOrThrow(preflight);
-  if (compareSemanticVersions(installedVersion, CODEX_CLI_PINNED_VERSION) < 0) {
-    throw new Error(`Codex CLI ${installedVersion} is older than the required ${CODEX_CLI_PINNED_VERSION}.`);
-  }
-  return { configuration:selectedConfiguration, preflight };
+    resolveCodexLaunch("codex", configuration.env);
+    return configuration;
+  } catch {}
+  const candidates = cliCandidates("codex-cli", {
+    env:configuration.env,
+    home:configuration.home,
+    stateDir:configuration.stateDir,
+    platform:options.platform,
+    configuredPath:"",
+    appFolders:options.appFolders,
+    systemDirs:options.systemDirs,
+  });
+  if (!candidates.length) return configuration;
+  return { ...configuration, env:{ ...configuration.env, CODEX_CLI_PATH:candidates[0].executable } };
 }
 
 async function testConfiguredProvider(configuration, options = {}) {
@@ -621,25 +580,15 @@ async function testConfiguredProvider(configuration, options = {}) {
     const result = await (options.apiTester || testApiConnection)(configuration.env, { fetchImpl:options.fetchImpl, timeoutMs });
     return `${apiConnectionTestLabel(configuration.env, result.format)} API responded with HTTP ${result.status}.`;
   }
-  let controller, timer;
-  const resetTimeout = (start = true) => {
-    if (timer) clearTimeout(timer);
-    if (!start) return;
-    controller = new AbortController();
-    timer = setTimeout(() => controller.abort(), timeoutMs);
-  };
-  resetTimeout();
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
   const atlasImage = configuredTestImage(configuration.env);
   try {
-    const assertNotTimedOut = () => {
-      if (controller.signal.aborted) throw connectionTestTimeoutError(`Connection test timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
-    };
-    let activeConfiguration = configuration, preflight;
-    if (provider === "codex-cli") {
-      ({ configuration:activeConfiguration, preflight } = await prepareCodexConnectionTest(configuration, options, resetTimeout, assertNotTimedOut));
-    } else preflight = provider === "kimi-cli"
-      ? await runKimiPreflight(configuration, { runner:options.runner })
-      : await runClaudePreflight(configuration, { runner:options.runner });
+    const activeConfiguration = provider === "codex-cli" ? resolveDefaultCodexConfiguration(configuration, options) : configuration;
+    const preflight = provider === "kimi-cli"
+      ? await runKimiPreflight(activeConfiguration, { runner:options.runner })
+      : provider === "codex-cli"
+        ? await runCodexPreflight(activeConfiguration, { runner:options.runner })
+        : await runClaudePreflight(activeConfiguration, { runner:options.runner });
     if (controller.signal.aborted) throw connectionTestTimeoutError(`Connection test timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
     if (!preflight.ok) throw new Error(preflight.error);
     if (provider === "codex-cli") {
@@ -692,7 +641,7 @@ async function runDoctor(args, configuration, options = {}) {
     const kimi = await runKimiPreflight(configuration, { runner:options.runner });
     report(kimi.ok, kimi.ok ? `${kimi.version}; executable is ready (authentication is checked when Kimi handles the first request)` : kimi.error);
   } else if (configuration.provider === "codex-cli") {
-    const codex = await runCodexPreflight(configuration, { runner: options.runner });
+    const codex = await runCodexPreflight(resolveDefaultCodexConfiguration(configuration, options), { runner: options.runner });
     report(codex.ok, codex.ok ? `${codex.version}; login is ready (no model request was made)` : codex.error);
   } else {
     const claude = await runClaudePreflight(configuration, { runner: options.runner });
@@ -724,11 +673,18 @@ async function runPostStartUpdate(server, argv, options, output, errorOutput) {
   return maybeUpdateOnStart(argv, updateOptions);
 }
 
-function schedulePostStartUpdate(server, argv, options, output, errorOutput) {
-  const task = () => runPostStartUpdate(server, argv, options, output, errorOutput).catch(error => {
-    errorOutput.write(`PenEcho update check failed: ${error.message}\n`);
-    return { checked:false, restarted:false };
-  });
+function schedulePostStartPrompts(server, argv, args, options, output, errorOutput) {
+  const task = async () => {
+    const update = await runPostStartUpdate(server, argv, options, output, errorOutput).catch(error => {
+      errorOutput.write(`PenEcho update check failed: ${error.message}\n`);
+    });
+    if (!update?.updated) {
+      await openStartedPage(server, args, options, output).catch(error => {
+        errorOutput.write(`PenEcho browser prompt failed: ${error.message}\n`);
+      });
+    }
+    return update;
+  };
   if (options.awaitUpdateCheck) return task();
   (options.updateScheduler || setImmediate)(() => { void task(); });
   return Promise.resolve(null);
@@ -776,11 +732,305 @@ function schedulePostStartCliPreflight(server, configuration, options, output, e
 }
 
 
+function requestInstanceControl(record, method, pathname, timeoutMs = 4000) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname:"127.0.0.1",
+      port:Number(record.port),
+      path:pathname,
+      method,
+      headers:{ "x-penecho-control-token":String(record.token || "") },
+      timeout:timeoutMs,
+    }, res => {
+      let raw = "";
+      res.setEncoding("utf8");
+      res.on("data", chunk => { raw += chunk; });
+      res.on("end", () => {
+        let body = null;
+        try { body = raw ? JSON.parse(raw) : null; } catch {}
+        resolve({ status:res.statusCode || 0, body });
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("Timed out contacting the running PenEcho server.")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+function formatRunningJob(job) {
+  if (!job || typeof job !== "object") return "- Active PenEcho job";
+  if (job.kind === "canvas-ai") {
+    const label = [job.agent, job.stepLabel].filter(Boolean).join(", ");
+    return `- ${job.title || "Canvas AI request"}${label ? ` [${label}]` : ""}`;
+  }
+  const title = job.title && job.title !== job.slug ? `${job.title} (${job.key || job.slug})` : (job.key || job.slug || "Active task");
+  const details = [job.stepLabel, job.agent, job.pid ? `PID ${job.pid}` : ""].filter(Boolean).join(", ");
+  return `- ${title}${details ? ` [${details}]` : ""}`;
+}
+
+function mergeRunningJobs(serverRunning = [], fallbackRuns = []) {
+  const merged = [], seenPids = new Set(), seenKeys = new Set();
+  for (const job of [...(serverRunning || []), ...(fallbackRuns || [])]) {
+    if (!job || typeof job !== "object") continue;
+    const pid = Number(job.pid) || 0, key = String(job.key || "");
+    if ((pid > 0 && seenPids.has(pid)) || (key && seenKeys.has(key))) continue;
+    if (pid > 0) seenPids.add(pid);
+    if (key) seenKeys.add(key);
+    merged.push(job);
+  }
+  return merged;
+}
+
+function formatRunningJobsError(running) {
+  const count = running.length, noun = count === 1 ? "job is" : "jobs are", pronoun = count === 1 ? "it" : "them";
+  return `PenEcho cannot restart: ${count} ${noun} still running:\n${running.map(formatRunningJob).join("\n")}\nWait for ${pronoun} to finish before restarting.\n`;
+}
+
+function selectRestartTarget(servers, args, configuration) {
+  if (args.port !== null) {
+    return { target:servers.find(server => Number(server.port) === Number(args.port)) || null, ambiguous:false };
+  }
+  if (servers.length === 1) return { target:servers[0], ambiguous:false };
+  if (servers.length > 1) {
+    const match = servers.find(server => Number(server.port) === Number(configuration.port)) || null;
+    return match ? { target:match, ambiguous:false } : { target:null, ambiguous:true };
+  }
+  return { target:null, ambiguous:false };
+}
+
+function stripCliOption(argv, optionNames) {
+  const cleaned = [];
+  for (let index = 0; index < argv.length; index++) {
+    const arg = String(argv[index] || "");
+    if (optionNames.includes(arg)) { index++; continue; }
+    if (optionNames.some(name => arg.startsWith(`${name}=`))) continue;
+    cleaned.push(arg);
+  }
+  return cleaned;
+}
+
+function buildRestartArgv(targetArgv = [], restartArgs = {}, targetPort = DEFAULT_PORT) {
+  let next = (Array.isArray(targetArgv) ? targetArgv : [])
+    .map(String)
+    .filter(arg => arg !== "restart" && arg !== "start" && arg !== "configure");
+  const effectivePort = restartArgs.port !== null && restartArgs.port !== undefined ? restartArgs.port : targetPort;
+  next = stripCliOption(next, ["--port"]);
+  if (effectivePort !== null && effectivePort !== undefined) next.push("--port", String(effectivePort));
+  if (restartArgs.config) next = [...stripCliOption(next, ["--config"]), "--config", restartArgs.config];
+  if (restartArgs.provider) {
+    next = next.filter(arg => !["--api", "--kimi", "--codex", "--claude"].includes(arg));
+    const providerFlag = { api:"--api", "kimi-cli":"--kimi", "codex-cli":"--codex", "claude-cli":"--claude" }[restartArgs.provider];
+    if (providerFlag) next.push(providerFlag);
+  }
+  if (restartArgs.model) next = [...stripCliOption(next, ["--model"]), "--model", restartArgs.model];
+  if (restartArgs.effort) next = [...stripCliOption(next, ["--effort"]), "--effort", restartArgs.effort];
+  if (restartArgs.open === false && !next.includes("--no-open")) next.push("--no-open");
+  if (restartArgs.uat && !next.includes("--uat")) next.push("--uat");
+  return next;
+}
+
+async function openStartedPage(server, args, options, output) {
+  const url = args.open ? browserUrl(server?.address?.()) : "";
+  if (!url || !canOpenBrowser({ ...options, output })) return;
+  const answer = await readStartupAnswer("Open PenEcho in your browser?", { ...options, output });
+  if (answer === null || !/^(?:y|yes)?$/i.test(answer)) {
+    output.write(`PenEcho is running at ${url}.\n`);
+    return;
+  }
+  if (!await (options.openBrowser || openBrowser)(url)) output.write(`Open ${url} in your browser.\n`);
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitForServerStop(target, checkPortFn, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const pidStopped = [target.pid, target.appPid].every(pid => !pid || Number(pid) === process.pid || !isPidAlive(pid));
+    const portFree = await checkPortFn(Number(target.port));
+    if (pidStopped && portFree) return true;
+    await delay(50);
+  }
+  return false;
+}
+
+async function spawnReplacementServer({ execPath, entry, argv, cwd, env, stateDir, port, timeoutMs = 15000 }) {
+  return new Promise(resolve => {
+    let settled = false, stderr = "";
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    const child = spawn(execPath || process.execPath, [entry, ...argv], {
+      cwd:cwd || process.cwd(),
+      env:{ ...env, PENECHO_EXIT_ON_SHUTDOWN:"1" },
+      detached:true,
+      stdio:["ignore", "ignore", "pipe"],
+      windowsHide:true,
+    });
+    child.stderr?.on("data", chunk => {
+      if (stderr.length < 4096) stderr += String(chunk);
+    });
+    child.once("error", error => finish({ ok:false, error:error.message }));
+    child.once("exit", (code, signal) => finish({ ok:false, error:stderr.trim() || `PenEcho exited during restart (${signal || code}).` }));
+
+    const deadline = Date.now() + timeoutMs;
+    const poll = async () => {
+      while (!settled && Date.now() < deadline) {
+        const servers = listRegisteredServers(stateDir);
+        const started = servers.find(server => [server.pid, server.appPid].some(pid => Number(pid) === Number(child.pid)) && (Number(port) === 0 || Number(server.port) === Number(port)));
+        if (started) {
+          child.stderr?.destroy();
+          child.unref();
+          return finish({ ok:true, pid:started.pid, port:started.port });
+        }
+        await delay(50);
+      }
+      if (!settled) {
+        child.stderr?.destroy();
+        child.unref();
+        finish({ ok:false, error:stderr.trim() || "Timed out waiting for the restarted PenEcho server to become ready." });
+      }
+    };
+    void poll();
+  });
+}
+
+function readLegacyDrawPid(configuration) {
+  const drawPath = process.env.PENECHO_DRAW_FILE || path.join(configuration.home || os.homedir(), ".penecho", "draw.json");
+  try {
+    const data = JSON.parse(fs.readFileSync(drawPath, "utf8"));
+    return data && isPidAlive(data.pid) ? { pid:Number(data.pid), port:Number(data.port) } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function runRestart(args, configuration, options = {}) {
+  const output = options.output || process.stdout;
+  const errorOutput = options.errorOutput || process.stderr;
+  const listServers = options.listRegisteredServers || listRegisteredServers;
+  const readFallbackRuns = options.readActiveRunsFallback || readActiveRunsFallback;
+  const controlRequest = options.controlRequest || requestInstanceControl;
+  const checkPortFn = options.checkPortAvailable || checkPortAvailable;
+  const spawnRestart = options.spawnRestart || spawnReplacementServer;
+
+  const fallbackRuns = readFallbackRuns(configuration.stateDir);
+  const servers = listServers(configuration.stateDir);
+  const selection = selectRestartTarget(servers, args, configuration);
+
+  if (selection.ambiguous) {
+    errorOutput.write(`PenEcho has multiple running servers (ports ${servers.map(s => s.port).join(", ")}). Re-run with --port <port> to choose which one to restart.\n`);
+    return 1;
+  }
+
+  const target = selection.target;
+  if (!target) {
+    if (fallbackRuns.length > 0) {
+      errorOutput.write(formatRunningJobsError(fallbackRuns));
+      return 1;
+    }
+    const legacy = readLegacyDrawPid(configuration);
+    if (legacy && (args.port === null || Number(legacy.port) === Number(args.port))) {
+      errorOutput.write(`PenEcho (PID ${legacy.pid}) is running on port ${legacy.port} without restart control registration. Stop it manually once idle and start PenEcho again.\n`);
+      return 1;
+    }
+    const probePort = args.port !== null ? args.port : configuration.port;
+    const free = probePort > 0 ? await checkPortFn(probePort) : true;
+    if (!free) {
+      errorOutput.write(`Port ${probePort} is already in use, but no registered PenEcho server instance was found for it.\n`);
+      return 1;
+    }
+    errorOutput.write("No running PenEcho server was found to restart. Run `penecho` to start it.\n");
+    return 1;
+  }
+
+  let statusResponse;
+  try {
+    statusResponse = await controlRequest(target, "GET", "/api/server/running-jobs");
+  } catch (error) {
+    if (fallbackRuns.length > 0) {
+      errorOutput.write(formatRunningJobsError(fallbackRuns));
+      return 1;
+    }
+    errorOutput.write(`PenEcho cannot contact the running server on port ${target.port}: ${error.message}\n`);
+    return 1;
+  }
+
+  if (statusResponse.status !== 200 || !statusResponse.body?.ok) {
+    if (fallbackRuns.length > 0) {
+      errorOutput.write(formatRunningJobsError(fallbackRuns));
+      return 1;
+    }
+    errorOutput.write(`PenEcho could not verify running jobs on port ${target.port}: ${statusResponse.body?.error || `HTTP ${statusResponse.status}`}\n`);
+    return 1;
+  }
+
+  const running = mergeRunningJobs(statusResponse.body.running, fallbackRuns);
+  if (running.length > 0) {
+    errorOutput.write(formatRunningJobsError(running));
+    return 1;
+  }
+
+  let shutdownResponse;
+  try {
+    shutdownResponse = await controlRequest(target, "POST", "/api/server/shutdown");
+  } catch (error) {
+    errorOutput.write(`PenEcho could not stop the running server on port ${target.port}: ${error.message}\n`);
+    return 1;
+  }
+
+  if (shutdownResponse.status === 409 && shutdownResponse.body?.code === "JOBS_RUNNING") {
+    errorOutput.write(formatRunningJobsError(mergeRunningJobs(shutdownResponse.body.running, fallbackRuns)));
+    return 1;
+  }
+  if (shutdownResponse.status !== 200 || !shutdownResponse.body?.ok) {
+    errorOutput.write(`PenEcho failed to stop the running server on port ${target.port}: ${shutdownResponse.body?.error || `HTTP ${shutdownResponse.status}`}\n`);
+    return 1;
+  }
+
+  const stopped = options.waitForStop
+    ? await options.waitForStop(target)
+    : await waitForServerStop(target, checkPortFn, options.stopTimeoutMs);
+  if (!stopped) {
+    errorOutput.write(`PenEcho timed out waiting for the previous server (PID ${target.pid}) on port ${target.port} to stop.\n`);
+    return 1;
+  }
+
+  const restartArgv = buildRestartArgv(target.argv, { ...args, config:args.config ? configuration.configFile : null }, target.port);
+  const effectivePort = args.port !== null ? args.port : target.port;
+  const restartEnv = {
+    ...(options.env || process.env),
+    PENECHO_STATE_DIR:configuration.stateDir,
+    PENECHO_CONFIG_FILE:args.config ? configuration.configFile : (target.configFile || configuration.configFile),
+    PENECHO_CLI_ARGV:JSON.stringify(restartArgv),
+  };
+  const spawned = await spawnRestart({
+    execPath:target.execPath || process.execPath,
+    entry:target.entry || path.join(configuration.packageRoot || PACKAGE_ROOT, "cli.js"),
+    argv:restartArgv,
+    cwd:target.cwd || configuration.cwd || process.cwd(),
+    env:restartEnv,
+    stateDir:configuration.stateDir,
+    port:effectivePort,
+    target,
+  });
+  if (!spawned?.ok) {
+    errorOutput.write(`PenEcho stopped the previous server on port ${target.port}, but could not start the new one: ${spawned?.error || "unknown error"}\n`);
+    return 1;
+  }
+  output.write(`PenEcho restarted on http://127.0.0.1:${spawned.port || effectivePort} (PID ${spawned.pid}).\n`);
+  return 0;
+}
+
 function helpText() {
   return `PenEcho ${PACKAGE_JSON.version}
 
 Usage:
   penecho [options]
+  penecho restart [--port PORT] [--config FILE]
   penecho doctor [--api|--kimi|--codex|--claude] [--config FILE]
   penecho mcp connect --host-id ID
   penecho mcp discover [--import FILE] [--host-id ID] [--client codex|claude|hermes|json]
@@ -794,6 +1044,7 @@ Options:
   --model <model>   Override the model for a CLI mode for this launch
   --effort <level>  Override reasoning effort for a CLI mode for this launch
   --port <port>     Override the listening port (0–65535; 0 selects a free port)
+  --no-open         Skip the browser prompt
   -h, --help        Show help
   -v, --version     Show version
 
@@ -839,6 +1090,7 @@ async function main(argv = process.argv.slice(2), options = {}) {
   catch (error) { errorOutput.write(`PenEcho configuration error: ${error.message}\n`); return 1; }
 
   if (args.command === "doctor") return (await runDoctor(args, configuration, options)) ? 0 : 1;
+  if (args.command === "restart") return runRestart(args, configuration, options);
 
   // Connection setup belongs to the Canvas UI and must never gate startup.
   if (args.command === "configure") configuration.env.PENECHO_OPEN_CONNECTIONS = "true";
@@ -846,19 +1098,20 @@ async function main(argv = process.argv.slice(2), options = {}) {
   Object.assign(configuration.serverEnv, {
     PENECHO_CONFIG_FILE:configuration.configFile,
     PENECHO_OPEN_CONNECTIONS:configuration.env.PENECHO_OPEN_CONNECTIONS || "",
+    PENECHO_CLI_ARGV:JSON.stringify(argv),
   });
   applyConfiguration(configuration.serverEnv);
   let startedServer;
   if (options.startServer) {
     startedServer = await options.startServer({ ...configuration, env:configuration.serverEnv });
     await schedulePostStartCliPreflight(startedServer, configuration, options, output, errorOutput);
-    const update = await schedulePostStartUpdate(startedServer, argv, options, output, errorOutput);
+    const update = await schedulePostStartPrompts(startedServer, argv, args, options, output, errorOutput);
     if (update?.exitCode) return update.exitCode;
   } else {
     startedServer = require("../../server.js");
     const schedule = () => {
       void schedulePostStartCliPreflight(startedServer, configuration, options, output, errorOutput);
-      void schedulePostStartUpdate(startedServer, argv, options, output, errorOutput);
+      void schedulePostStartPrompts(startedServer, argv, args, options, output, errorOutput);
     };
     if (startedServer?.listening) schedule();
     else if (typeof startedServer?.once === "function") startedServer.once("listening", schedule);
@@ -875,6 +1128,7 @@ if (require.main === module) {
 
 module.exports = {
   apiConfigurationIssues,
+  buildRestartArgv,
   checkAssets,
   checkPortAvailable,
   cliCandidates,
@@ -891,6 +1145,7 @@ module.exports = {
   runClaudePreflight,
   runKimiPreflight,
   runDoctor,
+  runRestart,
   saveConfiguration,
   testConfiguredProvider,
   testApiConnection,

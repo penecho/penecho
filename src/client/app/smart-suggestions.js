@@ -12,6 +12,7 @@
     SMART_SUGGEST_PRIOR_KEY = "penecho-smart-suggestions-instant-prior",
     ASSIST_LOCAL_DELAY_MS = 500,
     ASSIST_INK_CLEARANCE_PX = 80,
+    ASSIST_MASK_CELL = 4,
     SMART_SUGGEST_RANK_DELAY_MS = 100,
     SMART_SUGGEST_CONTINUED_RANK_DELAY_MS = 500,
     ASSIST_NAVIGATION_SETTLE_MS = 120,
@@ -27,6 +28,11 @@
     smartSuggestLayer = document.querySelector("#smartSuggestLayer"),
     smartSuggestToggle = document.querySelector("#smartSuggestToggle"),
     assistToolsButton = document.querySelector("#assistToolsBtn"),
+    // On a wide Canvas, ink suggestions sit inside the AI bar in place of its settings.
+    assistAiBar = document.querySelector("#aiToolsSection"),
+    assistAiRun = assistAiBar?.querySelector("#aiToolbarRun"),
+    assistAiBarWide = window.matchMedia?.("(min-width: 701px)"),
+    assistAiBarBesidePanel = window.matchMedia?.("(min-width: 901px)"),
     smartSuggest = {
       enabled:(() => { try { return localStorage.getItem(SMART_SUGGEST_STORAGE_KEY) !== "false"; } catch { return true; } })(),
       available:window.PENECHO_CONFIG?.smartSuggestions === true,
@@ -34,6 +40,7 @@
       availability:{ pending:null, controller:null, checkedAt:0, nextAt:0, retryAfterAt:0, failures:0, authRequired:false },
       strokes:[],
       nextStrokeId:1,
+      savingSidebarTask:false,
       consumedStrokeId:0,
       dismissedStrokeId:0,
       dismissedObjectKey:"",
@@ -276,7 +283,6 @@
     line.classList.toggle("is-low", Boolean(allowance?.low || allowance?.blocked));
     line.textContent = lines.length ? `PenEchoLLM · ${lines.join(" ")}` : "";
     // The PenEcho Agent Suggest tab shows the same allowance.
-    if (typeof agentSuggestRender === "function") agentSuggestRender();
   }
   function suggestionApiPath(suffix="") { return `${window.PENECHO_CONFIG?.runtime === "cloud" ? "/api/v1/apps/penecho-llm/suggest" : "/api/suggest"}${suffix}`; }
   function updateSuggestionAccess(data, { status = false } = {}) {
@@ -345,7 +351,6 @@
     if (!smartSuggestToggle) return;
     smartSuggestToggle.classList.toggle("on", smartSuggest.enabled);
     smartSuggestToggle.setAttribute("aria-checked", String(smartSuggest.enabled));
-    if (typeof agentSuggestRender === "function") agentSuggestRender();
   }
   function setSmartSuggestEnabled(enabled) {
     smartSuggest.enabled = Boolean(enabled);
@@ -1363,7 +1368,6 @@
       ? { mode:bar.mode, box:bar.box, cluster:bar.cluster, view:bar.view, target:bar.target, action:bar.action } : null;
   }
   function assistRequestStarted(owner, { blocksSuggestions = true, hideSuggestions = false } = {}) {
-    if (typeof agentSuggestWorkStarted === "function") agentSuggestWorkStarted();
     const previous = smartSuggest.requests.get(owner);
     if (previous?.documentId === canvasDocumentsCurrent().id) return;
     for (const snapshot of previous?.inputSnapshots || []) releaseDirtyInput(snapshot);
@@ -1580,7 +1584,7 @@
     } else if (model.mode === "result") {
       element.append(assistButton(t("assistKeep"), "✓", "assist-action primary", () => assistAcceptResult()));
       if (bar.action?.id !== "ask" && SMART_SUGGEST.actionById(bar.action?.id)) element.append(
-        assistButton(t("assistRetry"), "↻", "assist-action", () => { const again = bar.action, target = bar.target; assistRejectResult(); executeAssistAction(again, { ...target, resultBox:null }); }));
+        assistButton(t("assistRetry"), "↻", "assist-action assist-retry", () => { const again = bar.action, target = bar.target; assistRejectResult(); executeAssistAction(again, { ...target, resultBox:null }); }, t("assistRetry")));
       if (resultCluster && bar.view.items.length) {
         const divider = document.createElement("span");
         divider.className = "assist-divider";
@@ -1588,7 +1592,7 @@
         const target = assistFollowUpTarget(bar.target, resultCluster.box, true);
         target.routing = bar.view.routing;
         bar.nextTarget = target;
-        for (const item of bar.view.items.slice(0, 2)) element.append(assistActionButton(item, false, target));
+        for (const item of bar.view.items.slice(0, assistInAiBar(bar) ? 3 : 2)) element.append(assistActionButton(item, false, target));
       }
       element.append(assistCloseButton(model));
     } else if (model.mode === "followup") {
@@ -1859,7 +1863,7 @@
   let assistPlacementMask = null;
   function assistContentMask(width, height) {
     const chrome = [document.querySelector(".topbar"), document.querySelector(".primary-tools"),
-      ...document.querySelectorAll(".widget-object-toolbar, .canvas-agent-panel:not([hidden]), #assistAgentMini:not([hidden])")]
+      ...document.querySelectorAll(".widget-object-toolbar, #assistAgentMini:not([hidden])")]
         .filter(Boolean).map(canvasElementLayoutRect).filter(box => box?.width && box.height),
       region = viewportRect(), objects = [
       ...visibleWidgets(region).map(widgetBox),
@@ -1873,16 +1877,21 @@
       history = state.history.at(-1);
     if (assistPlacementMask?.key === key && assistPlacementMask.history === history) return assistPlacementMask;
     // Use all rendered raster ink, not the bounded recent/dirty stroke log.
-    // One screen-resolution capture and summed-area table are reused across
-    // stationary frames. Navigation postpones this work until the view settles.
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(width); canvas.height = Math.ceil(height);
+    // One capture and summed-area table are reused across stationary frames.
+    // Navigation postpones this work until the view settles. The capture is
+    // made of ASSIST_MASK_CELL-pixel cells: it is rebuilt after every stroke,
+    // and at screen resolution that read-back and scan held the pen for
+    // 50-230 ms each time on a well-filled Canvas.
+    const cell = ASSIST_MASK_CELL, canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.floor(width / cell)); canvas.height = Math.max(1, Math.floor(height / cell));
     const context = canvas.getContext("2d", { willReadFrequently:true });
+    // Filtered downscaling keeps a thin stroke inside the cell it crosses.
+    context.imageSmoothingQuality = "high";
     if (region) forTiles(region.x, region.y, region.w, region.h, (tile, tx, ty) => {
-      context.drawImage(tile, tx * TILE * state.scale + state.panX, ty * TILE * state.scale + state.panY, TILE * state.scale, TILE * state.scale);
+      context.drawImage(tile, (tx * TILE * state.scale + state.panX) / cell, (ty * TILE * state.scale + state.panY) / cell, TILE * state.scale / cell, TILE * state.scale / cell);
     }, false);
     context.fillStyle = "#000";
-    for (const box of objects) context.fillRect(Math.floor(box.x), Math.floor(box.y), Math.ceil(box.x + box.w) - Math.floor(box.x), Math.ceil(box.y + box.h) - Math.floor(box.y));
+    for (const box of objects) context.fillRect(Math.floor(box.x / cell), Math.floor(box.y / cell), Math.ceil((box.x + box.w) / cell) - Math.floor(box.x / cell), Math.ceil((box.y + box.h) / cell) - Math.floor(box.y / cell));
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data,
       stride = canvas.width + 1, sums = new Uint32Array(stride * (canvas.height + 1));
     for (let y = 0; y < canvas.height; y++) {
@@ -1895,30 +1904,44 @@
     // Only full-width top chrome raises the placement floor. A docked Agent
     // starts at the top too, but reserves its own rectangle rather than the
     // entire viewport height.
-    return assistPlacementMask = { key, history, width:canvas.width, height:canvas.height, stride, sums,
+    return assistPlacementMask = { key, history, cell, width:canvas.width, height:canvas.height, stride, sums,
       minY:chrome.filter(box => box.top <= 8 && box.left <= 8 && box.right >= width - 8)
         .reduce((min, box) => Math.max(min, Math.ceil(box.top + box.height) + 8), 8) };
   }
+  // Screen pixels in, covered screen pixels out, whatever the mask's cell size.
   function assistOccupiedArea(mask, x, y, w, h) {
+    const cell = mask.cell || 1;
+    return assistOccupiedCells(mask, x / cell, y / cell, w / cell, h / cell) * cell * cell;
+  }
+  function assistOccupiedCells(mask, x, y, w, h) {
     const left = Math.max(0, Math.floor(x)), top = Math.max(0, Math.floor(y)),
       right = Math.min(mask.width, Math.ceil(x + w)), bottom = Math.min(mask.height, Math.ceil(y + h)),
       { sums, stride } = mask;
     if (right <= left || bottom <= top) return 0;
     return sums[bottom * stride + right] - sums[top * stride + right] - sums[bottom * stride + left] + sums[top * stride + left];
   }
+  // Takes and returns screen pixels. The search itself runs over the mask's cells.
   function assistFindPlacement(mask, w, h, preferred, anchor, options = {}) {
-    const minY = mask.minY || 8,
-      maxX = Math.max(8, Math.floor(mask.width - w - 8)),
-      maxY = Math.max(minY, Math.floor(mask.height - h - 84)),
-      origin = { x:Math.max(8, Math.min(maxX, Math.round(preferred.x))), y:Math.max(minY, Math.min(maxY, Math.round(preferred.y))) },
-      gap = 8, inkGap = options.inkGap ?? 64,
+    const cell = mask.cell || 1;
+    if (cell === 1) return assistFindPlacementInCells(mask, w, h, preferred, anchor, options, 1);
+    const shrink = box => box && { x:box.x / cell, y:box.y / cell, w:box.w / cell, h:box.h / cell },
+      found = assistFindPlacementInCells(mask, w / cell, h / cell, { x:preferred.x / cell, y:preferred.y / cell }, shrink(anchor),
+        { ...options, inkGap:(options.inkGap ?? 64) / cell, obstacles:(options.obstacles || []).map(shrink) }, cell);
+    return { x:found.x * cell, y:found.y * cell };
+  }
+  function assistFindPlacementInCells(mask, w, h, preferred, anchor, options, cell) {
+    const edge = 8 / cell, minY = Math.ceil((mask.minY || 8) / cell),
+      maxX = Math.max(edge, Math.floor(mask.width - w - edge)),
+      maxY = Math.max(minY, Math.floor(mask.height - h - 84 / cell)),
+      origin = { x:Math.max(edge, Math.min(maxX, Math.round(preferred.x))), y:Math.max(minY, Math.min(maxY, Math.round(preferred.y))) },
+      gap = 8 / cell, inkGap = options.inkGap ?? 64,
       nearInk = anchor ? { x:anchor.x - inkGap, y:anchor.y - inkGap, w:anchor.w + inkGap * 2, h:anchor.h + inkGap * 2 } : null;
     const overlayArea = (x, y, width, height) => (options.obstacles || []).reduce((area, box) => area
       + Math.max(0, Math.min(x + width, box.x + box.w) - Math.max(x, box.x))
         * Math.max(0, Math.min(y + height, box.y + box.h) - Math.max(y, box.y)), 0),
       score = (x, y) => [
-      assistOccupiedArea(mask, x, y, w, h) + overlayArea(x, y, w, h),
-      assistOccupiedArea(mask, x - gap, y - gap, w + gap * 2, h + gap * 2) + overlayArea(x - gap, y - gap, w + gap * 2, h + gap * 2),
+      assistOccupiedCells(mask, x, y, w, h) + overlayArea(x, y, w, h),
+      assistOccupiedCells(mask, x - gap, y - gap, w + gap * 2, h + gap * 2) + overlayArea(x - gap, y - gap, w + gap * 2, h + gap * 2),
       nearInk ? Math.max(0, Math.min(x + w, nearInk.x + nearInk.w) - Math.max(x, nearInk.x))
         * Math.max(0, Math.min(y + h, nearInk.y + nearInk.h) - Math.max(y, nearInk.y)) : 0,
       (x - origin.x) ** 2 + (y - origin.y) ** 2,
@@ -1929,7 +1952,7 @@
       idealScore = costs => costs.slice(0, -1).every(cost => !cost);
     let best = origin, bestScore = ordered(score(origin.x, origin.y), origin.x, origin.y);
     if (idealScore(bestScore)) return best;
-    // Search every pixel-aligned position. Ink prompts protect the current
+    // Search every cell-aligned position. Ink prompts protect the current
     // writing gap first; other surfaces prefer a complete content-free slot.
     // A crowded viewport still gets the least-obstructing visible fallback.
     const { sums, stride } = mask, spanW = Math.ceil(w), spanH = Math.ceil(h),
@@ -1939,7 +1962,7 @@
         ideal = idealScore(bestScore), bestDistance = bestScore.at(-1);
       if (ideal && dy > bestDistance) continue;
       const radius = ideal ? Math.ceil(Math.sqrt(bestDistance - dy)) : maxX,
-        minX = Math.max(8, origin.x - radius), limitX = Math.min(maxX, origin.x + radius),
+        minX = Math.max(edge, origin.x - radius), limitX = Math.min(maxX, origin.x + radius),
         top = y * stride, bottom = Math.min(mask.height, y + spanH) * stride,
         gapTop = Math.max(0, y - gap) * stride, gapBottom = Math.min(mask.height, y + spanH + gap) * stride,
         nearHeight = nearInk ? Math.max(0, Math.min(y + h, nearInk.y + nearInk.h) - Math.max(y, nearInk.y)) : 0;
@@ -1973,10 +1996,12 @@
     const hidden = assistRequestsHideBar() && bar.mode !== "result";
     bar.element.classList.toggle("is-request-hidden", hidden);
     bar.element.inert = hidden;
+    const inAiBar = assistPlaceBar(bar);
     if (hidden) { bar.hovered = false; return; }
     // Rendering a late request/result must not reveal help under a moving pen.
     if (assistSyncWriting(bar)) return;
     fitAssistSuggestions(bar);
+    if (inAiBar) return;
     const { width, height } = canvasViewportMetrics(), element = bar.element,
       w = element.offsetWidth || 320, h = element.offsetHeight || 40, screen = assistScreenBox(bar.box), inkGap = ASSIST_INK_CLEARANCE_PX,
       docked = ["tools", "tool"].includes(bar.mode) && assistToolsButton && !assistToolsButton.hidden,
@@ -2051,11 +2076,19 @@
     if (bar.mode !== "suggest" || !layout) return;
     const { element } = bar, { buttons, ask, more, close } = layout,
       spark = element.querySelector(".assist-spark"),
-      width = Math.min(640, Math.max(0, canvasViewportMetrics().width - 16)),
-      fixed = [spark, ask, more, close].map(control => control?.offsetWidth || 0),
-      key = [width, ...fixed].join(":");
+      docked = element.classList.contains("in-ai-bar"),
+      viewport = canvasViewportMetrics().width,
+      // Below the AI bar, keep the attached shelf within the Canvas viewport.
+      width = docked ? Math.min(560, Math.max(0, viewport - 24))
+        : Math.min(640, Math.max(0, viewport - 16)),
+      anchor = ask.parentElement === element ? ask : more,
+      // Ask inside ⋯ takes no room on the bar, even with its box open.
+      fixed = [spark, anchor === ask ? ask : null, more, close].map(control => control?.offsetWidth || 0),
+      key = [docked, width, ...fixed].join(":");
     if (layout.key === key) return;
     if (!layout.widths) {
+      // Measure every action on the bar itself, in ranked order.
+      for (const button of buttons) element.insertBefore(button, anchor);
       layout.widths = buttons.map(button => button.getBoundingClientRect().width);
       const style = getComputedStyle(element);
       layout.inset = [style.paddingLeft, style.paddingRight, style.borderLeftWidth, style.borderRightWidth]
@@ -2063,19 +2096,47 @@
       layout.gap = parseFloat(style.columnGap) || 0;
     }
     const available = width - layout.inset, fixedWidth = fixed.reduce((sum, value) => sum + value, 0),
-      minimum = ask.querySelector("input") ? 0 : Math.min(1, buttons.length);
+      minimum = anchor === ask && ask.querySelector("input") ? 0 : Math.min(1, buttons.length);
     let count = buttons.length;
     while (count > minimum && fixedWidth + layout.widths.slice(0, count).reduce((sum, value) => sum + value, 0)
       + layout.gap * (count + 3) > available) count--;
     const menu = more.querySelector(".assist-menu");
     for (let index = count - 1; index >= 0; index--) {
-      if (buttons[index].parentElement !== element) element.insertBefore(buttons[index], buttons[index + 1]?.parentElement === element ? buttons[index + 1] : ask);
+      if (buttons[index].parentElement !== element) element.insertBefore(buttons[index], buttons[index + 1]?.parentElement === element ? buttons[index + 1] : anchor);
     }
     for (let index = buttons.length - 1; index >= count; index--) {
-      if (buttons[index].parentElement !== menu) menu.prepend(buttons[index]);
+      if (buttons[index].parentElement !== menu) menu.insertBefore(buttons[index], ask.parentElement === menu ? ask.nextSibling : menu.firstChild);
     }
     runtimeElementStyle(element, "assist-bar")?.setProperty("--assist-action-max-width", `${Math.max(40, available - fixedWidth - layout.gap * (count + 3))}px`);
     layout.key = key;
+  }
+  // On a wide Canvas, suggestions for new ink and their results dock in an
+  // attached shelf directly beneath the Canvas AI bar, keeping model,
+  // reasoning, Auto, colour and Favorites visible. Selections, shape tools,
+  // allowance notices and narrow screens keep the floating bar beside the ink.
+  function assistInAiBar(bar) {
+    if (!assistAiBar || !bar || !["suggest", "working", "result", "followup"].includes(bar.mode)) return false;
+    if (bar.target?.selection || bar.cluster?.selection || bar.element.classList.contains("has-access-notice")) return false;
+    return document.body.dataset.theme === "studio" && Boolean(assistAiBarWide?.matches)
+      && !(document.body.classList.contains("project-lines-panel-open") && !assistAiBarBesidePanel?.matches)
+      && !assistAiBar.classList.contains("studio-auto-paused");
+  }
+  function assistPlaceBar(bar) {
+    const docked = assistInAiBar(bar), parent = docked ? assistAiBar : smartSuggestLayer, layout = bar.suggestionLayout;
+    if (bar.element.parentElement !== parent) {
+      parent.insertBefore(bar.element, docked ? assistAiRun ?? null : null);
+      bar.placement = null;
+      bar.screenX = bar.screenY = null;
+      if (layout) { layout.widths = null; layout.key = ""; }
+    }
+    bar.element.classList.toggle("in-ai-bar", docked);
+    if (layout) {
+      // Ask is the first row of ⋯ inside the AI bar.
+      const menu = layout.more.querySelector(".assist-menu");
+      if (docked && layout.ask.parentElement !== menu) { menu.prepend(layout.ask); layout.key = ""; }
+      else if (!docked && layout.ask.parentElement !== bar.element) { bar.element.insertBefore(layout.ask, layout.more); layout.key = ""; }
+    }
+    return docked;
   }
   // AI results wait as a draft (ink/text) or as a pending Widget (graphs, prototypes).
   function assistAcceptResult() {
@@ -2118,7 +2179,7 @@
   }
   function assistSketchInk(target) {
     // Animate sketch rigs the user's actual strokes. A moved or region-only
-    // lasso has no reliable vector source; the caller then uses the Agent.
+    // lasso has no reliable vector source for the puppet animation.
     if (!target || target.widget || target.followUp) return null;
     let records = [...new Set([...(smartSuggest.strokes || []), ...(target.strokes || [])])]
         .filter(record => state.history.includes(record.historyEntry)),
@@ -2282,6 +2343,53 @@
     return Boolean(target?.selection && state.selection === target.selection && state.selection.phase === "active"
       && !state.selectionGesture && target.selectionKey === `selection:${smartSuggest.selectionVersion}`);
   }
+  async function assistSaveSidebarTask(target, instruction, actionId) {
+    if (smartSuggest.savingSidebarTask) return false;
+    const documentId = canvasDocumentsCurrent().id, epoch = canvasDocuments.epoch;
+    const current = () => projectLinesCanAsk() && canvasDocuments.epoch === epoch && canvasDocumentsCurrent().id === documentId;
+    const assertCurrent = () => {
+      if (!current()) throw Error(suggestionCopy("The Canvas changed. Choose the suggestion again.", "画布已改变，请重新选择建议。"));
+    };
+    const assertTarget = () => {
+      assertCurrent();
+      if (!assistAgentTargetCurrent(target, documentId)) throw Error(suggestionCopy("The suggestion target changed.", "建议的目标已改变。"));
+    };
+    const owner = {}, context = assistAgentTaskContext(target), box = context.box;
+    smartSuggest.savingSidebarTask = true;
+    assistRequestStarted(owner, { hideSuggestions:true });
+    let saved = false;
+    try {
+      assertTarget();
+      setStatus(suggestionCopy("Saving task to sidebar…", "正在将任务保存到侧栏…"));
+      const capture = async (region, name, quality) => {
+        const args = target.selection ? { target:"selection" } : { target:"region", region };
+        const { dataUrl } = await canvasAgentCapture({ ...args, quality, coordinates:"none" }, { assertCurrent:assertTarget });
+        return { dataUrl, name };
+      };
+      const captures = [await capture(box, target.selection ? "selection" : "canvas-region", "basic")];
+      if (context.detail) captures.push(await capture(context.detail, "widget-marks", "detail"));
+      assertTarget();
+      // Save the action's intent in words a sidebar agent can use with the Canvas attachment.
+      const details = actionId === "vivid" ? PenEchoIllustrationStyle.policy(state.illustrationStyle, state.illustrationBackground) : ASSIST_AGENT_TASKS[actionId];
+      const task = details ? `${instruction}\n${details}` : instruction;
+      let scope = suggestionCopy("Use the pictured region of the Canvas.", "使用附图所示的画布区域。");
+      if (target.selection) scope = suggestionCopy("Use only the masked selection in the attached image.", "仅使用附图中套索选中的内容。");
+      if (target.widget) scope = target.variant
+        ? suggestionCopy(`Place a separate result beside widget ${target.widget.id}.`, `在组件 ${target.widget.id} 旁创建独立结果。`)
+        : suggestionCopy(`Target widget: ${target.widget.id}.`, `目标组件：${target.widget.id}。`);
+      const text = `${task}\n\n${scope} ${suggestionCopy("Canvas coordinates", "画布坐标")}: x=${box.x}, y=${box.y}, w=${box.w}, h=${box.h}.`;
+      await projectLinesSaveSuggestion(text, captures, { selection:target.selection, assertCurrent });
+      saved = true;
+      if (current()) setStatus(suggestionCopy("Task saved. Choose Run with… in the sidebar to start it.", "任务已保存。请在侧栏点击“运行方式…”开始。"));
+      return true;
+    } catch (error) {
+      if (current()) setStatus(String(error?.message || error));
+      return false;
+    } finally {
+      smartSuggest.savingSidebarTask = false;
+      assistRequestFinished(owner, saved ? "completed" : "failed");
+    }
+  }
   async function executeAssistAction(item, target) {
     const id = item?.id, action = SMART_SUGGEST?.actionById(id);
     if (!target) return;
@@ -2318,12 +2426,10 @@
     if (typeof clearPenGesture === "function") clearPenGesture("smart-suggestion");
     const execution=SMART_SUGGEST.suggestionExecution(id,target.routing),
       sketchInk=id === "animate_sketch" ? assistSketchInk(target) : null;
-    if (SMART_SUGGEST.executionRoute(id,execution) === "penecho_agent" || id === "animate_sketch" && !sketchInk) {
-      const routed=await assistAgentRun(id,target,{label:SMART_SUGGEST.label(action,state.language,{ illustrationStyle:state.illustrationStyle }),fromSuggestBar:true});
-      if(routed === "submitted") {
-        smartSuggestRecent(`accepted ${id}`);return;
-      }
-      if(routed === "blocked")return;
+    if ((SMART_SUGGEST.executionRoute(id, execution) === "sidebar_task" || id === "animate_sketch" && !sketchInk) && projectLinesCanAsk()) {
+      const label = SMART_SUGGEST.label(action, state.language, { illustrationStyle:state.illustrationStyle });
+      if (await assistSaveSidebarTask(target, label, id)) smartSuggestRecent(`accepted ${id}`);
+      return;
     }
     if (!["typeset", "ai", "animate"].includes(action.exec.type) && target.strokes?.length) smartSuggest.consumedStrokeId = Math.max(smartSuggest.consumedStrokeId, target.strokes.at(-1).id);
     smartSuggest.cooldown[id] = 0;
@@ -2392,14 +2498,15 @@
     cancelWidgetRefinement?.("assist-ask");
     supersedeActiveAI("assist-ask");
     if (typeof clearPenGesture === "function") clearPenGesture("assist-ask");
-    const documentId=canvasDocumentsCurrent().id,generation=++assistAgent.generation;
-    renderAssist({mode:"working",label:t("assistRouting"),box:target.box,target,action:{id:"ask"}});
-    const execution=await assistClassifyRequest("ask",target,text);
-    if(generation!==assistAgent.generation||!assistAgentTargetCurrent(target,documentId))return;
-    if(SMART_SUGGEST.executionRoute("ask",execution)==="penecho_agent") {
-      const routed=await assistAgentRun("ask",target,{label:t("assistAsk"),instruction:text,fromSuggestBar:true});
-      if(routed==="submitted") return;
-      if(routed==="blocked"){hideAssist("agent-blocked");assistRefresh("agent-blocked");return;}
+    if (projectLinesCanAsk()) {
+      const documentId = canvasDocumentsCurrent().id, generation = ++assistAgent.generation;
+      renderAssist({ mode:"working", label:t("assistRouting"), box:target.box, target, action:{ id:"ask" } });
+      const execution = await assistClassifyRequest("ask", target, text);
+      if (generation !== assistAgent.generation || !assistAgentTargetCurrent(target, documentId)) return;
+      if (SMART_SUGGEST.executionRoute("ask", execution) === "sidebar_task") {
+        await assistSaveSidebarTask(target, text);
+        return;
+      }
     }
     if (target.selection) {
       if (!assistSelectionTargetValid(target)) { hideAssist("selection-changed"); return; }

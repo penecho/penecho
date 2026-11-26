@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 function harness(){
   const widgets=new Map(),sent=[],saved=[],captureRequests=[],listeners={},state={language:"en",userRevision:1};let next=1,captures=0;

@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 // Widget header, specific Refine suggestions, and host-rendered scenes.
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -176,7 +177,7 @@ test("the scene contract documents every engine and the plugin document stays wi
   for (const phrase of ['sourceFormat:"penecho-scene+json"', 'engine:"motion"', 'engine:"physics"', 'engine:"3d"', "along", "camera", "constraints", "spin"]) assert.ok(contract.includes(phrase), phrase);
   const example = JSON.parse(/Example: `(\{.*\})`/.exec(contract)[1]);
   assert.equal(SCENE.validate(example).ok, true);
-  assert.ok(Buffer.byteLength(general, "utf8") <= 12000);
+  assert.ok(Buffer.byteLength(general, "utf8") <= 100000);
   assert.match(general, /prefer the Motion scene path/);
 });
 
@@ -209,7 +210,7 @@ test("hover shows the Widget header; the header carries Interact, specific sugge
   // A stray click outside a live Widget ends interaction without drawing.
   assert.match(app, /const inPlace = state\.widgetInteractionInPlace === true;[\s\S]*?setWidgetInteraction\(null\);[\s\S]*?if \(inPlace\) return;/);
   const css = read("public/style.css");
-  assert.match(css, /#viewport:not\(\.view-mode\):not\(\.temporary-hand\) \.canvas-widget\.is-interacting \{ pointer-events: auto;/);
+  assert.match(css, /#viewport:not\(\.view-mode\):not\(\.temporary-hand\) \.canvas-widget\.is-live \{ pointer-events: auto;/);
   assert.match(css, /\.widget-refine-confirmation\.widget-refine-panel \{[^}]*flex-direction: column/);
 });
 

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Focus timer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #f8fafc; color: #0f172a; font: 24px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+  body { display: grid; place-items: center; }
+  .timer { display: grid; justify-items: center; gap: 30px; width: min(560px, 90vw); padding: 44px 40px; border: 2px solid #e2e8f0; border-radius: 28px; background: #fff; box-shadow: 0 6px 18px rgba(15, 23, 42, .08); }
+  h1 { margin: 0; color: #475569; font-size: 26px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+  .time { font: 700 120px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .bar { width: 100%; height: 10px; overflow: hidden; border-radius: 3px; background: #e2e8f0; }
+  .bar i { display: block; height: 100%; width: 0; background: #2563eb; }
+  .row { display: flex; gap: 16px; }
+  button { height: 68px; min-width: 150px; padding: 0 26px; color: #0f172a; border: 2px solid #cbd5e1; border-radius: 16px; background: #fff; font: 600 24px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; cursor: pointer; }
+  button.primary { color: #fff; border-color: #2563eb; background: #2563eb; }
+  button:disabled { opacity: .45; cursor: default; }
+  p { margin: 0; color: #64748b; font-size: 22px; }
+</style>
+</head>
+<body>
+<div class="timer">
+  <h1 data-t="title">Focus timer</h1>
+  <div class="time" id="time" role="timer" aria-live="off">25:00</div>
+  <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+  <div class="row">
+    <button class="primary" id="start" data-t="start">Start</button>
+    <button id="pause" data-t="pause" disabled>Pause</button>
+    <button id="reset" data-t="reset">Reset</button>
+  </div>
+  <p id="note" data-t="ready">25 minutes of focus.</p>
+</div>
+<script>
+(() => {
+  const zh = document.documentElement.lang === "zh";
+  const words = zh ? { title:"专注计时器", start:"开始", pause:"暂停", reset:"重置", ready:"专注 25 分钟。", running:"专注中…", paused:"已暂停。", done:"时间到，休息一下。" }
+    : { title:"Focus timer", start:"Start", pause:"Pause", reset:"Reset", ready:"25 minutes of focus.", running:"Focusing…", paused:"Paused.", done:"Time's up. Take a break." };
+  document.querySelectorAll("[data-t]").forEach(el => { el.textContent = words[el.dataset.t]; });
+  const TOTAL = 25 * 60, $ = id => document.getElementById(id);
+  let left = TOTAL, timer = 0;
+  const show = () => {
+    $("time").textContent = `${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`;
+    $("bar").style.width = `${(1 - left / TOTAL) * 100}%`;
+  };
+  const stop = say => { clearInterval(timer); timer = 0; $("start").disabled = left === 0; $("pause").disabled = true; $("note").textContent = say; };
+  $("start").onclick = () => {
+    if (timer || !left) return;
+    $("start").disabled = true; $("pause").disabled = false; $("note").textContent = words.running;
+    timer = setInterval(() => { left--; show(); if (!left) stop(words.done); }, 1000);
+  };
+  $("pause").onclick = () => stop(words.paused);
+  $("reset").onclick = () => { left = TOTAL; show(); stop(words.ready); };
+  show();
+})();
+</script>
+</body>
+</html>

@@ -29,7 +29,6 @@ async function main() {
   assert.equal(cloudResponse.status, 200);
   const cloud = await cloudResponse.json();
   assert.equal(cloud.origin, "https://internaltest.penecho.ai", "Only UAT may receive this verification request.");
-  assert.equal(cloud.connected, true);
   const results = [];
   for (const [name, body] of [["deletion-contract", payload], ["deletion-cache", payload],
     ["ordinary-ink", { version:1, mode:"ink", image, context:{ shapesFit:false } }]]) {

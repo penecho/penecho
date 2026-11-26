@@ -78,3 +78,6 @@ docs/codex-0.157.0-cache-smoke.json
 *.[wW][mM][vV]
 *.[fF][lL][vV]
 *.[oO][gG][vV]
+
+# Moved-aside local leftovers (old test results, scratch output, browser profiles)
+tmp/

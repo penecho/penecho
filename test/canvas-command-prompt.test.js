@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm"), {execFileSync} = require("node:child_process");
 const prompt = require("../src/server/canvas-command-prompt.js"), source = fs.readFileSync(path.join(__dirname,"../src/server/main.js"),"utf8");
 

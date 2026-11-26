@@ -1,0 +1,271 @@
+.orch-page { max-width: 1360px; margin: 0 auto; padding: 22px 24px 48px; display: flex; flex-direction: column; gap: 14px; }
+.orch-page.agents-hidden { max-width: 1080px; }
+/* The page's two columns: the sessions at the left, the "Who did the work" agents panel on the right (PE-706, PE-771). */
+.orch-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(330px, 35%, 400px); align-items: start; gap: 22px; }
+.orch-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.orch-side { position: sticky; top: 0; max-height: calc(var(--lines-viewport-dynamic-height, 100dvh) - 96px); padding: 0 2px 8px 0; overflow: hidden auto; overscroll-behavior: contain; }
+.orch-side[hidden] { display: none; }
+.orch-page.agents-hidden .orch-layout { grid-template-columns: minmax(0, 1fr); }
+.orch-side .orch-agents { margin-top: 0; }
+.orch-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.orch-top h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.orch-top-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* The start of the page: why to use it, the box, and starters (PE-639, PE-649). */
+.orch-start { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 6px; }
+.orch-guide { position: relative; display: grid; gap: 14px; padding-bottom: 4px; }
+.orch-guide[hidden], .orch-top-actions button[hidden], .orch-starters[hidden] { display: none; }
+.orch-guide h2 { margin: 0; padding-inline-end: 40px; font-size: 20px; font-weight: 650; letter-spacing: -.02em; line-height: 1.3; text-wrap: balance; }
+.orch-why { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.orch-why li { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+.orch-why-pic { flex: none; width: 64px; height: 48px; padding: 6px; box-sizing: content-box; background: var(--raised); border-radius: 9px;
+  fill: none; stroke: var(--ink3); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.orch-why-pic .a { stroke: var(--accent); stroke-width: 2; }
+.orch-why-pic rect.a, .orch-why-pic circle.a { fill: var(--accent-soft); }
+.orch-why-pic .f { fill: var(--ink3); stroke: none; }
+.orch-why-pic .fa { fill: var(--accent); stroke: none; }
+.orch-why-pic .dot { fill: var(--accent); stroke: none; opacity: .55; }
+.orch-why li > div { display: grid; gap: 3px; min-width: 0; }
+.orch-why strong { color: var(--ink); font-size: 14.5px; font-weight: 640; line-height: 1.3; }
+.orch-why span { color: var(--ink2); font-size: 13.5px; line-height: 1.45; }
+.orch-guide-x { position: absolute; top: -2px; inset-inline-end: 0; color: var(--ink3); }
+.orch-guide-x:hover { color: var(--ink); }
+.orch-starters { display: flex; flex-wrap: wrap; gap: 8px; }
+.orch-starter { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 5px 12px; color: var(--ink2); font-size: 13.5px; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; }
+.orch-starter:hover { color: var(--ink); border-color: var(--line2); background: var(--hover); }
+.orch-starter .ic { color: var(--ink3); }
+.orch-box-wrap { display: flex; flex-direction: column; gap: 6px; }
+.orch-box-foot { display: flex; align-items: center; justify-content: flex-end; padding: 0 4px; }
+.orch-how-link { display: inline-flex; align-items: center; gap: 5px; padding: 2px 6px; color: var(--ink3); font-size: 12.5px; line-height: 1.4; border-radius: 6px; }
+.orch-how-link:hover { color: var(--accent-label); background: var(--hover); }
+.orch-how-link:hover span { text-decoration: underline; text-underline-offset: 2px; }
+.orch-how-link .ic { flex: none; }
+.line-command-dialog.orch-how-dialog { width: min(540px, calc(var(--lines-viewport-width, 100vw) - 32px)); padding: 0; }
+.orch-how-inner { padding: 22px 24px 20px; }
+.orch-how-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.orch-how-head h2 { margin: 0; font-size: 19px; line-height: 1.3; letter-spacing: -.015em; }
+.orch-how-x { flex: none; margin: -4px -6px 0 0; color: var(--ink3); }
+.orch-how-x:hover { color: var(--ink); }
+.orch-how-body { display: grid; gap: 10px; color: var(--ink2); font-size: 13.5px; line-height: 1.5; }
+.orch-how-body p { margin: 0; }
+.orch-how-body h3 { margin: 4px 0 0; color: var(--ink); font-size: 13.5px; font-weight: 650; }
+.orch-how-body ul { display: grid; gap: 6px; margin: 0; padding-left: 18px; }
+.orch-how-body strong { color: var(--ink); font-weight: 600; }
+.orch-how-dialog footer { margin-top: 18px; }
+.orch-file-text .cmp-file-edit { color: var(--accent); }
+@media (max-width: 700px) {
+  /* A narrow page keeps the box in view: the reasons become a strip to swipe through. */
+  .orch-why { display: flex; margin-inline: -14px; padding: 0 14px 2px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 14px; scrollbar-width: none; }
+  .orch-why li { flex: 0 0 min(78%, 300px); flex-direction: column; align-items: flex-start; gap: 10px; scroll-snap-align: start; }
+  .orch-starters { flex-wrap: nowrap; margin-inline: -14px; padding-inline: 14px; overflow-x: auto; scrollbar-width: none; }
+  .orch-starter { flex: none; }
+}
+
+/* The box's one row: + and outputs at the left; agent and Start at the right. It never takes a second row:
+   make.js fitBar gives up room in steps (ORCH_FIT_STEPS) until it fits. */
+.orch-bar { gap: 4px; margin-left: -4px; }
+.orch-bar .cmp-chips { gap: 0; }
+.orch-bar .cmp-chip { gap: 5px; padding: 0 8px 0 7px; }
+.orch-bar .cmp-path { padding: 0; }
+.orch-picker { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; color: var(--ink2); font-size: 13.5px; border-radius: 8px; }
+.orch-picker:hover, .orch-picker:focus-visible, .orch-picker[aria-expanded="true"] { color: var(--ink); background: var(--hover); }
+.orch-picker > .ic { flex: none; color: var(--ink3); }
+.orch-agent-name { max-width: 300px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.orch-submit { display: inline-flex; flex: none; }
+.orch-submit:has(.orch-submit-pick) .orch-go { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.orch-submit .orch-submit-pick { padding: 0 7px; border-left: 1px solid #ffffff55; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.orch-bar .orch-go { flex: none; padding: 0 7px 0 12px; }
+.orch-bar .orch-go > svg { display: none; }
+.orch-bar .orch-go:has(> .spin) { padding-left: 10px; }
+/* Keep the action label visible as the agent name contracts to its badge. */
+.orch-bar.short-agent .orch-agent-name { max-width: 170px; }
+.orch-bar.tight-agent .orch-agent-name { max-width: 150px; }
+.orch-bar.icon-send .orch-go { justify-content: center; width: 36px; padding: 0; }
+.orch-bar.icon-send .orch-go > :is(span, kbd) { display: none; }
+.orch-bar.icon-send .orch-go > svg { display: block; }
+.orch-bar.icon-agent .orch-agent-name { display: none; }
+
+.orch-box { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 12px; background: var(--paper); border: 1px solid var(--line2); border-radius: 13px; box-shadow: var(--shadow-1); }
+.orch-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.orch-box textarea { width: 100%; min-height: 66px; max-height: 320px; padding: 4px 0; color: var(--ink); font: 400 16px/1.45 var(--words, inherit); background: none; border: 0; outline: 0; resize: none; }
+.orch-box textarea::placeholder { color: var(--ink3); }
+/* Pictures and files for the job, the same chips as the home box's. */
+.orch-pick { display: none; }
+.orch-files { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 6px; }
+.orch-file { display: flex; align-items: center; gap: 9px; max-width: min(330px, 100%); padding: 4px 3px 4px 4px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; }
+.orch-file-pic { position: relative; display: block; flex: none; width: 120px; height: 84px; padding: 0; overflow: hidden; background: var(--paper); border: 1px solid var(--line); border-radius: 5px; cursor: zoom-in; }
+.orch-file-pic.is-blank { cursor: default; }
+.orch-file img { display: block; flex: none; width: 120px; height: 84px; object-fit: contain; background: var(--paper); border: 1px solid var(--line); border-radius: 5px; }
+.orch-file-pic img { width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; opacity: 0; transition: opacity .12s ease; }
+.orch-file-pic img.is-loaded { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .orch-file-pic img { transition: none; } }
+.orch-file-ic { display: grid; flex: none; place-items: center; width: 38px; height: 38px; color: var(--ink3); }
+.orch-file-text { display: grid; flex: 1; gap: 2px; min-width: 0; line-height: 1.2; }
+.orch-file-text strong { overflow: hidden; font-size: 13px; font-weight: 550; white-space: nowrap; text-overflow: ellipsis; }
+.orch-file-text span { color: var(--ink3); font-size: 12px; }
+.orch-clip { flex: none; width: 31px; height: 31px; }
+.orch-box .btn .spin { width: 13px; height: 13px; }
+.orch-none { flex-direction: row; align-items: center; gap: 12px; color: var(--ink2); }
+.orch-none p { flex: 1; margin: 0; font-size: 14px; }
+
+#orchSessions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 6px; min-width: 0; }
+#orchSessions:empty { display: none; }
+.orch-session-head, .orch-toolbar, .orch-results-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.orch-session-head h2 { margin: 0; color: var(--ink); font-size: 19px; letter-spacing: -.02em; }
+.orch-search { display: flex; align-items: center; gap: 7px; width: 236px; max-width: 100%; padding: 0 10px; color: var(--ink3); background: var(--paper); border: 1px solid var(--line2); border-radius: 8px; }
+.orch-search:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.orch-search input { width: 100%; min-width: 0; height: 34px; outline: 0; border: 0; background: transparent; font-size: 14px; color: var(--ink); }
+.orch-search input::placeholder { color: var(--ink3); }
+#orchResults, .orch-list { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 8px; }
+.orch-toolbar { padding-bottom: 9px; border-bottom: 1px solid var(--line); }
+.orch-statuses, .orch-pager { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; }
+.orch-statuses button, .orch-pager button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 3px 8px; border-radius: 6px; color: var(--ink2); font-size: 13px; }
+.orch-statuses button span, .orch-range { font-variant-numeric: tabular-nums; }
+.orch-statuses button span { font-size: 12px; }
+.orch-statuses button[aria-pressed="true"], .orch-pager button[aria-current="page"] { background: var(--selected); color: var(--accent-label); font-weight: 650; }
+.orch-statuses button:hover, .orch-pager button:enabled:hover { background: var(--hover); }
+.orch-range { color: var(--ink2); font-size: 12.5px; }
+.orch-results-bar { gap: 5px 10px; }
+.orch-pager button { min-width: 30px; font-variant-numeric: tabular-nums; }
+.orch-pager > span { color: var(--ink3); }
+#orchPager-bottom { justify-content: flex-end; padding-top: 4px; }
+.orch-empty { padding: 18px; border: 1px dashed var(--line2); border-radius: 12px; }
+.orch-empty h2, .orch-empty h3 { margin: 0 0 5px; font-size: 15px; font-weight: 620; color: var(--ink); }
+.orch-empty p { max-width: 68ch; margin: 0; color: var(--ink2); font-size: 14px; line-height: 1.55; }
+.orch-run { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 15px 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+.orch-run.running { border-inline-start: 3px solid var(--c-run); }
+.orch-run.waiting { border-inline-start: 3px solid var(--amber-mark); }
+.orch-run > header, .orch-identity, .orch-run-actions { display: flex; align-items: center; gap: 8px; }
+.orch-run > header { flex-wrap: wrap; gap: 8px 12px; min-width: 0; min-height: 28px; }
+.orch-identity { flex: 1 1 200px; min-width: 0; }
+.orch-run-actions { flex-wrap: wrap; margin-inline-start: auto; }
+.orch-run-actions:empty { display: none; }
+.orch-run > header .spin { width: 14px; height: 14px; color: var(--c-run-label); }
+.orch-title { display: inline-flex; flex: 0 1 auto; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; color: var(--ink); font-size: 15px; font-weight: 640; text-align: left; }
+.orch-title code { flex: none; color: var(--ink3); font: 12px/1.4 var(--mono); }
+.orch-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.orch-title:hover span { text-decoration: underline; text-underline-offset: 2px; }
+.orch-tag { flex: none; padding: 1px 7px; color: var(--accent-label); font-size: 12px; font-weight: 560; background: var(--selected); border-radius: 6px; }
+.orch-ask { display: flex; align-items: center; gap: 7px; padding: 6px 9px; color: var(--hint-you); font-size: 13.5px; font-weight: 560; text-align: left; background: var(--hint-you-soft); border-radius: 8px; }
+.orch-reason { margin: 0; color: var(--ink2); font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.orch-route, .orch-auto { margin: 0; color: var(--ink2); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.orch-route b, .orch-auto b { color: var(--ink); font-weight: 600; }
+.orch-ask span { min-width: 0; overflow-wrap: anywhere; }
+.orch-report { display: grid; gap: 4px; padding: 10px 14px; background: var(--raised); border-radius: 8px; color: var(--ink2); font-size: 14px; line-height: 1.5; text-align: left; }
+.orch-report strong { display: inline-flex; align-items: center; gap: 3px; color: var(--accent-label); font-size: 12.5px; font-weight: 600; }
+.orch-report span { max-width: 80ch; white-space: pre-line; overflow-wrap: anywhere; }
+.orch-report:hover strong, .orch-line-t:hover span { text-decoration: underline; text-underline-offset: 2px; }
+.orch-activity { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 12px; color: var(--ink2); font-size: 13px; overflow-wrap: anywhere; }
+.orch-activity time { color: var(--ink3); font-size: 12px; }
+.orch-dependency { color: var(--accent-label); text-decoration: underline; text-underline-offset: 2px; }
+.orch-stop { flex: none; }
+.orch-lines, .orch-child { min-width: 0; }
+.orch-child + .orch-child { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+.orch-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+.orch-line-t { display: inline-flex; flex: 1 1 160px; align-items: baseline; gap: 8px; min-width: 0; min-height: 32px; padding: 6px 0; color: var(--ink); font-size: 14px; font-weight: 560; text-align: left; }
+.orch-line-t code { flex: none; color: var(--ink3); font: 12px/1.2 var(--mono); }
+.orch-line-t span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch-works { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 100%; }
+.orch-work { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink2); font-size: 12px; }
+.orch-work:hover, .orch-rating:hover { background: var(--hover); border-color: var(--line2); }
+.orch-mono { display: grid; place-items: center; min-width: 19px; height: 19px; padding: 0 2px; color: var(--a); font-size: 9px; font-weight: 700; border: 1px solid var(--a); border-radius: 50%; }
+.w-done .orch-mono { color: #fff; background: var(--a); }
+.reviewed .orch-mono { outline: 1px solid var(--c-end); outline-offset: 1px; }
+.orch-wkind { color: var(--ink3); font-size: 11px; font-weight: 550; }
+.orch-wscore { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.w-todo .orch-mono { border-style: dashed; }
+.orch-work.w-active { color: var(--c-run-label); background: var(--c-run-soft); }
+.orch-work.w-wait { color: var(--amber); background: var(--amber-soft); }
+.orch-work.w-error { color: var(--red); }
+.orch-ratings { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 5px; }
+.orch-rating-label { color: var(--ink3); font-size: 12px; margin-right: 4px; }
+.orch-rating { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 3px 6px; max-width: 100%; min-height: 30px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink2); text-align: left; font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.orch-rating .av { align-self: center; }
+.orch-rating-who { font-weight: 560; }
+.orch-score { border-radius: 4px; padding: 0 5px; background: var(--soft); color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 650; }
+.orch-rating-context { color: var(--ink3); }
+.orch-rating-note { color: var(--ink); }
+
+.orch-fns { border-top: 1px solid var(--line); padding-top: 8px; overflow-x: auto; }
+.orch-fns summary { width: max-content; padding: 4px 2px; color: var(--ink3); font-size: 13px; cursor: pointer; }
+.orch-fns summary:hover { color: var(--ink); }
+.orch-fns table { margin-top: 6px; }
+.orch-fns td { padding: 6px 8px; font-size: 13px; vertical-align: top; }
+.orch-fns td:first-child { white-space: nowrap; }
+.orch-fns code { font: 12.5px/1.3 var(--mono); }
+
+@media (max-width: 640px) {
+  .orch-page { padding: 16px 14px 36px; }
+  .orch-search { flex: 1 1 275px; }
+  .orch-results-bar { flex: 1 1 100%; }
+  .orch-run { padding: 12px; }
+  .orch-works { flex-basis: 100%; }
+}
+@media (max-width: 480px) {
+  .orch-file img { width: 88px; height: 64px; }
+  .orch-box { padding: 12px 12px 10px; }
+  .orch-bar { gap: 2px; }
+  .orch-why li { padding: 10px 12px; gap: 12px; }
+}
+@media (hover: none) {
+  .orch-statuses button, .orch-pager button { min-width: 44px; min-height: 44px; }
+  .orch-search input { min-height: 44px; }
+  .orch-guide button, .orch-starter, .orch-how-link, .orch-top-actions button, .orch-file-text button,
+  .orch-work, .orch-rating, .orch-line-t, .orch-stop, .orch-dependency, .orch-fns summary { min-height: 44px; }
+}
+
+/* Agents (PE-706, PE-771): "Who did the work" card on the right, shown by default and hidden from the top button or ×. */
+.orch-agents { margin-top: 18px; }
+.orch-side .orch-agents { padding: 16px 18px; }
+.orch-side .orch-agents .sx-hd { flex-wrap: nowrap; }
+.orch-agents-hide { flex: none; margin-left: auto; color: var(--ink3); }
+.orch-agents-hide:hover { color: var(--ink); }
+.orch-side .sx-share-list li { grid-template-columns: 24px minmax(88px, 1fr) minmax(36px, 56px) minmax(52px, auto) 42px; gap: 8px; }
+.orch-side .sx-share-list .sx-who { gap: 7px; }
+.orch-side .sx-share-n small { white-space: nowrap; }
+@media (max-width: 1120px) {
+  .orch-layout { grid-template-columns: minmax(0, 1fr); }
+  .orch-side { position: static; max-height: none; padding: 0; overflow: visible; }
+  .orch-side .sx-share-list li { grid-template-columns: 26px minmax(96px, 150px) minmax(40px, 1fr) repeat(2, 58px); gap: 10px; }
+}
+@media (max-width: 760px) {
+  .orch-side .sx-share-list li { grid-template-columns: 24px minmax(0, 1fr) 58px 58px; }
+}
+
+/* Settings beside the box: a gear at the left of the bar, a small panel of three rows, one quiet hint under the box. */
+.orch-gear-slot { display: contents; }
+.orch-gear { position: relative; flex: none; color: var(--ink3); }
+.orch-gear:hover, .orch-gear[aria-expanded="true"] { color: var(--ink); background: var(--hover); }
+.orch-gear-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; background: var(--accent); border: 1.5px solid var(--paper); border-radius: 50%; }
+/* The panel hangs just under the box, over the hint, from an anchor of no height. */
+.orch-set-anchor { position: relative; height: 0; margin-top: -6px; }
+.orch-set-panel { position: absolute; top: 4px; left: 8px; z-index: 30; display: grid; width: min(430px, calc(100% - 16px)); padding: 6px 14px; background: var(--paper); border: 1px solid var(--line2); border-radius: 12px; box-shadow: var(--float-shadow); }
+.orch-set-panel[hidden] { display: none; }
+.orch-set-row { align-items: center; color: var(--ink); font-size: 13.5px; }
+.orch-set-row + .orch-set-row { border-top: 1px solid var(--line); }
+/* Its name and its control on one line, what it does under both. */
+.orch-set-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; min-height: 0; padding: 10px 0; }
+.orch-set-what { display: contents; }
+.orch-set-what small { grid-column: 1 / -1; order: 3; color: var(--ink3); font-size: 12px; line-height: 1.4; }
+.orch-set-select { min-width: 0; max-width: 210px; height: 30px; padding: 0 8px; color: var(--ink); font: inherit; font-size: 13px; background: var(--paper); border: 1px solid var(--line2); border-radius: 8px; text-overflow: ellipsis; }
+.orch-set-select:disabled { color: var(--ink3); opacity: .7; }
+.orch-set-sync { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.orch-set-state { display: inline-flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 13px; white-space: nowrap; }
+.orch-set-state.is-error { overflow: hidden; color: var(--red); text-overflow: ellipsis; white-space: normal; }
+.orch-switch { position: relative; flex: none; width: 34px; height: 20px; margin: 0; background: var(--line2); border-radius: 999px; transition: background .12s; appearance: none; cursor: pointer; }
+.orch-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; box-shadow: 0 1px 2px rgba(15, 23, 42, .25); transition: left .12s; }
+.orch-switch:checked { background: var(--accent); }
+.orch-switch:checked::after { left: 16px; }
+.orch-switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* The hint at the left, How Orchestrator chooses models at the right, on one row. */
+.orch-under { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
+.orch-under .orch-box-foot { margin-left: auto; }
+#orchHint:empty { display: none; }
+.orch-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 0 5px; margin: 0; padding: 0 10px; color: var(--ink3); font-size: 12.5px; line-height: 1.5; }
+.orch-hint.is-error > span { color: var(--red); }
+.orch-hint-link { font-size: inherit; }
+.orch-hint .spin, .orch-set-state .spin { width: 11px; height: 11px; margin-right: 5px; }
+.orch-auto-av { display: inline-grid; flex: none; place-items: center; width: 22px; height: 22px; color: var(--accent); background: var(--accent-soft); border-radius: 50%; }
+.orch-review-score { color: var(--ink3); font-size: 12.5px; white-space: nowrap; }
+@media (hover: none) {
+  .orch-gear { min-width: 44px; min-height: 44px; }
+}

@@ -1,3 +1,4 @@
+require("./helpers/safety.js");
 const assert = require("node:assert/strict");
 const { mkdtemp, mkdir, readFile, rm, writeFile } = require("node:fs/promises");
 const { tmpdir } = require("node:os");

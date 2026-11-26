@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -137,8 +138,7 @@ test("sharing an unchanged Cloud Canvas does not create another revision", async
   assert.deepEqual(run.events,[{type:"finalize"}]);
 });
 
-test("empty Canvas sharing stops before Cloud save or share request", async () => {
+test("an empty Canvas can be saved for sharing or collaboration", async () => {
   const run=harness({canvasHasShareableContent:() => false});
-  await assert.rejects(run.saveLiveShareToCloud(), /emptyCanvas/);
-  assert.deepEqual(run.events,[{type:"finalize"}]);
+  assert.equal(await run.saveLiveShareToCloud(),SAVED_CANVAS_ID);
 });

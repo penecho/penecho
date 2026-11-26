@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict');
 function fixture(width,height,available=1280,nodeHeight=0,viewportHeight){
   const events=new Map(),mapEvents=new Map(),buttons=new Map(),output={},select={addEventListener:(name,fn)=>events.set('select:'+name,fn)};

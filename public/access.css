@@ -77,113 +77,123 @@
 [data-studio-palette="amber"] { --studio-accent: #b45309; --studio-accent-strong: #92400e; --studio-accent-soft: #f5e9dd; --studio-accent-softer: #faf4ee; --studio-accent-border: #dfc4aa; --studio-shell: #f6f3ef; --studio-titlebar: #faf8f5; --studio-toolbar: #f1eee9; --studio-outside: #faf8f5; --studio-panel: #ffffff; --studio-panel-raised: #fdfbf9; --studio-line: #e3d9cd; --studio-text: #2a211b; --studio-muted: #71665d; }
 [data-studio-palette="burgundy"] { --studio-accent: #9f1239; --studio-accent-strong: #881337; --studio-accent-soft: #f4e5ea; --studio-accent-softer: #faf1f4; --studio-accent-border: #dbbcc6; --studio-shell: #f6f1f3; --studio-titlebar: #faf7f8; --studio-toolbar: #f2ecee; --studio-outside: #faf7f8; --studio-panel: #ffffff; --studio-panel-raised: #fdfafb; --studio-line: #e3d4d9; --studio-text: #2b1c21; --studio-muted: #716168; }
 
+/* ---------- The door: what another device sees before PenEcho opens ----------
+   One calm page in PenEcho's own blue, whatever palette the Canvas uses: the mark, one sentence, six boxes. */
+:root {
+  --d-bg: #f8fafc; --d-paper: #ffffff; --d-soft: #f1f4f8; --d-ink: #0f172a; --d-ink2: #475569; --d-ink3: #64748b;
+  --d-line: rgba(31, 36, 45, .13); --d-line2: rgba(31, 36, 45, .24); --d-grid: rgba(15, 23, 42, .07);
+  --d-accent: #2563eb; --d-accent2: #1d4ed8; --d-accent-soft: #eff6ff; --d-focus: rgba(37, 99, 235, .22);
+  --d-ok: #16a34a; --d-ok-soft: rgba(22, 163, 74, .14); --d-bad: #b4232c; --d-bad-soft: rgba(180, 35, 44, .08);
+  --d-shadow: 0 1px 2px rgba(17, 24, 39, .05), 0 18px 48px rgba(17, 24, 39, .1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --d-bg: #090e1a; --d-paper: #111a2c; --d-soft: #172238; --d-ink: #e9eef8; --d-ink2: #aab5c9; --d-ink3: #7f8ba4;
+    --d-line: rgba(255, 255, 255, .1); --d-line2: rgba(255, 255, 255, .2); --d-grid: rgba(255, 255, 255, .06);
+    --d-accent: #3b82f6; --d-accent2: #60a5fa; --d-accent-soft: rgba(59, 130, 246, .16); --d-focus: rgba(96, 165, 250, .32);
+    --d-ok: #4ade80; --d-ok-soft: rgba(74, 222, 128, .16); --d-bad: #f87171; --d-bad-soft: rgba(248, 113, 113, .12);
+    --d-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 18px 48px rgba(0, 0, 0, .5);
+  }
+}
+
 * { box-sizing: border-box; }
-html { min-width: 320px; min-height: 100%; overflow-x: hidden; background: var(--studio-outside); }
-body { min-width: 320px; min-height: 100vh; min-height: 100dvh; margin: 0; overflow-x: hidden; color: var(--pe-ink); background: var(--studio-outside); font: var(--pe-type-regular) var(--pe-type-body)/1.45 var(--pe-font-ui); }
+html { min-width: 320px; min-height: 100%; overflow-x: hidden; background: var(--d-bg); }
+body { --accent: var(--d-accent); position: relative; min-width: 320px; min-height: 100vh; min-height: 100dvh; margin: 0; overflow-x: hidden; color: var(--d-ink); background: var(--d-bg); font: var(--pe-type-regular) 15px/1.45 var(--pe-font-ui); -webkit-font-smoothing: antialiased; }
+body::before { position: fixed; inset: 0; content: ""; background-image: radial-gradient(var(--d-grid) 1px, transparent 1.2px); background-size: 22px 22px; -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 45%, transparent 0 34%, #000 100%); mask-image: radial-gradient(ellipse 70% 70% at 50% 45%, transparent 0 34%, #000 100%); pointer-events: none; }
 button, a { font: inherit; }
-button { letter-spacing: 0; }
+button { letter-spacing: 0; color: inherit; }
 svg { display: block; }
 
-.access-topbar {
-  display: flex;
-  min-height: 52px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
-  border-bottom: 1px solid var(--pe-line);
-  background: var(--studio-titlebar);
-}
-.access-brand { display: inline-flex; min-height: 36px; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
-.access-brand-mark { display: grid; width: 30px; height: 30px; place-items: center; }
-.access-brand img { display: block; width: 30px; height: 30px; object-fit: contain; }
-.access-brand > span:last-child { display: grid; gap: 1px; line-height: 1.05; }
-.access-brand strong { color: var(--pe-ink); font-size: 14px; font-weight: var(--pe-type-semibold); letter-spacing: normal; }
-.access-brand small { color: var(--pe-ink-2); font-size: var(--pe-type-meta); font-weight: var(--pe-type-medium); letter-spacing: normal; text-transform: none; }
+.access-language { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); z-index: 2; display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--d-soft); }
+.access-language button { min-width: 34px; height: 26px; padding: 0 8px; color: var(--d-ink3); border: 0; border-radius: 7px; background: transparent; font-size: 12.5px; font-weight: var(--pe-type-medium); cursor: pointer; }
+.access-language button[aria-pressed="true"] { color: var(--d-ink); background: var(--d-paper); box-shadow: 0 1px 2px rgba(17, 24, 39, .12); }
 
-/* Language switch follows the closed segmented contract: 30px track, 24px items. */
-.access-language { display: inline-flex; height: 30px; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--pe-line); border-radius: 6px; background: var(--pe-surface-muted); }
-.access-language button { min-width: 34px; height: 24px; min-height: 24px; padding: 0 8px; color: var(--pe-ink-2); border: 1px solid transparent; border-radius: 4px; background: transparent; font-size: 12.5px; font-weight: var(--pe-type-medium); cursor: pointer; transition: color .18s ease-out, border-color .18s ease-out, background .18s ease-out; }
-.access-language button:hover { color: var(--pe-ink); }
-.access-language button[aria-pressed="true"] { color: var(--pe-ink); border-color: var(--pe-line); background: var(--pe-surface); box-shadow: none; }
+.access-shell { position: relative; display: grid; min-height: 100vh; min-height: 100dvh; place-items: center; padding: 56px 16px max(24px, env(safe-area-inset-bottom)); }
+.access-panel { display: flex; flex-direction: column; align-items: center; width: min(100%, 420px); padding: 36px 32px 28px; text-align: center; border: 1px solid var(--d-line); border-radius: 28px; background: var(--d-paper); box-shadow: var(--d-shadow); animation: access-rise .6s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes access-rise { from { opacity: 0; transform: translateY(14px); } }
 
-.access-shell { display: grid; min-height: calc(100vh - 52px); min-height: calc(100dvh - 52px); place-items: center; padding: 24px 16px max(24px, env(safe-area-inset-bottom)); }
-.access-panel { width: min(100%, 480px); padding: 24px; border: 1px solid var(--pe-line); border-radius: var(--pe-r-dialog); background: var(--pe-surface); box-shadow: var(--pe-shadow-dialog); }
-.access-heading { display: grid; gap: 7px; margin-bottom: 20px; }
-.access-kicker { color: var(--pe-accent-label); font-size: var(--pe-type-overline); font-weight: var(--pe-type-semibold); letter-spacing: .035em; }
-.access-heading h1 { margin: 0; color: var(--pe-ink); font-size: var(--pe-type-page); font-weight: var(--pe-type-semibold); line-height: 1.25; letter-spacing: normal; text-wrap: balance; }
-.access-heading p { margin: 0; color: var(--pe-ink-2); font-size: var(--pe-type-description); font-weight: var(--pe-type-regular); line-height: 1.45; text-wrap: pretty; }
+/* The mark carves itself once. */
+.access-mark { width: 60px; height: 60px; margin-bottom: 18px; }
+.access-mark-shell { fill: var(--d-accent); transform-origin: 50% 60%; animation: access-shell .7s cubic-bezier(.2, .8, .2, 1) both; }
+.access-mark-cut { stroke-dasharray: 1; stroke-dashoffset: 1; animation: access-carve 1.4s .25s cubic-bezier(.45, 0, .2, 1) forwards; }
+@keyframes access-shell { from { opacity: 0; transform: scale(.8) rotate(-14deg); } }
+@keyframes access-carve { to { stroke-dashoffset: 0; } }
 
-.access-loading { display: flex; min-height: 54px; align-items: center; gap: 11px; color: var(--pe-ink-2); font-size: var(--pe-type-body); }
-.access-loading span { width: 18px; height: 18px; border: 2px solid var(--pe-line-strong); border-top-color: var(--pe-accent); border-radius: 50%; animation: access-spin .8s linear infinite; }
+.access-heading { display: grid; gap: 8px; margin-bottom: 26px; }
+.access-heading h1 { margin: 0; color: var(--d-ink); font-size: 26px; font-weight: 680; line-height: 1.15; letter-spacing: -.02em; text-wrap: balance; }
+.access-heading p { margin: 0; color: var(--d-ink2); font-size: 15.5px; line-height: 1.5; text-wrap: balance; }
+.access-heading p:empty { display: none; }
+
+.access-loading { display: flex; align-items: center; gap: 10px; min-height: 40px; color: var(--d-ink2); font-size: 14.5px; }
+.access-loading b { font-weight: var(--pe-type-regular); }
+.access-loading span { width: 18px; height: 18px; border: 2px solid var(--d-line2); border-top-color: var(--d-accent); border-radius: 50%; animation: access-spin .8s linear infinite; }
 @keyframes access-spin { to { transform: rotate(360deg); } }
-.access-view { display: grid; gap: 14px; }
+.access-view { display: grid; gap: 16px; width: 100%; justify-items: center; }
 .access-view[hidden], .access-loading[hidden], .access-error[hidden], #accessRetry[hidden] { display: none; }
 
-.access-scope-note { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 10px; padding: 12px; border: 1px solid var(--pe-line); border-radius: var(--pe-r-group); background: var(--pe-surface-raised); }
-.access-note-icon { display: grid; width: 30px; height: 30px; place-items: center; color: var(--pe-ink-2); border-radius: 7px; background: var(--pe-surface-muted); }
-.access-note-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
-.access-scope-note strong { color: var(--pe-ink); font-size: var(--pe-type-label); font-weight: var(--pe-type-medium); line-height: 1.25; }
-.access-scope-note p { margin: 3px 0 0; color: var(--pe-ink-2); font-size: var(--pe-type-description); font-weight: var(--pe-type-regular); line-height: 1.45; }
+/* Two ways, as two rows. */
+.access-choice-list { display: grid; gap: 10px; width: 100%; }
+.access-choice { display: grid; grid-template-columns: 40px minmax(0, 1fr) 16px; align-items: center; gap: 13px; min-height: 68px; padding: 12px 14px; text-align: left; border: 1px solid var(--d-line); border-radius: 16px; background: var(--d-paper); cursor: pointer; transition: transform .16s cubic-bezier(.2, .8, .2, 1), border-color .16s, box-shadow .16s; }
+.access-choice:hover { border-color: var(--d-line2); box-shadow: 0 6px 18px rgba(17, 24, 39, .08); transform: translateY(-1px); }
+.access-choice:active { transform: scale(.985); }
+.access-choice-primary { border-color: color-mix(in srgb, var(--d-accent) 34%, var(--d-line)); }
+.access-choice-icon { display: grid; width: 40px; height: 40px; place-items: center; color: var(--d-ink2); border-radius: 12px; background: var(--d-soft); }
+.access-choice-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.access-choice-primary .access-choice-icon { color: var(--d-accent2); background: var(--d-accent-soft); }
+.access-choice > span:nth-child(2) { display: grid; gap: 2px; }
+.access-choice strong { color: var(--d-ink); font-size: 15.5px; font-weight: 600; line-height: 1.3; }
+.access-choice small { color: var(--d-ink2); font-size: 13.5px; line-height: 1.4; }
+.access-choice-chevron { width: 16px; height: 16px; color: var(--d-ink3); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-/* Choice rows implement the catalog icon+title+two-line-copy action list:
-   the whole row is clickable, hover is a restrained accent tint, and the
-   recommended action leads by position instead of a filled block. */
-.access-choice-list { display: grid; overflow: hidden; border: 1px solid var(--pe-line); border-radius: var(--pe-r-group); background: var(--pe-surface); }
-.access-choice { display: grid; grid-template-columns: 30px minmax(0, 1fr) 16px; min-height: 70px; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; color: var(--pe-ink); border: 0; background: var(--pe-surface); text-align: left; cursor: pointer; transition: color .18s ease-out, background .18s ease-out; }
-.access-choice + .access-choice { border-top: 1px solid var(--pe-line); }
-.access-choice:hover { background: color-mix(in srgb, var(--pe-accent) 4%, var(--pe-surface)); }
-.access-choice:active { background: var(--pe-surface-pressed); }
-.access-choice-icon { display: grid; width: 30px; height: 30px; place-items: center; color: var(--pe-ink-2); border-radius: 7px; background: var(--pe-surface-muted); }
-.access-choice-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
-.access-choice-primary .access-choice-icon { color: var(--pe-accent-label); background: var(--pe-accent-soft); }
-.access-choice > span:nth-child(2) { display: grid; gap: 3px; }
-.access-choice strong { font-size: var(--pe-type-label); font-weight: var(--pe-type-medium); line-height: 1.25; }
-.access-choice small { color: var(--pe-ink-2); font-size: 12.5px; font-weight: var(--pe-type-regular); line-height: 1.45; }
-.access-choice-chevron { width: 14px; height: 14px; color: var(--pe-ink-3); fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+/* Six boxes. The one being filled is ringed; a wrong code shakes them, a right one turns them green. */
+.access-code { display: flex; justify-content: center; gap: 9px; }
+.access-code i { position: relative; display: block; flex: none; width: 46px; height: 58px; border: 1.5px solid var(--d-line2); border-radius: 14px; background: var(--d-paper); transition: border-color .16s, box-shadow .16s, background .16s, transform .16s; }
+.access-code i:nth-child(4) { margin-left: 10px; }
+.access-code i::after { position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; content: ""; border-radius: 50%; background: var(--d-ink); opacity: 0; transform: translate(-50%, -50%) scale(.2); transition: opacity .14s, transform .22s cubic-bezier(.3, 1.6, .5, 1), background .16s; }
+.access-code i.filled::after { opacity: 1; transform: translate(-50%, -50%); }
+.access-code i.now { border-color: var(--d-accent); box-shadow: 0 0 0 4px var(--d-focus); }
+.access-code i.now::before { position: absolute; top: 50%; left: 50%; width: 2px; height: 22px; margin: -11px 0 0 -1px; content: ""; border-radius: 1px; background: var(--d-accent); animation: access-caret 1.1s steps(1) infinite; }
+@keyframes access-caret { 50% { opacity: 0; } }
+.access-pin.wrong .access-code { animation: access-shake .42s cubic-bezier(.36, .07, .19, .97); }
+.access-pin.wrong .access-code i { border-color: var(--d-bad); box-shadow: none; }
+@keyframes access-shake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-7px); } 40%, 60% { transform: translateX(7px); } }
+.access-pin.ok .access-code i { border-color: var(--d-ok); background: var(--d-ok-soft); box-shadow: none; }
+.access-pin.ok .access-code i::after { background: var(--d-ok); }
+.access-pin.ok .access-code i.now::before { display: none; }
+.access-pin-step { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.access-restart-note { margin: 0; padding: 0 2px; color: var(--pe-ink-2); font-size: var(--pe-type-description); font-weight: var(--pe-type-regular); line-height: 1.45; }
-.access-restart-note b { color: var(--pe-ink); font-weight: var(--pe-type-medium); }
+/* Keys for a finger. With a keyboard and a mouse the boxes are typed into, and the keys stay away. */
+.access-keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px 20px; width: max-content; margin-top: 8px; }
+.access-keypad button { display: grid; width: 72px; height: 72px; place-items: center; padding: 0; color: var(--d-ink); border: 0; border-radius: 50%; background: var(--d-soft); font-size: 27px; font-weight: 450; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background .14s, transform .14s cubic-bezier(.2, .8, .2, 1); }
+.access-keypad button:hover { background: color-mix(in srgb, var(--d-accent) 10%, var(--d-soft)); }
+.access-keypad button:active { background: color-mix(in srgb, var(--d-accent) 22%, var(--d-soft)); transform: scale(.92); }
+.access-keypad .access-key-action { color: var(--d-ink3); background: transparent; }
+.access-keypad .access-key-action svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover: hover) and (pointer: fine) { .access-keypad { display: none; } }
 
-.access-pin { justify-items: center; }
-.access-pin-entry { display: grid; justify-items: center; gap: 7px; width: 100%; padding: 4px 0 2px; }
-.access-pin-dots { display: grid; grid-template-columns: repeat(6, 18px); gap: 10px; justify-content: center; min-height: 22px; }
-.access-pin-dots i { width: 13px; height: 13px; align-self: center; border: 1.5px solid var(--pe-line-strong); border-radius: 50%; background: var(--pe-surface); transition: border-color .18s ease-out, background .18s ease-out, transform .18s ease-out; }
-.access-pin-dots i.filled { border-color: var(--pe-accent); background: var(--pe-accent); transform: scale(1.06); }
-.access-pin-step { min-height: 18px; margin: 0; color: var(--pe-ink-3); font-size: var(--pe-type-meta); font-weight: var(--pe-type-medium); line-height: 1.3; text-align: center; }
-.access-keypad { display: grid; grid-template-columns: repeat(3, 68px); gap: 8px; width: max-content; }
-.access-keypad button { display: grid; width: 68px; height: 52px; place-items: center; padding: 0; color: var(--pe-ink); border: 1px solid var(--pe-line); border-radius: var(--pe-control-radius); background: var(--pe-surface-raised); font-size: 20px; font-weight: var(--pe-type-medium); cursor: pointer; touch-action: manipulation; transition: color .18s ease-out, border-color .18s ease-out, background .18s ease-out, transform .18s ease-out; }
-.access-keypad button:hover { color: var(--pe-accent-label); border-color: color-mix(in srgb, var(--pe-accent) 45%, var(--pe-line)); background: var(--pe-hover); }
-.access-keypad button:active { background: var(--pe-surface-pressed); transform: scale(.97); }
-.access-keypad .access-key-action { color: var(--pe-ink-2); font-size: 16px; font-weight: var(--pe-type-medium); }
-.access-keypad .access-key-action svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-
-/* The full-width confirmation keeps its 44px presence; hierarchy still comes
-   from the single filled primary and its position. */
-.access-primary { width: 100%; min-height: 44px; padding: 9px 14px; color: var(--pe-accent-ink); border: 1px solid var(--pe-accent-strong); border-radius: var(--pe-control-radius); background: var(--pe-accent-strong); font-size: var(--pe-type-label); font-weight: var(--pe-type-medium); cursor: pointer; transition: border-color .18s ease-out, background .18s ease-out; }
-.access-primary:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pe-accent-strong) 84%, #000); background: color-mix(in srgb, var(--pe-accent-strong) 89%, #000); }
-.access-primary:active:not(:disabled) { border-color: var(--pe-accent-strong); background: color-mix(in srgb, var(--pe-accent-strong) 80%, #000); }
-.access-text-button { min-height: var(--pe-button-standard-h); padding: 0 10px; color: var(--pe-ink-2); border: 0; border-radius: var(--pe-control-radius); background: transparent; font-size: var(--pe-type-label); font-weight: var(--pe-type-medium); cursor: pointer; transition: color .18s ease-out, background .18s ease-out; }
-.access-text-button:hover { color: var(--pe-ink); background: var(--pe-hover); }
-.access-text-button:active { background: var(--pe-surface-pressed); }
-
-.access-warning { padding: 12px; border: 1px solid color-mix(in srgb, var(--pe-warning) 25%, var(--pe-line)); border-radius: var(--pe-r-group); background: var(--pe-warning-soft); }
-.access-warning strong { color: var(--pe-warning); font-size: var(--pe-type-section); font-weight: var(--pe-type-semibold); line-height: 1.3; }
-.access-warning p { margin: 5px 0 0; color: var(--pe-ink-2); font-size: var(--pe-type-description); font-weight: var(--pe-type-regular); line-height: 1.45; }
-.access-error { margin-top: 14px; padding: 10px 12px; color: var(--pe-danger); border: 1px solid color-mix(in srgb, var(--pe-danger) 25%, var(--pe-line)); border-radius: var(--pe-r-group); background: var(--pe-danger-soft); font-size: var(--pe-type-body); font-weight: var(--pe-type-regular); line-height: 1.45; }
+.access-primary { width: 100%; min-height: 48px; padding: 10px 16px; color: #fff; border: 0; border-radius: 13px; background: var(--d-accent); font-size: 15.5px; font-weight: 600; cursor: pointer; transition: background .16s, transform .12s; }
+.access-primary:hover:not(:disabled) { background: var(--d-accent2); }
+.access-primary:active:not(:disabled) { transform: scale(.985); }
+.access-text-button { min-height: 36px; padding: 0 12px; color: var(--d-ink2); border: 0; border-radius: 9px; background: transparent; font-size: 14.5px; font-weight: var(--pe-type-medium); cursor: pointer; }
+.access-text-button:hover { color: var(--d-ink); background: var(--d-soft); }
+.access-restart-note { margin: 6px 0 0; color: var(--d-ink3); font-size: 13px; line-height: 1.45; }
+.access-restart-note b { color: var(--d-ink2); font-weight: var(--pe-type-medium); }
+.access-error { margin-top: 16px; padding: 8px 14px; color: var(--d-bad); border-radius: 10px; background: var(--d-bad-soft); font-size: 14px; line-height: 1.4; animation: access-rise .25s ease-out both; }
+#accessRetry { margin-top: 14px; }
 
 button:focus-visible, a:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--accent); outline-offset: 2px; }
-.access-choice:focus-visible { outline-offset: -3px; }
 button:disabled { cursor: not-allowed; opacity: .46; }
 
 @media (max-width: 520px) {
-  .access-shell { align-items: start; padding: 18px 0 max(18px, env(safe-area-inset-bottom)); }
-  .access-panel { padding: 20px 16px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-  .access-heading { margin-bottom: 20px; }
+  .access-shell { align-items: start; padding-top: 72px; }
+  .access-panel { padding: 8px 4px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .access-code { gap: 8px; }
+  .access-code i { width: 42px; height: 54px; border-radius: 13px; }
 }
-@media (max-height: 700px) and (min-width: 521px) { .access-shell { align-items: start; } }
+@media (max-height: 760px) { .access-keypad { grid-template-columns: repeat(3, 62px); gap: 10px 18px; } .access-keypad button { width: 62px; height: 62px; font-size: 24px; } .access-heading { margin-bottom: 20px; } .access-mark { width: 48px; height: 48px; margin-bottom: 12px; } }
 @media (pointer: coarse) {
   .access-language button, .access-text-button { min-height: 44px; }
-  .access-brand { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }

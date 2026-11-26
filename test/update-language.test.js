@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const path = require("node:path");
 
 test("update window follows app language across states, independently of system language", async () => {
-  const { parseHTML } = require("linkedom");
+  const { parseHTML } = require("./helpers/dom.js");
   const { document } = parseHTML(fs.readFileSync(path.join(__dirname, "../desktop/update-window.html"), "utf8"));
   const element = selector => document.querySelector(selector);
   let listener;
@@ -45,8 +45,9 @@ test("native update menu accepts language changes only from the Canvas main fram
   const context = vm.createContext({
     desktopLanguage:"en", process:{ platform:"darwin" }, currentLanUrls:[], updateWindow:null,
     mainWindow:null, desktopMenuState:{},
+    networkAccessOff:false,
     createMenuTemplate:require("../desktop/menu.js").createMenuTemplate,
-    dispatchCanvasCommand() {}, editFromMenu() {}, showUpdateWindow() {}, HELP_URL:"https://example.com",
+    dispatchCanvasCommand() {}, editFromMenu() {}, showUpdateWindow() {}, openMenuFolder() {}, HELP_URL:"https://example.com",
     shell:{}, clipboard:{},
     Menu:{ buildFromTemplate:template => template, setApplicationMenu:template => { menu = template; } },
     fromCanvas:event => event.sender === sender,

@@ -1,7 +1,8 @@
 "use strict";
+require("./helpers/safety.js");
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { CloudConnector, cloudAiRelayRequest } = require("../src/server/cloud-connector.js");
+const { CloudConnector } = require("../src/server/cloud-connector.js");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const modelId = "00000000-0000-4000-8000-000000000101";
 
@@ -9,7 +10,7 @@ test("hosted models use local account authorization without exposing the credent
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-hosted-test-"));
   const originalFetch = global.fetch;
   try {
-    const connector = new CloudConnector({ stateDir, executeRequest:async () => ({}), defaultOrigin:"https://example.com" });
+    const connector = new CloudConnector({ stateDir, defaultOrigin:"https://example.com" });
     connector.writeConfiguration({ version:2, origin:"https://example.com", accountToken:"test-local-session" });
     global.fetch = async (url, options) => {
       assert.equal(options.headers.authorization, "Bearer test-local-session");
@@ -32,7 +33,7 @@ test("late catalog responses cannot cross a local account change", async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-hosted-race-test-"));
   const originalFetch = global.fetch;
   try {
-    const connector = new CloudConnector({ stateDir, executeRequest:async () => ({}), defaultOrigin:"https://example.com" });
+    const connector = new CloudConnector({ stateDir, defaultOrigin:"https://example.com" });
     connector.writeConfiguration({ version:2, origin:"https://example.com", accountToken:"first-session" });
     let release;
     const gate = new Promise(resolve => { release = resolve; });
@@ -48,7 +49,7 @@ test("late catalog responses cannot cross a local account change", async () => {
 test("catalog cache respects account identity, expiry and explicit refresh while balances remain fresh",async()=>{
   const stateDir=fs.mkdtempSync(path.join(os.tmpdir(),'penecho-hosted-cache-')),originalFetch=global.fetch;
   try{
-    const connector=new CloudConnector({stateDir,executeRequest:async()=>({}),defaultOrigin:'https://example.com'});
+    const connector=new CloudConnector({stateDir,defaultOrigin:'https://example.com'});
     connector.writeConfiguration({version:2,origin:'https://example.com',accountToken:'first-session'});
     let catalogs=0,wallets=0;
     global.fetch=async url=>new Response(JSON.stringify(url.endsWith('/models')?(catalogs++,{models:[{id:modelId,apiFormat:'openai',available:true}]}):(wallets++,{credits:{balance:wallets}})));
@@ -59,4 +60,19 @@ test("catalog cache respects account identity, expiry and explicit refresh while
     connector.writeConfiguration({version:2,origin:'https://example.com',accountToken:'second-session'});
     await connector.hostedModels();assert.equal(catalogs,4);
   }finally{global.fetch=originalFetch;fs.rmSync(stateDir,{recursive:true,force:true});}
+});
+
+test("a wallet Cloud does not answer leaves credits unknown and still lists the models", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-hosted-wallet-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, defaultOrigin:"https://example.com" });
+    connector.writeConfiguration({ version:2, origin:"https://example.com", accountToken:"test-local-session" });
+    global.fetch = async url => url.endsWith("/models")
+      ? new Response(JSON.stringify({ models:[{ id:modelId, apiFormat:"openai", available:true, enabled:true, multiplier:1 }] }))
+      : new Response(JSON.stringify({ error:"busy" }), { status:503 });
+    const catalog = await connector.hostedModels();
+    assert.equal(catalog.models[0].id, modelId);
+    assert.equal(catalog.credits, null);
+  } finally { global.fetch = originalFetch; fs.rmSync(stateDir, { recursive:true, force:true }); }
 });

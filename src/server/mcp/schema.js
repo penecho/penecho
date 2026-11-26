@@ -545,7 +545,7 @@ const validators = {
     } else if (input.architecture !== undefined) {
       try { html = require("../../architecture/schema.js").architectureHtml(input.architecture); }
       catch (error) { invalid(error.message); }
-    } else html = typeof input.html === "string" ? input.html : invalid("html is invalid.");
+    } else html = typeof input.html === "string" ? require("../slides.js").expandSlideCharts(input.html) : invalid("html is invalid.");
     if (!html || html.length > MAX_HTML_CHARS || Buffer.byteLength(html, "utf8") > MAX_HTML_BYTES) invalid("html is invalid or too large.");
     if (input.capture !== undefined && typeof input.capture !== "boolean") invalid("capture is invalid.");
     if (input.quality !== undefined && input.capture !== true) invalid("quality requires capture to be true.");
@@ -700,6 +700,17 @@ for (const tool of TOOLS) {
     output:{type:"string",enum:["concise","detailed"],default:"concise"},
     completion:{type:"object",additionalProperties:false,required:["status"],properties:{status:{type:"string",enum:[...COMPLETION_STATUSES]},summary:{type:"string",maxLength:600},handledMessageIds:{type:"array",maxItems:50,uniqueItems:true,items:{type:"string",minLength:1,maxLength:128}}}},
   });
+  // With no live page (no sessionId, or its page has gone) these three go on a Canvas in a project's folder instead and answer its url and png.
+  if(["penecho_present_widget","penecho_draw","penecho_plot"].includes(tool.name)) {
+    tool.inputSchema.required=tool.inputSchema.required.filter(key=>key!=="sessionId");
+    Object.assign(tool.inputSchema.properties,{
+      folder:{type:"string",minLength:1,maxLength:1024,description:"Without a live session: the absolute path of the folder you work in. Its PenEcho project (or My Canvases) gets the Canvas; the answer has url and png."},
+      project:{type:"string",minLength:1,maxLength:1024,description:"Without a live session and folder: a PenEcho project id, or my-canvases."},
+      canvas:{type:"string",minLength:1,maxLength:1024,description:"Without a live session: the canvas name an earlier answer gave, to update that Canvas."},
+      line:{type:"string",minLength:1,maxLength:1024,description:"Without a live session: a line of the project to put a new picture on."},
+    });
+    tool.description+=" No sessionId (or no page connected): send folder, and it is saved as a Canvas file; the answer gives url and png.";
+  }
   if(["penecho_present_widget","penecho_draw","penecho_plot"].includes(tool.name)) {tool.inputSchema.properties.requestId={type:"string",minLength:1,maxLength:128,description:"Reuse only for identical arguments. Use a new requestId whenever any argument changes, even after a failed attempt; retain the artifactId when correcting or updating the same content."};tool.inputSchema.required.push("requestId");}
   if(["penecho_patch_file","penecho_edit_canvas","penecho_place_image","penecho_draw","penecho_plot"].includes(tool.name)) {
     tool.inputSchema.properties.capture={type:"boolean",default:false};

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" data-penecho-prototype>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dark mode</title>
+<style>
+  :root {
+    --bg: #f8fafc; --side: #f1f5f9; --paper: #ffffff; --line: #e2e8f0; --sep: #f1f5f9;
+    --ink: #0f172a; --ink2: #64748b; --ink3: #94a3b8;
+    --accent: #2563eb; --accent-soft: rgba(37, 99, 235, .14); --accent-bar: rgba(37, 99, 235, .18); --thumb: #eff6ff;
+    --trunk: #0f172a; --elbow: #64748b; --rail: #94a3b8;
+    --ask: #2563eb; --canvas: #e9551f; --done: #16a34a; --ring: #ffffff;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131a; --side: #121821; --paper: #161c25; --line: rgba(226, 232, 240, .12); --sep: rgba(226, 232, 240, .07);
+    --ink: #e6e9ef; --ink2: #a9b2c0; --ink3: #8a94a4;
+    --accent: #60a5fa; --accent-soft: rgba(96, 165, 250, .2); --accent-bar: rgba(96, 165, 250, .28); --thumb: rgba(96, 165, 250, .14);
+    --trunk: #e2e8f0; --elbow: #7b8798; --rail: #7b8798;
+    --ask: #60a5fa; --canvas: #f26b38; --done: #22c55e; --ring: #475163;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: grid; grid-template-columns: 200px minmax(0, 1fr) 225px; min-height: 100vh; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+  .side { padding: 18px 12px; border-right: 1px solid var(--line); background: var(--side); }
+  .brand { margin: 0 8px 16px; font-size: 16px; font-weight: 700; }
+  .project { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 10px; border-radius: 8px; text-align: left; }
+  .project i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .project span { margin-left: auto; color: var(--ink3); font-size: 12px; }
+  .project.on { background: var(--paper); font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, .06); }
+
+  .main { padding: 18px 22px; min-width: 0; }
+  .head { display: flex; align-items: baseline; gap: 12px; }
+  .head h1 { margin: 0; font-size: 21px; }
+  .head span { color: var(--ink2); font-size: 13.5px; }
+  .theme { margin-left: auto; color: var(--ink2); font-size: 13px; }
+  .theme select { margin-left: 6px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+
+  .week { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 14px 0; }
+  .day { position: relative; display: flex; flex-direction: column; align-items: flex-start; height: 64px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); overflow: hidden; }
+  .day b { font-size: 12.5px; }
+  .day span { color: var(--accent); font-size: 19px; font-weight: 650; line-height: 1.2; }
+  .day i { position: absolute; right: 10px; bottom: 0; width: 12px; border-radius: 4px 4px 0 0; background: var(--accent-bar); }
+  .day.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .day.empty { opacity: .55; }
+
+  .lines { position: relative; padding: 4px 0 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); overflow: hidden; }
+  .trunk { position: absolute; left: 16px; top: 14px; bottom: 14px; width: 2.5px; border-radius: 2px; background: var(--trunk); }
+  .dayhead, .row { display: grid; grid-template-columns: minmax(120px, 162px) minmax(0, 1fr); align-items: center; padding: 0 14px 0 34px; }
+  .dayhead { height: 32px; border-top: 1px solid var(--line); font-size: 12.5px; }
+  .dayhead:first-of-type { border-top: 0; }
+  .clock { position: relative; height: 32px; color: var(--ink3); font-size: 11px; }
+  .clock span { position: absolute; bottom: 5px; transform: translateX(-50%); }
+  .row { position: relative; height: 54px; border-top: 1px solid var(--sep); }
+  .elbow { position: absolute; left: 18px; top: 12px; width: 12px; height: 10px; border-left: 1.5px solid var(--elbow); border-bottom: 1.5px solid var(--elbow); border-bottom-left-radius: 7px; }
+  .title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 10px; font-size: 13.5px; }
+  .track { display: block; width: 100%; height: 54px; }
+  .track .rail { stroke: var(--rail); stroke-width: 2; }
+  .track .n-ask { fill: var(--paper); stroke: var(--ask); stroke-width: 2.5; }
+  .track .n-canvas { fill: var(--canvas); }
+  .track .n-done { fill: var(--done); }
+  .track .n-tick { fill: none; stroke: #ffffff; stroke-width: 1.8; }
+  .track .face circle { stroke: var(--ring); stroke-width: 2; }
+  .track .face text { fill: #ffffff; }
+  .track .time { fill: var(--ink2); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+  .files { padding: 18px 14px; border-left: 1px solid var(--line); }
+  .files h2 { margin: 4px 0 10px; font-size: 14px; }
+  .files ul { margin: 0; padding: 0; list-style: none; }
+  .files li { display: flex; gap: 9px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--sep); }
+  .thumb { display: grid; place-items: center; flex: none; width: 36px; height: 28px; border-radius: 6px; background: var(--thumb); color: var(--accent); font-size: 12.5px; }
+  .files b { display: block; font-size: 12.5px; font-weight: 600; }
+  .files em { color: var(--ink2); font-size: 11.5px; font-style: normal; }
+</style>
+<script>
+(() => {
+  const MODES = ["light", "dark", "system"], dark = matchMedia("(prefers-color-scheme: dark)");
+  let mode = "dark";
+  const apply = () => { document.documentElement.dataset.theme = mode === "system" ? (dark.matches ? "dark" : "light") : mode; };
+  apply();
+  dark.addEventListener("change", apply);
+  window.setTheme = next => { mode = MODES.includes(next) ? next : "dark"; apply(); };
+  window.currentTheme = () => mode;
+})();
+</script>
+</head>
+<body>
+  <aside class="side">
+    <div class="brand">Timeline</div>
+    <nav id="projects" aria-label="Projects"></nav>
+  </aside>
+  <main class="main">
+    <header class="head">
+      <h1 id="name"></h1><span id="range"></span>
+      <label class="theme">Theme
+        <select id="theme"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select>
+      </label>
+    </header>
+    <section id="week" class="week" aria-label="This week"></section>
+    <section id="lines" class="lines" aria-label="Lines"></section>
+  </main>
+  <aside class="files">
+    <h2>Latest files</h2>
+    <ul id="files"></ul>
+  </aside>
+<script>
+const PROJECTS = [
+  { id:"bakery", name:"Bakery website", color:"#2563eb" },
+  { id:"recipes", name:"Recipe app", color:"#0d9488" },
+  { id:"shop", name:"Online shop", color:"#d97706" },
+];
+const LINES = [
+  { project:"bakery", title:"Menu page", day:"Mon", steps:[["canvas", "09:05"], ["ask", "09:12"], ["work", "09:40", "Claude"], ["ask", "11:02"], ["work", "11:31", "Codex"], ["done", "14:10"]] },
+  { project:"bakery", title:"Opening hours", day:"Mon", steps:[["ask", "10:20"], ["work", "10:31", "Codex"], ["done", "10:45"]] },
+  { project:"bakery", title:"Order form", day:"Tue", steps:[["ask", "09:30"], ["work", "09:38", "Claude"], ["ask", "09:44"], ["work", "09:52", "Claude"], ["ask", "15:10"], ["work", "15:40", "Codex"]] },
+  { project:"bakery", title:"Photos of the cakes", day:"Wed", steps:[["canvas", "13:00"], ["ask", "13:05"], ["work", "13:20", "Claude"], ["done", "16:30"]] },
+  { project:"bakery", title:"Contact page", day:"Thu", steps:[["ask", "11:15"], ["work", "11:24", "OpenCode"]] },
+  { project:"bakery", title:"Gift cards", day:"Fri", steps:[["ask", "09:20"], ["work", "09:46", "Codex"], ["ask", "13:30"], ["work", "13:52", "Claude"]] },
+  { project:"recipes", title:"Shopping list", day:"Tue", steps:[["canvas", "10:00"], ["ask", "10:06"], ["work", "10:30", "Claude"], ["done", "12:00"]] },
+  { project:"recipes", title:"Search by ingredient", day:"Thu", steps:[["ask", "14:00"], ["work", "14:25", "Codex"]] },
+  { project:"shop", title:"Checkout", day:"Wed", steps:[["ask", "09:00"], ["work", "09:41", "Codex"], ["ask", "11:00"], ["work", "11:18", "Codex"], ["done", "17:00"]] },
+];
+const FILES = [
+  { project:"bakery", name:"gift-card.png", line:"Gift cards", day:"Fri" },
+  { project:"bakery", name:"contact-form.html", line:"Contact page", day:"Thu" },
+  { project:"bakery", name:"cakes.png", line:"Photos of the cakes", day:"Wed" },
+  { project:"bakery", name:"menu-sketch.png", line:"Menu page", day:"Mon" },
+  { project:"recipes", name:"list-sketch.png", line:"Shopping list", day:"Tue" },
+  { project:"shop", name:"checkout-flow.png", line:"Checkout", day:"Wed" },
+];
+const DAY_START = 8, DAY_END = 18, TRACK = 480;
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const AGENT = { Claude:["Cl", "#a8502a"], Codex:["Cx", "#2b303a"], OpenCode:["Oc", "#3f4754"] };
+const minutes = time => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
+const xOf = time => Math.round((minutes(time) - DAY_START * 60) / ((DAY_END - DAY_START) * 60) * TRACK) + 12;
+const esc = text => String(text).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const notify = () => { try { window.parent?.postMessage({ type:"penecho-widget-updated" }, "*"); } catch {} };
+let current = PROJECTS[0].id, picked = null;
+
+function node([kind, time, who]) {
+  const x = xOf(time), title = `<title>${esc(who || kind)} · ${time}</title>`;
+  if (kind === "work") { const [initials, color] = AGENT[who] || ["Ag", "#475569"]; return `<g class="face">${title}<circle cx="${x}" cy="19" r="9.5" fill="${color}"/><text x="${x}" y="22.5" font-size="8" font-weight="650" text-anchor="middle">${initials}</text></g>`; }
+  if (kind === "canvas") return `<g>${title}<rect class="n-canvas" x="${x - 5.5}" y="13.5" width="11" height="11" rx="3"/></g>`;
+  if (kind === "done") return `<g>${title}<circle class="n-done" cx="${x}" cy="19" r="7.5"/><path class="n-tick" d="M${x - 3.2} 19l2.3 2.3 4.2-4.7"/></g>`;
+  return `<g>${title}<circle class="n-ask" cx="${x}" cy="19" r="4.8"/></g>`;
+}
+function row(line) {
+  const xs = line.steps.map(([, time]) => xOf(time)), first = xs[0], last = xs[xs.length - 1];
+  let end = -Infinity;
+  const times = line.steps.map(([, time], i) => { if (xs[i] - 16 < end + 4) return ""; end = xs[i] + 16; return `<text x="${xs[i]}" y="42" class="time" text-anchor="middle">${time}</text>`; }).join("");
+  return `<div class="row"><i class="elbow"></i><b class="title">${esc(line.title)}</b>
+    <svg class="track" viewBox="0 0 ${TRACK + 24} 54" preserveAspectRatio="xMidYMid meet"><line class="rail" x1="${first}" y1="19" x2="${last}" y2="19"/>${line.steps.map(node).join("")}${times}</svg></div>`;
+}
+function draw() {
+  const project = PROJECTS.find(p => p.id === current), lines = LINES.filter(l => l.project === current);
+  document.getElementById("name").textContent = project.name;
+  document.getElementById("range").textContent = `${lines.length} lines this week`;
+  document.getElementById("projects").innerHTML = PROJECTS.map(p => `<button type="button" class="project${p.id === current ? " on" : ""}" data-project="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}<span>${LINES.filter(l => l.project === p.id).length}</span></button>`).join("");
+  document.getElementById("week").innerHTML = DAYS.map(day => { const n = lines.filter(l => l.day === day).length; return `<button type="button" class="day${picked === day ? " on" : ""}${n ? "" : " empty"}" data-day="${day}"><b>${day}</b><span>${n || ""}</span><i style="height:${n * 8}px"></i></button>`; }).join("");
+  const days = [...DAYS].reverse().filter(day => (!picked || picked === day) && lines.some(l => l.day === day));
+  const clock = [9, 12, 15, 18].map(h => `<span style="left:${(xOf(`${h}:00`) / (TRACK + 24) * 100).toFixed(2)}%">${String(h).padStart(2, "0")}:00</span>`).join("");
+  document.getElementById("lines").innerHTML = `<i class="trunk"></i>${days.map(day => `<div class="dayhead"><b>${day}</b><div class="clock">${clock}</div></div>${lines.filter(l => l.day === day).map(row).join("")}`).join("")}`;
+  document.getElementById("files").innerHTML = FILES.filter(f => f.project === current).map(f => `<li><span class="thumb">${f.name.endsWith(".png") ? "▦" : "‹›"}</span><span><b>${esc(f.name)}</b><em>${esc(f.line)} · ${f.day}</em></span></li>`).join("");
+  notify();
+}
+document.addEventListener("click", event => {
+  const project = event.target.closest("[data-project]"), day = event.target.closest("[data-day]");
+  if (project) { current = project.dataset.project; picked = null; draw(); }
+  if (day) { picked = picked === day.dataset.day ? null : day.dataset.day; draw(); }
+});
+const theme = document.getElementById("theme");
+theme.value = currentTheme();
+theme.addEventListener("change", () => { setTheme(theme.value); notify(); });
+draw();
+</script>
+</body>
+</html>

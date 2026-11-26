@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -61,7 +62,7 @@ test("loading connections leaves an empty selection for the picker and preserves
 });
 test("desktop menu routes only allowed commands to the focused Canvas",()=>{
   const main=fs.readFileSync(path.join(__dirname,"../desktop/main.js"),"utf8"),calls=[];
-  const context=vm.createContext({COMMANDS:["open-settings"],desktopMenuState:{enabled:{"open-settings":true}},mainWindow:{isDestroyed:()=>false,isFocused:()=>true,webContents:{send:(...args)=>calls.push(args)}}});
+  const context=vm.createContext({menuCommandAllowed:require("../desktop/menu.js").menuCommandAllowed,desktopMenuState:{page:"projects",enabled:{"open-settings":true}},mainWindow:{isDestroyed:()=>false,isFocused:()=>true,webContents:{send:(...args)=>calls.push(args)}}});
   vm.runInContext(main.slice(main.indexOf("function dispatchCanvasCommand("),main.indexOf("function editFromMenu(")),context);
   context.dispatchCanvasCommand("open-settings");
   context.dispatchCanvasCommand("unknown");
@@ -71,7 +72,7 @@ test("desktop menu routes only allowed commands to the focused Canvas",()=>{
 });
 test("desktop bootstrap starts Canvas without checking whether AI is configured",async()=>{
   const main=fs.readFileSync(path.join(__dirname,"../desktop/main.js"),"utf8"),calls=[],configuration={};
-  const context=vm.createContext({createUpdateManager:()=>({start:()=>calls.push("updates")}),app:{},DESKTOP_VERSION:"test",net:{},updateDesktopUpdateUi:()=>{},installMenu:()=>{},registerIpc:()=>{},loadConfiguration:()=>({configuration}),startServer:async value=>{assert.equal(value,configuration);calls.push("server");return "http://127.0.0.1:1234/";},server:{address:()=>({port:1234})},process:{env:{HOST:"127.0.0.1"}},createMainWindow:url=>{calls.push(url);return {};},dialog:{showMessageBox:()=>assert.fail("startup should succeed")}});
+  const context=vm.createContext({createUpdateManager:()=>({start:()=>calls.push("updates")}),app:{},DESKTOP_VERSION:"test",net:{},updateDesktopUpdateUi:()=>{},installMenu:()=>{},registerIpc:()=>{},loadConfiguration:()=>({configuration}),startServer:async value=>{assert.equal(value,configuration);calls.push("server");return "http://127.0.0.1:1234/";},quitting:false,process:{env:{HOST:"127.0.0.1"}},createMainWindow:url=>{calls.push(url);return {};},dialog:{showMessageBox:()=>assert.fail("startup should succeed")}});
   vm.runInContext(main.slice(main.indexOf("async function bootstrap()"),main.indexOf("if (gotLock) {",main.indexOf("async function bootstrap()"))),context);
   await context.bootstrap();
   assert.deepEqual(calls,["updates","server","http://127.0.0.1:1234/"]);

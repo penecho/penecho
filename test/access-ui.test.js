@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -78,7 +79,7 @@ function makeDocument() {
   return { document, elements, body, themeColor, focusCalls };
 }
 
-async function boot(mode, { palette="indigo", theme=null, legacyTheme=null } = {}) {
+async function boot(mode, { palette="indigo", theme=null, legacyTheme=null, location={} } = {}) {
   const { document, elements, body, themeColor, focusCalls } = makeDocument();
   const calls = [];
   const storedSession = new Map();
@@ -89,7 +90,8 @@ async function boot(mode, { palette="indigo", theme=null, legacyTheme=null } = {
     ...(legacyTheme === null ? [] : [["ghostboard-theme", legacyTheme]]),
   ]);
   let redirected = false;
-  const response = (body, status = 200) => ({ ok:status >= 200 && status < 300, status, async json() { return body; } });
+  const replaced = [], reloads = [];
+  const response =(body, status = 200) => ({ ok:status >= 200 && status < 300, status, async json() { return body; } });
   const fetch = async (url, options = {}) => {
     calls.push({ url, options });
     if (url === "/api/local-access/status") return response({ mode, unlocked:false, setupRequired:mode === "undecided" });
@@ -101,7 +103,7 @@ async function boot(mode, { palette="indigo", theme=null, legacyTheme=null } = {
     fetch,
     localStorage: { getItem(key) { return storedAppearance.get(key) || null; }, setItem(key,value) { storedAppearance.set(key,String(value)); } },
     sessionStorage: { getItem(key) { return storedSession.get(key) || null; }, setItem(key,value) { storedSession.set(key,String(value)); } },
-    window: { location: { replace() { redirected = true; } }, addEventListener() {} },
+    window: { location: { pathname:"/", search:"", hash:"", replace(url) { redirected = true; replaced.push(url); }, reload() { reloads.push(true); }, ...location }, addEventListener() {} },
     Date,
     setInterval,
     clearInterval,
@@ -109,7 +111,7 @@ async function boot(mode, { palette="indigo", theme=null, legacyTheme=null } = {
   };
   vm.runInNewContext(accessScript, context, { filename:"public/access.js" });
   await new Promise((resolve) => setImmediate(resolve));
-  return { document, elements, body, themeColor, focusCalls, calls, redirected, storedSession, storedAppearance };
+  return { document, elements, body, themeColor, focusCalls, calls, redirected, replaced, reloads, storedSession, storedAppearance };
 }
 
 function clickDigits(keypad, value) {
@@ -140,6 +142,19 @@ test("access PIN setup and unlock submit once on the sixth digit", async () => {
   assert.equal(unlockRequests.length, 1);
   assert.deepEqual(JSON.parse(unlockRequests[0].options.body), { pin:"271828" });
   assert.equal(unlock.storedSession.get("penecho-access-session"),"test-access-session");
+});
+
+test("the form reloads a Projects address, because the same address with a # would not leave the form", async () => {
+  const unlock = async (location) => {
+    const run = await boot("pin", { location });
+    clickDigits(run.elements["#accessKeypad"], "271828");
+    await new Promise((resolve) => setImmediate(resolve));
+    return { reloads:run.reloads.length, replaced:[...run.replaced] };
+  };
+  assert.deepEqual(await unlock({ pathname:"/projects.html", hash:"#p1/line/read-hand-off-md/ask-4" }), { reloads:1, replaced:[] });
+  assert.deepEqual(await unlock({ pathname:"/projects.html" }), { reloads:1, replaced:[] });
+  assert.deepEqual(await unlock({ pathname:"/", search:"?linesProject=p1" }), { reloads:0, replaced:["/?linesProject=p1"] });
+  assert.deepEqual(await unlock({ pathname:"/access.html" }), { reloads:0, replaced:["/"] });
 });
 
 test("unlock opens without focusing a keypad button while keyboard entry still works", async () => {

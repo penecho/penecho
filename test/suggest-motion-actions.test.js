@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict");
 const SMART=require("../public/smart-suggest.js");
 function choice(probabilities){const [choice,confidence]=Object.entries(probabilities).sort((a,b)=>b[1]-a[1])[0];return {type:"choice",choice,confidence,probabilities};}
@@ -9,7 +10,7 @@ test("sketch motion participates directly in ordinary and selected model questio
     assert.equal(SMART.actionById("animate_sketch").proxy,undefined);
   }
   assert.equal(SMART.executionRoute("animate_sketch"),"canvas_ai");
-  assert.equal(SMART.executionRoute("animate"),"penecho_agent");
+  assert.equal(SMART.executionRoute("animate"),"sidebar_task");
 });
 test("a static-illustration verdict does not fabricate a model sketch-motion score",()=>{
   const ranked=SMART.rankActions({answers:{kind:choice({drawing:1}),action:choice({none:.01,vivid:.94,animate_sketch:.02,finish_drawing:.03})}});

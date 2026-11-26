@@ -1,0 +1,26 @@
+{
+  "en": {
+    "title": "Team sync: demo, tour fix and icons",
+    "style": "note",
+    "category": "meeting",
+    "tags": ["team sync", "demo", "tour", "icons"],
+    "summary": "Team sync notes: ship the demo, Ana fixes the tour, the icons are still open.",
+    "blocks": [
+      { "type": "keypoints", "title": "Decided", "items": ["Ship the demo.", "Ana owns the tour fix."] },
+      { "type": "checklist", "items": [{ "text": "Ship the demo", "done": false }, { "text": "Fix the tour — Ana", "done": false }] },
+      { "type": "callout", "tone": "question", "title": "Still open", "text": "Icons: keep the current set or redraw them? Decide at the next sync." }
+    ]
+  },
+  "zh": {
+    "title": "团队同步：演示、导览修复和图标",
+    "style": "note",
+    "category": "meeting",
+    "tags": ["团队同步", "演示", "导览", "图标"],
+    "summary": "团队同步记录：发布演示，Ana 修复导览，图标还没定。",
+    "blocks": [
+      { "type": "keypoints", "title": "已决定", "items": ["发布演示。", "导览修复由 Ana 负责。"] },
+      { "type": "checklist", "items": [{ "text": "发布演示", "done": false }, { "text": "修复导览 — Ana", "done": false }] },
+      { "type": "callout", "tone": "question", "title": "待定", "text": "图标：沿用现有的还是重画？下次同步时决定。" }
+    ]
+  }
+}

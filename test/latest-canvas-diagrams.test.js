@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const fixtures=JSON.parse(fs.readFileSync('test/fixtures/diagrams/regression/latest-models.json','utf8'));
 

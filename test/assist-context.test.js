@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const ai = fs.readFileSync(path.join(__dirname,"../src/client/app/ai-runtime.js"),"utf8"), assist = fs.readFileSync(path.join(__dirname,"../src/client/app/smart-suggestions.js"),"utf8");
 function fn(source,name) {

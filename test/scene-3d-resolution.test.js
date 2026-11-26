@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm"),
   source=fs.readFileSync(path.join(__dirname,"../public/scene-runtime.js"),"utf8"),
   mount=source.slice(source.indexOf("  function mount3d(scene)"),source.indexOf("  // ---------- Puppet:"));

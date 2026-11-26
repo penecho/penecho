@@ -4,13 +4,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const sharp = require("sharp");
 const { prepareBrandLogo } = require("./prepare-brand-logo.js");
+const { makeBrandMaster } = require("./make-brand-master.js");
 
-// PenEcho brand: the blue pen nib touching water, with two ripples.
-// build/brand/penecho-logo-original.png is the checked-in transparent master
-// (stacked lockup: mark above the PenEcho wordmark, lettering baked in, so no
+// PenEcho brand: a blue nautilus. Its drawing is build/brand/penecho-mark.json,
+// and scripts/make-brand-master.js turns that into the two pictures used here:
+// build/brand/penecho-logo-original.png is the transparent master (stacked
+// lockup: mark above the PenEcho wordmark, lettering kept as pixels, so no
 // build-host fonts are involved). penecho-logo.json documents its crops.
-// build/brand/penecho-mark-small.png is the same mark with heavier strokes for
-// icons rendered at 48 px and below, where the regular strokes would blur.
+// build/brand/penecho-mark-small.png is the same mark without its chamber walls,
+// for icons rendered at 48 px and below, where they would blur.
 const ROOT = path.resolve(__dirname, ".."),
   iconRoot = path.join(ROOT, "build", "icons"),
   generated = path.join(iconRoot, "generated"),
@@ -179,6 +181,7 @@ function encodeIcns(pngBySize) {
 
 async function main() {
   fs.mkdirSync(generated, { recursive:true });
+  await makeBrandMaster();
   await prepareBrandLogo(original, source);
   await readmeLogos();
   const windows = new Map(), mac = new Map();
@@ -202,6 +205,8 @@ async function main() {
   await installerGif(path.join(iconRoot, "penecho-install.gif"));
   fs.writeFileSync(path.join(iconRoot, "penecho.ico"), encodeIco([16, 24, 32, 48, 64, 128, 256].map(size => ({ size, png:windows.get(size) }))));
   fs.writeFileSync(path.join(iconRoot, "penecho.icns"), encodeIcns(mac));
+  // The picture agent apps show beside the PenEcho plugin.
+  fs.writeFileSync(path.join(ROOT, "integrations", "penecho-cloud", "assets", "logo.png"), await tilePng(512));
   console.log(`Generated PenEcho brand assets in ${iconRoot} and public/`);
 }
 

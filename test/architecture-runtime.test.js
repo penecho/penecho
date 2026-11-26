@@ -1,3 +1,4 @@
+require('./helpers/safety.js');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const {validateArchitecture,architectureHtml}=require('../src/architecture/schema.js');
 const {validateToolArguments}=require('../src/server/mcp/schema.js');

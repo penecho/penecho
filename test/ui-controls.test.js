@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -62,7 +63,9 @@ test("active pen drawing paints a live layer before committing authoritative ink
   assert.doesNotMatch(pointerMove, /getCoalescedEvents/);
   assert.match(pointerMove, /if \(updateActiveCanvasDrawing\(e\)\) return;[\s\S]*?updateCanvasWidgetGestureResetTap\(e\)/);
   assert.doesNotMatch(activeDrawing, /clientPoint\(|canvasViewportMetrics\(|calibrateScreenClientRatio\(/);
-  assert.match(activeDrawing, /drawingClientPoint\(d, e\)[\s\S]*?appendLiveInkSample\(d, p, size\)[\s\S]*?commitLiveInkDrawingProgress\(d\)/);
+  // Every position the browser joined into one move is drawn, so a fast circle is not cut into corners.
+  assert.match(activeDrawing, /getCoalescedEvents\(\)[\s\S]*?drawingClientPoint\(d, input\)[\s\S]*?canvasDrawingBend\(d, from, p\)[\s\S]*?addCanvasDrawingPoint\(d, p, cssSize\)[\s\S]*?commitLiveInkDrawingProgress\(d\)/);
+  assert.match(functionSource(app, "addCanvasDrawingPoint"), /appendLiveInkSample\(d, p, size\)/);
   assert.match(appendLive, /drawing\.samples\.push\(sample\)[\s\S]*?paintInkDisplaySegment\([\s\S]*?drawing\.erase \? inkCtx : liveInkCtx/);
   assert.match(commitProgress, /LIVE_INK_COMMIT_SAMPLE_BATCH[\s\S]*?dot\(first\.point, drawing\.erase[\s\S]*?stroke\(previous\.point, current\.point, drawing\.erase[\s\S]*?drawing\.committedSamples = drawing\.samples\.length/);
   assert.match(commitLive, /commitLiveInkDrawingProgress\(drawing, true\)[\s\S]*?requestCommittedInkRender\(\)/);
@@ -105,7 +108,6 @@ test("hand panning and Canvas zoom preview content on the compositor before the 
   assert.doesNotMatch(zoomCanvasSource, /requestRender\(|\brender\(/);
   assert.doesNotMatch(pinchCanvasSource, /requestRender\(|\brender\(/);
   assert.doesNotMatch(requestPreview, /applyCanvasNavigationPreview\(\)/);
-  assert.match(requestPreview, /noteCanvasChromeInteraction\(\);[\s\S]*?noteCanvasAgentNavigation\(\);/);
   assert.match(requestPreview, /view\.classList\.add\("canvas-navigation-previewing"\)[\s\S]*?setTimeout\(finishCanvasNavigationPreview, CANVAS_NAVIGATION_SETTLE_MS\)[\s\S]*?requestAnimationFrame\(canvasNavigationPreviewStep\)/);
   assert.match(previewTransform, /scale = state\.scale \/ canvasNavigationPreviewScale[\s\S]*?x:state\.panX - canvasNavigationPreviewPanX \* scale[\s\S]*?y:state\.panY - canvasNavigationPreviewPanY \* scale/);
   assert.match(previewDisplacement, /canvasNavigationPreviewViewportWidth \* scaleDelta[\s\S]*?canvasNavigationPreviewViewportHeight \* scaleDelta/);
@@ -283,6 +285,7 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(functionSource(app, "updateSettingsProviderFields"), /inspectCanvasCli\(provider\)/);
   assert.match(functionSource(app, "inspectCanvasCli"), /\/api\/settings\/connections\/inspect-cli[\s\S]*?renderCanvasCliStatus\(body\.status\)/);
   assert.match(functionSource(app, "renderCanvasCliStatus"), /status\.state === "missing"[\s\S]*?showCliCommand\(status\.installCommand\)[\s\S]*?showCliInstaller\(status\.provider, true\)/);
+  assert.match(functionSource(app, "showCliInstaller"), /"kimi-cli", "codex-cli", "claude-cli"/);
   assert.match(functionSource(app, "installCanvasCli"), /settingsCliManualFallback/);
   assert.match(functionSource(app, "copyCanvasCliCommand"), /writeClipboardText\(command\)/);
   assert.match(html, /id="settingsKimiCliRecommendation"[^>]*role="note"[^>]*hidden/);
@@ -503,8 +506,8 @@ test("Select exposes one focused object toolbar, drags from its surface, and exp
   assert.match(app, /mode:\s*"pen"/);
   assert.match(app, /hand:\s*"Hand: move the canvas \(H\)"/);
   assert.match(zh, /hand:\s*"小手：移动画布（H）"/);
-  assert.match(app, /handAutoAIManual:\s*"Hand mode pauses Auto AI · Use the AI button to run it manually\."/);
-  assert.match(zh, /handAutoAIManual:\s*"Hand 模式暂停自动 AI · 请点击 AI 按钮手动运行"/);
+  assert.match(app, /handAutoAIManual:\s*"Hand mode pauses Auto AI\. Choose Run AI to start a request\."/);
+  assert.match(zh, /handAutoAIManual:\s*"Hand 模式暂停自动 AI。点击「运行 AI」可手动发起请求。"/);
   for (const key of ["handAutoAIResume", "handWidgetConfirmedHint", "handImageConfirmedHint", "handImageMergedHint", "handAnimationConfirmedHint", "handTextConfirmedHint", "handDraftConfirmedHint"]) {
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
@@ -562,7 +565,7 @@ test("Select exposes one focused object toolbar, drags from its surface, and exp
   assert.match(activateToolbar, /targetKey !== key\) finishHandToolbarHide\(targetKey\)[\s\S]*?handToolbarActiveKey = key[\s\S]*?record\.expanded = true/);
   assert.match(functionSource(app, "updateHandObjectHover"), /handHoverKey = ""[\s\S]*?releaseHandObjectFocus\(previousKey, "canvas-hover"\)[\s\S]*?return false/);
   assert.doesNotMatch(functionSource(app, "updateHandObjectHover"), /handObjectToolbarTargetAtPoint|focusHandObject/);
-  assert.doesNotMatch(functionSource(app, "mountWidget"), /pointerenter[\s\S]*?focusHandObject|updateHandObjectHover/);
+  assert.doesNotMatch(functionSource(app, "mountWidget"), /frame\.addEventListener\("pointer|updateHandObjectHover/);
   assert.match(functionSource(app, "mountWidget"), /frame\.addEventListener\("focus"[\s\S]*?focusHandObject\("widget", widget, "widget-focus"\)/);
   assert.match(functionSource(app, "beginHandObjectFocus"), /handObjectToolbarTargetAtPoint[\s\S]*?handPointerFocusKeys\.set/);
   assert.match(createChromeButton, /dragSurface = kind === "move" \|\| kind === "toolbar"[\s\S]*?if \(dragSurface\) activateHandObjectToolbar[\s\S]*?beginObjectChromeMove/);
@@ -721,21 +724,18 @@ test("contextual Canvas hints share one quiet application-footer line by priorit
   assert.doesNotMatch(css, /studio-agent-launcher-floating [^{]*(?:\.canvas-hint|#tip|\.canvas-navigation-lock-hint|\.text-input-hint)/);
   assert.match(startWidget, /widget\.widgetType === "html_widget"[\s\S]*?widgetInteractionPresentation\(\) === "maximized" \? "canvasHintWidgetFullscreen" : "canvasHintWidgetInline"/);
   assert.match(acceptWidget, /if \(restoreMode\) finishAIDraftHandMode\(\);[\s\S]*?if \(!replacement && restoreMode\) showCanvasHint\(widgetInteractionPresentation\(\) === "maximized" \? "canvasHintWidgetFullscreen" : "canvasHintWidgetInline"\)/);
-  assert.match(mode, /keyboardShortcutCanvasHint\("focus-agent", "canvasHintShortcutAgent"\)/);
   assert.match(mode, /keyboardShortcutCanvasHint\("save-canvas", "canvasHintShortcutSave"\)/);
   assert.match(mode, /keyboardShortcutUndoRedoHint\(\)/);
   assert.match(mode, /keyboardShortcutCanvasHint\("canvas-library", "canvasHintShortcutLibrary"\)/);
   assert.match(mode, /keyboardShortcutCanvasHint\("toggle-fullscreen", "canvasHintShortcutFullscreen"\)/);
   assert.match(mode, /keyboardShortcutCanvasHint\("open-settings", "canvasHintShortcutSettings"\)/);
-  assert.match(mode, /pen:\[shortcutHints\.agent, shortcutHints\.save, shortcutHints\.undoRedo, "canvasHintMcp"\]/);
-  assert.match(mode, /hand:\["canvasHintHand", "canvasHintHandAlt", shortcutHints\.agent, shortcutHints\.library, shortcutHints\.fullscreen\]/);
   assert.match(mode, /select:\["canvasHintLasso", "canvasHintLassoAlt", shortcutHints\.undoRedo\]/);
   assert.match(app, /if\(!reconnecting\)showCanvasHint\("canvasHintMcpConnected"\)/);
   assert.doesNotMatch(app, /canvasHintWidgetAddedAlt|canvasHintRefineInPlace|canvasHintAIAddsOnly/);
   assert.match(app, /button\.onclick = \(\) => selectCanvasToolMode\(button\.dataset\.mode, \{ showHint:true \}\)/);
   assert.match(app, /e\.pointerType === "touch"[\s\S]*?touchTarget = valid\(touchPoint\) \? handObjectToolbarTargetAtPoint\(touchPoint\) : null[\s\S]*?touchTarget\?\.kind === "widget" && state\.mode !== "select"\) showCanvasHint\("canvasHintWidgetTouchHand"\)/);
   const hintKeys = [
-    "canvasHintWidgetAdded", "canvasHintWidgetFullscreen", "canvasHintWidgetInline", "canvasHintShortcutAgent", "canvasHintShortcutSave", "canvasHintShortcutUndoRedo",
+    "canvasHintWidgetAdded", "canvasHintWidgetFullscreen", "canvasHintWidgetInline", "canvasHintShortcutSave", "canvasHintShortcutUndoRedo",
     "canvasHintShortcutLibrary", "canvasHintShortcutFullscreen", "canvasHintShortcutSettings", "canvasHintMcp", "canvasHintMcpConnected", "canvasHintHand", "canvasHintHandAlt", "canvasHintLasso",
     "canvasHintWidgetTouchHand", "canvasHintLassoAlt", "canvasHintText", "canvasHintTextAlt", "canvasHintEraser", "canvasHintEraserAlt",
   ];
@@ -763,48 +763,6 @@ test("widget shadows are an optional device display preference", () => {
   assert.match(drawImages, /withShadow = false[\s\S]*?shadowColor = "rgba\(15, 23, 42, \.24\)"[\s\S]*?shadowBlur = 18[\s\S]*?shadowOffsetY = 7[\s\S]*?drawImage[\s\S]*?restore/);
   assert.match(functionSource(app, "renderPlacedContentLayer"), /drawPlacedCanvasObjectsToContext\(placedContentCtx, visible, state\.widgetShadowEnabled\)/);
   assert.doesNotMatch(mergeImage, /shadow(?:Color|Blur|Offset)|widgetShadowEnabled/);
-});
-
-test("PenEcho Agent auto-open is an opt-in canvas preference", () => {
-  const app = read("public/app.js"),
-    html = read("public/index.html"),
-    zh = read("public/locales/zh.js"),
-    agent = read("src/client/app/canvas-agent-runtime.js"),
-    setter = functionSource(app, "setCanvasAgentAutoOpen");
-  assert.match(html, /id="settingsCanvasAgentAutoOpenToggle" class="settings-switch"[^>]*aria-checked="false"/);
-  assert.match(html, /id="settingsCanvasAgentAutoOpenLabel"[^>]*data-i18n="settingsCanvasAgentAutoOpen"/);
-  assert.match(app, /storedCanvasAgentAutoOpen = localStorage\.getItem\("penecho-canvas-agent-auto-open"\)/);
-  assert.match(app, /storedCanvasAgentAutoOpen === null \? configuredCanvasAgentAutoOpen === true : storedCanvasAgentAutoOpen === "true"/);
-  assert.match(setter, /localStorage\.setItem\("penecho-canvas-agent-auto-open"[\s\S]*?aria-checked/);
-  assert.match(app, /settingsCanvasAgentAutoOpen: "Open PenEcho Agent with each canvas"/);
-  assert.match(zh, /settingsCanvasAgentAutoOpen: "打开画布时自动打开 PenEcho Agent"/);
-  let openCount = 0, shellOpen = false, mcpDocked = false;
-  const context = {
-    window:{PenEchoStudioNavigator:{isMcpDocked:()=>mcpDocked}},
-    canvasAgent:{ socket:null, connectPromise:null }, state:{ canvasAgentAutoOpen:false }, canvasAgentPanel:{ hidden:true }, WebSocket:{ OPEN:1 }, canvasAgentRestoreLocalConversation:()=>false,
-    mcpDisconnect:()=>{},
-    document:{ body:{ classList:{ contains:() => shellOpen } } },
-    canvasAgentCanvasIdentity:() => "draft:test-client", canvasAgentReconcileCloudCanvas:()=>{}, canvasAgentCancelInitialAutoHide:() => {}, canvasAgentPersistCurrentConversation:() => {}, canvasAgentBeginLocalConversation:() => {}, canvasAgentDropSessionIdentity:() => {}, canvasAgentSyncPromptSuggestions:() => {}, openCanvasAgent:() => { openCount++; },
-  };
-  vm.runInNewContext(functionSource(agent, "canvasAgentCanvasDidChange"), context);
-  context.canvasAgentCanvasDidChange();
-  assert.equal(openCount, 0);
-  context.state.canvasAgentAutoOpen = true;
-  context.canvasAgentCanvasDidChange();
-  assert.equal(openCount, 1);
-  context.canvasAgentPanel.hidden = false;
-  shellOpen = true;
-  context.canvasAgentCanvasDidChange();
-  assert.equal(openCount, 1, "an already-open Agent stays open without a duplicate open call");
-  shellOpen = false;
-  context.canvasAgentCanvasDidChange();
-  assert.equal(openCount, 2, "a stale visible panel without the shell open state is reopened");
-  mcpDocked = true;
-  context.canvasAgentCanvasDidChange();
-  assert.equal(openCount, 2, "MCP dock suppresses automatic opening");
-  mcpDocked = false;
-  context.canvasAgentCanvasDidChange();
-  assert.equal(openCount, 3, "other sidebar tabs preserve the preference");
 });
 
 test("pen ink stays above widgets and the eraser exposes a dashed footprint", () => {
@@ -982,125 +940,6 @@ test("canvas navigation guidance disappears after five seconds without navigatio
   assert.match(css, /\.ink-layer\s*\{[^}]*z-index:\s*2/);
 });
 
-test("Canvas navigation temporarily hides Agent and restores its original state 500ms after every pointer is released", () => {
-  const app = read("public/app.js"), css = read("public/style.css"),
-    restoreSource = functionSource(app, "restoreCanvasAgentAfterNavigation"),
-    scheduleSource = functionSource(app, "scheduleCanvasAgentNavigationRestore"),
-    noteSource = functionSource(app, "noteCanvasAgentNavigation"),
-    pointerEndSource = functionSource(app, "canvasAgentNavigationPointerDidEnd"),
-    previewSource = functionSource(app, "requestCanvasNavigationPreview"),
-    endSource = functionSource(app, "end"),
-    openAgent = app.slice(app.indexOf("function openCanvasAgent"), app.indexOf("function closeCanvasAgent")),
-    closeAgent = app.slice(app.indexOf("function closeCanvasAgent"), app.indexOf("canvasAgentToggle.hidden", app.indexOf("function closeCanvasAgent")));
-
-  assert.match(app, /CANVAS_AGENT_NAVIGATION_RESTORE_MS\s*=\s*500/);
-  assert.match(previewSource, /noteCanvasAgentNavigation\(\)/);
-  assert.match(noteSource, /canvasAgentNavigationWasOpen = !canvasAgentPanel\.hidden && document\.body\.classList\.contains\("canvas-agent-open"\)/);
-  assert.match(noteSource, /canvasAgentPanel\.contains\(document\.activeElement\)[\s\S]*?document\.activeElement\.blur\(\)/);
-  assert.doesNotMatch(noteSource, /canvasAgentPanel\.hidden\s*=/);
-  assert.match(restoreSource, /restoreMaterial = state\.canvasAgentNavigationActive && state\.canvasAgentNavigationWasOpen[\s\S]*?if \(restoreMaterial\) restoreCanvasChromeMaterial\(\)[\s\S]*?classList\.remove\("canvas-agent-navigation-hidden"\)/);
-  assert.match(pointerEndSource, /canvasAgentNavigationPointerIds\.delete\(pointerId\)[\s\S]*?canvasAgentNavigationPointerIds\.size[\s\S]*?now \+ CANVAS_AGENT_NAVIGATION_RESTORE_MS/);
-  assert.doesNotMatch(pointerEndSource, /state\.pointers\.size/);
-  assert.equal((endSource.match(/state\.pointers\.delete\(e\.pointerId\);\s*canvasAgentNavigationPointerDidEnd\(e\.pointerId\);/g) || []).length, 2);
-  assert.equal((app.match(/state\.canvasAgentNavigationPointerIds\.add\(e\.pointerId\)/g) || []).length, 2);
-  assert.match(app, /window\.addEventListener\("pointerup", finishCanvasAgentNavigationPointer, true\)/);
-  assert.match(app, /screen\.addEventListener\("lostpointercapture", finishCanvasAgentNavigationPointer\)/);
-  assert.match(openAgent, /restoreCanvasAgentAfterNavigation\(\)[\s\S]*?restoreCanvasChromeMaterial\(\)/);
-  assert.match(closeAgent, /restoreCanvasAgentAfterNavigation\(\)[\s\S]*?classList\.remove\("canvas-agent-open"\)/);
-  assert.match(css, /canvas-agent-open\.canvas-agent-navigation-hidden \.canvas-frame\s*\{[^}]*--studio-agent-edge-shift:\s*0px/);
-  assert.match(css, /canvas-agent-open\.canvas-agent-navigation-hidden \.canvas-frame::after\s*\{[^}]*right:\s*0/);
-  assert.match(css, /studio-agent-docked\.canvas-agent-navigation-hidden \.canvas-agent-panel\.canvas-agent-positioned\s*\{[^}]*pointer-events:\s*none[^}]*opacity:\s*0[^}]*translate3d\(100%, 0, 0\)[^}]*visibility:\s*hidden/);
-  assert.match(css, /@media \(max-width: 700px\)\s*\{[\s\S]*?canvas-agent-open\.canvas-agent-navigation-hidden \.canvas-agent-panel\s*\{[^}]*pointer-events:\s*none[^}]*opacity:\s*0[^}]*visibility:\s*hidden/);
-
-  let now = 100, timerId = 0, blurred = 0, materialRestores = 0;
-  const timers = new Map(), classes = new Set(["canvas-agent-open", "canvas-chrome-lightweight"]), activeElement = { blur:() => blurred++ },
-    panel = { hidden:false, contains:(value) => value === activeElement },
-    state = {
-      canvasAgentNavigationActive:false,
-      canvasAgentNavigationWasOpen:false,
-      canvasAgentNavigationRestoreTimer:0,
-      canvasAgentNavigationRestoreDeadline:0,
-      canvasAgentNavigationPointerIds:new Set([1]),
-      pointers:new Map(),
-    },
-    harness = vm.runInNewContext(`(() => {
-      ${restoreSource}
-      ${scheduleSource}
-      ${noteSource}
-      ${pointerEndSource}
-      return { noteCanvasAgentNavigation, canvasAgentNavigationPointerDidEnd };
-    })()`, {
-      CANVAS_AGENT_NAVIGATION_RESTORE_MS:500,
-      state, canvasAgentPanel:panel,
-      document:{ activeElement, body:{ classList:{
-        add:(value) => classes.add(value),
-        remove:(value) => classes.delete(value),
-        contains:(value) => classes.has(value),
-      } } },
-      performance:{ now:() => now },
-      restoreCanvasChromeMaterial:() => {
-        materialRestores++;
-        classes.delete("canvas-chrome-lightweight");
-      },
-      setTimeout:(callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
-      clearTimeout:(id) => timers.delete(id),
-    });
-  const runNextTimer = () => {
-    const entry = timers.entries().next().value;
-    assert.ok(entry, "an Agent visibility restore timer should be pending");
-    const [id, timer] = entry;
-    timers.delete(id);
-    timer.callback();
-    return timer.delay;
-  };
-
-  harness.noteCanvasAgentNavigation();
-  assert.equal(state.canvasAgentNavigationWasOpen, true);
-  assert.ok(classes.has("canvas-agent-navigation-hidden"));
-  assert.ok(classes.has("canvas-agent-open"), "temporary hiding must preserve the authoritative open state");
-  assert.equal(panel.hidden, false, "temporary hiding must not close the panel");
-  assert.equal(blurred, 1);
-  assert.equal(timers.size, 1);
-  assert.equal(timers.values().next().value.delay, 500);
-
-  now = 320;
-  harness.noteCanvasAgentNavigation();
-  assert.equal(timers.size, 1, "continued navigation should coalesce restore timers");
-  now = 600;
-  assert.equal(runNextTimer(), 500);
-  assert.equal(timers.values().next().value.delay, 220);
-  now = 821;
-  runNextTimer();
-  assert.equal(timers.size, 0);
-  assert.ok(classes.has("canvas-agent-navigation-hidden"), "a held mouse, pen, or finger keeps Agent hidden even when motion pauses");
-
-  now = 900;
-  assert.equal(harness.canvasAgentNavigationPointerDidEnd(1), true);
-  assert.equal(timers.values().next().value.delay, 500);
-  state.pointers.set(99, true);
-  now = 1401;
-  runNextTimer();
-  assert.equal(state.canvasAgentNavigationActive, false);
-  assert.ok(!classes.has("canvas-agent-navigation-hidden"));
-  assert.ok(classes.has("canvas-agent-open"));
-  assert.equal(panel.hidden, false);
-  assert.equal(materialRestores, 1);
-  assert.ok(!classes.has("canvas-chrome-lightweight"), "Agent must return with its full frosted material immediately");
-  assert.equal(state.pointers.size, 1, "hover pointer bookkeeping must not block Agent restoration");
-
-  panel.hidden = true;
-  classes.delete("canvas-agent-open");
-  now = 2000;
-  harness.noteCanvasAgentNavigation();
-  assert.equal(state.canvasAgentNavigationWasOpen, false);
-  assert.ok(!classes.has("canvas-agent-navigation-hidden"));
-  now = 2501;
-  runNextTimer();
-  assert.equal(panel.hidden, true, "an originally hidden Agent must remain hidden");
-  assert.ok(!classes.has("canvas-agent-open"));
-  assert.equal(materialRestores, 1, "a hidden Agent does not need a material restoration");
-});
-
 test("Canvas chrome uses one drawing and navigation cooldown before restoring static glass", () => {
   const app = read("public/app.js"), css = read("public/style.css"),
     material = functionSource(app, "noteCanvasChromeInteraction"),
@@ -1128,12 +967,9 @@ test("Canvas chrome uses one drawing and navigation cooldown before restoring st
   assert.doesNotMatch(navigating, /clearTimeout/);
   assert.match(beginDrawing, /noteCanvasChromeInteraction\(\)[\s\S]*?classList\.add\("is-drawing"\)/);
   assert.match(finishDrawing, /state\.drawing = null[\s\S]*?noteCanvasChromeInteraction\(\)[\s\S]*?classList\.remove\("is-drawing"\)/);
-  assert.match(openAgent, /restoreCanvasChromeMaterial\(\)[\s\S]*?classList\.add\("canvas-agent-open"\)/);
   assert.match(openNavigator, /if \(open\) restoreCanvasChromeMaterial\(\)[\s\S]*?classList\.toggle\("studio-navigator-open"/);
   assert.match(css, /body\[data-theme="studio"\] \.toolbar\.studio-chrome-lightweight\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--studio-toolbar\) 88%, transparent\)[^}]*backdrop-filter:\s*none/);
   assert.match(css, /body\[data-theme="studio"\] \.studio-navigator\.studio-chrome-lightweight\s*\{[^}]*background:\s*var\(--studio-panel\)[^}]*backdrop-filter:\s*none/);
-  assert.match(css, /studio-agent-docked \.canvas-agent-panel\.studio-chrome-lightweight\s*\{[^}]*background:\s*var\(--studio-panel\)[^}]*backdrop-filter:\s*none/);
-  assert.match(css, /@media \(prefers-reduced-transparency: reduce\), \(prefers-contrast: more\)\s*\{[\s\S]*?body\[data-theme="studio"\] \.toolbar\s*\{[^}]*background:\s*var\(--studio-toolbar\) !important[^}]*backdrop-filter:\s*none !important[\s\S]*?studio-agent-docked \.canvas-agent-panel\s*\{[^}]*background:\s*var\(--studio-panel\) !important[^}]*backdrop-filter:\s*none !important/);
 
   let now = 100, timerId = 0;
   const timers = [], classes = new Set(), state = { canvasChromeMaterialTimer:0, canvasChromeMaterialDeadline:0, canvasChromeMaterialActive:false },
@@ -1298,7 +1134,6 @@ test("canvas view mode exposes quiet share, download, and exit controls while pr
   assert.match(viewMode, /view\.classList\.toggle\("view-mode", enabled\)/);
   assert.match(viewMode, /element\.inert = true[\s\S]*?data-canvas-view-inert/);
   assert.match(viewMode, /state\.viewModeNavigationLocked = state\.navigationLocked[\s\S]*?setCanvasNavigationLocked\(false\)/);
-  assert.match(viewMode, /closeCanvasAgent\(\)/);
   assert.match(viewMode, /state\.viewModeNavigationLocked[\s\S]*?setCanvasNavigationLocked\(true\)/);
   assert.match(viewMode, /syncCanvasNavigation\(\)/);
   assert.doesNotMatch(viewMode, /"\.widget-layer"/);
@@ -1401,7 +1236,7 @@ test("plugin manager is a centered dynamic catalog with General HTML and bundled
   assert.doesNotMatch(enabledPluginDescriptors, /styles/);
   assert.match(app, /localStorage\.setItem\(PLUGIN_STORAGE_KEY, JSON\.stringify/);
   assert.match(app, /if \(!state\.pluginCatalogLoaded\) void loadPluginDocuments\(\)/);
-  assert.match(app, /applyTheme\(state\.theme\);\s*applyStudioPalette\(state\.studioPalette\);\s*applyPageScale\(state\.pageScale\);\s*resetCanvasCursor\(\);\s*loadPluginDocuments\(\)\.catch/);
+  assert.match(app, /applyTheme\(state\.theme\);\s*applyStudioPalette\(state\.studioPalette\);\s*resetCanvasCursor\(\);\s*loadPluginDocuments\(\)\.catch/);
   assert.match(app, /function pluginRequestPayload\(\)/);
   assert.match(app, /\.\.\.pluginRequestPayload\(\)/);
   assert.match(app, /function authenticatedApiHeaders\([\s\S]*?X-PenEcho-Session/);
@@ -1526,7 +1361,7 @@ test("plugin creator offers one air-quality template, editable copies, AI title 
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
   }
-  assert.match(server, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?JSON object with exactly two string fields[\s\S]*?under 12000 UTF-8 bytes[\s\S]*?under 32000 UTF-8 bytes/);
+  assert.match(server, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?JSON object with exactly two string fields[\s\S]*?under 100000 UTF-8 bytes[\s\S]*?under 32000 UTF-8 bytes/);
   assert.match(functionSource(server, "pluginBundleFromModel"), /matchAll[\s\S]*?JSON\.parse[\s\S]*?PLUGIN_FORMAT\.parse/);
   assert.match(functionSource(server, "improvePluginDocument"), /requestPluginAuthoringModel[\s\S]*?pluginBundleFromModel[\s\S]*?pluginAuthoringRepairPrompt[\s\S]*?requestPluginAuthoringModel[\s\S]*?still failed validation/);
   assert.match(server, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document, body\.styles \|\| ""\)/);
@@ -1877,12 +1712,12 @@ test("strict CSP dynamic layout uses stylesheet rules instead of element style a
     widgetHost = read("public/widget-host.js"),
     helper = functionSource(app, "runtimeElementStyle");
   assert.match(helper, /sheet\.insertRule\(`\.\$\{className\} \{\}`/);
-  for (const key of ["tour-layer", "tour-highlight", "tour-card", "tour-progress", "animation-controls", "canvas-image-selection", "selection-assist-menu", "summon-copy"])
+  for (const key of ["animation-controls", "canvas-image-selection", "selection-assist-menu", "summon-copy"])
     assert.match(app, new RegExp(`runtimeElementStyle\\([^)]*["']${key}["']`));
   assert.match(functionSource(app,"positionToolbarPopover"),/runtimeElementStyle\(popover, `toolbar-popover-\$\{popover\.id\}`\)[\s\S]*?setProperty\("left"[\s\S]*?setProperty\("top"/);
   assert.doesNotMatch(app,/canvasAgentOpenFeedbackMenu|canvas-agent-feedback-menu/);
   assert.doesNotMatch(app,/\b(?:popover|menu)\.style\./);
-  assert.doesNotMatch(app, /Reflect\.get\((?:tourLayer|tourHighlight|tourCard|tourProgressBar|animationControls|selectionToolbar), "style"\)/);
+  assert.doesNotMatch(app, /Reflect\.get\((?:animationControls|selectionToolbar), "style"\)/);
   assert.match(functionSource(app, "ensureObjectChromeStyleRule"), /sheet\.insertRule\(`\.\$\{className\} \{ --object-control-x: 0px; --object-control-y: 0px; z-index: 1; \}`/);
   assert.doesNotMatch(summon, /copyEl\.style\./);
   assert.match(summon, /styleFor = options\.styleFor/);
@@ -2247,7 +2082,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   resetState.handWidgetPointerIds.add("widget-touch:2");
   assert.equal(resetHarness.beginCanvasWidgetGestureResetTap(resetPointer, { x:10, y:20 }), false);
   assert.equal(resetState.handWidgetPointerIds.has("widget-touch:2"), true);
-  assert.doesNotMatch(functionSource(app, "mountWidget"), /pointerenter|pointerleave|updateHandObjectHover/);
+  assert.doesNotMatch(functionSource(app, "mountWidget"), /frame\.addEventListener\("pointer|updateHandObjectHover/);
   assert.match(functionSource(app, "handleWidgetMessage"), /validWidgetHostActivate\(message\)[\s\S]*?state\.mode === "select"[\s\S]*?showHandObjectToolbar\(target\.kind, target\.object\)/);
   const trackedPoint = vm.runInNewContext(`(${functionSource(app, "widgetHostTrackedPoint")})`, { screenClientRatio:0.5 });
   assert.deepEqual({ ...trackedPoint({ clientX:100, clientY:200, screenX:500, screenY:600 }, { screenX:540, screenY:660 }) }, { x:120, y:230 });
@@ -2349,6 +2184,7 @@ test("text stays above placed objects while selected Widgets temporarily cover i
     selectedLayerMaterial = { hidden:true },
     syncCanvasObjectLayerOrder = vm.runInNewContext(`(${functionSource(app, "syncCanvasObjectLayerOrder")})`, {
       state:layerState,
+      syncCanvasPlacedInputRegions() {},
       widgetLayer:{},
       imageMaterialLayer:{},
       placedContentLayer:{},
@@ -2640,7 +2476,7 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(css, /#viewport:is\(\.is-drawing, \.canvas-navigation-previewing\)[^}]*\.object-chrome-button\.refine\.solo-widget-tool[^}]*\{[^}]*backdrop-filter:\s*none/);
   assert.match(css, /#viewport:is\(\.is-drawing, \.canvas-navigation-previewing\)[^}]*\.object-chrome-button\.refine\.solo-widget-tool[^}]*\{[^}]*animation:\s*none[^}]*translate:\s*none/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.object-chrome-button\.refine\.solo-widget-tool[^}]*\{[^}]*animation:\s*none[^}]*translate:\s*none/);
-  assert.match(app, /kind:"favorite"[\s\S]*?baseWidth:28,[\s\S]*?iconOnly:true/);
+  assert.doesNotMatch(app, /kind:"favorite"/);
   assert.match(app, /kind:"share"[\s\S]*?baseWidth:28,[\s\S]*?iconOnly:true/);
   assert.match(syncChrome, /classList\.toggle\("icon-only", Boolean\(spec\.iconOnly \|\| \(spec\.objectToolbarItem && !\["interact", "askagent", "suggest", "refine"\]\.includes\(spec\.kind\)\)\)\)/);
   assert.match(syncChrome, /classList\.toggle\("widget-chrome-control", Boolean\(spec\.widgetTool \|\| spec\.objectToolbar \|\| spec\.objectToolbarItem\)\)/);
@@ -2648,8 +2484,6 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(syncChrome, /attachedWidgetShells = new Set\(\)[\s\S]*?spec\.objectToolbar && spec\.object\?\.shell[\s\S]*?classList\.toggle\("object-toolbar-attached", attachedWidgetShells\.has\(widget\.shell\)\)/);
   assert.match(syncChrome, /selectedWidgetMaterialRecord = \{ spec, position \}[\s\S]*?syncSelectedWidgetMaterial\(selectedWidgetMaterialRecord\)/);
   assert.match(functionSource(app, "syncSelectedWidgetMaterial"), /widgetStackIndex = state\.widgets\.length \+ \(state\.pendingWidget \? 2 : 1\)[\s\S]*?spec\.object\.styleRule\.style\.zIndex = String\(widgetStackIndex\)[\s\S]*?setProperty\("z-index", String\(widgetStackIndex\)\)/);
-  assert.match(app, /favoriteLabelKey = widget\.favoriteBusy \? "favoriteWidgetSaving" : widget\.favorite \? "unfavoriteWidget" : "favoriteWidget"/);
-  assert.match(app, /kind:"favorite"[\s\S]*?pressed:widget\.favorite === true,[\s\S]*?busy:widget\.favoriteBusy === true/);
   assert.match(functionSource(app, "createObjectChromeButton"), /kind === "move" \|\| kind === "toolbar" \|\| button\.disabled/);
   assert.match(syncChrome, /classList\.toggle\("is-favorite", Boolean\(spec\.kind === "favorite" && spec\.pressed\)\)/);
   assert.match(syncChrome, /button\.disabled = Boolean\(spec\.busy\)/);
@@ -2702,7 +2536,7 @@ test("widget Refine discovery stays in the parent canvas and leaves iframe event
   assert.match(pointer, /widgetHeaderHoverAllowed\(\) \? widgetAtHeaderPoint\(state\.widgetRefinePointer\) : null/);
   assert.match(hitTest, /visibleWidgets\(\)[\s\S]*?widgetBox\(widget\)[\s\S]*?point\.x[\s\S]*?point\.y/);
   assert.doesNotMatch(hitTest, /contentWindow|postMessage|addEventListener/);
-  assert.doesNotMatch(functionSource(app, "mountWidget"), /pointerenter|pointerleave|updateHandObjectHover/);
+  assert.doesNotMatch(functionSource(app, "mountWidget"), /frame\.addEventListener\("pointer|updateHandObjectHover/);
   assert.match(functionSource(app, "mountWidget"), /frame\.addEventListener\("focus"[\s\S]*?focusHandObject\("widget", widget, "widget-focus"\)/);
   assert.doesNotMatch(widgetHost, /penecho-widget-hover|widget-refine/i);
   assert.doesNotMatch(messageHandler, /refine|hover/i);
@@ -2805,7 +2639,7 @@ test("selected Widget chrome uses one top toolbar and follows Studio glass token
   assert.deepEqual({ ...chromePosition({x:-40,y:100,w:300,h:200},"toolbar","",{objectToolbar:true,minimumWidth:196,baseHeight:34}) },{x:-40,y:66,scale:1,baseWidth:300,baseHeight:34});
   assert.deepEqual({ ...chromePosition({x:1130,y:100,w:300,h:200},"toolbar","",{objectToolbar:true,minimumWidth:196,baseHeight:34}) },{x:1130,y:66,scale:1,baseWidth:300,baseHeight:34});
   assert.deepEqual({ ...chromePosition({x:400,y:100,w:180,h:200},"toolbar","",{objectToolbar:true,minimumWidth:196,baseHeight:34}) },{x:400,y:66,scale:1,baseWidth:196,baseHeight:34});
-  assert.deepEqual(selectedClasses,[["is-interacting",false],["is-selected",true]]);
+  assert.deepEqual(selectedClasses,[["is-live",false],["is-interacting",false],["is-selected",true]]);
   assert.equal(selectedWidgetMaterial.hidden,false);
   assert.equal(materialProperties.get("--selected-widget-material-x"),"6500.0px");
   assert.equal(materialProperties.get("--selected-widget-material-y"),"4516.0px");
@@ -2917,7 +2751,7 @@ test("Save canvas exposes non-blocking progress and completion feedback", () => 
   assert.match(finalize, /for \(const editor of \[\.\.\.state\.textEditors\.values\(\)\]\) await confirmTextEditor\(editor\)/);
   assert.match(finalize, /state\.selection[\s\S]*?commitSelection\(\)/);
   assert.match(finalize, /finishAIDraftHandMode\(\)/);
-  assert.match(app, /async function saveSnapshot\(\{ overwriteId = null, name = null, location = state\.snapshotLocation, allowEmpty = false \} = \{\}\) \{[\s\S]*?selectionAIBusy\(\)[\s\S]*?await finalizeCanvasForSnapshot\(\)[\s\S]*?if \(!allowEmpty && !tiles\.size/);
+  assert.match(app, /async function saveSnapshot\(\{ overwriteId = null, name = null, location = state\.snapshotLocation, allowEmpty = false \} = \{\}, autosave\) \{[\s\S]*?selectionAIBusy\(\)[\s\S]*?await finalizeCanvasForSnapshot\(\)[\s\S]*?if \(!allowEmpty && !tiles\.size/);
   assert.match(app, /async function saveSnapshot\([\s\S]*?prepareVisibleWidgetSnapshots\(null, true\)/);
   assert.match(functionSource(app, "snapshotPreviewBlob"), /canvasBlob\(snapshotPreview\(\), "image\/webp", \.78\)[\s\S]*?fallback thumbnail[\s\S]*?data:image\/png;base64/);
   assert.match(app, /async function saveSnapshot\([\s\S]*?preview = location === "cloud" \? await cloudSnapshotPreviewBlob\(\) : await snapshotPreviewBlob\(\)/);
@@ -3216,16 +3050,14 @@ test("canvas history clearly separates device, server, and private cross-device 
 
 test("searchable sidebars and popups open without focusing a text field", () => {
   const html = read("public/index.html"), persistence = read("src/client/app/persistence.js"),
-    navigator = read("src/client/app/studio-navigator.js"), agent = read("src/client/app/canvas-agent-runtime.js"),
-    openHistory = functionSource(persistence, "openHistoryPanel"), scheduleNavigator = functionSource(navigator, "scheduleStudioNavigatorOpenWork"),
-    toggleReferencePicker = functionSource(agent, "canvasAgentToggleReferencePicker");
-  for (const id of ["historySearch", "studioNavigatorSearch", "canvasAgentReferenceSearch"]) {
+    navigator = read("src/client/app/studio-navigator.js"),
+    openHistory = functionSource(persistence, "openHistoryPanel"), scheduleNavigator = functionSource(navigator, "scheduleStudioNavigatorOpenWork");
+  for (const id of ["historySearch", "studioNavigatorSearch"]) {
     assert.doesNotMatch(html, new RegExp(`id="${id}"[^>]*\\bautofocus\\b`));
   }
   assert.match(openHistory, /requestAnimationFrame\([\s\S]*panel\.focus\(\{ preventScroll:true \}\)[\s\S]*requestAnimationFrame\([\s\S]*renderSnapshotList\(\)/);
   assert.doesNotMatch(openHistory, /historySearch[^\n]*focus/);
   assert.doesNotMatch(scheduleNavigator, /studioNavigatorSearch\.focus/);
-  assert.doesNotMatch(toggleReferencePicker, /canvasAgentReferenceSearch\.focus/);
 });
 
 test("text-entry focus stays on the rounded control surface without a nested rectangular outline", () => {
@@ -3234,7 +3066,6 @@ test("text-entry focus stays on the rounded control surface without a nested rec
   assert.ok(css.includes('body[data-theme="studio"] button:focus-visible, body[data-theme="studio"] select:focus-visible, body[data-theme="studio"] a:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }'));
   assert.match(css, /\.history-search input\s*\{[^}]*outline:\s*0/);
   assert.match(css, /\.studio-navigator-search input\s*\{[^}]*outline:\s*0/);
-  assert.match(css, /\.canvas-agent-reference-picker input\s*\{[^}]*outline:\s*0/);
   assert.match(css, /\.plugin-editor-field textarea:focus, \.plugin-editor-field input:focus\s*\{[^}]*outline:\s*none[^}]*box-shadow:/);
   assert.doesNotMatch(css, /(?:^|,)\s*(?:body\[data-theme="studio"\]\s+)?input:focus-visible\s*(?:,|\{)/m);
 });
@@ -3419,10 +3250,6 @@ test("Studio-only palettes are wired through initialization, localization, and s
   }
   assert.match(css, /body\[data-theme="studio"\]\s*\{/);
   for (const palette of ["indigo", "graphite", "cobalt", "azure", "teal", "forest", "amber", "burgundy", "plum", "rose", "terracotta", "olive"]) assert.match(css, new RegExp(`\\[data-studio-palette="${palette}"\\]`));
-  assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-project-dialog\s*\{[^}]*color:\s*var\(--studio-text\)[^}]*border-color:\s*var\(--studio-line\)[^}]*background:\s*var\(--penecho-dialog-surface\)/);
-  assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-project-row\.selected,[\s\S]*?\.canvas-agent-project-row\.selected:hover\s*\{[^}]*background:\s*var\(--pe-selected\)/);
-  assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-resource-heading-icon,[\s\S]*?\.canvas-agent-resource-icon\s*\{[^}]*color:\s*var\(--pe-ink-2\)[^}]*background:\s*var\(--pe-surface-muted\)/);
-  assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-prompt-popup\s*\{[^}]*border-color:\s*var\(--studio-line\)[^}]*background:\s*var\(--studio-panel-raised\)/);
   assert.match(css, /body\[data-theme="studio"\]\.is-fullscreen\s+#viewport\s*\{[^}]*height:\s*100%[^}]*min-height:\s*0/);
 });
 
@@ -3438,7 +3265,7 @@ test("Studio palette propagates through every Canvas popup surface", () => {
   assert.match(css, /--penecho-workbench-navigation-surface:[^;]*68%, transparent\)/);
   assert.match(css, /--penecho-workbench-navigation-filter:\s*blur\(24px\) saturate\(1\.14\)/);
   assert.match(css, /--penecho-workbench-content-surface:[^;]*62%, transparent\)/);
-  for (const selector of ["plugin-modal", "changelog-dialog", "settings-panel", "configuration-panel", "crafts-modal", "canvas-agent-project-dialog"]) {
+  for (const selector of ["plugin-modal", "settings-panel", "configuration-panel", "crafts-modal"]) {
     assert.match(css, new RegExp(`\\.${selector}\\s*\\{[^}]*border-radius:\\s*var\\(--penecho-large-dialog-radius\\)`));
   }
   for (const selector of ["settings-panel", "crafts-modal"]) {
@@ -3451,15 +3278,11 @@ test("Studio palette propagates through every Canvas popup surface", () => {
   assert.match(css, /\.plugin-modal-layer\s*\{[^}]*background:\s*var\(--penecho-dialog-backdrop\)[^}]*backdrop-filter:\s*var\(--penecho-dialog-backdrop-filter\)/);
   assert.match(css, /\.plugin-modal\s*\{[^}]*background:\s*var\(--penecho-dialog-surface\)[^}]*backdrop-filter:\s*var\(--penecho-dialog-surface-filter\)/);
   assert.match(css, /\.history-panel, \.new-canvas-dialog\s*\{[^}]*--ai-surface:\s*var\(--studio-panel,[^)]+\)[^}]*--ai-accent:\s*var\(--studio-accent,[^)]+\)[^}]*--ai-primary:\s*var\(--studio-accent-strong,[^)]+\)/);
-  assert.match(css, /body\[data-theme="studio"\] \.tour-card\s*\{[^}]*border-color:\s*var\(--studio-accent-border\)[^}]*background:\s*var\(--studio-panel\)/);
   assert.match(css, /\.settings-panel, \.configuration-panel\s*\{[^}]*--ink:\s*var\(--studio-text,[^)]+\)[^}]*--gold-bright:\s*var\(--studio-accent-strong,[^)]+\)/);
   assert.match(css, /\.configuration-panel\s*\{[^}]*background:\s*var\(--penecho-dialog-surface\)[^}]*backdrop-filter:\s*var\(--penecho-dialog-surface-filter\)/);
   assert.match(css, /\.crafts-modal\s*\{[^}]*--ink:\s*var\(--studio-text,[^)]+\)[^}]*--panel-raised:\s*var\(--studio-panel,[^)]+\)[^}]*background:\s*var\(--penecho-large-dialog-surface\)[^}]*backdrop-filter:\s*var\(--penecho-large-dialog-surface-filter\)/);
-  assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-project-dialog\s*\{[^}]*color:\s*var\(--studio-text\)[^}]*border-color:\s*var\(--studio-line\)[^}]*background:\s*var\(--penecho-dialog-surface\)/);
-  assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-prompt-popup\s*\{[^}]*border-color:\s*var\(--studio-line\)[^}]*background:\s*var\(--studio-panel-raised\)/);
   assert.match(css, /\.studio-session-delete-dialog\s*\{[^}]*color:\s*var\(--studio-text,[^)]+\)[^}]*background:\s*var\(--penecho-dialog-surface\)[^}]*backdrop-filter:\s*var\(--penecho-dialog-surface-filter\)/);
-  assert.match(css, /\.changelog-dialog\s*\{[^}]*color:\s*var\(--ink\)[^}]*background:\s*var\(--penecho-dialog-surface\)[^}]*backdrop-filter:\s*var\(--penecho-dialog-surface-filter\)/);
-  for (const selector of ["new-canvas-dialog", "studio-session-delete-dialog", "canvas-agent-project-dialog"]) {
+  for (const selector of ["new-canvas-dialog", "studio-session-delete-dialog"]) {
     assert.match(css, new RegExp(`\\.${selector}::backdrop\\s*\\{[^}]*background:\\s*var\\(--penecho-dialog-backdrop\\)[^}]*backdrop-filter:\\s*var\\(--penecho-dialog-backdrop-filter\\)`));
   }
 });
@@ -3545,83 +3368,19 @@ test("Studio navigator reserves canvas space and keeps the existing Agent runtim
   const html=read("public/index.html"),css=read("public/studio-shell.css"),agent=read("src/client/app/canvas-agent-runtime.js");
   assert.match(css,/\.canvas-frame > #viewport \{[^}]*margin-left: 0/);
   assert.match(css,/#studioNavigator \{[^}]*box-shadow: none/);
-  assert.match(read("public/style.css"),/\.studio-agent-docked \.canvas-agent-panel \{[^}]*position: absolute/);
-  assert.match(functionSource(agent,"syncStudioWorkbench"),/canvasAgentFrame\.append\(canvasAgentPanel\)/);
   assert.match(html,/id="aiToolsSection"[\s\S]*?data-color-control="ai"[\s\S]*?class="mode-tools"/);
   assert.match(html,/id="penToolProperties"[\s\S]*?id="penSize"[\s\S]*?data-color-control="ink"/);
-  assert.match(html,/id="canvasAgentPanel"[^>]*hidden[^>]*inert/);
 });
 
-test("opening PenEcho Agent re-syncs Pen mode presentation without changing the Canvas mode", () => {
-  const bootstrap = read("src/client/app/ui-bootstrap.js"), agent = read("src/client/app/canvas-agent-runtime.js"),
-    syncModePresentation = functionSource(bootstrap, "syncCanvasModePresentation"),
-    makeButton = (active) => ({
-      active,
-      pressed:String(active),
-      classList:{ toggle(name,value) { if (name === "active") this.owner.active = Boolean(value); }, owner:null },
-      setAttribute(name,value) { if (name === "aria-pressed") this.pressed = value; },
-    }),
-    handButton = makeButton(true), penButton = makeButton(false), bodyAttributes = {"data-canvas-mode":"pen"}, viewClasses = {}, calls = [];
-  handButton.classList.owner = handButton;
-  penButton.classList.owner = penButton;
-  const result = vm.runInNewContext(`${syncModePresentation};syncCanvasModePresentation();`, {
-    state:{ mode:"pen" },
-    eraserToolButton:null,
-    syncCanvasNavigation() {},
-    document:{
-      body:{ getAttribute:name => bodyAttributes[name], setAttribute:(name,value) => { bodyAttributes[name] = value; } },
-      querySelector:(selector) => selector === '[data-mode="pen"]' ? penButton : null,
-      querySelectorAll:() => [handButton,penButton],
-    },
-    view:{ classList:{ toggle:(name,value) => { viewClasses[name] = value; } } },
-    updateEraserToolUI:() => calls.push("eraser-ui"),
-    resetCanvasCursor:() => calls.push("cursor"),
-    stopLassoButtonAnimation:() => assert.fail("Re-syncing the same tool must not restart or cancel its hover preview"),
-  });
-  assert.equal(result,true);
-  assert.equal(bodyAttributes["data-canvas-mode"],"pen");
-  assert.equal(viewClasses["hand-mode"],false);
-  assert.deepEqual({handActive:handButton.active,handPressed:handButton.pressed,penActive:penButton.active,penPressed:penButton.pressed},{handActive:false,handPressed:"false",penActive:true,penPressed:"true"});
-  assert.deepEqual(calls,["eraser-ui","cursor"]);
-  const openAgent = agent.slice(agent.indexOf("function openCanvasAgent("),agent.indexOf("function closeCanvasAgent("));
-  assert.match(openAgent,/syncCanvasModePresentation\(\)/);
-  assert.doesNotMatch(openAgent,/setCanvasMode\(/);
-});
-
-test("PenEcho Agent launcher stays clickable while its status shell shows work", () => {
-  const html = read("public/index.html"), css = read("public/style.css"), agent = read("src/client/app/canvas-agent-runtime.js");
-  const syncTrigger = functionSource(agent, "canvasAgentSyncTriggerState");
-  assert.match(syncTrigger, /busy = canvasAgent\.requestPending \|\| canvasAgent\.running[\s\S]*?canvasAgentControl\.classList\.toggle\("is-busy",busy\)[\s\S]*?canvasAgentControl\.setAttribute\("aria-busy",String\(busy\)\)/);
-  assert.doesNotMatch(syncTrigger, /canvasAgentToggle\.setAttribute\("aria-busy"/);
-  assert.doesNotMatch(syncTrigger, /canvasAgentPanel\.hidden/);
-  const triggerState = {};
-  vm.runInNewContext(`${syncTrigger};canvasAgentSyncTriggerState();`,{
-    canvasAgent:{requestPending:true,running:false}, canvasAgentPanel:{hidden:false},
-    canvasAgentControl:{
-      classList:{toggle:(name,value)=>{triggerState.className=name;triggerState.busy=value;}},
-      setAttribute:(name,value)=>{triggerState.attribute=name;triggerState.ariaBusy=value;},
-    },
-    canvasAgentSyncPromptSuggestions:()=>{},
-  });
-  assert.deepEqual(triggerState,{className:"is-busy",busy:true,attribute:"aria-busy",ariaBusy:"true"});
-  const toggle = html.match(/<button id="canvasAgentToggle"[^>]*>/)?.[0] || "";
-  assert.doesNotMatch(toggle, /(?:disabled|aria-disabled|aria-busy)=/);
-  assert.match(agent, /canvasAgentToggle\.addEventListener\("click",\(\)=>window\.PENECHO_CONFIG\?\.guestCanvas \? window\.PenEchoBrowserDraft\?\.signIn\(\) : canvasAgentPanel\.hidden\|\|!document\.body\.classList\.contains\("canvas-agent-open"\) \? openCanvasAgent\(\{focus:false\}\) : closeCanvasAgent\(\)\)/);
-  assert.match(css, /\[data-pe-button\]\)\[aria-busy="true"\][^}]*pointer-events:\s*none/);
-  assert.match(css, /@property --canvas-agent-busy-angle\s*\{[^}]*syntax:\s*"<angle>"[^}]*initial-value:\s*0deg/);
-  assert.match(css, /\.canvas-agent-control\.is-busy > #canvasAgentToggle::after\s*\{[^}]*inset:\s*0[^}]*padding:\s*2px[^}]*background:\s*conic-gradient\(from var\(--canvas-agent-busy-angle\)[^}]*mask-composite:\s*exclude[^}]*animation:\s*canvas-agent-trigger-busy 1\.4s linear infinite/);
-  assert.match(css, /@keyframes canvas-agent-trigger-busy\s*\{\s*to\s*\{\s*--canvas-agent-busy-angle:\s*360deg/);
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.canvas-agent-control\.is-busy > #canvasAgentToggle::after\s*\{[^}]*animation:\s*none/);
-});
-
-test("PenEcho Agent launcher uses ordered toolbar compaction before the toolbar wraps", () => {
+test("the group at the end of the toolbar uses ordered toolbar compaction before the toolbar wraps", () => {
   const html = read("public/index.html"), css = read("public/style.css"), core = read("src/client/app/core.js"), agent = read("src/client/app/canvas-agent-runtime.js");
   const toolbar = html.match(/<nav class="toolbar"[\s\S]*?<\/nav>/)?.[0] || "",
     syncLayout = functionSource(agent, "canvasAgentSyncToolbarLayout"),
     positionPopover = functionSource(core, "positionToolbarPopover"),
     updateEffort = functionSource(core, "updateEffortControl");
   assert.ok(toolbar.indexOf('class="tool-group primary-tools"') < toolbar.indexOf('id="canvasAgentToolbarHome"'));
-  assert.match(toolbar, /id="canvasAgentToolbarHome"[\s\S]*?id="canvasAgentControl"[\s\S]*?id="canvasAgentToggle"/);
+  assert.match(toolbar, /id="canvasAgentToolbarHome"[\s\S]*?id="canvasAgentControl"[\s\S]*?id="mcpToolbarToggle"[\s\S]*?id="playgroundToggle"/);
+  assert.doesNotMatch(toolbar, /id="canvasAgentToggle"/);
   assert.equal((html.match(/id="canvasAgentControl"/g) || []).length, 1);
   assert.match(updateEffort, /effort-label-full[\s\S]*?effort-label-short[\s\S]*?shortLabel\.textContent = shortLevel[\s\S]*?canvasAgentScheduleToolbarLayout/);
   assert.match(syncLayout, /canvasAgentToolbarHome\.append\(canvasAgentControl\)[\s\S]*?studio-toolbar-effort-compact[\s\S]*?canvasAgentToolbarOverflows\(\)[\s\S]*?studio-toolbar-controls-compact[\s\S]*?canvasAgentToolbarOverflows\(\)[\s\S]*?studio-toolbar-two-row[\s\S]*?return "two-row"/);
@@ -3671,7 +3430,6 @@ test("Studio title bar exposes document identity, explicit save state, and a bla
   assert.match(css, /body\[data-theme="studio"\] \.toolbar-leading-divider\s*\{[^}]*width:\s*1px[^}]*height:\s*24px[^}]*background:\s*var\(--studio-line\)/);
   assert.match(css, /\.canvas-document-save-state\[data-state="saved"\][\s\S]*?\.canvas-document-save-state\[data-state="edited"\][\s\S]*?\.canvas-document-save-state\[data-state="saving"\]/);
   assert.match(css, /body\[data-theme="studio"\] \.canvas-frame\s*\{[^}]*--studio-navigator-width:\s*248px[^}]*--studio-agent-edge-shift:\s*0px[^}]*--studio-navigator-edge-shift:\s*0px/);
-  assert.match(css, /studio-agent-docked\.canvas-agent-open \.canvas-frame\s*\{[^}]*--studio-agent-edge-shift:\s*calc\(var\(--studio-agent-width\) - 4px\)/);
   assert.match(css, /studio-navigator-open \.canvas-frame\s*\{[^}]*--studio-navigator-edge-shift:\s*var\(--studio-navigator-width\)/);
   assert.match(css, /body\[data-theme="studio"\] \.canvas-frame\s*\{[^}]*--studio-agent-width:\s*clamp\(360px, var\(--canvas-agent-width, 390px\), min\(calc\(100% - 16px - var\(--studio-navigator-edge-shift\)\), 50%\)\)/);
   assert.doesNotMatch(css, /studio-navigator-open\.studio-agent-docked\.canvas-agent-open[^}]*--studio-agent-width:\s*336px/);
@@ -3683,7 +3441,9 @@ test("Studio title bar exposes document identity, explicit save state, and a bla
   assert.match(updateDocument, /currentCanvasDisplayName\(\) \|\| t\("canvasUntitledName"\)/);
   assert.match(updateDocument, /canvasHasUnsavedChanges\(\) \|\| Boolean\(state\.currentCanvasSuggestedName\)/);
   assert.match(updateDocument, /snapshotSaveInProgress \? "saving" : !saved \? "unsaved" : edited \? "edited" : "saved"/);
-  assert.match(updateDocument, /canvasWelcome\.hidden = !active \|\| state\.viewMode \|\| studioCanvasHasContent\(\)/);
+  assert.match(updateDocument, /canvasWelcome\.hidden = !active \|\| state\.viewMode \|\| \(studioCanvasHasContent\(\) && !coverKept\)/);
+  // Opening PenEcho shows PenEcho Lines first, over a Canvas kept from last time; once put away, content hides the welcome.
+  assert.match(updateDocument, /coverKept = studioCanvasHasContent\(\) && Boolean\(window\.projectLinesWelcomeOpen\)[\s\S]*?classList\.toggle\("pls-kept", !canvasWelcome\.hidden && coverKept\)/);
   assert.match(css, /\.canvas-document-name-editor\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 28px/);
   assert.match(css, /\.canvas-document-name-confirm\s*\{[^}]*grid-area:\s*1 \/ 2[^}]*margin:\s*0/);
   assert.match(functionSource(navigator, "beginCanvasDocumentRename"), /canvasDocumentName\.hidden = true[\s\S]*?canvasDocumentNameEditor\.hidden = false[\s\S]*?canvasDocumentNameInput\.hidden = false[\s\S]*?select\(\)/);
@@ -3729,110 +3489,7 @@ test("Studio navigator rail toggle closes on the second click without reopening 
   toggle(); assert.equal(open,false);
 });
 
-test("Studio navigator groups recent Agent sessions by canvas and opens the bound canvas first", () => {
-  const html = read("public/index.html"), css = read("public/style.css"), navigator = read("src/client/app/studio-navigator.js"),
-    persistence = read("src/client/app/persistence.js"), agent = read("src/client/app/canvas-agent-runtime.js"),
-    build = read("scripts/build-client.js"), app = read("public/app.js"), zh = read("public/locales/zh.js");
-  assert.match(html, /id="studioNavigatorToggle"[^>]*aria-controls="studioNavigator"/);
-  assert.match(html, /id="studioNavigator"[^>]*aria-labelledby="studioNavigatorTitle"[\s\S]*?id="studioNavigatorAllPanel"[\s\S]*?id="studioNavigatorAgentPanel"[\s\S]*?id="studioNavigatorCanvasPanel"/);
-  assert.match(html, /id="studioNavigatorSearch"[^>]*type="search"/);
-  assert.match(build, /src\/client\/app\/studio-navigator\.js/);
-  assert.match(navigator, /let studioNavigatorOpenPreference = false/);
-  assert.doesNotMatch(navigator, /STUDIO_NAVIGATOR_OPEN_KEY|storedStudioNavigatorOpen/);
-  assert.match(functionSource(navigator, "studioNavigatorWorkGroups"), /sort\(\(a,b\)=>\(b\.savedAt\|\|b\.firstSeenAt\|\|0\)-\(a\.savedAt\|\|a\.firstSeenAt\|\|0\)/);
-  assert.match(navigator, /className="studio-navigator-group"[\s\S]*?className="studio-navigator-group-conversations"/);
-  assert.match(functionSource(navigator, "studioNavigatorCanvasGroupSnapshot"), /snapshotItemsLocation===identity\.location[\s\S]*?snapshotItems\.find\(candidate=>candidate\.id===identity\.id\)[\s\S]*?studioNavigatorCanvasGroupSnapshots\.set\(key,item\)/);
-  assert.match(functionSource(navigator, "studioNavigatorLoadDraftSnapshot"), /await snapshotPreviewBlob\(\)[\s\S]*?request\.canvasKey===state\.canvasAgentCanvasKey[\s\S]*?studioNavigatorDraftSnapshot\.item=\{id:request\.canvasKey,preview\}/);
-  assert.match(functionSource(navigator, "studioNavigatorQueueDraftSnapshot"), /canvasKey\.startsWith\("draft:"\)[\s\S]*?studioNavigatorLoadDraftSnapshot\(request\)/);
-  assert.match(functionSource(navigator, "studioNavigatorQueueCanvasGroupSnapshots"), /snapshotListInProgress[\s\S]*?studioNavigatorCanvasGroupSnapshotLoads\.get\(location\)[\s\S]*?studioNavigatorLoadCanvasGroupSnapshots\(location,request\)/);
-  assert.match(functionSource(navigator, "studioNavigatorLoadCanvasGroupSnapshots"), /await snapshotsAt\(location\)[\s\S]*?studioNavigatorCanvasGroupSnapshots\.set\(key,item\)[\s\S]*?renderStudioAgentHistory\(\)/);
-  const conversationEntry=functionSource(navigator,"studioNavigatorConversationEntry");
-  assert.match(conversationEntry, /if\(standalone\)[\s\S]*studioNavigatorMessageCount/);
-  assert.match(conversationEntry, /className="studio-navigator-conversation-name"[\s\S]*?title\.textContent=conversationName[\s\S]*?body\.append\(title\);row\.append\(icon,body,time\)/);
-  assert.doesNotMatch(conversationEntry, /studio-navigator-item-icon agent|studio-navigator-item-summary/);
-  const renderCanvasHistory=functionSource(navigator,"renderStudioCanvasHistory");
-  assert.match(navigator, /studio-navigator-meta-current[\s\S]*studio-navigator-meta-location/);
-  assert.doesNotMatch(navigator, /studioNavigatorCurrentStateLabel|meta\.textContent=\[[^\n]*studioNavigatorSessionCount/);
-  assert.match(renderCanvasHistory, /studioNavigatorGroupSection\(group,\{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls/);
-  assert.doesNotMatch(renderCanvasHistory, /canvasAgentHistoryCurrent/);
-  const renderAgentHistory=functionSource(navigator, "renderStudioAgentHistory"), renderWorkHistory=functionSource(navigator,"renderStudioWorkHistory");
-  assert.match(renderAgentHistory, /studioNavigatorWorkGroups\(\)[\s\S]*?groups\.flatMap[\s\S]*sort\(\(a,b\)=>b\.updatedAt-a\.updatedAt/);
-  assert.match(renderAgentHistory, /releaseStudioNavigatorPreviewUrls\(studioNavigatorAgentPreviewUrls\)[\s\S]*?studioNavigatorQueueCanvasGroupSnapshots\(groups\)[\s\S]*?studioNavigatorConversationEntry\(entry\.group,entry\.conversation,\{standalone:true\}\)/);
-  assert.match(renderWorkHistory, /appendStudioNavigatorRecentGroups\(studioWorkRecentList,groups\)/);
-  assert.doesNotMatch(renderWorkHistory, /studioNavigatorSectionLabel/);
-  const navigatorCanvasPreview=functionSource(navigator, "studioNavigatorCanvasPreview");
-  assert.match(navigatorCanvasPreview, /item\?\.preview instanceof Blob[\s\S]*?urls\.set\(url, image\)[\s\S]*?image\.onerror[\s\S]*?urls\.delete\(url\)/);
-  assert.doesNotMatch(navigatorCanvasPreview, /image\.onload\s*=/);
-  const releaseNavigatorPreviewUrls=functionSource(navigator,"releaseStudioNavigatorPreviewUrls"),
-    revokeNavigatorPreviewUrlWhenSettled=functionSource(navigator,"revokeStudioNavigatorPreviewUrlWhenSettled");
-  assert.match(releaseNavigatorPreviewUrls, /entries = \[\.\.\.urls\][\s\S]*?urls\.clear\(\)[\s\S]*?queueMicrotask[\s\S]*?revokeStudioNavigatorPreviewUrlWhenSettled\(url, image\)/);
-  assert.match(revokeNavigatorPreviewUrlWhenSettled, /image\.complete[\s\S]*?addEventListener\("load", revoke\)[\s\S]*?addEventListener\("error", revoke\)/);
-  assert.match(navigator, /className="studio-navigator-conversation-entry"[\s\S]*?className="studio-navigator-session-delete"/);
-  assert.match(functionSource(navigator, "openStudioSessionDeleteDialog"), /studioSessionDeletePending=[\s\S]*?studioSessionDeleteDialog\.showModal\(\)[\s\S]*?studioSessionDeleteCancel\.focus/);
-  assert.match(functionSource(navigator, "confirmStudioSessionDelete"), /canvasAgentDeleteStoredConversation\(studioSessionDeletePending\.canvasKey,studioSessionDeletePending\.conversationId\)/);
-  assert.match(functionSource(navigator, "openStudioConversation"), /requestLoadSnapshot\(identity\.id,identity\.location\)/);
-  assert.match(functionSource(navigator, "openStudioConversationOnCurrentCanvas"), /canvasAgentHistoryForCanvas\(pending\.canvasKey\)[\s\S]*?openCanvasAgent\(\{focus:false,connect:false\}\)[\s\S]*?canvasAgentViewStoredConversation\(conversation\.id\)/);
-  const collapseNavigator = functionSource(navigator, "collapseStudioNavigatorForWorkspaceFocus");
-  assert.match(collapseNavigator, /studioNavigatorIsOpen\(\)[\s\S]*?studioNavigator\.contains\(target\)[\s\S]*?studioNavigatorToggle\.contains\(target\)[\s\S]*?setStudioNavigatorOpen\(false\)/);
-  assert.match(functionSource(navigator, "collapseStudioNavigatorForWorkspaceFocus"), /if \(!studioNavigatorIsCompact\(\)\) return false/);
-  assert.match(navigator, /document\.addEventListener\("pointerdown", collapseStudioNavigatorForWorkspaceFocus, true\)/);
-  assert.match(navigator, /document\.addEventListener\("focusin", collapseStudioNavigatorForWorkspaceFocus\)/);
-  assert.doesNotMatch(navigator, /(?:view|canvasAgentPanel)\.addEventListener\("(?:pointerdown|focusin)", collapseStudioNavigatorForWorkspaceFocus/);
-  assert.match(functionSource(navigator, "studioNavigatorCanvasDidLoad"), /openStudioConversationOnCurrentCanvas\(studioNavigatorPendingConversation\)/);
-  assert.match(functionSource(navigator,"renderStudioCanvasHistory"), /studioNavigatorWorkGroups\(\)/);
-  assert.match(navigator, /requestLoadSnapshot\(identity\.id,identity\.location\)/);
-  assert.match(navigator, /openHistoryPanel\(\)/);
-  assert.match(functionSource(navigator, "updateStudioNavigatorSurfaceInert"), /const blocked = false[\s\S]*?view\.inert = false/);
-  assert.match(functionSource(navigator,"handleStudioNavigatorCompactChange"), /studioNavigatorIsOpen\(\)[\s\S]*?studioNavigatorIsCompact\(\)\)suspendStudioAgentForNavigator\(\)[\s\S]*?restoreStudioAgentAfterNavigator\(\)/);
-  assert.match(functionSource(navigator,"studioNavigatorAgentWillOpen"), /studioNavigatorIsCompact\(\)[\s\S]*?setStudioNavigatorOpen\(false,\{restoreAgent:false\}\)/);
-  const setNavigatorOpen=navigator.slice(navigator.indexOf("function setStudioNavigatorOpen("),navigator.indexOf("function syncStudioNavigatorTheme(")), scheduleNavigatorOpen=functionSource(navigator,"scheduleStudioNavigatorOpenWork"), renderNavigator=functionSource(navigator,"renderStudioNavigator"), syncNavigatorTheme=functionSource(navigator,"syncStudioNavigatorTheme");
-  assert.match(setNavigatorOpen, /classList\.toggle\("studio-navigator-open"[\s\S]*?updateStudioNavigatorA11y\(\{ deferSurface:studioNavigatorIsStudio\(\) \}\)[\s\S]*?scheduleStudioNavigatorOpenWork\(open, \{ restoreAgent \}\)/);
-  assert.doesNotMatch(setNavigatorOpen, /renderStudioNavigator\(|refreshStudioNavigatorSources\(/);
-  assert.match(scheduleNavigatorOpen, /property = studioNavigatorIsMcpDocked\(\) \? "opacity" : "transform"[\s\S]*?propertyName === property[\s\S]*?addEventListener\("transitionend"[\s\S]*?setTimeout\(settle, STUDIO_NAVIGATOR_SETTLE_FALLBACK_MS\)/);
-  assert.match(scheduleNavigatorOpen, /updateStudioNavigatorA11y\(\)[\s\S]*?renderStudioNavigator\(\)[\s\S]*?refreshStudioNavigatorSources\(\)/);
-  assert.doesNotMatch(scheduleNavigatorOpen, /studioNavigatorSearch\.focus/);
-  assert.match(renderNavigator, /setStudioNavigatorTab\(studioNavigatorActiveTab, \{ persist:false \}\)/);
-  assert.doesNotMatch(renderNavigator, /renderStudioWorkHistory\(|renderStudioAgentHistory\(|renderStudioCanvasHistory\(/);
-  assert.match(syncNavigatorTheme, /wasActive = document\.body\.classList\.contains\("studio-navigator-enabled"\)[\s\S]*?if \(active && !wasActive\) renderStudioNavigator\(\)/);
-  assert.doesNotMatch(navigator, /canvasAgentBeginLocalConversation|canvasAgentStartNewConversation/);
-  assert.match(persistence, /function snapshotItemsForCurrentView\(\)/);
-  assert.match(functionSource(persistence, "renderStudioSnapshotLists"), /PenEchoStudioNavigator\?\.render\?\.\(\)/);
-  assert.doesNotMatch(functionSource(persistence, "renderStudioSnapshotLists"), /renderWork|renderCanvases|renderAgent/);
-  const renderActiveNavigator=functionSource(navigator,"renderActiveStudioNavigatorHistory"),
-    refreshNavigatorSource=navigator.slice(navigator.indexOf("async function refreshStudioNavigatorSource("),navigator.indexOf("function refreshStudioNavigatorSources("));
-  assert.match(renderActiveNavigator, /studioNavigatorActiveTab==="canvas"[\s\S]*?renderStudioCanvasHistory\(\)[\s\S]*?studioNavigatorActiveTab==="agent"[\s\S]*?renderStudioAgentHistory\(\)[\s\S]*?renderStudioWorkHistory\(\)/);
-  assert.doesNotMatch(refreshNavigatorSource, /renderStudioWorkHistory\(\)[\s\S]*?renderStudioCanvasHistory\(\)|renderStudioCanvasHistory\(\)[\s\S]*?renderStudioAgentHistory\(\)/);
-  assert.match(functionSource(persistence, "renderSnapshotList"), /renderStudioSnapshotLists\(\)[\s\S]*?renderStudioSnapshotLists\(\)/);
-  assert.match(persistence, /wantsConversationForCanvas\?\.\(\{ id:item\.id, location \}\)[\s\S]*?deferConversationStart:restoreStudioConversation/);
-  assert.match(functionSource(agent, "canvasAgentCanvasDidChange"), /deferConversationStart[\s\S]*?!deferConversationStart&&/);
-  assert.match(agent, /function canvasAgentStoredHistoryGroups\(\)/);
-  assert.match(agent, /PenEchoStudioNavigator\?\.renderAgent/);
-  assert.match(css, /body\[data-theme="studio"\] \.studio-navigator\s*\{[^}]*position:\s*absolute[^}]*inset:\s*var\(--studio-toolbar-height\) auto 0 0[^}]*width:\s*var\(--studio-navigator-width\)[^}]*flex:\s*0 0 auto[^}]*border-right:\s*0[^}]*background:\s*var\(--studio-glass\)[^}]*box-shadow:\s*4px 0 8px var\(--studio-chrome-shadow-color\)[^}]*backdrop-filter:\s*saturate\(1\.15\) blur\(20px\)/);
-  assert.match(css, /@media \(max-width: 1100px\)[\s\S]*?\.studio-navigator\s*\{[^}]*z-index:\s*45[^}]*box-shadow:\s*4px 0 8px var\(--studio-chrome-shadow-color\)/);
-  assert.match(css, /@media \(max-width: 1100px\)[\s\S]*?\.studio-navigator-scrim\s*\{[^}]*z-index:\s*44[^}]*background:\s*rgba\(20, 24, 34, \.16\)/);
-  assert.match(css, /not\(\.studio-navigator-open\) \.studio-navigator\s*\{[^}]*transform:\s*translateX\(-100%\)/);
-  assert.match(css, /\.studio-navigator-group-heading \.studio-navigator-item-icon\.canvas\s*\{[^}]*width:\s*40px[^}]*height:\s*28px[^}]*flex-basis:\s*40px/);
-  assert.match(css, /\.studio-navigator-group-heading \.studio-navigator-item-icon\.canvas img\s*\{[^}]*object-fit:\s*contain/);
-  assert.match(css, /\.studio-navigator-group-conversations\s*\{[^}]*border-left:\s*1px solid/);
-  assert.match(css, /\.studio-navigator-conversation\s*\{[^}]*min-height:\s*36px[^}]*padding:\s*2px 36px 2px 8px/);
-  assert.match(css, /\.studio-navigator-foot\s*\{[^}]*width:\s*var\(--studio-navigator-width\)[^}]*min-width:\s*0[^}]*margin:\s*0[^}]*overflow:\s*visible/);
-  assert.match(css, /\.studio-navigator-item-body strong\s*\{[^}]*font:\s*500 13px\/1\.25 var\(--studio-ui-font/);
-  assert.match(css, /\.studio-navigator-conversation-name\s*\{[^}]*text-overflow:\s*clip !important[^}]*mask-image:\s*linear-gradient\(to right,/);
-  assert.match(css, /\.studio-navigator-item-body strong[\s\S]*?color:\s*var\(--pe-ink\)[\s\S]*?\.studio-navigator-item-body small\s*\{[^}]*color:\s*var\(--pe-ink-3\)/);
-  assert.match(css, /#studioNavigatorManage\[data-pe-button="ghost"\][^}]*\{[^}]*flex:\s*0 0 auto[^}]*width:\s*auto[^}]*margin-left:\s*auto/);
-  assert.match(html, /id="studioNavigatorManage"[^>]*data-pe-button="ghost"/);
-  assert.doesNotMatch(css, /\.studio-navigator-item-icon\.agent|\.studio-navigator-item-summary/);
-  assert.match(css, /\.studio-navigator-session-delete\s*\{[^}]*width:\s*36px[^}]*height:\s*36px[^}]*opacity:\s*0[^}]*pointer-events:\s*none/);
-  assert.match(css, /\.studio-navigator-conversation-entry:focus-within \.studio-navigator-session-delete\s*\{[^}]*opacity:\s*1[^}]*pointer-events:\s*auto/);
-  assert.match(css, /\.studio-session-delete-dialog\s*\{[^}]*width:\s*min\(400px,[^}]*border-radius:\s*14px/);
-  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?\.studio-navigator\s*\{\s*transition:\s*none/);
-  for (const key of ["studioNavigatorTitle", "studioNavigatorAll", "studioNavigatorAgents", "studioNavigatorCanvases", "studioNavigatorCurrent", "studioNavigatorRecent", "studioNavigatorManageCanvases", "studioNavigatorSessionCount", "studioNavigatorCanvasUnavailable", "studioNavigatorDeleteSession", "studioNavigatorDeleteSessionAction", "studioNavigatorDeleteSessionConfirm"]) {
-    assert.match(app, new RegExp(`\\b${key}:\\s*"`));
-    assert.match(zh, new RegExp(`\\b${key}:\\s*"`));
-  }
-});
-
-test("Studio tablet edge swipes open the left and right sidebars without taking mouse or pen input", () => {
+test("a Studio tablet edge swipe opens the left sidebar without taking mouse or pen input", () => {
   const navigator = read("src/client/app/studio-navigator.js"),
     side = functionSource(navigator, "studioEdgeSwipeSide"),
     move = functionSource(navigator, "moveStudioEdgeSwipe");
@@ -3841,86 +3498,13 @@ test("Studio tablet edge swipes open the left and right sidebars without taking 
   assert.match(side, /event\.isPrimary === false/);
   assert.match(side, /state\.viewMode \|\| !studioNavigatorIsStudio\(\)/);
   assert.match(side, /studioEdgeSwipeInteractiveTarget\(event\.target\)/);
-  assert.match(side, /leftInset >= 0[\s\S]*?!studioNavigatorIsOpen\(\)[\s\S]*?return "left"/);
-  assert.match(side, /rightInset >= 0[\s\S]*?canvasAgentAvailable\(\)[\s\S]*?canvasAgentPanel\.hidden[\s\S]*?canvasAgentDockedPanel\(\)[\s\S]*?return "right"/);
+  assert.match(side, /leftInset >= 0 && leftInset <= STUDIO_EDGE_SWIPE_START_PX && !studioNavigatorIsOpen\(\) \? "left" : ""/);
+  assert.doesNotMatch(side, /rightInset|canvasAgent/, "nothing opens from the right edge");
   assert.match(move, /inward < STUDIO_EDGE_SWIPE_COMMIT_PX \|\| inward < deltaY \* STUDIO_EDGE_SWIPE_DIRECTION_RATIO/);
-  assert.match(move, /setStudioNavigatorOpen\(true\)[\s\S]*?openCanvasAgent\(\{ focus:false \}\)/);
+  assert.match(move, /setStudioNavigatorOpen\(true\)/);
+  assert.doesNotMatch(move, /openCanvasAgent/);
   assert.match(navigator, /view\.addEventListener\("pointerdown", beginStudioEdgeSwipe, true\)[\s\S]*?view\.addEventListener\("pointercancel", finishStudioEdgeSwipe, true\)/);
   assert.match(navigator, /studioNavigatorToggle\.addEventListener\("click"/);
-});
-
-test("stored Agent sessions can be deleted individually without touching sibling sessions", () => {
-  const agent = read("src/client/app/canvas-agent-runtime.js"), writes = [], context = {
-    canvasAgent:{projectId:"",currentConversation:{id:"keep"},requestPending:false,running:false},
-    state:{canvasAgentCanvasKey:"device:canvas-a"},
-    canvasAgentReadHistoryStore:() => ({
-      version:1,
-      canvasMeta:{"device:canvas-a":{name:"Canvas A",updatedAt:30}},
-      canvases:{"device:canvas-a":[{id:"delete",updatedAt:30,items:[{}]},{id:"keep",updatedAt:20,items:[{}]}]},
-    }),
-    canvasAgentNormalizeConversation:(value) => value,
-    canvasAgentRememberCanvasMeta:(store,key,value) => { store.canvasMeta[key]={name:value.name,updatedAt:value.updatedAt}; },
-    canvasAgentBeginLocalConversation:() => { throw Error("a sibling deletion must not reset the current session"); },
-    canvasAgentDropSessionIdentity:() => {},
-    canvasAgentSetStatus:() => {},
-    canvasAgentRenderHistoryList:() => {},
-    t:(key) => key,
-    localStorage:{setItem:(key,value) => writes.push([key,JSON.parse(value)])},
-    CANVAS_AGENT_HISTORY_KEY:"history",
-    result:null,
-  };
-  vm.runInNewContext(`${functionSource(agent,"canvasAgentDeleteStoredConversation")};result=canvasAgentDeleteStoredConversation("device:canvas-a","delete");`,context);
-  assert.equal(context.result.deleted,true);
-  assert.deepEqual(writes[0][1].canvases["device:canvas-a"].map(item=>item.id),["keep"]);
-  assert.equal(writes[0][1].canvasMeta["device:canvas-a"].updatedAt,20);
-});
-
-test("deleting the current stored Agent session is blocked while busy and resets only after deletion", () => {
-  const agent = read("src/client/app/canvas-agent-runtime.js"), writes = [], calls = [], context = {
-    canvasAgent:{projectId:"",currentConversation:{id:"current"},requestPending:true,running:false},
-    state:{canvasAgentCanvasKey:"device:canvas-a"},
-    canvasAgentReadHistoryStore:() => ({version:1,canvasMeta:{"device:canvas-a":{name:"Canvas A",updatedAt:30}},canvases:{"device:canvas-a":[{id:"current",updatedAt:30,items:[{}]}]}}),
-    canvasAgentNormalizeConversation:(value) => value,
-    canvasAgentRememberCanvasMeta:() => {},
-    canvasAgentBeginLocalConversation:(options) => calls.push(["begin",options]),
-    canvasAgentDropSessionIdentity:() => calls.push(["drop"]),
-    canvasAgentSetStatus:(text,status) => calls.push(["status",text,status]),
-    canvasAgentRenderHistoryList:() => calls.push(["render"]),
-    t:(key) => key,
-    localStorage:{setItem:(key,value) => writes.push([key,JSON.parse(value)])},
-    CANVAS_AGENT_HISTORY_KEY:"history",
-    first:null,
-    second:null,
-  };
-  vm.runInNewContext(`${functionSource(agent,"canvasAgentDeleteStoredConversation")};first=canvasAgentDeleteStoredConversation("device:canvas-a","current");canvasAgent.requestPending=false;second=canvasAgentDeleteStoredConversation("device:canvas-a","current");`,context);
-  assert.equal(context.first.reason,"busy");
-  assert.equal(context.second.deleted,true);
-  assert.equal(writes.length,1);
-  assert.equal(writes[0][1].canvases["device:canvas-a"],undefined);
-  assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),["begin",{persistCurrent:false}]);
-  assert.deepEqual(calls.slice(1),[["drop"],["status","canvasAgentReadyConnect","ready"]]);
-});
-
-test("stored Agent canvas groups and their conversations are newest first", () => {
-  const agent = read("src/client/app/canvas-agent-runtime.js"), context = {
-    CANVAS_AGENT_HISTORY_LIMIT:5,
-    canvasAgentReadHistoryStore:() => ({
-      version:1,
-      canvasMeta:{"device:older":{name:"Older",updatedAt:20},"device:newer":{name:"Newer",updatedAt:90}},
-      canvases:{
-        "device:older":[{id:"old",createdAt:10,updatedAt:20,title:"Old",items:[{}]}],
-        "device:newer":[{id:"second",createdAt:40,updatedAt:70,title:"Second",items:[{}]},{id:"first",createdAt:50,updatedAt:90,title:"First",items:[{}]}],
-      },
-    }),
-    canvasAgentNormalizeConversation:(value) => value,
-    canvasAgentHistoryText:(value,limit) => String(value||"").slice(0,limit),
-    result:null,
-  };
-  vm.runInNewContext(`${functionSource(agent,"canvasAgentStoredHistoryGroups")};result=canvasAgentStoredHistoryGroups();`,context);
-  const groups=JSON.parse(JSON.stringify(context.result));
-  assert.deepEqual(groups.map(group=>group.canvasKey),["device:newer","device:older"]);
-  assert.deepEqual(groups[0].conversations.map(conversation=>conversation.id),["first","second"]);
-  assert.equal(groups[0].name,"Newer");
 });
 
 test("the canvas fills the available browser viewport consistently across themes", () => {
@@ -3929,7 +3513,7 @@ test("the canvas fills the available browser viewport consistently across themes
   assert.match(css, /\.canvas-frame\s*\{[^}]*display:\s*flex;[^}]*min-height:\s*0;[^}]*flex:\s*1 1 auto/);
   assert.match(css, /#viewport\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*440px;[^}]*flex:\s*1 1 auto/);
   assert.doesNotMatch(css, /#viewport\s*\{[^}]*(?:height:\s*(?:min\([^}]*vh|[0-9]+vh)|900px|960px)/);
-  assert.doesNotMatch(css, /body\[data-theme="studio"\]\s+#viewport\s*\{[^}]*height:/);
+  assert.doesNotMatch(css, /body\[data-theme="studio"\]\s+#viewport\s*\{[^}]*(?<![a-z-])height:(?!\s*auto)/, "Studio may only say again that the height follows the frame");
   assert.match(css, /@media \(max-width:\s*620px\)\s*\{[\s\S]*?#viewport\s*\{\s*min-height:\s*380px;\s*\}/);
 });
 
@@ -3937,9 +3521,10 @@ test("PNG export crops to all ink with one tile of padding at 1.5x browser-local
   const html = read("public/index.html"), app = read("public/app.js"), ink = functionSource(app, "exportInkBounds"), region = functionSource(app, "exportRegion"), render = functionSource(app, "renderExportCanvas"), run = functionSource(app, "exportCanvasPng");
   assert.match(ink, /inkBox\(tileCanvas/);
   assert.doesNotMatch(ink, /visibleInkBounds/);
-  assert.match(region, /Math\.floor\(ink\.x\) - TILE/);
-  assert.match(region, /Math\.ceil\(ink\.x \+ ink\.w\) \+ TILE/);
-  assert.match(region, /Math\.ceil\(ink\.y \+ ink\.h\) \+ TILE/);
+  assert.match(region, /exportRegion\(padding = TILE\)/);
+  assert.match(region, /Math\.floor\(ink\.x\) - padding/);
+  assert.match(region, /Math\.ceil\(ink\.x \+ ink\.w\) \+ padding/);
+  assert.match(region, /Math\.ceil\(ink\.y \+ ink\.h\) \+ padding/);
   assert.match(app, /CANVAS_DOWNLOAD_RESOLUTION_SCALE = 1\.5,[\s\S]*?EXPORT_MAX_DIMENSION = 16384,[\s\S]*?EXPORT_MAX_PIXELS = 64 \* 1024 \* 1024/);
   assert.doesNotMatch(app, /EXPORT_TARGET_SCALE|function exportPixelScale/);
   assert.match(render, /ensureWidgetSnapshots\([^;]*capturableWidgets\(null\), \{ highResolution:true, currentFrame:Boolean\(selected\) \}\)/);
@@ -4004,7 +3589,7 @@ test("toolbar exposes reasoning presets and an editable provider-native value be
   const section = html.indexOf('id="aiToolsSection"'), auto = html.indexOf('id="autoControl"'), effort = html.indexOf('id="effortControl"'), font = html.indexOf('id="aiFont"'), pen = html.indexOf('data-mode="pen"'), fullscreen = html.indexOf('id="fullscreenBtn"'), grid = html.indexOf('id="gridToggle"');
   assert.ok(section < auto && auto < effort && effort < pen && pen < font);
   assert.ok(pen < fullscreen && fullscreen < grid);
-  assert.match(html, /id="aiToolsSection"[^>]*data-i18n-aria="aiTools"[\s\S]*?class="ai-section-label"[^>]*>AI<\/button>/);
+  assert.match(html, /id="aiToolsSection"[^>]*data-i18n-aria="aiTools"[\s\S]*?id="aiToolbarRun"[^>]*data-shell-forward="#aiOrb"[^>]*>Run AI<\/button>/);
   assert.match(html, /class="settings-row"[\s\S]*?data-i18n="aiFont"[\s\S]*?id="aiFont"/);
   assert.match(css, /\.ai-tools-section\s*\{/);
   assert.match(css, /\.view-tools\s*\{/);
@@ -4401,7 +3986,7 @@ test("eraser strokes shrink retained dirty input without becoming new AI instruc
     activeDrawing = functionSource(app, "updateActiveCanvasDrawing");
   assert.match(pointerMove, /if \(e\.pointerType !== "touch"\) updateWidgetRefinePointer\(clientPoint\(e\)\)/);
   assert.match(pointerMove, /if \(updateActiveCanvasDrawing\(e\)\) return/);
-  assert.match(activeDrawing, /if \(!d \|\| d\.id !== e\.pointerId\) return false[\s\S]*?appendLiveInkSample\(d, p, size\)[\s\S]*?commitLiveInkDrawingProgress\(d\)/);
+  assert.match(activeDrawing, /if \(!d \|\| d\.id !== e\.pointerId\) return false[\s\S]*?addCanvasDrawingPoint\(d, p, cssSize\)[\s\S]*?commitLiveInkDrawingProgress\(d\)/);
   assert.match(app, /const shouldRequest = !d\.erase/);
   assert.match(app, /if \(shouldRequest\) \{\s*for \(const point of d\.trail\) state\.hotspotTrail\.push\(point\)/);
   assert.match(app, /recomputeDirtyBounds\(\);\s*filterErasedDirtyHotspots\(d\.dirtyMaskTouched\);\s*refineCandidate = relatchWidgetRefineCandidateFromDirty\(\)/);
@@ -4622,8 +4207,8 @@ test("the magic orb becomes a device-scoped stop button while an AI request is a
   assert.match(css, /\.ai-embodiment\.working \.ai-stop-icon\s*\{[^}]*display:\s*block/);
   assert.match(css, /\.ai-stop-icon\s*\{[^}]*width:\s*11px;[^}]*height:\s*11px;[^}]*border-radius:\s*2px;[^}]*background:\s*currentColor;[^}]*box-shadow:\s*none/);
   assert.doesNotMatch(css, /\.ai-stop-icon::before|\.ai-stop-icon::after|\.ai-stop-icon\s*\{[^}]*background:\s*#fff/);
-  assert.match(zh, /triggerAutoAI:\s*"立即运行 Auto AI"/);
-  assert.match(zh, /stopAIRequest:\s*"停止当前 AI 请求"/);
+  assert.match(zh, /triggerAutoAI:\s*"运行 AI"/);
+  assert.match(zh, /stopAIRequest:\s*"停止 AI"/);
   assert.doesNotMatch(`${app}\n${css}`, /radial-action|openRadialMenu|closeRadialMenu|menu-open/);
   assert.doesNotMatch(stop, /fetch\(|\/api\//);
   assert.match(supersede, /reason === "user-stop"[\s\S]*?restoreDirty\(active\.dirtySnapshot\)[\s\S]*?refreshWidgetRefineHoverCandidate\(\)/);
@@ -5041,15 +4626,12 @@ test("a multi-tool AI draft has one uniform group corner resize", () => {
   assert.ok(bounded.x + bounded.w <= 800 && bounded.y + bounded.h <= 800);
 });
 
-test("PenEcho Agent internet search is configured in Settings and toggled beside attachments", () => {
+test("PenEcho Agent internet search is configured in Settings, and is on whenever it is set up", () => {
   const html=read("public/index.html"),app=read("public/app.js"),server=read("src/server/main.js"),runtime=read("src/server/canvas-agent/runtime.mjs"),css=read("public/style.css"),zh=read("public/locales/zh.js");
-  for(const id of ["settingsOpenSearch","settingsSearchEntryStatus","settingsDeepSeekSearchProvider","settingsOpenCodeGoSearchSetup","settingsDeepSeekSearchApiKey","settingsDeepSeekSearchSaved","settingsTavilyApiKey","settingsTavilySaved","settingsDuckDuckGoReady","settingsSearchTestResults","settingsSearchTestFlashLabel","settingsTestSearch","canvasAgentSearch"]) assert.match(html,new RegExp(`id="${id}"`));
-  assert.ok(html.indexOf('id="canvasAgentAttach"')<html.indexOf('id="canvasAgentSearch"'));
-  assert.ok(html.indexOf('id="canvasAgentSearch"')<html.indexOf('id="canvasAgentFileInput"'));
+  for(const id of ["settingsOpenSearch","settingsSearchEntryStatus","settingsDeepSeekSearchProvider","settingsOpenCodeGoSearchSetup","settingsDeepSeekSearchApiKey","settingsDeepSeekSearchSaved","settingsTavilyApiKey","settingsTavilySaved","settingsDuckDuckGoReady","settingsSearchTestResults","settingsSearchTestFlashLabel","settingsTestSearch"]) assert.match(html,new RegExp(`id="${id}"`));
   assert.match(app,/settingsOpenSearch\?\.addEventListener\("click", \(\) => openConfiguration\("search"\)\)/);
-  assert.match(app,/canvasAgentSearch\.setAttribute\("aria-disabled",String\(!canvasAgent\.searchConfigured\)\)/);
-  assert.match(app,/canvasAgentSearch\.dataset\.tooltip = canvasAgent\.searchConfigured \? "" : label/);
-  assert.match(app,/localStorage\.getItem\(CANVAS_AGENT_SEARCH_ENABLED_KEY\) !== "false"/);
+  assert.match(app,/canvasAgent\.searchConfigured = canvasAgent\.searchEnabled = Boolean\(configured\)/);
+  assert.doesNotMatch(app,/penecho-canvas-agent-search-enabled/,"no switch of its own is remembered");
   assert.match(app,/settingsTestSearch\?\.addEventListener\("click", \(\) => void testCanvasSearch\(\)\)/);
   assert.match(app,/fetch\("\/api\/settings\/search\/test"/);
   assert.ok(html.indexOf('id="settingsSearchTestResults"')<html.indexOf('id="settingsTestSearch"'));
@@ -5074,8 +4656,6 @@ test("PenEcho Agent internet search is configured in Settings and toggled beside
   assert.match(runtime,/name:'stock_market_data'/);
   assert.match(runtime,/export async function testCanvasSearchProviders/);
   assert.match(runtime,/include_answer:false, include_raw_content:false, include_images:false/);
-  assert.match(css,/\.canvas-agent-composer \.canvas-agent-search\.active \{ color: var\(--studio-accent, #4f46e5\); background: transparent; \}/);
-  assert.match(css,/content: attr\(data-tooltip\)/);
   assert.match(css,/\.settings-search-test-results output\[data-state="available"\]/);
   for(const text of ["互联网搜索","Flash 密钥来源","OpenCode Go","中国托管的 DeepSeek 模型","复制 Go API 密钥","Flash 搜索 API 密钥","Tavily API 密钥","DuckDuckGo 后备已就绪","当前搜索状态","测试搜索","尚未测试","未配置","可用 · 已返回结果","内置搜索已就绪","查询股票数据"]) assert.match(zh,new RegExp(text));
 });
@@ -5216,6 +4796,7 @@ test("opening Widget toolbar keeps canonical front order when Interact hides its
       state = {widgets:[rear,front],userRevision:0,mode:"select",frontCanvasObjectKind:"image",handToolbarTargets:new Map()},
       selectedWidgetMaterial = {hidden:false,classList:{remove(){}}}, styles = new Map(),
       context = vm.createContext({state,selectedWidgetMaterial,Date,Set,
+        syncCanvasPlacedInputRegions() {},
         HAND_OBJECT_TOOLBAR_VISIBLE_MS:10000,
         widgetLayer:{},imageMaterialLayer:{},placedContentLayer:{},textEditorLayer:{},
         runtimeElementStyle:(_,key)=>{if(!styles.has(key))styles.set(key,{setProperty(){}});return styles.get(key);},
@@ -5262,4 +4843,124 @@ test("widget corner resizing anchors the opposite corner and respects canvas bou
     assert.ok(bounded.x >= 0 && bounded.y >= 0 && bounded.x+bounded.w <= 20000 && bounded.y+bounded.h <= 20000);
     assert.ok(Math.abs(bounded.w/bounded.h - 1.5) < 0.0001);
   }
+});
+
+test("a Cloud guest's title row ends with Sign in and Sign up, and Sign up is its one filled button", () => {
+  const html = read("public/index.html"), css = read("public/studio-shell.css"), boot = read("src/client/app/ui-bootstrap.js"), core = read("src/client/app/core.js"), zh = read("public/locales/zh.js");
+  const actions = html.match(/<span id="guestAccountActions"[\s\S]*?<\/span>/)?.[0] || "";
+  assert.match(actions, /^<span id="guestAccountActions" class="guest-account-actions" hidden>/, "hidden until a guest opens the page");
+  assert.match(actions, /<button id="guestSignInBtn" type="button" data-i18n="guestSignIn"[^>]*data-pe-button="ghost"/);
+  assert.match(actions, /<button id="guestSignUpBtn" type="button" data-i18n="guestSignUp"[^>]*data-pe-button="primary"/);
+  assert.ok(html.indexOf('id="guestAccountActions"') > html.indexOf('id="settingsBtn"'), "after every other title-row control");
+  assert.match(core, /guestSignIn: "Sign in",\s*guestSignUp: "Sign up",/);
+  assert.match(zh, /guestSignIn: "登录",\s*guestSignUp: "注册",/);
+  assert.match(boot, /#guestAccountActions"\)\.hidden = !canvasGuest\(\);/);
+  assert.match(boot, /#guestSignUpBtn"\)\.onclick = \(\) => canvasGuestSignIn\(\{ signup:true \}\);/);
+  // The account button and Save give way to them, and Share is outlined beside Sign up.
+  assert.match(css, /:root\[data-penecho-guest-ai="true"\] body \.topbar :is\(#cloudAccountBtn, #saveCanvasBtn\) \{ display: none !important; \}/);
+  assert.match(css, /:root\[data-penecho-guest-ai="true"\] body\[data-theme="studio"\] \.topbar #shareCanvasBtn \{[^}]*background: transparent;/);
+});
+
+test("app start page defaults to hand tool and keeps the intro visible on hand clicks or drags", () => {
+  const persistence = read("src/client/app/persistence.js");
+  const bridge = read("src/client/app/project-lines-bridge.js");
+  const boot = read("src/client/app/ui-bootstrap.js");
+
+  // 1. resetCanvasDefaultMode picks hand while the app start page is open, and pen on an empty Canvas once closed.
+  const modes = [];
+  const win = { projectLinesWelcomeOpen: true, projectLinesWelcomeSync: () => {} };
+  const tiles = new Map();
+  const state = { mode: "pen", viewMode: false, spacePan: false, images: [], textBoxes: [], preservedSnapshotAnimations: [], animations: [] };
+  const reset = vm.runInNewContext(`(${functionSource(persistence, "resetCanvasDefaultMode")})`, {
+    window: win,
+    tiles,
+    state,
+    pluginEnabled: () => true,
+    visibleWidgets: () => [],
+    setCanvasMode: (mode) => { state.mode = mode; modes.push(mode); },
+  });
+  reset();
+  assert.equal(state.mode, "hand", "empty Canvas under app start page defaults to hand");
+  win.projectLinesWelcomeOpen = false;
+  reset();
+  assert.equal(state.mode, "pen", "empty Canvas without app start page defaults to pen");
+  tiles.set("0,0", {});
+  reset();
+  assert.equal(state.mode, "hand", "Canvas with content defaults to hand");
+
+  // 2. Startup and leaving the start page both sync the tool mode.
+  assert.match(boot, /if \(window\.projectLinesWelcomeOpen && !state\.viewMode\) setCanvasMode\("hand"/);
+  assert.match(bridge, /if \(window\.projectLinesWelcomeOpen && !state\.viewMode && state\.mode === "pen"\) resetCanvasDefaultMode\(\);/);
+  assert.match(functionSource(bridge, "projectLinesPutAway"), /window\.projectLinesWelcomeOpen = false;[\s\S]*?window\.projectLinesWelcomeSync\?\.\(\);[\s\S]*?if \(state\.mode === "hand" && !state\.viewMode\) resetCanvasDefaultMode\(\);/);
+
+  // 3. projectLinesBindDrawing keeps the intro visible in hand mode (both empty and pls-kept) and hides it only when drawing in a drawing mode.
+  const classes = new Set();
+  const welcome = {
+    hidden: false,
+    classList: {
+      add: (c) => classes.add(c),
+      remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c),
+    },
+  };
+  const screen = { closest: () => null };
+  const viewportListeners = new Map();
+  const windowListeners = new Map();
+  let syncCalls = 0;
+  win.projectLinesWelcomeOpen = true;
+  win.projectLinesWelcomeSync = () => { syncCalls++; };
+  state.mode = "hand";
+  let selectToolCalls = 0;
+  const bind = vm.runInNewContext(`(${functionSource(bridge, "projectLinesBindDrawing")})`, {
+    window: win,
+    state,
+    screen,
+    projectLinesTarget: null,
+    projectLinesMakingCanvas: false,
+    projectLinesRenderEntry: () => {},
+    selectCanvasToolMode: (m) => { selectToolCalls++; state.mode = m; },
+    MutationObserver: class { observe() {} },
+    document: {
+      querySelector: (sel) => sel === "#canvasWelcome" ? welcome : sel === "#viewport" ? {
+        addEventListener: (type, fn) => viewportListeners.set(type, fn),
+      } : null,
+    },
+    addEventListener: (type, fn) => windowListeners.set(type, fn),
+  });
+  bind();
+  const pointerdown = viewportListeners.get("pointerdown");
+  const pointerup = windowListeners.get("pointerup");
+
+  // Hand click on empty start page: stays in hand mode, no pls-drawing, intro stays open.
+  let prevented = false, stopped = false;
+  pointerdown({ target: screen, pointerType: "mouse", button: 0, altKey: false, preventDefault() { prevented = true; }, stopImmediatePropagation() { stopped = true; } });
+  pointerup();
+  assert.equal(state.mode, "hand");
+  assert.equal(selectToolCalls, 0);
+  assert.equal(classes.has("pls-drawing"), false);
+  assert.equal(win.projectLinesWelcomeOpen, true);
+  assert.equal(syncCalls, 0);
+  assert.equal(prevented, false);
+
+  // Hand click on kept-Canvas start page: still stays in hand mode, intro stays open, and hidden canvas underneath is shielded.
+  classes.add("pls-kept");
+  pointerdown({ target: screen, pointerType: "mouse", button: 0, altKey: false, preventDefault() { prevented = true; }, stopImmediatePropagation() { stopped = true; } });
+  pointerup();
+  assert.equal(state.mode, "hand");
+  assert.equal(selectToolCalls, 0);
+  assert.equal(classes.has("pls-drawing"), false);
+  assert.equal(win.projectLinesWelcomeOpen, true);
+  assert.equal(syncCalls, 0);
+  assert.equal(prevented, true);
+  assert.equal(stopped, true);
+
+  // Explicit switch to pen + draw on screen: fades intro during stroke and puts it away on lift.
+  state.mode = "pen";
+  prevented = false; stopped = false;
+  pointerdown({ target: screen, pointerType: "mouse", button: 0, altKey: false, preventDefault() { prevented = true; }, stopImmediatePropagation() { stopped = true; } });
+  assert.equal(classes.has("pls-drawing"), true);
+  assert.equal(win.projectLinesWelcomeOpen, false);
+  pointerup();
+  assert.equal(classes.has("pls-drawing"), false);
+  assert.equal(syncCalls, 1);
 });

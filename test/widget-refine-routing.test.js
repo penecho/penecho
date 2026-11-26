@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const SMART = require("../public/smart-suggest.js"), route = SMART.widgetRefineRoute;
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -6,22 +7,22 @@ const widget = (html, extra = {}) => ({ id:"existing", widgetType:"html_widget",
 
 test("structured source markers win over general/html metadata; names and comments do not", () => {
   for (const id of ["architecture", "sequence", "workflow"]) {
-    assert.deepEqual(route(widget(`<section data-penecho-${id}><script type="application/json" data-${id}-source>{}</script></section>`)), { executor:"penecho_agent", reason:"structured-diagram", guidance:[id] });
+    assert.deepEqual(route(widget(`<section data-penecho-${id}><script type="application/json" data-${id}-source>{}</script></section>`)), { executor:"sidebar_task", reason:"structured-diagram", guidance:[id] });
   }
   assert.equal(route(widget('<p>architecture workflow</p><!-- <section data-penecho-architecture> -->', { title:"Flowchart" })).executor, "canvas_ai");
   for (const extra of [{ widgetType:"diagram_source" }, { pluginId:"flowchart" }, { sourceFormat:"dot" }, { frameworkVersion:"penecho-professional-diagrams-v1" }]) assert.equal(route(widget("", extra)).reason, "professional-diagram");
-  assert.equal(route(widget("<svg></svg>",{diagramKind:"sequence"})).executor,"penecho_agent");
+  assert.equal(route(widget("<svg></svg>",{diagramKind:"sequence"})).executor,"sidebar_task");
   assert.deepEqual(route(widget("", { sourceFormat:"penecho-scene+json" })).guidance, ["scene"]);
   assert.deepEqual(route(widget("", { sourceFormat:"penecho-visual-explainer-plan+json" })).guidance, ["visual-explorer"]);
 });
-test("clock timers, local controls and embedded images stay fast; executable complexity goes to Agent", () => {
+test("clock timers, local controls and embedded images stay fast; executable complexity goes to the sidebar", () => {
   assert.equal(route(widget('<svg></svg><script>setInterval(update,1000);'+" ".repeat(5858)+'</script>')).executor, "canvas_ai");
   assert.equal(route(widget('<button>Clock</button><img src="data:image/png;base64,'+"a".repeat(30000)+'">')).executor, "canvas_ai");
-  for (const html of ['<script>fetch("/api/data")</script>', '<script src="https://example.com/runtime.js"></script>', '<script>new WebSocket("wss://example.com")</script>', '<script>'+" ".repeat(12001)+'</script>']) assert.equal(route(widget(html)).executor, "penecho_agent");
-  for (const actionId of ["fix_error", "add_controls"]) assert.equal(route(widget("<p>Clock</p>"), { actionId }).executor, "penecho_agent");
-  assert.equal(route(widget("", { runtimeDiagnostics:{ errors:[{ message:"error" }] } })).executor, "penecho_agent");
+  for (const html of ['<script>fetch("/api/data")</script>', '<script src="https://example.com/runtime.js"></script>', '<script>new WebSocket("wss://example.com")</script>', '<script>'+" ".repeat(12001)+'</script>']) assert.equal(route(widget(html)).executor, "sidebar_task");
+  for (const actionId of ["fix_error", "add_controls"]) assert.equal(route(widget("<p>Clock</p>"), { actionId }).executor, "sidebar_task");
+  assert.equal(route(widget("", { runtimeDiagnostics:{ errors:[{ message:"error" }] } })).executor, "sidebar_task");
   for (const instruction of ["Make the button blue", "Colorful", "Date", "把文字放大", "增加日期"]) assert.equal(route(widget(""), { instruction }).executor, "canvas_ai");
-  for (const instruction of ["Add drag interaction", "增加暂停播放控制", "修复计算逻辑", "Connect to an API"]) assert.equal(route(widget(""), { instruction }).executor, "penecho_agent");
+  for (const instruction of ["Add drag interaction", "增加暂停播放控制", "修复计算逻辑", "Connect to an API"]) assert.equal(route(widget(""), { instruction }).executor, "sidebar_task");
 });
 function centralHarness(html) {
   const w = widget(html, { x:100, y:100, w:400, h:300 }), calls = [], dirty = { x:490, y:200, w:70, h:80 };
@@ -30,23 +31,23 @@ function centralHarness(html) {
     viewportRect:()=>({ x:0, y:0, w:1000, h:800 }), intersection:(_a,b)=>b===dirty?dirty:_a,
     widgetBox:()=>({ x:w.x, y:w.y, w:w.w, h:w.h }), unionLocalBounds:(a,b)=>!b ? {...a} : ({ x:Math.min(a.x,b.x), y:Math.min(a.y,b.y), w:Math.max(a.x+a.w,b.x+b.w)-Math.min(a.x,b.x), h:Math.max(a.y+a.h,b.y+b.h)-Math.min(a.y,b.y) }),
     widgetEditContext:(_widget,instructionMode,options)=>({ html, instructionMode, ...options }), requestAI:(_id,_selection,options)=>calls.push({ executor:"canvas_ai", options }),
-    assistAgentRun:async(id,target,options)=>{ calls.push({ executor:"penecho_agent", id, target, options }); return "submitted"; },
+    projectLinesCanAsk:()=>true, assistSaveSidebarTask:async(target,instruction)=>{ calls.push({ executor:"sidebar_task", target, instruction }); return true; },
   };
   vm.createContext(context);
   const source = fs.readFileSync("src/client/app/canvas-runtime.js", "utf8").match(/  function requestWidgetRefinement\([^]*?\n  \}/)[0];
   vm.runInContext(source, context);
   return { context, w, calls, dirty };
 }
-test("central Refine preserves annotations, includes nearby ink, and handles unavailable or busy Agent", async () => {
+test("central Refine preserves annotations, includes nearby ink, and handles an unsuccessful task save", async () => {
   const h = centralHarness('<section data-penecho-architecture></section>');
   assert.equal(await h.context.requestWidgetRefinement(h.w,"nearby-dirty",{ actionId:"apply_marks" }),true);
-  assert.equal(h.calls.length,1);assert.equal(h.calls[0].executor,"penecho_agent");
+  assert.equal(h.calls.length,1);assert.equal(h.calls[0].executor,"sidebar_task");
   assert.deepEqual(plain(h.calls[0].target.box),{ x:100,y:100,w:460,h:300 });
-  assert.deepEqual(plain(h.calls[0].target.refinement.route.guidance),["architecture"]);
+  assert.equal(h.calls[0].target.widget,h.w);
   assert.equal(h.context.state.dirty,h.dirty);
-  h.context.assistAgentRun=async()=>"blocked";
+  h.context.assistSaveSidebarTask=async()=>false;
   assert.equal(await h.context.requestWidgetRefinement(h.w,"nearby-dirty"),false);
-  assert.equal(h.calls.length,1,"blocked Agent never falls back to a one-shot Canvas AI rewrite");
+  assert.equal(h.calls.length,1,"a failed save never falls back to a one-shot Canvas AI rewrite");
   h.context.assistAgent.preparing=true;
   assert.equal(h.context.requestWidgetRefinement(h.w,"nearby-dirty"),false);
   const simple=centralHarness('<script>setInterval(update,1000)</script>');
@@ -71,7 +72,7 @@ test("Widget Refine sends all distant and offscreen dirty to only the selected W
       assert.equal(request.target.widget,h.w);
       assert.equal(request.target.refinement.instructionMode,"canvas-dirty");
       assert.deepEqual(plain(request.target.box),box);
-      assert.match(request.options.instruction,/all pending user content.*distant handwriting, text and images/);
+      assert.match(request.instruction,/all pending user content.*distant handwriting, text and images/);
     }
     assert.equal(h.context.state.dirty,dirty,"preparation never consumes the instructions");
   }
@@ -97,7 +98,7 @@ test("typed Widget Ask uses central routing without PenEchoLLM classification", 
 
 test("Widget animation explanation, sketch animation and illustration create variants for every source format",()=>{
   for(const sourceFormat of ["html","penecho-note-card+json","penecho-scene+json","mermaid"])for(const actionId of ["animate","animate_sketch","vivid"]){
-    assert.deepEqual(route(widget("<p>Source</p>",{sourceFormat}),{actionId}),{executor:"penecho_agent",reason:"widget-variant",guidance:[actionId==="vivid"?"general-html":"scene"]});
+    assert.deepEqual(route(widget("<p>Source</p>",{sourceFormat}),{actionId}),{executor:"sidebar_task",reason:"widget-variant",guidance:[actionId==="vivid"?"general-html":"scene"]});
   }
 });
 
@@ -106,10 +107,22 @@ test("central Refine binds derived Widgets to the original box and preserves nea
     const h=centralHarness('<section data-penecho-workflow></section>'),before=JSON.stringify(h.w);
     assert.equal(await h.context.requestWidgetRefinement(h.w,"nearby-dirty",{actionId}),true);
     const request=h.calls[0];
-    assert.equal(request.executor,"penecho_agent");assert.equal(request.id,actionId);
+    assert.equal(request.executor,"sidebar_task");
     assert.deepEqual(plain(request.target.box),{x:100,y:100,w:400,h:300});
-    assert.deepEqual(plain(request.target.variant.guidance),[actionId==="vivid"?"general-html":"scene"]);
+    assert.equal(request.target.variant,true);
     assert.equal(request.target.refinement,undefined);assert.equal(request.target.widget,h.w);
     assert.equal(h.context.state.dirty,h.dirty);assert.equal(JSON.stringify(h.w),before);
   }
+});
+
+test("without a sidebar, Canvas AI creates variants separately and refines the original for edits", async () => {
+  const h = centralHarness('<section data-penecho-workflow></section>');
+  h.context.projectLinesCanAsk = () => false;
+  await h.context.requestWidgetRefinement(h.w,"action",{ actionId:"animate" });
+  await h.context.requestWidgetRefinement(h.w,"ask",{ actionId:"ask", instruction:"Fix the labels." });
+  assert.deepEqual(h.calls.map(call=>call.executor),["canvas_ai","canvas_ai"]);
+  assert.equal(h.calls[0].options.suggestion,"animate");
+  assert.equal(h.calls[0].options.widgetEditTarget,undefined);
+  assert.equal(h.calls[1].options.widgetEditTarget,h.w);
+  assert.equal(h.calls[1].options.widgetEditContext.instruction,"Fix the labels.");
 });

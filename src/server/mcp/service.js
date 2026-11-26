@@ -3,14 +3,14 @@
 const { BOUND_CANVAS_TOOL_NAMES, executeBoundCanvasTool, MAX_CAPTURE_BYTES, MAX_MUTATION_REQUESTS, safeString, safeJsonValue, browserSessionProgress, mutationSignature, browserRevision, browserCursor, browserObject } = require("./bound-operations.js");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
-const { createRemoteMcpChannels } = require("./remote.js");
 const net = require("node:net");
 const { isPrivateAddress, lanAddresses } = require("./network-addresses.js");
 const path = require("node:path");
 const { WebSocket, WebSocketServer } = require("ws");
 const { GUIDANCE_VERSION } = require("./guidance.js");
 const { createMcpRequestTracer } = require("./request-trace.js");
-const { MAX_EVENTS_PER_UPDATE, McpBridgeError, validateToolArguments } = require("./schema.js");
+const { MAX_EVENTS_PER_UPDATE, McpBridgeError, TOOLS, validateToolArguments } = require("./schema.js");
+const { NO_PAGE_TOOLS, PLACE_KEYS, fileFor } = require("./no-page.js");
 
 const MAX_HTTP_BODY_BYTES = 3 * 1024 * 1024;
 const MAX_WS_FRAME_BYTES = 12 * 1024 * 1024;
@@ -142,6 +142,8 @@ function createMcpService(options) {
   const registryDirectory = options.cloudRuntime ? requestedRegistryDirectory : fs.realpathSync(requestedRegistryDirectory);
   const directory = options.cloudRuntime ? null : recordsDirectory(registryDirectory), instanceId = crypto.randomUUID(), secret = crypto.randomBytes(32).toString("hex");
   const logger = typeof options.logger === "function" ? options.logger : () => {};
+  // Usage counts see only the fixed name of a tool call that succeeded.
+  const onToolCall = typeof options.onToolCall === "function" ? options.onToolCall : () => {};
   const requestTracer = options.requestTraceEnabled === true ? createMcpRequestTracer({
     requestTraceDirectory:options.requestTraceDirectory,
     requestTraceLimit:options.requestTraceLimit,
@@ -164,6 +166,8 @@ function createMcpService(options) {
   const businessOwnerLimit = options.businessOwnerLimit || MAX_OWNER_SESSIONS;
   const businessSessionLimit = options.businessSessionLimit || MAX_DIRECT_SESSIONS;
   const bindings = options.bindings || require("./conversation-bindings.js").conversationBindings(path.join(registryDirectory,"mcp","conversations"));
+  // Tools a host adds to this server, answered by the host itself: { tools, call(ownerId,name,args,options) }.
+  const hostTools = options.hostTools || null, hostToolNames = new Set((hostTools?.tools || []).map(tool => tool.name));
   function bindingCall(operation, signal, timeoutMs = bindingTimeoutMs) {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -226,8 +230,10 @@ function createMcpService(options) {
   const direct = options.cloudRuntime ? {status:()=>({enabled:false}),close:async()=>{}} : require("./direct-http-service.js").createDirectHttpService({
     stateDirectory:path.join(registryDirectory,"mcp","server"),
     callTool:(ownerId,name,args,callOptions)=>callTool(ownerId,name,args,{...callOptions,direct:true}),
+    ...(hostTools?{tools:[...TOOLS,...hostTools.tools]}:{}),
     uploadImage:uploadRawImage,
     disposeOwner,onChange:notifyConnections,
+    ...(options.directPreferredPort!==undefined?{preferredPort:options.directPreferredPort}:{}),
     ...(options.lanAddresses?{getAddresses:options.lanAddresses}:{}),
     ...(options.directAnnounce?{announce:options.directAnnounce}:{}),
   });
@@ -303,10 +309,9 @@ function createMcpService(options) {
     if (!["/api/mcp/canvas","/api/mcp/cloud-canvas"].includes(pathname)) return;
     if (closed) return rejectUpgrade(socket, bridgeError("service_closed", "The PenEcho MCP service is closed.", 503));
     if (await browserAuthorization(req)) return rejectUpgrade(socket);
-    if(pathname==='/api/mcp/cloud-canvas') {
-      if(!options.attachCloudBrowser)return rejectUpgrade(socket);
-      return wss.handleUpgrade(req,socket,head,ws=>{try{options.attachCloudBrowser(ws,req);}catch{ws.close(4401,'Enable Cloud MCP after signing in.');}});
-    }
+    // Cloud MCP reached this Canvas through the retired Linked Device. Today's Canvas page
+    // still knows this address until it is cleaned, so a socket opened here is closed at once.
+    if(pathname==='/api/mcp/cloud-canvas')return wss.handleUpgrade(req,socket,head,ws=>ws.close(4410,'Linked Device has been retired.'));
     wss.handleUpgrade(req, socket, head, ws => wss.emit("connection", ws, req));
   };
   if (!options.cloudRuntime) server.on("upgrade", upgrade);
@@ -743,10 +748,22 @@ function createMcpService(options) {
       const timer = setTimeout(abort, CALL_TIMEOUT_MS); timer.unref?.();
       callOptions.signal?.addEventListener("abort", abort, {once:true});
       if (callOptions.signal?.aborted) abort();
-      try { return await callTool(ownerId,name,input,{...callOptions,signal:controller.signal,expiresAt:Date.now()+CALL_TIMEOUT_MS}); }
+      try {
+        const result = await callTool(ownerId,name,input,{...callOptions,signal:controller.signal,expiresAt:Date.now()+CALL_TIMEOUT_MS});
+        try { onToolCall(name); } catch {}
+        return result;
+      }
       finally {clearTimeout(timer);callOptions.signal?.removeEventListener("abort",abort);}
     }
     if (callOptions.signal?.aborted) throw bridgeError("request_cancelled","The MCP request was cancelled.",499);
+    // Drawing tools with no live page to draw on go on a Canvas in a project's folder instead, through the same call as POST /api/draw.
+    if (NO_PAGE_TOOLS.has(name) && input && typeof input === "object" && !Array.isArray(input)) {
+      const place = {}, rest = {};
+      for (const [key, value] of Object.entries(input)) (PLACE_KEYS.includes(key) ? place : rest)[key] = value;
+      if (options.draw && !liveSession(ownerId, rest.sessionId)) return drawWithoutPage(name, rest, place, callOptions);
+      input = rest;
+    }
+    if (hostToolNames.has(name)) return hostTools.call(ownerId,name,input,callOptions);
     const tracked = sessions.get(input?.sessionId);
     const session = tracked?.ownerId === ownerId && tracked.direct ? tracked : null;
     if (session) session.activeCalls++;
@@ -771,6 +788,23 @@ function createMcpService(options) {
     }
     finally { if (session) { session.activeCalls--; session.lastUsed = businessNow(); } }
   }
+  function liveSession(ownerId, sessionId) {
+    const session = typeof sessionId === "string" ? sessions.get(sessionId) : null;
+    return Boolean(session && session.ownerId === ownerId && !session.lost && !session.connection.closed);
+  }
+  // No page is connected (or the session's page has gone): the picture becomes a Canvas file, so the agent still gets a link and a picture.
+  // `folder` is a folder on this computer, so a client that reached this server over the network (IP direct) may name only a project.
+  async function drawWithoutPage(name, input, place, callOptions) {
+    for (const key of PLACE_KEYS) if (place[key] !== undefined && (typeof place[key] !== "string" || !place[key] || place[key].length > 1024)) throw bridgeError("invalid_arguments", `${key} must be a non-empty string.`);
+    if (place.folder && callOptions.ipDirect) throw bridgeError("invalid_arguments", "folder names a folder on the PenEcho computer. Over IP direct, send project instead.");
+    const args = validateToolArguments(name, { ...input, sessionId:typeof input.sessionId === "string" && input.sessionId ? input.sessionId : "no-page" });
+    let file;
+    try { file = fileFor(name, args, input); } catch (error) { throw bridgeError("invalid_arguments", String(error.message || "That cannot be drawn.")); }
+    let made;
+    try { made = await options.draw({ folder:place.folder, project:place.project || (place.folder ? "" : "my-canvases"), canvas:place.canvas, line:place.line, name:file.name, text:file.text, title:args.title }); }
+    catch (error) { throw bridgeError(String(error.code || "draw_failed").toLowerCase(), String(error.message || "PenEcho could not make that Canvas."), error.status || 500); }
+    return { applied:true, noPage:true, artifactId:args.artifactId, ...made, note:`No PenEcho page was connected, so this is now the Canvas "${made.title}" in ${made.projectName}. Give the person url; png is the absolute path of its picture. Send the same artifactId (and canvas) again to update it.` };
+  }
   async function untrackedCallTool(ownerId, name, input, callOptions = {}) {
     if (callOptions.direct && !callOptions.bindingLocked && name === "penecho_start_session" && typeof input?.sessionKey === "string") {
       const key = JSON.stringify([input.client || "External AI",input.sessionKey]);
@@ -791,8 +825,6 @@ function createMcpService(options) {
       throw error;
     }
   }
-
-  const remoteChannels = createRemoteMcpChannels({ attach:ws => wss.emit("connection", ws) });
 
   function statusPayload(canConfigureLocalClients = true, canCopyLanSetup = canConfigureLocalClients) {
     const http=direct.status();
@@ -904,7 +936,6 @@ function createMcpService(options) {
     if (closed) return;
     closed = true;
     await direct.close();
-    remoteChannels.close();
     clearInterval(heartbeatTimer);
     server.off("upgrade", upgrade);
     if (record) { try { removeRecord(directory, record); } catch (error) { log({ type:"mcp-record-cleanup-error", errorCode:String(error?.code || "cleanup_failed").slice(0, 80) }); } }
@@ -926,7 +957,7 @@ function createMcpService(options) {
     await new Promise(resolve => wss.close(resolve));
   }
 
-  return { callTool, disposeOwner, attachBrowser:ws=>wss.emit("connection",ws), close, startDirect, executeRemote:remoteChannels.execute, closeRemoteChannels:remoteChannels.disconnect, handleHttp, instanceId, listCanvases:() => [...canvases.values()].filter(item => item.canvasId && !item.closed).flatMap(item => publicCanvasDocuments(item, instanceId)), register, status:statusPayload };
+  return { callTool, disposeOwner, attachBrowser:ws=>wss.emit("connection",ws), close, startDirect, handleHttp, instanceId, listCanvases:() => [...canvases.values()].filter(item => item.canvasId && !item.closed).flatMap(item => publicCanvasDocuments(item, instanceId)), register, status:statusPayload };
 }
 
 module.exports = { BOUND_CANVAS_TOOL_NAMES, executeBoundCanvasTool, CALL_TIMEOUT_MS, MAX_CAPTURE_BYTES, MAX_HTTP_BODY_BYTES, createMcpService, isLoopback, normalizedAddress };

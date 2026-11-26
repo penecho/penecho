@@ -52,7 +52,7 @@ New direct HTTPS root and server certificates use `9999-12-31T23:59:59Z`, the [R
 
 ## Native HTTP and legacy compatibility / 兼容
 
-Clients may still use native HTTP with a fixed URL and authorization header when their own endpoint and CA handling is suitable. Those clients must trust the CA in their actual HTTP runtime and arrange address refresh themselves; they cannot implicitly read `.penecho` just because it exists. For Codex this includes CODEX_CA_CERTIFICATE (SSL_CERT_FILE fallback); Node-based clients may use NODE_EXTRA_CA_CERTS. Preserve enterprise trust requirements.
+Clients may still use native HTTP with a fixed URL and authorization header when their own endpoint and CA handling is suitable. Those clients must trust the CA in their actual HTTP runtime and arrange address refresh themselves; they cannot implicitly read `.penecho` just because it exists. Use only a certificate setting the client has for that one server. Never set CODEX_CA_CERTIFICATE, SSL_CERT_FILE or NODE_EXTRA_CA_CERTS for the user or the system: every Codex on the computer, its desktop app included, then depends on that file and stops working once it is gone. Codex has no setting for one server, so it uses the stdio connection above. Preserve enterprise trust requirements.
 
 The invitation-based LAN pairing protocol has been removed. Use bundled `client.js` from `session-client.js` with direct HTTPS credentials. Existing local `penecho mcp` / `stdio.js` remains an explicit compatibility entry; Settings never falls back to it when HTTPS is unavailable. Do not configure duplicate PenEcho transports.
 
@@ -99,6 +99,26 @@ Enable MCP in at least one authorized browser. For a new conversation, call `pen
 Retain the returned `documentId` and `sessionId`. Reuse `client` plus `sessionKey` across turns and reconnects; an old conversation restores its original document instead of moving to the newest browser document. A closed saved document may reopen in the background. `restore` defaults true: only confirmed `DOCUMENT_NOT_FOUND` permits creating a replacement; permission, unavailable storage and other provider errors must remain errors. `restore:false` disables replacement; `show` defaults false. New unbound conversations create a named document.
 
 要修改用户明确指出的当前画布，使用 `target:"current"`，省略 `documentId`；先读取文件和 revision。若已有对话绑定其他文档，使用另一个稳定的 attachment sessionKey 并保留两个句柄。普通重连继续原 documentId，不把连接错误误当作文档不存在。MCP opt-out/浏览器断开撤销当前连接；持久文档不会因此被删除。
+
+## Drawing with no page open / 无需打开页面绘图
+
+`penecho_draw`, `penecho_plot` and `penecho_present_widget` no longer need a live browser page. With a `sessionId` whose page is still connected they work exactly as before. With no `sessionId`, or one whose page has gone, they go on a Canvas file instead, through the same code as the local `POST /api/draw` (see "Drawing with no setup" in [project-lines.md](project-lines.md)), and answer at once:
+
+```json
+{ "applied":true, "noPage":true, "artifactId":"flow-map", "project":"<project id>", "projectName":"My Canvases",
+  "canvas":"flow-map", "line":"", "title":"Flow map", "path":"files/flow-map/canvas.penecho.json",
+  "url":"http://127.0.0.1:3888/?linesProject=…&linesCanvas=files%2Fflow-map%2Fcanvas.penecho.json&linesTitle=Flow+map",
+  "png":"/Users/me/Documents/PenEcho/My Canvases/files/flow-map/canvas.png", "updatedAt":1762750000000, "note":"…" }
+```
+
+- Where it goes: `folder` (the absolute path of the folder the agent works in) picks the Lines project whose docs or code folders hold it, else **My Canvases**. Or `project` (a project id, or `my-canvases`). With neither, My Canvases. `line` puts a new picture on that line; `canvas` (a name an earlier answer gave) updates that Canvas. Over IP direct only `project` is accepted, since `folder` names a folder on the PenEcho computer.
+- Sending the same `artifactId` again updates the same Canvas and keeps what the person drew on it. `requestId` is still required.
+- What it draws: `architecture`, `sequence` and `workflow` become a native, editable diagram (its picture drawn on the server). `html`, `scene` and `note` become a Visual Explorer page; `penecho_plot` and `penecho_draw` become an SVG page drawn on the server (same expression language as the Canvas). Their pictures come from a local Chrome, cut off from the network, or a title card without one. `capture`, `presentation` and `completion` are ignored here.
+- Not available this way: the other session tools (`penecho_inbox`, `penecho_edit_canvas`, `penecho_capture_canvas` …) still need a live page. To see what the person drew, read the `png` again later, or call `GET /api/draw`.
+
+Failure codes these three tools can no longer return when PenEcho is local (the server has the draw function): `canvas_not_found`, `canvas_disconnected`, `session_not_found`, `session_expired`. An agent that never calls `penecho_start_session` also never meets that tool's `canvas_not_found`, `session_key_conflict`, `session_limit`, `instance_mismatch` or `session_document_conflict`. What it can still get: `invalid_arguments` (a bad item, expression or diagram), `bad_folder`, `not_found` (no such project, line or Canvas), `bad_picture`, `request_cancelled`. PenEcho Cloud's MCP has no draw function and answers as before.
+
+`penecho_draw`、`penecho_plot`、`penecho_present_widget` 不再需要已连接的浏览器页面：没有 `sessionId`（或其页面已断开）时，按 `folder`/`project` 存为项目中的 Canvas 文件，立即返回 `url`（在 PenEcho 中打开）和 `png`（图片的绝对路径）。同一 `artifactId` 再次发送会更新同一 Canvas，并保留用户的笔迹。
 
 ## Tool contract / 工具契约
 

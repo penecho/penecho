@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const {test}=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 const host=fs.readFileSync(path.join(__dirname,"../public/widget-host.js"),"utf8"),vendor=fs.readFileSync(path.join(__dirname,"../public/vendor/penecho-dom-renderer.js"),"utf8");
 function fn(name){const start=host.indexOf(`    function ${name}(`),end=host.indexOf("\n    function ",start+1);return host.slice(start,end);}

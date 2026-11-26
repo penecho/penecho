@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 // Boundary tests for the live share social helpers, run from the shipped source.
 const {test} = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "..", "public", "cloud-connect.js"), "utf8");

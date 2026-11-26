@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const source = file => fs.readFileSync(`src/client/app/${file}.js`, "utf8");
 const functionSource = (file, name) => {

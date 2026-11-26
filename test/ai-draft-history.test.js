@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const persistence = fs.readFileSync(require.resolve("../src/client/app/persistence.js"), "utf8"),
   canvas = fs.readFileSync(require.resolve("../src/client/app/canvas-runtime.js"), "utf8"),

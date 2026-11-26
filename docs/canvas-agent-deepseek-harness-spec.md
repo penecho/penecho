@@ -1,5 +1,13 @@
 # PenEcho Agent × DeepSeek Harness 集成规格
 
+> Current runtime amendment (2026-11-04): the integration now uses DSH
+> `0.2.1-rc.5`. See [the current upgrade and compatibility baseline](canvas-agent-harness-upgrade.md).
+> The historical research snapshot and implementation notes below remain as history;
+> the linked amendment supersedes their dependency, settings, stream, and vendor-patch details.
+
+> Scope amendment (2026-11-10): the limits in this document ("不允许模型读取任意本地文件、执行 bash", 5.2's forbidden components, the 19-plugin allow-list and the eight Canvas tools) describe the **Canvas** agent scope, and still hold there unchanged.
+> PenEcho Lines now has a second, separate use of the same engine: the built-in **PenEcho** runner (`src/server/project-lines/penecho-runner.mjs`), a process of its own started per Ask. It mounts the same loop from `src/server/agent-core/` (`loop.mjs`, `connection-profile.mjs`, `shell.mjs`; `runtime.mjs` imports them from there, with no change in behaviour) under its own allow-list: the Canvas list without `attachment-local`, `penecho-cli-llm` and `project-fs`, plus a filesystem kept to the run's folders, `working-directory` and `tool-fs`. In that scope the model does read, write and edit files, inside the run's working folder, the docs folder and the folders a merge adds, and does run commands, from the list unattended Claude runs get. It has no Canvas tools, no attachments and no CLI adapters, and it never holds a key: models are reached through a loopback proxy with a secret per run. See "Run with PenEcho" in [project-lines.md](project-lines.md).
+
 > 状态：首版已实施（API + CLI）
 > 基线：`penecho_071_version`
 > 产品意图参考：`penecho_always_main`，仅用于理解界面方向与最终需求，不作为实现来源

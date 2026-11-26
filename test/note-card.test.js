@@ -1,4 +1,5 @@
 "use strict";
+require("./helpers/safety.js");
 // Note cards: the note source, rendering, deck geometry, ranking, review, the
 // Organize as Note action and the Canvas AI / Agent / MCP creation paths.
 const test = require("node:test");

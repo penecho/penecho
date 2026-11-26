@@ -1,0 +1,30 @@
+{
+  "en": {
+    "title": "QED: electron–muon scattering at tree level",
+    "style": "card",
+    "category": "formula",
+    "tags": ["QED", "scattering", "Feynman diagram", "Mandelstam"],
+    "summary": "One-photon exchange for e⁻μ⁻ → e⁻μ⁻: the amplitude, the propagator and the t-channel momentum transfer.",
+    "blocks": [
+      { "type": "markdown", "text": "**Process** $e^-(k)\\,\\mu^-(p) \\to e^-(k')\\,\\mu^-(p')$, one virtual photon exchanged between the two lines." },
+      { "type": "formula", "latex": "i\\mathcal{M} = \\bar u(k')(-ie\\gamma^\\mu)u(k)\\,\\frac{-ig_{\\mu\\nu}}{q^2}\\,\\bar u(p')(-ie\\gamma^\\nu)u(p)", "caption": "Amplitude: two vertices and the photon propagator" },
+      { "type": "formula", "latex": "q = k - k' = p' - p,\\qquad q^2 = (k-k')^2 = t", "caption": "Momentum transfer: a t-channel process" },
+      { "type": "keypoints", "title": "From the board", "items": ["Each vertex gives −ieγ; the photon line gives −ig/q².", "Integrating over x and y gives (2π)⁴δ⁴(q − p − p′): momentum is conserved.", "For e⁺e⁻ annihilation the photon carries q² = (p + p′)² = s instead.", "Masses: e⁻ ≈ 0.5 MeV, μ⁻ ≈ 106 MeV (the board's 130 is a slip)."] },
+      { "type": "qa", "question": "Why is this called a t-channel diagram?", "answer": "The exchanged photon carries q² = (k − k′)² = t, the Mandelstam variable for momentum transfer." }
+    ]
+  },
+  "zh": {
+    "title": "QED：电子–μ子散射（树图）",
+    "style": "card",
+    "category": "formula",
+    "tags": ["QED", "散射", "费曼图", "Mandelstam"],
+    "summary": "e⁻μ⁻ → e⁻μ⁻ 的单光子交换：振幅、传播子与 t 道动量转移。",
+    "blocks": [
+      { "type": "markdown", "text": "**过程** $e^-(k)\\,\\mu^-(p) \\to e^-(k')\\,\\mu^-(p')$，两条线之间交换一个虚光子。" },
+      { "type": "formula", "latex": "i\\mathcal{M} = \\bar u(k')(-ie\\gamma^\\mu)u(k)\\,\\frac{-ig_{\\mu\\nu}}{q^2}\\,\\bar u(p')(-ie\\gamma^\\nu)u(p)", "caption": "振幅：两个顶点加光子传播子" },
+      { "type": "formula", "latex": "q = k - k' = p' - p,\\qquad q^2 = (k-k')^2 = t", "caption": "动量转移：t 道过程" },
+      { "type": "keypoints", "title": "板书要点", "items": ["每个顶点给出 −ieγ，光子线给出 −ig/q²。", "对 x、y 积分得到 (2π)⁴δ⁴(q − p − p′)：动量守恒。", "e⁺e⁻ 湮灭时光子携带 q² = (p + p′)² = s。", "质量：e⁻ ≈ 0.5 MeV，μ⁻ ≈ 106 MeV（板书上的 130 是笔误）。"] },
+      { "type": "qa", "question": "为什么叫 t 道图？", "answer": "交换的光子携带 q² = (k − k′)² = t，即表示动量转移的 Mandelstam 变量。" }
+    ]
+  }
+}

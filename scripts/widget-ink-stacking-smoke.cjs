@@ -20,7 +20,7 @@ const readStream = fs.createReadStream;
 fs.createReadStream = function(file, ...args) {
   if (path.resolve(String(file)) === path.join(root, "public/app.js")) {
     const code = fs.readFileSync(file, "utf8").replace(/\}\)\(\);\s*$/,
-      "window.inkTest={state,restoreWidgets,render,setCanvasMode,setWidgetInteraction,setWidgetMaximized,focusHandObject,stroke,renderLiveInkDrawing,clearLiveInkLayer,createTextEditor,confirmTextEditor,clearWidgetRefineCandidate,updateWidgetRefinePointer,closeCanvasAgent};})();");
+      "window.inkTest={state,restoreWidgets,render,setCanvasMode,setWidgetInteraction,setWidgetMaximized,focusHandObject,stroke,renderLiveInkDrawing,clearLiveInkLayer,createTextEditor,confirmTextEditor,clearWidgetRefineCandidate,updateWidgetRefinePointer};})();");
     return Readable.from([code]);
   }
   return readStream.call(this, file, ...args);
@@ -42,7 +42,7 @@ app.whenReady().then(async () => {
     const js = code => win.webContents.executeJavaScript(code, true);
     await win.loadURL(`http://127.0.0.1:${server.address().port}`);
     await until(() => js("!!window.inkTest"), "application startup");
-    await js(`document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();inkTest.closeCanvasAgent();if(document.querySelector('#studioNavigatorToggle')?.getAttribute('aria-expanded')==='true')document.querySelector('#studioNavigatorToggle').click();`);
+    await js(`document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();if(document.querySelector('#studioNavigatorToggle')?.getAttribute('aria-expanded')==='true')document.querySelector('#studioNavigatorToggle').click();`);
     const html = `<!doctype html><style>html,body{margin:0;height:100%;font:18px system-ui}#surface{position:absolute;inset:0;background:#fee4b7}button{position:absolute;left:80px;top:110px;width:180px;height:44px;background:#fff;border:1px solid #888}</style><div id="surface"><button id="action">Widget action</button></div><script>window.actionCount=0;document.querySelector('#action').onclick=()=>actionCount++;<\/script>`;
     await js(`(()=>{const n=inkTest,s=n.state;s.auto=false;s.scale=1;s.panX=0;s.panY=0;n.restoreWidgets(${JSON.stringify([
       { id:"ink-widget", pluginId:"general", widgetType:"html_widget", x:150, y:200, w:550, h:350,
