@@ -761,7 +761,8 @@ process.stdin.on("data", d => { buffer += d; const lines = buffer.split("\\n"); 
   const agents = createAgents({ env:{ PATH:"" }, extra:{ codexish:{ name:"Codex", mono:"Cx", color:"#000", role:"Build", resolve:() => ({ command:process.execPath, prefixArgs:[script] }), command:(launch, { workdir }) => ({ command:launch.command, args:launch.prefixArgs, cwd:workdir, protocol:"app-server", ownInstructions:true, thread:{ cwd:workdir }, turn:{} }) } } });
   const { service, project } = setup({ noCode:true, agents });
   project.defaultAgent = "codexish";
-  const { slug } = await service.createTopic(project, { text:"Do it.", kinds:["ask", "work"] });
+  // With one saved setup an agent runs with it (PE-1221), so the first Work picks the agent's own setup by name.
+  const { slug } = await service.createTopic(project, { text:"Do it.", kinds:["ask", "work"], preset:"auto:codexish" });
   await until(() => service.runs.get(service.key(project, slug))?.turnId, "the turn to start");
   await service.act(project, slug, "feedback", { text:"use blue" });
   const tasks = await settled(service, project, slug, "done");
@@ -793,7 +794,8 @@ process.stdin.on("data", d => { buffer += d; const lines = buffer.split("\\n"); 
   const mini = service.presets.add({ agent:"codexish", model:"mini", effort:"low" });
   project.defaultAgent = "codexish";
   const notSent = (slug, words) => { service.writeDoc(project, slug, F.updateSteps(service.readDoc(project, slug), steps => steps.push(F.askStep({ words, via:F.NOT_SENT })))); return tasksOf(service, project, slug).steps.at(-1).id; };
-  const { slug } = await service.createTopic(project, { text:"Do it.", kinds:["ask", "work"] });
+  // With one saved setup an agent runs with it (PE-1221), so the first Work picks the agent's own setup by name.
+  const { slug } = await service.createTopic(project, { text:"Do it.", kinds:["ask", "work"], preset:"auto:codexish" });
   await until(() => service.runs.get(service.key(project, slug))?.turnId, "the turn to start");
   const summary = () => service.stateOf(project).lines.find(l => l.id === slug);
   assert.equal(summary().runAgent, "codexish"); assert.equal(summary().runSteers, true); assert.equal(summary().runSetup, "|");
@@ -831,7 +833,8 @@ process.stdin.on("data", d => { buffer += d; const lines = buffer.split("\\n"); 
   service.presets = createAgentPresets({ file:path.join(temp, `presets-${counter}.json`), agents });
   const mini = service.presets.add({ agent:"codexish", model:"mini", effort:"low" });
   project.defaultAgent = "codexish";
-  const { slug } = await service.createTopic(project, { text:"Do it.", kinds:["ask", "work"] });
+  // With one saved setup an agent runs with it (PE-1221), so the first Work picks the agent's own setup by name.
+  const { slug } = await service.createTopic(project, { text:"Do it.", kinds:["ask", "work"], preset:"auto:codexish" });
   await until(() => service.runs.get(service.key(project, slug))?.turnId, "the turn to start");
   const run = service.runs.get(service.key(project, slug));
   service.writeDoc(project, slug, F.updateSteps(service.readDoc(project, slug), steps => steps.push(F.askStep({ words:"use red", via:F.NOT_SENT }))));
@@ -1551,7 +1554,8 @@ process.stdin.on("data", d => prompt += d).on("end", () => {
   const patchPath = records()[1].args[records()[1].args.indexOf("--patch") + 1];
   assert.equal(path.dirname(path.dirname(patchPath)), path.join(service.directory, "keep"));
   assert.ok(!fs.existsSync(patchPath), "a finished Work removes the launch overlay without a sweep");
-  assert.ok(fs.existsSync(path.join(path.dirname(patchPath), "exit.json")));
+  // The keeper ends, and a Work read to its end has its folder swept at once.
+  await until(() => fs.existsSync(path.join(path.dirname(patchPath), "exit.json")) || !fs.existsSync(path.dirname(patchPath)), "the keeper to end");
   const work = tasksOf(service, project, asked.slug).steps.filter(step => step.kind === "work").at(-1);
   const facts = service.detailOf(project, F.detailPath(asked.slug, work.id)).front;
   assert.equal(facts["selected model"], "deepseek-official/deepseek-v4-pro");
@@ -1615,7 +1619,7 @@ setInterval(() => {}, 1000);
 
   await service.act(project, active.slug, "stop");
   await until(() => run.child.closed && !fs.existsSync(patch), "stopped Work overlay cleanup");
-  assert.ok(fs.existsSync(path.join(run.keepDir, "read")));
+  await until(() => fs.existsSync(path.join(run.keepDir, "read")) || !fs.existsSync(run.keepDir), "the stopped Work read to its end, or swept");
   assert.equal(tasksOf(service, project, active.slug).status, "stopped");
 
   fs.unlinkSync(manifest);

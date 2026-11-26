@@ -116,7 +116,8 @@ test("keeper restart replays incomplete CLI output without relaunching the Work"
   await until(() => fixture.doc().status === "done", "the original Work to finish");
   const detail = fixture.detail(first.stepId);
   assert.match(F.sectionText(detail, "Result"), /Full answer 🧪 survived\./);
-  await until(() => fs.existsSync(path.join(first.keepDir, "exit.json")), "the isolated keeper to finish");
+  // A saved Work's folder is swept as soon as its keeper has ended.
+  await until(() => fs.existsSync(path.join(first.keepDir, "exit.json")) || !fs.existsSync(first.keepDir), "the isolated keeper to finish");
 });
 
 function keptCodex(t) {
@@ -262,4 +263,23 @@ test("a recovered turn/start rejection settles the submitted request once while 
   const recovered = attach(offsets);
   assert.deepEqual(await settled(followTurn(recovered, { phase:"starting-turn", savedOutcome })), expected);
   assert.deepEqual(requests("turn/start"), [start]);
+});
+
+// Why 7: a PenEcho quitting while it saves a result keeps the keeper's folder, so the restart still recovers that result.
+test("a save cut short by quitting sweeps no keeper folder; a finished save does", async t => {
+  const fixture = await lineWithAgent(t, "process.stdin.resume();");
+  const { service, project, slug } = fixture;
+  const swept = [];
+  service.keeper.sweep = keep => swept.push(keep);
+  const end = how => async () => { if (how === "quit") service.closing = true; if (how === "fail") throw new Error("disk full"); };
+  service.endRun = end("quit");
+  await service.ended(project, slug, { stepId:"work-quit", launchId:"" }, { code:0 });
+  assert.equal(swept.length, 0, "quitting mid-save leaves the folder for the restart");
+  service.closing = false;
+  service.endRun = end("fail");
+  await assert.rejects(service.ended(project, slug, { stepId:"work-fail", launchId:"" }, { code:0 }), /disk full/);
+  assert.equal(swept.length, 0, "a save that failed leaves the folder too");
+  service.endRun = end("ok");
+  await service.ended(project, slug, { stepId:"work-ok", launchId:"", stopping:true }, { code:0 });
+  assert.equal(swept.length, 1, "a finished save sweeps what was read to its end");
 });

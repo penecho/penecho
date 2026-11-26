@@ -118,7 +118,8 @@ for (const agent of ["claude", "codex", "penecho"]) test(`${agent} resumes and r
     await h.service.request(h.project, { topic:slug, text, agent });
     await done(h, slug);
     namedInstructions(instructions(h.rows(), agent, true), visibleInput(h.rows(), agent), slug);
-    const [said, context, ...rest] = visibleInput(h.rows(), agent).split("\n\n");
+    // An agent in Reviewed access (Claude by default) is also told what the person allows, as the last part.
+    const [said, context, ...rest] = visibleInput(h.rows(), agent).split("\n\n").filter(part => !/^Reviewed mode permissions: /.test(part));
     assert.equal(said, text, "the app shows the person's message first");
     assert.match(context, /^Current PenEcho Work: Work \d+\. Task: continue the selected task\.\nAuthoritative Line record: /);
     assert.equal(rest.length, 1, "and only which Work this is and how to do it after it");

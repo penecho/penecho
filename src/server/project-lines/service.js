@@ -6761,7 +6761,8 @@ class Service {
           else if (!run.stopping) this.conversations.caughtUp(run.agent, run.sessionId);
         }
         if (handed && this.pendingLease.get(key) === handed) { this.pendingLease.delete(key); run.lease = passed; }
-        this.sweepKeepers();
+        // A save cut short, or a PenEcho on its way out, keeps the folder: a restart recovers the result from it, and sweeps it then.
+        if (saved && !this.ownerLost(run)) this.sweepKeepers();
       }
     }
   }
