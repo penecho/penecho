@@ -471,8 +471,8 @@ test("README logo is a compact horizontal WebP: blue nautilus mark beside the Pe
     assert.ok(svg.includes("PenEcho") && svg.includes("Lines"), `${svgFile} must display the PenEcho Lines lockup`);
   }
   const translatedReadmes = fs.readdirSync(path.join(ROOT, "docs/readme")).filter(file => /^README.*\.md$/.test(file)).map(file => "docs/readme/" + file);
-  for (const file of translatedReadmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /penecho-readme-header\.webp" alt="PenEcho" width="320"/);
-  for (const file of translatedReadmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /prefers-color-scheme: dark[\s\S]*?penecho-readme-header-dark\.webp/);
+  for (const file of translatedReadmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /\.\.\/assets\/penecho-lines-logo\.svg" alt="PenEcho Lines" width="340"/);
+  for (const file of translatedReadmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /prefers-color-scheme: dark[\s\S]*?\.\.\/assets\/penecho-lines-logo-dark\.svg/);
   const dark = await sharp(path.join(ROOT, "public/penecho-readme-header-dark.webp")).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
   assert.equal(dark.info.width, metadata.width);
   assert.equal(dark.info.height, metadata.height);

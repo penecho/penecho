@@ -49,11 +49,11 @@
 
 | | |
 | :--- | :--- |
-| **Desktop app** | Download for macOS or Windows from the [latest release](https://github.com/penecho/penecho/releases/latest). |
+| **Desktop app** | Download for macOS or Windows from [penecho.ai](https://penecho.ai/downloads.html). |
 | **npm** | `npm install -g penecho`, then `penecho` (Node.js 22.19 or newer). |
 | **Browser** | Open [penecho.ai](https://penecho.ai). Nothing to install. |
 
-PenEcho opens at http://localhost:3888. Choose an access code, open a project folder, and add your agents in **Settings → Agents**. Use the agent plans you already pay for, your own API key, or PenEcho models.
+Choose an access code, open a project folder, and add your agents in **Settings → Agents**. Use the agent plans you already pay for, your own API key, or PenEcho models.
 
 New in 1.5.0: Lines, one-click review, the Orchestrator with real ratings, token savings with proof, and live Canvas sharing. See the [changelog](CHANGELOG.md#150).
 
@@ -78,7 +78,7 @@ One real job from start to finish: one agent builds, another reviews, the fixes 
 
 <p align="center">
   <a href="https://penecho.ai/lines.html#film">
-    <img src="docs/assets/release-1.5/lines-film.gif" alt="PenEcho Lines film: circle a screenshot, pick an agent, one-click review, send fixes, ready 5 out of 5, the Orchestrator picks agents by their record" width="100%">
+    <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_lines.gif" alt="PenEcho Lines film: circle a screenshot, pick an agent, one-click review, send fixes, ready 5 out of 5, the Orchestrator picks agents by their record" width="100%">
   </a>
 </p>
 <p align="center"><a href="https://penecho.ai/lines.html#film">▶ Watch the full film</a></p>
@@ -96,50 +96,42 @@ Send a job straight to one agent, or hand it to the Orchestrator, which splits i
 <table width="100%">
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/assets/features/collaborate.svg" alt="" width="76" align="left">
       <strong>Agents work together on one job</strong><br>
-      One agent builds, another reviews in one click, and <em>Send fixes</em> hands the findings back. All on the same Line.
+      One agent builds, another reviews in one click, and <em>Send fixes</em> hands findings back on the same Line.
     </td>
     <td width="50%" valign="top">
-      <img src="docs/assets/features/token-savings.svg" alt="" width="76" align="left">
       <strong>Token savings, with proof</strong><br>
-      PenEcho continues or starts fresh, whichever costs less, and every job shows what it saved.
+      Continues or starts fresh, whichever costs less, and shows what every job saved.
     </td>
   </tr>
   <tr>
-    <td valign="top">
-      <img src="docs/assets/features/ratings.svg" alt="" width="76" align="left">
+    <td width="50%" valign="top">
       <strong>An Orchestrator that learns</strong><br>
-      It splits big jobs, picks agents by their real record, and rates every result. The more you use it, the better it picks.
+      Splits big jobs, picks agents by their real record, and rates every result so picks improve over time.
     </td>
-    <td valign="top">
-      <img src="docs/assets/features/sync.svg" alt="" width="76" align="left">
+    <td width="50%" valign="top">
       <strong>Every agent, synced</strong><br>
-      Sessions from Claude Code, Codex, Kimi, OpenCode and more come into your project. Continue any of them with any agent.
+      Sessions from Claude Code, Codex, Kimi, OpenCode and more sync in. Continue any of them with any agent.
     </td>
   </tr>
   <tr>
-    <td valign="top">
-      <img src="docs/assets/features/lifecycle.svg" alt="" width="76" align="left">
+    <td width="50%" valign="top">
       <strong>Hundreds of jobs on one screen</strong><br>
       Ask, Working, Needs you, To review, Done. See at a glance what waits for you.
     </td>
-    <td valign="top">
-      <img src="docs/assets/features/canvas.svg" alt="" width="76" align="left">
+    <td width="50%" valign="top">
       <strong>Draw what you mean</strong><br>
-      Circle a screenshot, sketch a prototype, make diagrams and slides. Your agent sees your marks with your words.
+      Circle a screenshot, sketch a prototype, make diagrams and slides. Agents see your marks with your words.
     </td>
   </tr>
   <tr>
-    <td valign="top">
-      <img src="docs/assets/features/markdown.svg" alt="" width="76" align="left">
+    <td width="50%" valign="top">
       <strong>Plain Markdown you own</strong><br>
-      Every Line is a Markdown file in your folder, with one MEMORY.md for the whole project. Read it anywhere.
+      Every Line is a Markdown file in your folder, with one <code>MEMORY.md</code> for the project. Read it anywhere.
     </td>
-    <td valign="top">
-      <img src="docs/assets/features/share.svg" alt="" width="76" align="left">
+    <td width="50%" valign="top">
       <strong>Share with one link</strong><br>
-      Share a project or a Canvas. Teammates open it in a browser to review and draw notes.
+      Share a project or a Canvas with a link. Teammates open it in a browser to review and draw notes.
     </td>
   </tr>
 </table>
@@ -152,40 +144,10 @@ Works with Claude Code, Codex, OpenCode, Antigravity, Kimi, Pi, DeepSeek Harness
 
 Write, sketch, or circle something, and the answer lands right where you drew.
 
-<table width="100%">
-  <tr>
-    <td width="50%" valign="top">
-      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Equations, physics problems, sketches and a maze solved on a PenEcho Canvas" width="100%"><br>
-      <strong>Sketch and ask</strong><br>
-      Handwriting, equations, drawings, and mazes.
-    </td>
-    <td width="50%" valign="top">
-      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="Molecules, charts, class models, database schemas, force diagrams and circuits drawn and corrected by hand" width="100%"><br>
-      <strong>Drawing skills</strong><br>
-      Molecules, charts, schemas, circuits. Mark a fix by hand and only that part changes.
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.webp" alt="Smart Assist, 3D graphs, animated sketches, simulations and visual proofs" width="100%"><br>
-      <strong>It knows the next step</strong><br>
-      Pause, and PenEcho offers to solve, plot, animate, or explain.
-    </td>
-    <td width="50%" valign="top">
-      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="A handwritten request becomes a playable game, changed by circling its buttons" width="100%"><br>
-      <strong>Working widgets</strong><br>
-      Write what you want, use it on the Canvas, circle a part to change it.
-    </td>
-  </tr>
-</table>
-
-**Use the Canvas from any chat** (Claude Code, Codex, Cursor, or any MCP client). Paste this into your chat:
-
-```text
-Set up PenEcho for me by following https://penecho.ai/agents.md
-```
-
-Then ask: *"Draw this project's architecture on the canvas."* No account needed. Manual setup: [MCP guide](docs/mcp-setup.md).
+<p align="center">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Equations, physics problems, sketches and a maze solved on a PenEcho Canvas" width="720">
+</p>
+<p align="center"><sub><strong>Sketch and ask</strong> — handwriting, equations, drawings, and mazes.</sub></p>
 
 ---
 
