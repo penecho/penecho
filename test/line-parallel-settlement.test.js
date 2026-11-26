@@ -83,7 +83,7 @@ function setup(t, name) {
   service.store.save();
   t.after(() => {
     service.close();
-    fs.rmSync(root, { recursive:true, force:true, maxRetries:5, retryDelay:50 });
+    fs.rmSync(root, { recursive:true, force:true, maxRetries:20, retryDelay:50 });
   });
   const doc = slug => F.parseLine(service.readDoc(project, slug));
   const prompts = slug => {

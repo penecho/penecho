@@ -761,8 +761,7 @@ process.stdin.on("data", d => { buffer += d; const lines = buffer.split("\\n"); 
   const agents = createAgents({ env:{ PATH:"" }, extra:{ codexish:{ name:"Codex", mono:"Cx", color:"#000", role:"Build", resolve:() => ({ command:process.execPath, prefixArgs:[script] }), command:(launch, { workdir }) => ({ command:launch.command, args:launch.prefixArgs, cwd:workdir, protocol:"app-server", ownInstructions:true, thread:{ cwd:workdir }, turn:{} }) } } });
   const { service, project } = setup({ noCode:true, agents });
   project.defaultAgent = "codexish";
-  // With one saved setup an agent runs with it (PE-1221), so the first Work picks the agent's own setup by name.
-  const { slug } = await service.createTopic(project, { text:"Do it.", kinds:["ask", "work"], preset:"auto:codexish" });
+  const { slug } = await service.createTopic(project, { text:"Do it.", kinds:["ask", "work"] });
   await until(() => service.runs.get(service.key(project, slug))?.turnId, "the turn to start");
   await service.act(project, slug, "feedback", { text:"use blue" });
   const tasks = await settled(service, project, slug, "done");
