@@ -338,7 +338,7 @@ test("antigravityDone rejects pre-wakeup waiting text, prefix/reminder false cle
   assert.deepEqual(W.antigravityTurnState(prefixTurn, at - 60000).pendingTasks, ["cid/task-2"]);
 
   // 3. Parallel daemon + non-daemon sharing a >40-char working-directory prefix, plus paraphrased daemon beside another call.
-  const longPrefix = "cd /Users/heack/workspace/penecho_071_version/very/long/subdir && ";
+  const longPrefix = "cd /Users/me/projects/penecho/very/long/subdir && ";
   const sharedPrefixTurn = [
     { step_index:0, type:"USER_INPUT", status:"DONE" },
     { step_index:1, type:"PLANNER_RESPONSE", status:"DONE", tool_calls:[

@@ -96,9 +96,9 @@ test("activity.js captures tool summaries, plan checklists, multi-file edits, re
   });
 
   // nowFrom strips noisy cd prefixes even without summary, and recognizes Windows PowerShell helpers
-  assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:"cd /Users/heack/workspace/penecho_071_version && git diff --stat && git diff public/lines/line.js" }), "Checking git diff");
-  assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:"cd /Users/heack/workspace/penecho_071_version && node --test test/a.test.js" }), "Running tests");
-  assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:"cd /Users/heack/workspace/penecho_071_version && rg -n zoomIn public/lines/" }), "Searching code");
+  assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:"cd /Users/me/projects/penecho && git diff --stat && git diff public/lines/line.js" }), "Checking git diff");
+  assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:"cd /Users/me/projects/penecho && node --test test/a.test.js" }), "Running tests");
+  assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:"cd /Users/me/projects/penecho && rg -n zoomIn public/lines/" }), "Searching code");
   assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:`'{"dir":"C:/app"}' | node "$env:PENECHO_BROWSER_HELPER"` }), "Checking page in browser");
   assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:`node -e 'require(process.env.PENECHO_BROWSER_HELPER)'` }), "Checking page in browser");
   assert.equal(nowFrom({ kind:"tool", verb:"Ran", code:true, target:`'{"do":"plan"}' | node "$env:PENECHO_ORCH_HELPER"` }), "Updating Orchestrator");
@@ -127,24 +127,24 @@ test("activity.js captures tool summaries, plan checklists, multi-file edits, re
 
 test("paintRows renders a structured Work progress briefing (Plan, Changed, Checks, Issues, Read), human-readable rows, and clean live footer", () => {
   const { document, c } = renderHarness();
-  const l = { id:"l1", slug:"demo", workdir:"/Users/heack/workspace/penecho_071_version" };
+  const l = { id:"l1", slug:"demo", workdir:"/Users/me/projects/penecho" };
   const s = { id:"work-1", state:"active", agent:"antigravity" };
   const rows = [
     { i:0, step:"work-1", kind:"start", agent:"antigravity", at:1000 },
     { i:1, step:"work-1", kind:"tool", verb:"Updated its plan", target:"", todos:[{ text:"Locate animation code", status:"completed" }, { text:"Update navigation rules", status:"in_progress" }, { text:"Verify in Chromium", status:"pending" }], state:"done" },
     { i:2, step:"work-1", kind:"tool", verb:"Ran", code:true, target:'node "$PENECHO_ORCH_HELPER" \'{"do":"decide","route":"self","kind":"code"}\'', state:"done", output:'{"route":"self"}' },
-    { i:3, step:"work-1", kind:"tool", verb:"Read", target:"/Users/heack/workspace/penecho_071_version/public/lines/main.js", range:"65-110", state:"done" },
-    { i:4, step:"work-1", kind:"tool", verb:"Read", target:"/Users/heack/workspace/penecho_071_version/public/lines/navigation.js", state:"done" },
-    { i:5, step:"work-1", kind:"tool", verb:"Read", target:"/Users/heack/workspace/penecho_071_version/public/lines/panorama.js", state:"done" },
-    { i:6, step:"work-1", kind:"tool", verb:"Ran", code:true, target:'cd /Users/heack/workspace/penecho_071_version && rg -n "zoomIn|flightToLine" public/lines/', state:"done", output:"main.js:87" },
-    { i:7, step:"work-1", kind:"tool", verb:"Ran", code:true, target:"cd /Users/heack/workspace/penecho_071_version && node --test test/project-line-navigation.test.js test/project-line-doc-back.test.js", state:"failed", output:"ℹ tests 19\nℹ pass 5\nℹ fail 14\nCommand exited with code 1." },
-    { i:8, step:"work-1", kind:"tool", verb:"Edited", target:"/Users/heack/workspace/penecho_071_version/public/lines/main.js", state:"done" },
-    { i:9, step:"work-1", kind:"tool", verb:"Edited", target:"/Users/heack/workspace/penecho_071_version/public/lines/main.js", state:"done" },
-    { i:10, step:"work-1", kind:"tool", verb:"Wrote", target:"/Users/heack/workspace/penecho_071_version/test/project-line-transition-animation.test.js", state:"done" },
-    { i:11, step:"work-1", kind:"tool", verb:"Ran", code:true, target:"cd /Users/heack/workspace/penecho_071_version && npm run build:lines && npm run check:lines && node --test test/project-line-transition-animation.test.js", state:"done", output:"ℹ pass 19\nℹ fail 0\n" },
-    { i:12, step:"work-1", kind:"tool", verb:"Ran", code:true, target:"cd /Users/heack/workspace/penecho_071_version && git diff --stat && git diff public/lines/line.js", state:"running" },
+    { i:3, step:"work-1", kind:"tool", verb:"Read", target:"/Users/me/projects/penecho/public/lines/main.js", range:"65-110", state:"done" },
+    { i:4, step:"work-1", kind:"tool", verb:"Read", target:"/Users/me/projects/penecho/public/lines/navigation.js", state:"done" },
+    { i:5, step:"work-1", kind:"tool", verb:"Read", target:"/Users/me/projects/penecho/public/lines/panorama.js", state:"done" },
+    { i:6, step:"work-1", kind:"tool", verb:"Ran", code:true, target:'cd /Users/me/projects/penecho && rg -n "zoomIn|flightToLine" public/lines/', state:"done", output:"main.js:87" },
+    { i:7, step:"work-1", kind:"tool", verb:"Ran", code:true, target:"cd /Users/me/projects/penecho && node --test test/project-line-navigation.test.js test/project-line-doc-back.test.js", state:"failed", output:"ℹ tests 19\nℹ pass 5\nℹ fail 14\nCommand exited with code 1." },
+    { i:8, step:"work-1", kind:"tool", verb:"Edited", target:"/Users/me/projects/penecho/public/lines/main.js", state:"done" },
+    { i:9, step:"work-1", kind:"tool", verb:"Edited", target:"/Users/me/projects/penecho/public/lines/main.js", state:"done" },
+    { i:10, step:"work-1", kind:"tool", verb:"Wrote", target:"/Users/me/projects/penecho/test/project-line-transition-animation.test.js", state:"done" },
+    { i:11, step:"work-1", kind:"tool", verb:"Ran", code:true, target:"cd /Users/me/projects/penecho && npm run build:lines && npm run check:lines && node --test test/project-line-transition-animation.test.js", state:"done", output:"ℹ pass 19\nℹ fail 0\n" },
+    { i:12, step:"work-1", kind:"tool", verb:"Ran", code:true, target:"cd /Users/me/projects/penecho && git diff --stat && git diff public/lines/line.js", state:"running" },
   ];
-  const a = { running:true, started:Date.now() - 444000, now:"Running cd /Users/heack/workspace/penecho_071_version && git diff --stat", seq:12, rows:new Map(rows.map(r => [r.i, r])) };
+  const a = { running:true, started:Date.now() - 444000, now:"Running cd /Users/me/projects/penecho && git diff --stat", seq:12, rows:new Map(rows.map(r => [r.i, r])) };
   c.ACTIVITY = { "p1:demo":a };
   c.activityOf = () => a;
   c.paintRows({ id:"p1" }, l, s);
@@ -178,10 +178,10 @@ test("paintRows renders a structured Work progress briefing (Plan, Changed, Chec
 
   // Underlying toolRow strips `cd /Users/... && `, preserves quoted regex pipes, and keeps raw command inside <pre>
   const searchRow = document.querySelector('#lppRows .act-rows [data-row="6"]');
-  assert.doesNotMatch(searchRow.querySelector("summary").textContent, /cd \/Users\/heack/);
+  assert.doesNotMatch(searchRow.querySelector("summary").textContent, /cd \/Users\/me/);
   assert.match(searchRow.querySelector("summary").textContent, /Searched/);
   assert.match(searchRow.querySelector("summary").textContent, /zoomIn\|flightToLine in public\/lines\//);
-  assert.match(searchRow.querySelector("pre").textContent, /\$ cd \/Users\/heack\/workspace\/penecho_071_version && rg/);
+  assert.match(searchRow.querySelector("pre").textContent, /\$ cd \/Users\/me\/projects\/penecho && rg/);
 
   // Clicking a file chip jumps to the underlying step and opens its enclosing group
   const mainChip = brief.querySelector('.at-chip[data-act="act-jump"]');
@@ -193,7 +193,7 @@ test("paintRows renders a structured Work progress briefing (Plan, Changed, Chec
 
   // Live footer never repeats raw `cd /Users/...`
   const liveNow = document.querySelector("#lppRows .at-live .at-now").textContent;
-  assert.doesNotMatch(liveNow, /cd \/Users\/heack/);
+  assert.doesNotMatch(liveNow, /cd \/Users\/me/);
   assert.match(liveNow, /Git · diff --stat · diff public\/lines\/line\.js/);
 
   // When no tool is running, live footer says Thinking… instead of a stale command

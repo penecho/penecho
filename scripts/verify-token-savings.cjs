@@ -2,7 +2,7 @@
 "use strict";
 // Real server and browser, isolated folders, deterministic agent telemetry; no external model requests.
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),assert=require("node:assert/strict"),{spawn}=require("node:child_process");
-const {chromium}=require(process.env.PLAYWRIGHT_PATH || "/Users/heack/workspace/canvas-jev/node_modules/playwright");
+const {chromium}=require(process.env.PLAYWRIGHT_PATH || "playwright");
 const root=path.resolve(__dirname,".."),temp=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-token-ui-")),shots=process.argv[2] || path.join(temp,"shots");
 fs.mkdirSync(shots,{recursive:true});
 const docs=path.join(temp,"docs"),agent=path.join(temp,"agent.cjs"),calls=path.join(temp,"calls.jsonl"),port=0;

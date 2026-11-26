@@ -52,7 +52,7 @@ test("initialLine, initialDetail, noteToLine, setFront, readmeIndex, drawingSkil
     priority: 2,
     created: "2026-11-18 17:46",
     source: "Claude desktop",
-    code: "/Users/heack/workspace/penecho_071_version",
+    code: "/Users/me/projects/penecho",
     steps: [F.askStep({ words: "Check examples" }), F.workStep({ who: "claude", done: true, took: "4 min", body: "Done." })],
   });
   assert.match(line, /^who: "@claude"$/m);
@@ -81,7 +81,7 @@ test("initialLine, initialDetail, noteToLine, setFront, readmeIndex, drawingSkil
     "doc sep": "---",
     "multiline": "first line\nsecond line",
     "outer space": " padded ",
-    "win path": "C:\\Users\\heack\\project",
+    "win path": "C:\\Users\\me\\project",
   });
   const parsed = F.splitFront(patched).front;
   assert.equal(parsed.who, "@codex");
@@ -95,7 +95,7 @@ test("initialLine, initialDetail, noteToLine, setFront, readmeIndex, drawingSkil
   assert.equal(parsed["doc sep"], "---");
   assert.equal(parsed["multiline"], "first line\nsecond line");
   assert.equal(parsed["outer space"], " padded ");
-  assert.equal(parsed["win path"], "C:\\Users\\heack\\project");
+  assert.equal(parsed["win path"], "C:\\Users\\me\\project");
 
   // Lossless round-trip on repeated setFront
   const repatched = F.setFront(patched, { reviewed: "2026-11-21 17:10" });
@@ -148,7 +148,7 @@ test("initialLine, initialDetail, noteToLine, setFront, readmeIndex, drawingSkil
     assert.equal(yamlResults.line.who, "@claude");
     assert.equal(yamlResults.patched["quote test"], 'Say "hi" & \\bye\\');
     assert.equal(yamlResults.patched["multiline"], "first line\nsecond line");
-    assert.equal(yamlResults.patched["win path"], "C:\\Users\\heack\\project");
+    assert.equal(yamlResults.patched["win path"], "C:\\Users\\me\\project");
     assert.equal(yamlResults.readme.project, "@acme: Web #1");
     assert.equal(yamlResults.memory.project, "@acme: Web #1");
   }

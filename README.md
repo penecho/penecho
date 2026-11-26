@@ -57,17 +57,18 @@ PenEcho opens at http://localhost:3888. Choose an access code, open a project fo
 
 New in 1.5.0: Lines, one-click review, the Orchestrator with real ratings, token savings with proof, and live Canvas sharing. See the [changelog](CHANGELOG.md#150).
 
-<details>
-<summary>Run from source</summary>
+### Run from source
 
-```text
+You need Git and Node.js 22.19 or newer. The built pages are part of the repository, so there is no build step.
+
+```bash
 git clone https://github.com/penecho/penecho.git
 cd penecho
 npm install
-npm start
+npm start        # PenEcho opens at http://localhost:3888
 ```
 
-</details>
+For the desktop app from source, run `npm run desktop:deps` once, then `npm run desktop`. `npm run check` runs every check and test.
 
 ---
 
