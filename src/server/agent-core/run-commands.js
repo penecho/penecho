@@ -10,19 +10,29 @@ const RUN_COMMANDS = ["git", "gh", "npm", "npx", "node", "pnpm", "yarn", "python
 // Commands whose arguments name what they write. A program such as node or python can still write anywhere it likes, as it can for any agent.
 const WRITES_ALL = new Set(["mkdir", "touch", "mv"]), WRITES_LAST = new Set(["cp"]);
 
-const physical = target => {
+const pathMod = platform => (platform === "win32" ? path.win32 : path);
+const MSYS_DRIVE = /^\/(?:cygdrive\/)?([A-Za-z])(?=\/|$)/;
+const normalizeShellPath = (file, platform) => {
+  const raw = String(file || "");
+  if (platform !== "win32") return raw;
+  return raw.replace(MSYS_DRIVE, (_, drive) => `${drive.toUpperCase()}:/`);
+};
+const physical = (target, platform = process.platform) => {
+  const pathOps = pathMod(platform);
+  if (platform !== process.platform) return pathOps.resolve(target);
   // A file that is not there yet is judged by the nearest folder that is.
-  let current = path.resolve(target), rest = [];
+  let current = pathOps.resolve(target), rest = [];
   for (;;) {
-    try { return path.join(fs.realpathSync(current), ...rest); } catch { /* Not there yet. */ }
-    const parent = path.dirname(current);
-    if (parent === current) return path.resolve(target);
-    rest.unshift(path.basename(current)); current = parent;
+    try { return pathOps.join(fs.realpathSync(current), ...rest); } catch { /* Not there yet. */ }
+    const parent = pathOps.dirname(current);
+    if (parent === current) return pathOps.resolve(target);
+    rest.unshift(pathOps.basename(current)); current = parent;
   }
 };
-function inside(roots, target) {
-  const real = physical(target);
-  return roots.some(root => { const rel = path.relative(physical(root), real); return !rel || (!rel.startsWith("..") && !path.isAbsolute(rel)); });
+function inside(roots, target, platform = process.platform) {
+  const pathOps = pathMod(platform);
+  const real = physical(target, platform);
+  return roots.some(root => { const rel = pathOps.relative(physical(root, platform), real); return !rel || (!rel.startsWith("..") && !pathOps.isAbsolute(rel)); });
 }
 
 // One command line, cut into words and the signs between simple commands. Quotes keep their words whole; nothing is expanded.
@@ -33,7 +43,7 @@ function words(line) {
     const c = line[i];
     if (quote) {
       if (c === quote) quote = "";
-      else if (quote === '"' && c === "\\" && i + 1 < line.length) word += line[++i];
+      else if (quote === '"' && c === "\\" && i + 1 < line.length && /[$`"\\\n]/.test(line[i + 1])) word += line[++i];
       else if (quote === '"' && (c === "`" || (c === "$" && line[i + 1] === "("))) return { error:"Command substitution is not allowed." };
       else word += c;
       continue;
@@ -106,17 +116,31 @@ function escapes(name, args) {
   if (name === "gh" && ["alias", "extension"].includes(args.find((arg, i) => i > 0 && !arg.startsWith("-")))) return "gh alias and gh extension are not allowed in an unattended run.";
   return "";
 }
-function checkCommand(command, { cwd, folders = [], extra = [], strictReads = false } = {}) {
+function checkCommand(command, { cwd, folders = [], extra = [], strictReads = false, platform = process.platform } = {}) {
   const source = String(command || "");
   if (!source.trim()) return { ok:false, why:"The command is empty." };
   if (source.length > 20000 || source.includes("\0")) return { ok:false, why:"The command is too long." };
   const cut = words(source);
   if (cut.error) return { ok:false, why:cut.error };
   const roots = [cwd, ...folders].filter(Boolean);
+  const pathOps = pathMod(platform);
+  const home = process.env.HOME || (platform === "win32" ? process.env.USERPROFILE : "") || "~";
   // A path the shell would change before using it cannot be judged here, so a file to write is named plainly.
   let here = cwd || process.cwd();
-  const at = file => path.resolve(here, file.replace(/^~(?=$|\/)/, process.env.HOME || "~"));
-  const allowed = file => !/[$`{]/.test(file) && !/^~[^/]/.test(file) && inside(roots, at(file));
+  const at = file => {
+    const expanded = String(file || "").replace(/^~(?=$|[\\/])/, home);
+    return pathOps.resolve(here, normalizeShellPath(expanded, platform));
+  };
+  const allowed = file => {
+    const raw = String(file || "");
+    if (/[$`{]/.test(raw) || /^~[^\\/]/.test(raw)) return false;
+    if (platform === "win32") {
+      if (/^[A-Za-z]:(?![\\/])/.test(raw)) return false;
+      // In Git Bash on Windows, POSIX-rooted paths other than /dev/null and /<drive>/... point into MSYS2's root.
+      if (raw.startsWith("/") && !raw.startsWith("//") && !MSYS_DRIVE.test(raw)) return false;
+    }
+    return inside(roots, at(raw), platform);
+  };
   // A command allowed as it is typed is compared word for word, so its quotes do not matter.
   const allowedAsTyped = extra.map(text => (words(String(text)).words || []).map(item => item.word ?? "").join(" "));
   const parts = [[]];
@@ -129,6 +153,7 @@ function checkCommand(command, { cwd, folders = [], extra = [], strictReads = fa
       const target = part[++i]?.word;
       if (!target) return { ok:false, why:"A redirection names no file." };
       if (part[i - 1].redirect === "write" && target !== "/dev/null" && !allowed(target)) return { ok:false, why:`Writing to ${target} is outside this run's folders.` };
+      if (strictReads && part[i - 1].redirect === "read" && target !== "/dev/null" && !allowed(target)) return { ok:false, why:`${target} is outside this run's folders.` };
     }
     const name = args[0] || "";
     if (!name) return { ok:false, why:"A redirection has no command." };
@@ -145,7 +170,7 @@ function checkCommand(command, { cwd, folders = [], extra = [], strictReads = fa
     const written = [...(WRITES_ALL.has(name) ? files : WRITES_LAST.has(name) && !targets.length ? files.slice(-1) : name === "sed" && args.some(arg => /^-[a-zA-Z]*i/.test(arg) || arg.startsWith("--in-place")) ? files.slice(1) : []), ...targets.filter(file => file !== "-")];
     // With no OS sandbox around the shell, no argument may name a place outside the run's folders, for reading either.
     if (strictReads) {
-      const named = args.slice(1).map(arg => arg.replace(/^--?[A-Za-z][\w-]*=/, "")).filter(arg => /^(?:\/|~)|(?:^|\/)\.\.(?:\/|$)/.test(arg) && arg !== "/dev/null");
+      const named = args.slice(1).map(arg => arg.replace(/^--?[A-Za-z][\w-]*=/, "")).filter(arg => /^(?:[/\\~]|[A-Za-z]:)|(?:^|[\\/])\.\.(?:[\\/]|$)/.test(arg) && arg !== "/dev/null");
       const far = named.find(arg => !allowed(arg));
       if (far) return { ok:false, why:`${far} is outside this run's folders.` };
     }

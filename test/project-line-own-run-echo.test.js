@@ -102,6 +102,12 @@ test("internal reviewer and Ask-tab prompts never become standalone imported Lin
   assert.equal(s.store.scan(p).topics.length, before, "Ask-tab session must not create a Line");
   assert.equal(askRec.penechoRun, true);
 
+  const askRecV2 = { agent:"antigravity", id:"conv_ask_2", via:"Antigravity CLI", lastAt:0, doneTurns:{}, lastSay:"" };
+  const askPromptV2 = 'You are answering a question about the project "PenEcho" in PenEcho. Read-only: do not edit files, commit, or change anything in the project.\n\n<question>\nwhat is the rule?\n</question>';
+  await s.conversationChanges(p, askRecV2, [{ me:askPromptV2, at:Date.now() }, { said:"Summary answer [PE-1].", at:Date.now() }]);
+  assert.equal(s.store.scan(p).topics.length, before, "New Ask-tab session must not create a Line");
+  assert.equal(askRecV2.penechoRun, true);
+
   // A person asking a question mentioning the reviewer still creates a normal Line.
   const humanRec = { agent:"opencode", id:"ses_human_1", via:"OpenCode", lastAt:0, doneTurns:{}, lastSay:"" };
   await s.conversationChanges(p, humanRec, [{ me:"Why did this reviewer show up as a new session?", at:Date.now() }]);

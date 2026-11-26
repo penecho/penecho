@@ -16,8 +16,10 @@ function findHTML(p, r) {
   if (FIND.q.trim() && (!FIND.data || FIND.data.project !== p.id)) queueMicrotask(() => runFind(p));
   if (!HOSTED && FIND.history?.project !== p.id) queueMicrotask(() => loadAsked(p));
   queueMicrotask(() => { const input = $('#findInput'); if (input && document.activeElement !== input && !matchMedia('(hover: none)').matches) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } });
+  const canAsk = askPresets().length > 0;
+  const prompt = canAsk ? 'Ask a question about this project' : 'Search all lines';
   return `<div class="page find-page">
-    <div class="find-box" role="search">${ic('search', 19)}<input id="findInput" type="text" value="${esc(FIND.q)}" placeholder="${askPresets().length ? 'Search, or ask about this project' : 'Search all lines'}" aria-label="${askPresets().length ? 'Search, or ask about this project' : 'Search all lines'}" autocomplete="off" spellcheck="false" enterkeyhint="search">${askControlHTML()}</div>
+    <div class="find-box" role="search">${ic('search', 19)}<input id="findInput" type="text" value="${esc(FIND.q)}" placeholder="${prompt}" aria-label="${prompt}" autocomplete="off" spellcheck="false" enterkeyhint="${canAsk ? 'send' : 'search'}">${askControlHTML()}</div>
     <div id="findAnswer">${answerHTML(p)}</div>
     <div id="findBody" aria-live="polite">${findBodyHTML(p)}</div>
   </div>`;
@@ -198,7 +200,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; findTyped(''); }
   if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
   e.preventDefault();
-  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && askPresets().length) {
+  if (!e.altKey && !e.shiftKey && askPresets().length) {
     if (!e.repeat) findAsk();
     return;
   }
@@ -246,7 +248,7 @@ function askControlHTML() {
   const all = askPresets(), chosen = askPreset();
   if (!chosen) return '';
   const pick = all.length > 1 ? `<select id="findAgent" class="find-agent" aria-label="Agent that answers">${all.map(x => `<option value="${esc(x.id)}" ${x.id === chosen.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : `<span class="find-agent one" title="${esc(chosen.name)}">${esc(chosen.name)}</span>`;
-  return `${pick}<button type="button" class="btn sm primary find-ask" data-act="find-ask" aria-keyshortcuts="Meta+Enter Control+Enter" title="Ask the selected agent (Command+Enter or Ctrl+Enter)">Ask <kbd class="cmp-key" aria-hidden="true">${MOD_ENTER}</kbd></button>`;
+  return `${pick}<button type="button" class="btn sm primary find-ask" data-act="find-ask" aria-keyshortcuts="Enter" title="Ask the selected agent (Enter)">Ask <kbd class="cmp-key" aria-hidden="true"><b>↵</b></kbd></button>`;
 }
 const answerKey = (p, q) => `${p?.id || ''}\n${q}`;
 // The answer to what is in the box: one asked on this page, else the one kept from before.
@@ -257,19 +259,42 @@ function answerFor(p, q = FIND.q.trim()) {
   const kept = askedList(p).find(x => x.question === q);
   return kept ? { id:kept.id, q:kept.question, agent:kept.agent, name:kept.name, status:'done', text:kept.answer, lines:kept.lines || [], took:kept.took, at:kept.at } : null;
 }
+const ASK_BADGE_KIND = new Map([
+  ['finished', 'done'], ['done', 'done'], ['completed', 'done'], ['reviewed', 'done'], ['shipped', 'done'], ['landed', 'done'],
+  ['已完成', 'done'], ['已审阅', 'done'], ['已合并', 'done'], ['已提交', 'done'],
+  ['to do', 'todo'], ['todo', 'todo'], ['remaining', 'todo'], ['pending', 'todo'], ['not started', 'todo'], ['left to do', 'todo'],
+  ['待办', 'todo'], ['未完成', 'todo'], ['待完成', 'todo'],
+  ['to review', 'review'], ['needs review', 'review'], ['待审阅', 'review'], ['待评审', 'review'],
+  ['needs you', 'wait'], ['waiting on you', 'wait'], ['action needed', 'wait'], ['需要你', 'wait'], ['待你确认', 'wait'],
+  ['in progress', 'working'], ['working', 'working'], ['ongoing', 'working'], ['进行中', 'working'],
+  ['blocked', 'blocked'], ['caveat', 'blocked'], ['caveats', 'blocked'], ['uncommitted', 'blocked'], ['unverified', 'blocked'],
+  ['受阻', 'blocked'], ['注意', 'blocked'], ['未提交', 'blocked'],
+]);
+function askBadgeHTML(label) {
+  const clean = String(label || '').trim().replace(/[:：]+$/, '').trim();
+  const kind = ASK_BADGE_KIND.get(clean.toLowerCase());
+  return kind ? `<span class="fa-badge is-${kind}">${clean}</span>` : '';
+}
+function decorateAskLabels(html) {
+  return String(html || '')
+    .replace(/<dt>([^<]+)<\/dt>/g, (all, label) => { const b = askBadgeHTML(label); return b ? `<dt class="fa-dt-badge">${b}</dt>` : all; })
+    .replace(/(<li\b[^>]*>\s*)<strong>([^<]+)<\/strong>([:：]?)/g, (all, pre, label) => { const b = askBadgeHTML(label); return b ? `${pre}${b}` : all; })
+    .replace(/(<p class="md-p"(?:\s+data-[ab]="\d+")*>\s*)<strong>([^<]+)<\/strong>([:：]?)/g, (all, pre, label) => { const b = askBadgeHTML(label); return b ? `${pre}${b}` : all; })
+    .replace(/\[([^\[\]<>]{2,24})\]/g, (all, label) => askBadgeHTML(label) || all);
+}
 function answerHTML(p) {
   const a = answerFor(p);
   if (!a) return '';
   const again = askPresets().length ? `<button type="button" class="icon-btn" data-act="find-ask" title="Ask again" aria-label="Ask again">${ic('retry', 15)}</button>` : '';
   const head = `<header>${av(a.agent || 'agent', 20)}<b>${esc(a.name)}</b><span class="fa-grow"></span>${a.status === 'asking'
     ? `<span class="fa-time"><i class="spin" aria-hidden="true"></i><span>${Math.max(0, Math.round((Date.now() - a.started) / 1000))} s</span></span><button type="button" class="btn sm" data-act="find-ask-stop">Stop</button>`
-    : `${a.at ? `<time title="${esc(new Date(a.at).toLocaleString())}">${esc(findDay(a.at))}</time>` : a.took ? `<time>${Math.max(1, Math.round(a.took / 1000))} s</time>` : ''}${again}${a.id ? `<button type="button" class="icon-btn" data-act="find-asked-delete" data-id="${esc(a.id)}" title="Delete" aria-label="Delete this answer">${ic('trash', 15)}</button>` : ''}`}</header>`;
-  if (a.status === 'asking') return `<section class="find-answer asking" aria-busy="true">${head}<p class="fa-wait">Reading the project's Topics, Lines and Git</p></section>`;
+    : `${a.at ? `<time title="${esc(new Date(a.at).toLocaleString())}">${esc(findDay(a.at))}</time>` : a.took ? `<time>${Math.max(1, Math.round(a.took / 1000))} s</time>` : ''}<button type="button" class="icon-btn" data-act="find-answer-copy" title="Copy answer" aria-label="Copy answer">${ic('copy', 15)}</button>${again}${a.id ? `<button type="button" class="icon-btn" data-act="find-asked-delete" data-id="${esc(a.id)}" title="Delete" aria-label="Delete this answer">${ic('trash', 15)}</button>` : ''}`}</header>`;
+  if (a.status === 'asking') return `<section class="find-answer asking" aria-busy="true">${head}<p class="fa-wait">Reading the project's docs…</p></section>`;
   if (a.status === 'error') return `<section class="find-answer failed" role="alert">${head}<p class="fa-error">${esc(a.error)}</p></section>`;
   const refs = new Map((a.lines || []).map(l => [l.ref, l])), held = [];
-  // Each [PE-12] the agent cited becomes a link to that Line; one it was not given stays as text.
-  const marked = String(a.text || '').replace(/\[([A-Z][A-Z0-9]*-\d+|L\d+)\]/g, (all, ref) => refs.has(ref) ? `⁣${held.push(ref) - 1}⁣` : all);
-  const html = wordsMd(marked, p).replace(/⁣(\d+)⁣/g, (all, i) => { const l = refs.get(held[Number(i)]), real = lineById(p, l.slug); return `<button type="button" class="fa-ref" data-act="find-open" data-line="${esc(l.slug)}" title="${esc(real?.title || l.title)}">${esc(/^L\d+$/.test(l.ref) ? (real?.title || l.title) : l.ref)}</button>`; });
+  // Each [PE-12] the agent cited becomes a link to that Line; unknown ids stay as text.
+  const marked = String(a.text || '').replace(/\[([A-Z][A-Z0-9]*-\d+|L\d+)\](?:\((?:[^()\s]*\/)?lines\/[^()\s]+\.md\))?/g, (all, ref) => refs.has(ref) ? `⁣${held.push(ref) - 1}⁣` : all);
+  const html = decorateAskLabels(wordsMd(marked, p)).replace(/⁣(\d+)⁣/g, (all, i) => { const l = refs.get(held[Number(i)]), real = lineById(p, l.slug); return `<button type="button" class="fa-ref" data-act="find-open" data-line="${esc(l.slug)}" title="${esc(real?.title || l.title)}">${esc(/^L\d+$/.test(l.ref) ? (real?.title || l.title) : l.ref)}</button>`; });
   const cited = (a.lines || []).filter(l => l.cited);
   const lines = cited.length ? `<div class="fa-lines">${cited.map(l => { const real = lineById(p, l.slug); return `<button type="button" class="fa-line" data-act="find-open" data-line="${esc(l.slug)}">${/^L\d+$/.test(l.ref) ? '' : `<code>${esc(l.ref)}</code>`}<span>${esc(real?.title || l.title)}</span>${findState(real)}</button>`; }).join('')}</div>` : '';
   return `<section class="find-answer">${head}<div class="fa-body">${html}</div>${lines}</section>`;
@@ -302,6 +327,7 @@ async function findAsk(p = project()) {
 }
 ACT['find-ask'] = () => findAsk();
 ACT['find-ask-stop'] = () => { FIND.asking?.stop.abort(); };
+ACT['find-answer-copy'] = () => { const a = answerFor(project()); if (a?.text) writeClipboard(a.text).then(ok => toast(ok ? 'Copied the answer' : 'Could not copy')); };
 document.addEventListener('change', e => {
   if (e.target.id !== 'findAgent') return;
   try { localStorage.setItem(FIND_AGENT, e.target.value); } catch { /* Only a convenience. */ }

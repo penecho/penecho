@@ -1,5 +1,5 @@
 'use strict';
-// Settings → Agents → Model prices and the agents' No price marks (prices.js, settings.js).
+// Settings → Preset agents → Model prices and the agents' No price marks (prices.js, settings.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -52,9 +52,25 @@ test('an agent whose model has no price is marked, and the mark opens Model pric
   assert.deepEqual(h.opened, [['agents', 'prices']]);
   h.c.paintPrices();
   assert.equal(h.host.querySelector('tr.is-target').dataset.priceModel, 'opus');
-  // Two tabs on the Agents page; the number is of the models the saved agents run.
+  // Two tabs on Preset agents: Presets counts the saved ones, Model prices the models the saved agents run with no price.
   const tabs = parseHTML(`<body>${h.c.agentsTabsHTML()}</body>`).document;
-  assert.deepEqual([...tabs.querySelectorAll('[role="tab"]')].map(words), ['Agents', 'Model prices1']);
+  assert.deepEqual([...tabs.querySelectorAll('[role="tab"]')].map(words), ['Presets (2)', 'Model prices1']);
+  h.c.S.presets = { presets:[], default:'' };
+  assert.equal(words(parseHTML(`<body>${h.c.agentsTabsHTML()}</body>`).document.querySelector('#agentsTab-agents')), 'Presets');
+});
+
+test('Model prices stays under #agents/prices, with the Project agents steps above its tabs', async () => {
+  const h = harness();
+  await h.c.loadPrices();
+  h.c.run("S.shelfPage = 'agents'; SET.agentsTab = 'prices';");
+  const body = parseHTML(`<body>${h.c.sysBodyHTML('agents')}</body>`).document;
+  const flow = body.querySelector('.sys-flow'), strip = body.querySelector('#agentsTabs');
+  assert.ok(flow && strip, 'the steps and the tabs are both there');
+  assert.ok(flow.compareDocumentPosition(strip) & 4, 'the steps come first');
+  assert.ok(body.querySelector('[data-prices="settings"]'), 'the prices list is on show');
+  assert.equal(body.querySelector('#sysAgents'), null, 'not the presets');
+  assert.equal(body.querySelector('.sys-flow-step.is-active').dataset.tab, 'agents');
+  assert.match(words(body.querySelector('.sys-flow-step[data-tab="agents"]')), /2 saved presets active/);
 });
 
 test('the list shows the models with no price first, with boxes, then every price and where it is from', async () => {

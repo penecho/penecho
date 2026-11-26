@@ -8,7 +8,7 @@ const { dshSavedKeys, dshTakesFolders } = require("./agents.js");
 const { prepareAgentEnv } = require("../../providers/agent-env.js");
 const { dshHome, dshCredentialRef, stageDshPatch, validDshModel, effortId } = require("./dsh-models.js");
 const { NOT_SET_UP } = require("../agent-core/penecho-source.js");
-const { userLine, piRpcInit, piRpcUiResponse } = require("./activity.js");
+const { userLine, ompLogError, piRpcInit, piRpcUiResponse, isPiTurnEnd, parseDialect } = require("./activity.js");
 const { installKind } = require("./agent-updates.js");
 const { updateAgent } = require("./agent-self-update.js");
 
@@ -99,7 +99,7 @@ function refreshDshProblems(agent, env, out) {
   dshExtraProblems.set(out, next);
 }
 
-async function checkOne(agent, { env, run, reach = reachUrl, fresh = false, modelCache = null, pickModel = null, levels = null }) {
+async function checkOne(agent, { env, run, reach = reachUrl, fresh = false, modelCache = null, pickModel = null, catalog = null, levels = null }) {
   const out = { id:agent.id, name:agent.name, mono:agent.mono, color:agent.color, state:"ready", where:"", version:"", signedIn:null, model:null, app:agent.app ? `${agent.app.name} ${agent.app.version}` : "", access:agent.access || null, problems:[] };
   const add = (kind, problem) => { out.problems.push({ kind, ...problem }); if (kind === "fix") out.state = "problem"; };
   const pathFact = `PenEcho looks for commands in: ${String(env.PATH || "").split(path.delimiter).filter(Boolean).join(path.delimiter) || "(no PATH)"}`;
@@ -157,7 +157,7 @@ async function checkOne(agent, { env, run, reach = reachUrl, fresh = false, mode
   const version = await run(agent.launch.command, [...agent.launch.prefixArgs, "--version"], { env });
   if (version.status !== 0) {
     const said = version.timedOut ? "No answer in 15 seconds." : firstLine(version.stderr) || firstLine(version.stdout) || `It stopped with code ${version.status}.`;
-    add("fix", { title:"Found, but it does not start", detail:said, fix:`Run \`${agent.cli || agent.launch.command} --version\` in Terminal to see why. Reinstalling usually fixes it.`,
+    add("fix", { code:"version_check_failed", title:"Found, but it does not start", detail:said, fix:`Run \`${agent.cli || agent.launch.command} --version\` in Terminal to see why. Reinstalling usually fixes it.`,
       prompt:prompt(agent, `PenEcho runs ${out.where}, and \`--version\` fails.`, [`What it said: ${said}`, pathFact], [`Find out why \`${out.where} --version\` fails, and fix it, reinstalling if that is what it takes.`], checkLine(agent, agent.signIn)) });
     return out;
   }
@@ -201,9 +201,25 @@ async function checkOne(agent, { env, run, reach = reachUrl, fresh = false, mode
     }
   }
 
-  // An agent that works its models' levels out itself, as OpenCode does, says them in its own list: those are the ones offered, and a model it lists with none takes none.
-  const known = out.model && levels ? await levels(agent.id, { fresh }).catch(() => null) : null;
-  if (known) out.model.effortsFor = { ...(out.model.effortsFor || {}), ...known };
+  // An agent that resolves its own models and levels, as OpenCode does, says them in its own list:
+  // those become the offered choices and per-model levels, and a model it lists with none takes none.
+  const listed = out.model && catalog
+    ? await catalog(agent.id, { fresh, version:out.version, includeDefault:true }).catch(() => null)
+    : out.model && levels
+      ? await levels(agent.id, { fresh, version:out.version }).then(effortsFor => (effortsFor ? { effortsFor } : null)).catch(() => null)
+      : null;
+  if (listed) {
+    if (listed.effortsFor) out.model.effortsFor = { ...(out.model.effortsFor || {}), ...listed.effortsFor };
+    if (listed.choices?.length) {
+      const hasConfigured = Boolean(out.model.name && listed.choices.includes(out.model.name));
+      if (!hasConfigured && listed.defaultModel) {
+        out.model.name = listed.defaultModel;
+        out.model.effort = "";
+        out.model.from = "";
+      }
+      out.model.choices = [...new Set([out.model.name && listed.choices.includes(out.model.name) ? out.model.name : "", ...listed.choices].filter(Boolean))].slice(0, 300);
+    }
+  }
 
   if (agent.signIn) {
     const answer = await run(agent.launch.command, [...agent.launch.prefixArgs, ...agent.signIn.args], { env });
@@ -279,9 +295,14 @@ const agyFailed = event => event?.event === "result" && Boolean(event.result?.st
 // Only a top-level error event reads as one. Codex also reports harmless warnings as an item of type error,
 // such as an under-development feature, and those must not be mistaken for the run failing.
 // Pi and omp in RPC mode turn down a command with a response that did not succeed, and end a model failure with an assistant message stopped on error.
-const piFailed = event => (event?.type === "response" && event.success === false) || (event?.type === "message_end" && event.message?.role === "assistant" && (event.message.stopReason === "error" || event.message.stopReason === "aborted"));
-const failedEvent = stdout => stdout.split("\n").some(line => {
-  try { const event = JSON.parse(line); return Boolean(event) && (event.type === "error" || event.type === "turn.failed" || agyFailed(event) || piFailed(event)); }
+// Older OMP/Pi binaries may not recognize optional `set_event_filter`, so ignore its refusal.
+const piFailed = event => (event?.type === "response" && event.success === false && event.command !== "set_event_filter") || (event?.type === "message_end" && event.message?.role === "assistant" && (event.message.stopReason === "error" || event.message.stopReason === "aborted"));
+const failedEvent = (stdout, piRpc) => stdout.split("\n").some(line => {
+  try {
+    const event = JSON.parse(line);
+    return Boolean(event) && (event.type === "error" || event.type === "turn.failed" || agyFailed(event)
+      || ((!piRpc || event.type !== "message_end") && piFailed(event)));
+  }
   catch { return false; }
 });
 function failureOf(stdout, safeStderr, redact) {
@@ -296,6 +317,7 @@ function failureOf(stdout, safeStderr, redact) {
   for (const line of stdout.split("\n")) {
     let event; try { event = JSON.parse(line); } catch { continue; }
     if (!event || typeof event !== "object") continue;
+    if (event.type === "response" && event.command === "set_event_filter") continue;
     if ((event.type === "error" || event.type === "turn.failed") && typeof event.message === "string") found = event.message;
     if (piFailed(event)) found = String(event.error || event.message?.errorMessage || "");
     if (agyFailed(event)) found = String(event.result.error || event.result.status);
@@ -351,19 +373,26 @@ async function tryOne(agentList, id, { env, spawnFn = spawn, timeout = 120000, r
   // Pi and omp in RPC mode read JSON commands, and quit as soon as stdin closes, before the model answers.
   // So their stdin stays open until the run ends, or the prompt is turned down, and any dialog is cancelled, with nobody there to answer.
   const rpc = command.input === "pi-rpc" && !command.promptLast;
-  const said = rpc ? piRpcInit(TRY_WORDS) : streaming ? userLine(TRY_WORDS, command.dialect) : TRY_WORDS;
+  const said = rpc ? piRpcInit(TRY_WORDS, { eventFilter:command.rpcEventFilter }) : streaming ? userLine(TRY_WORDS, command.dialect) : TRY_WORDS;
+  const started = Date.now();
   const result = await new Promise(resolve => {
     let stdout = "", stderr = "", timedOut = false;
     const outputDecoder = new StringDecoder("utf8"), errorDecoder = diagnosticDecoder({ env:childEnv });
     let child;
     try { child = spawnFn(command.command, command.promptLast ? [...command.args, TRY_WORDS] : command.args, { cwd:command.cwd, env:childEnv, stdio:["pipe", "pipe", "pipe"], windowsHide:true }); }
-    catch (error) { resolve({ code:-1, stdout, stderr:error.message, timedOut }); return; }
+    catch (error) { resolve({ code:-1, stdout, stderr:error.message, timedOut, pid:0 }); return; }
     const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); }, timeout);
-    let pending = "", inputOpen = rpc;
+    let pending = "", inputOpen = rpc, piAttemptFailed = false;
     const rpcLine = line => {
       let event; try { event = JSON.parse(line); } catch { return; }
       if (event?.type === "extension_ui_request" && event.id && ["select", "confirm", "input", "editor"].includes(event.method) && inputOpen) child.stdin?.write(piRpcUiResponse(event.id, event.method, "", true));
-      if (event?.type === "agent_end" || (event?.type === "response" && event.command === "prompt" && event.success === false)) { inputOpen = false; child.stdin?.end(); }
+      if (event?.type === "message_end") {
+        for (const change of parseDialect("pi", event)) {
+          if ("failed" in change) piAttemptFailed = true;
+          if (change.recovered) piAttemptFailed = false;
+        }
+      }
+      if (isPiTurnEnd(event) || (event?.type === "response" && event.command === "prompt" && event.success === false)) { inputOpen = false; child.stdin?.end(); }
     };
     child.stdout?.on("data", chunk => {
       const text = typeof chunk === "string" ? chunk : outputDecoder.write(chunk);
@@ -380,19 +409,20 @@ async function tryOne(agentList, id, { env, spawnFn = spawn, timeout = 120000, r
       // A signal error can leave a spawned dsh alive. Its patch stays until close.
       if (command.dshPatch && child.pid) return;
       clearTimeout(timer);
-      resolve({ code:-1, stdout, stderr, timedOut });
+      resolve({ code:-1, stdout, stderr, timedOut, pid:child.pid || 0 });
     });
-    child.on("close", code => { clearTimeout(timer); stdout += outputDecoder.end(); stderr += errorDecoder.end(); resolve({ code, stdout, stderr, timedOut }); });
+    child.on("close", code => { clearTimeout(timer); stdout += outputDecoder.end(); stderr += errorDecoder.end(); resolve({ code, stdout, stderr, timedOut, piAttemptFailed, pid:child.pid || 0 }); });
   });
   fs.rmSync(folder, { recursive:true, force:true });
   agentList.endRun?.(id, command.proxyRun);
   // An agent may repeat the words it was given, so OK counts only outside them.
-  const ok = result.code === 0 && !result.timedOut && /\bOK\b/.test(result.stdout.split(TRY_WORDS).join("")) && !failedEvent(result.stdout);
+  const ok = result.code === 0 && !result.timedOut && !result.piAttemptFailed && /\bOK\b/.test(result.stdout.split(TRY_WORDS).join("")) && !failedEvent(result.stdout, rpc);
   if (ok) return { ok:true, said:"OK", error:"" };
   const ref = id === "dsh" ? dshCredentialRef(childEnv, command.dshSelection ? `${command.dshSelection.provider}/${command.dshSelection.model}` : agent.picked) : "";
   const redact = redactDiagnostics(command.env, ref);
   const safeStderr = redact(result.stderr);
-  const failure = failureOf(result.stdout, safeStderr, redact);
+  const failure = failureOf(result.stdout, safeStderr, redact)
+    || (id === "omp" && result.code !== 0 ? redact(ompLogError(result.pid, { started, home:env?.HOME || env?.USERPROFILE || os.homedir() })) : "");
   const waited = result.timedOut ? waitedOn(result.stdout + result.stderr, redact) : "";
   const error = result.timedOut ? `No answer in ${Math.round(timeout / 1000)} seconds.${waited ? ` It was waiting on ${waited}.` : ""}` : failure || `It stopped with code ${result.code}.`;
   const shown = redact([command.command, ...command.args].map(word => (/\s/.test(word) ? `"${word}"` : word)).join(" "));
@@ -438,7 +468,7 @@ function createAgentCheck(agentList, { env = agentList.env || process.env, run =
     // A fresh check forgets earlier test runs too: whatever they found may be fixed now.
     if (fresh) tries.clear();
     const described = agentList.describe().filter(agent => agent.cli || agent.app || agent.installFrom || agent.builtIn);
-    running = Promise.all(described.map(agent => checkOne(agent, { env, run, reach, fresh, modelCache, pickModel:agentList.pickModel, levels:agentList.listLevels }))).then(agents => {
+    running = Promise.all(described.map(agent => checkOne(agent, { env, run, reach, fresh, modelCache, pickModel:agentList.pickModel, catalog:agentList.listCatalog, levels:agentList.listLevels }))).then(agents => {
       installs.clear();
       if (updates) for (const agent of described) {
         const kind = agent.launch?.command ? installKind(agent.id, agent.launch.command, { home:env.HOME || env.USERPROFILE || os.homedir(), env }) : "";
@@ -458,8 +488,12 @@ function createAgentCheck(agentList, { env = agentList.env || process.env, run =
       const a = latest ? { ...row, update:{ latest, auto:majorOf(latest) === majorOf(row.version), running:updating.has(row.id), failed:Boolean(failed), prompt:updatePrompt(row, latest, installed.install, failed?.said) } } : row;
       const tried = tries.get(a.id);
       if (!tried) return a;
-      const problems = tried.problem ? [...a.problems, tried.problem] : a.problems;
-      return { ...a, tried:{ ok:tried.ok, error:tried.error, at:tried.at }, problems, state:tried.problem && a.state === "ready" ? "problem" : a.state };
+      let problems = a.problems;
+      // A real answer proves the agent starts, even if the earlier version probe failed.
+      if (tried.ok) problems = problems.filter(p => p.code !== "version_check_failed");
+      if (tried.problem) problems = [...problems, tried.problem];
+      const state = a.state === "missing" ? a.state : problems.some(p => p.kind === "fix") ? "problem" : "ready";
+      return { ...a, tried:{ ok:tried.ok, error:tried.error, at:tried.at }, problems, state };
     });
     return { ...last, agents, problems:agents.reduce((n, a) => n + a.problems.filter(p => p.kind === "fix").length, 0) };
   }

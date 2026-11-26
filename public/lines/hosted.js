@@ -74,7 +74,7 @@ const HOSTED_READ = {
     'approve-step', 'discard-work', 'line-pin', 'line-outdated', 'restore-line', 'similar-merge', 'merge-accept', 'merge-undo', 'group-merge',                         // steps, pins, merging lines
     'file-add', 'file-menu', 'file-restore', 'cmp-attach', 'cmp-meeting', 'cmp-meeting-node', 'line-meeting', 'meetcue-add', 'new-note-quick', 'open-example',                             // adding files, notes, meetings, examples
     'open-setup', 'open-settings', 'open-keys', 'project-share', 'project-rename', 'project-archive', 'project-restore', 'project-delete', 'download-folder', // the project and its settings
-    'line-todo', 'work-rate', 'work-rate-note', 'work-scope', 'memory-recover', 'topic-merge-accept', 'file-select', 'file-select-all', 'file-select-clear', 'file-delete-selected', // marks, ratings, restoring memory, deleting files
+    'line-todo', 'work-rate', 'work-rate-note', 'work-scope', 'work-scope-menu', 'memory-recover', 'topic-merge-accept', 'file-select', 'file-select-all', 'file-select-clear', 'file-delete-selected', // marks, ratings, restoring memory, deleting files
     'line-make', 'make-again', 'make-chip', 'make-paste', 'make-mc-add', 'make-mc-retry', 'make-mc-link', 'make-meetcue',                                               // making something from the box
   ],
   views:['settings', 'deleted'],

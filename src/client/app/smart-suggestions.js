@@ -2078,8 +2078,8 @@
       spark = element.querySelector(".assist-spark"),
       docked = element.classList.contains("in-ai-bar"),
       viewport = canvasViewportMetrics().width,
-      // Inside the AI bar, leave room for the AI button and the bar's own edges.
-      width = docked ? Math.min(560, Math.max(0, viewport - 40 - (assistAiRun?.offsetWidth || 0)))
+      // Below the AI bar, keep the attached shelf within the Canvas viewport.
+      width = docked ? Math.min(560, Math.max(0, viewport - 24))
         : Math.min(640, Math.max(0, viewport - 16)),
       anchor = ask.parentElement === element ? ask : more,
       // Ask inside ⋯ takes no room on the bar, even with its box open.
@@ -2110,10 +2110,10 @@
     runtimeElementStyle(element, "assist-bar")?.setProperty("--assist-action-max-width", `${Math.max(40, available - fixedWidth - layout.gap * (count + 3))}px`);
     layout.key = key;
   }
-  // On a wide Canvas, suggestions for new ink and their results sit inside the
-  // AI bar, in place of its model, reasoning, Auto and colour, until they are
-  // used or closed. Selections, shape tools, allowance notices and narrow
-  // screens keep the floating bar beside the ink.
+  // On a wide Canvas, suggestions for new ink and their results dock in an
+  // attached shelf directly beneath the Canvas AI bar, keeping model,
+  // reasoning, Auto, colour and Favorites visible. Selections, shape tools,
+  // allowance notices and narrow screens keep the floating bar beside the ink.
   function assistInAiBar(bar) {
     if (!assistAiBar || !bar || !["suggest", "working", "result", "followup"].includes(bar.mode)) return false;
     if (bar.target?.selection || bar.cluster?.selection || bar.element.classList.contains("has-access-notice")) return false;

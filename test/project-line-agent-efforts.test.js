@@ -14,7 +14,7 @@ const { createAgentPresets } = require("../src/server/project-lines/agent-preset
 const { createProjectLines } = require("../src/server/project-lines/http.js");
 const { Service } = require("../src/server/project-lines/service.js");
 const F = require("../src/server/project-lines/format.js");
-const { modelOf, effortsWith, defaultEffortWith, parseOpenCodeModels } = require("../src/server/project-lines/agent-model.js");
+const { modelOf, effortsWith, defaultEffortWith, parseOpenCodeCatalog, parseOpenCodeModels, parseOpenCodeDefault } = require("../src/server/project-lines/agent-model.js");
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "pe-agent-efforts-"));
 after(() => fs.rmSync(temp, { recursive:true, force:true }));
@@ -148,6 +148,144 @@ test("OpenCode parses explicit empty/disabled variants and refuses unsupported v
   assert.deepEqual(oc.model.effortsFor["opencode/big-pickle"], []);
   assert.deepEqual(oc.model.effortsFor["magpie/no-key"], ["low", "high", "max"]);
   assert.match((await check.pickModel("opencode", { model:"opencode/big-pickle", effort:"high" })).error, /does not take the reasoning level high/);
+});
+
+test("OpenCode 2 reads v2 config schema and queries live CLI models, variants, and default instead of stale 1.x config", async () => {
+  const home = fresh("opencode2-models"), customDir = path.join(home, "custom-oc");
+  // Legacy 1.x config.json alongside current v2 opencode.json / opencode.jsonc: config.json must be ignored once opencode.json(c) exists.
+  put(home, ".config/opencode/config.json", JSON.stringify({
+    model:"legacy1/stale-model",
+    provider:{ legacy1:{ models:{ "stale-model":{} } } },
+  }));
+  put(home, ".config/opencode/opencode.json", JSON.stringify({
+    model:"v1prov/old-model",
+    provider:{
+      v1prov:{ models:{ "old-model":{ variants:{ low:{} } }, "keep-v1":{} } },
+      dropped:{ models:{ gone:{} } },
+    },
+    disabled_providers:["dropped"],
+  }));
+  put(home, ".config/opencode/opencode.jsonc", `{
+    // OpenCode v2 native schema
+    "model": { "providerID": "v2prov", "model": "v2-model", "variant": "high" },
+    "providers": {
+      "v2prov": {
+        "models": {
+          "v2-model": { "variants": [{ "id": "low" }, { "id": "high" }, { "id": "off", "disabled": true }] },
+          "v2-plain": { "variants": [] }
+        }
+      },
+      "v1prov": { "disabled": true }
+    }
+  }\n`);
+
+  const cfg = modelOf("opencode", { HOME:home });
+  assert.equal(cfg.name, "v2prov/v2-model");
+  assert.equal(cfg.effort, "high");
+  assert.deepEqual(cfg.choices, ["v2prov/v2-model", "v2prov/v2-plain"]);
+  assert.deepEqual(cfg.effortsFor, { "v2prov/v2-model":["low", "high"], "v2prov/v2-plain":[] });
+  assert.equal(defaultEffortWith("", cfg), "high");
+
+  // OPENCODE_CONFIG_DIR and string model#variant syntax are also honored.
+  put(home, "custom-oc/opencode.json", JSON.stringify({ model:"dirprov/dir-model#max", providers:{ dirprov:{ models:{ "dir-model":{ variants:["low", "max"] } } } } }));
+  const fromDir = modelOf("opencode", { HOME:home, OPENCODE_CONFIG_DIR:customDir });
+  assert.deepEqual([fromDir.name, fromDir.effort], ["dirprov/dir-model", "max"]);
+  assert.deepEqual(fromDir.effortsFor["dirprov/dir-model"], ["low", "max"]);
+
+  // Legacy config.json still works when it is the only file present (OpenCode 1.x).
+  const onlyLegacy = fresh("opencode1-only");
+  put(onlyLegacy, ".config/opencode/config.json", JSON.stringify({ model:"old/a", provider:{ old:{ models:{ a:{} } } } }));
+  assert.deepEqual(modelOf("opencode", { HOME:onlyLegacy }).choices, ["old/a"]);
+
+  // Parsers handle OpenCode 2 JSON (including id !== modelID, enabled:false, array variants), plain lines (CRLF), and default JSON.
+  const v2ApiPayload = JSON.stringify({
+    location:{ directory:home },
+    data:[
+      { id:"gpt-6.2-sol", modelID:"gpt-6.2-sol", providerID:"openai", variants:[{ id:"low" }, { id:"xhigh" }], enabled:true },
+      { id:"kimi-k3-high", modelID:"kimi-k3", providerID:"moonshot", variants:[], enabled:true },
+      { id:"hidden-model", modelID:"hidden-model", providerID:"openai", variants:[{ id:"high" }], enabled:false },
+      { id:"beam-free", modelID:"beam-free", providerID:"opencode", variants:[{ id:"low" }, { id:"max" }], enabled:true },
+    ],
+  });
+  assert.deepEqual(parseOpenCodeCatalog(v2ApiPayload), {
+    choices:["moonshot/kimi-k3-high", "openai/gpt-6.2-sol", "opencode/beam-free"],
+    effortsFor:{
+      "openai/gpt-6.2-sol":["low", "xhigh"],
+      "moonshot/kimi-k3-high":[],
+      "opencode/beam-free":["low", "max"],
+    },
+  });
+  assert.deepEqual(parseOpenCodeModels(v2ApiPayload), {
+    "openai/gpt-6.2-sol":["low", "xhigh"],
+    "moonshot/kimi-k3-high":[],
+    "opencode/beam-free":["low", "max"],
+  });
+  assert.deepEqual(parseOpenCodeCatalog("openai/gpt-6.2-sol\r\nopencode/beam-free\r\nhttps://ignored.example/x\r\n"), {
+    choices:["openai/gpt-6.2-sol", "opencode/beam-free"],
+    effortsFor:null,
+  });
+  assert.equal(parseOpenCodeDefault(JSON.stringify({ data:{ providerID:"openai", id:"gpt-6.2-sol", modelID:"gpt-6.2-sol" } })), "openai/gpt-6.2-sol");
+
+  // Simulate Windows upgrade: opencode v2.4.1 binary with stale 1.x opencode.json on disk.
+  const winHome = fresh("opencode2-win"), env = fakeCliEnv(winHome, ["opencode"]);
+  fs.writeFileSync(path.join(winHome, "bin", "opencode"), "#!/bin/sh\necho opencode v2.4.1\n", { mode:0o755 });
+  put(winHome, ".config/opencode/opencode.json", JSON.stringify({
+    model:"kimi-cn/kimi-1021-preview",
+    provider:{
+      "kimi-cn":{ models:{ "kimi-1021-preview":{} } },
+      passion8:{ models:{ "gpt-5.5":{} } },
+    },
+  }));
+  const calls = [];
+  const runV2 = async (_cmd, args) => {
+    calls.push(args);
+    if (args.includes("--version")) return { status:0, stdout:"opencode v2.4.1\r\n", stderr:"" };
+    if (args.includes("/api/model")) return { status:0, stdout:v2ApiPayload, stderr:"" };
+    if (args.includes("/api/model/default")) return { status:0, stdout:JSON.stringify({ data:{ providerID:"openai", id:"gpt-6.2-sol" } }), stderr:"" };
+    return { status:1, stdout:"", stderr:"Unrecognized flag: --verbose\n" };
+  };
+  const agents = createAgents({ env, appFolders:[], run:runV2 });
+  const check = createAgentCheck(agents, { env, run:runV2 });
+  const checked = await check.check();
+  const oc = checked.agents.find(a => a.id === "opencode");
+  assert.ok(calls.some(args => args.includes("api") && args.includes("--standalone") && args.includes("/api/model")), "queries OpenCode 2 /api/model");
+  assert.ok(!calls.some(args => args.includes("--verbose")), "never sends OpenCode 1 --verbose to OpenCode 2.4.1");
+  assert.equal(oc.model.name, "openai/gpt-6.2-sol", "replaces stale 1.x default with OpenCode 2's live default");
+  assert.deepEqual(oc.model.choices, ["openai/gpt-6.2-sol", "moonshot/kimi-k3-high", "opencode/beam-free"], "replaces stale 1.x config list with OpenCode 2's live models");
+  assert.deepEqual(oc.model.effortsFor["openai/gpt-6.2-sol"], ["low", "xhigh"]);
+  assert.deepEqual(oc.model.effortsFor["moonshot/kimi-k3-high"], []);
+  assert.equal(agents.configuredModel("opencode"), "openai/gpt-6.2-sol");
+  assert.match((await check.pickModel("opencode", { model:"moonshot/kimi-k3-high", effort:"high" })).error, /does not take the reasoning level high/);
+  assert.equal(at(agents.command("opencode", { workdir:winHome, docs:winHome, gitDir:"", also:[], model:"", effort:"xhigh" }).args, "--model"), "openai/gpt-6.2-sol#xhigh");
+
+  // When OpenCode 2's api endpoint fails, fall back cleanly to `models --standalone`.
+  const fallbackCalls = [];
+  const runFallback = async (_cmd, args) => {
+    fallbackCalls.push(args);
+    if (args.includes("--version")) return { status:0, stdout:"opencode v2.4.1\n", stderr:"" };
+    if (args[0] === "models" && args.includes("--standalone")) return { status:0, stdout:"anthropic/claude-sonnet-5\r\nopenai/gpt-6.2-sol\r\n", stderr:"" };
+    return { status:1, stdout:"", stderr:"not found\n" };
+  };
+  const fallbackAgents = createAgents({ env, appFolders:[], run:runFallback });
+  const fallbackChecked = await createAgentCheck(fallbackAgents, { env, run:runFallback }).check();
+  const fbOc = fallbackChecked.agents.find(a => a.id === "opencode");
+  assert.ok(fallbackCalls.some(args => args[0] === "models" && args.includes("--standalone")));
+  assert.deepEqual(fbOc.model.choices, ["anthropic/claude-sonnet-5", "openai/gpt-6.2-sol"]);
+
+  // If version detection assumed 1.x and `--verbose` fails as unrecognized, automatically retry v2 commands.
+  const retryHome = fresh("opencode2-retry"), retryEnv = fakeCliEnv(retryHome, ["opencode"]);
+  const retryCalls = [];
+  const runRetry = async (_cmd, args) => {
+    retryCalls.push(args);
+    if (args.includes("--verbose")) return { status:1, stdout:"", stderr:"ERROR\n  Unrecognized flag: --verbose in command opencode models\n" };
+    if (args.includes("/api/model")) return { status:0, stdout:v2ApiPayload, stderr:"" };
+    return { status:1, stdout:"", stderr:"" };
+  };
+  const retryAgents = createAgents({ env:retryEnv, appFolders:[], run:runRetry });
+  const retryCatalog = await retryAgents.listCatalog("opencode");
+  assert.ok(retryCalls.some(args => args.includes("--verbose")));
+  assert.ok(retryCalls.some(args => args.includes("/api/model")));
+  assert.deepEqual(retryCatalog.choices, ["moonshot/kimi-k3-high", "openai/gpt-6.2-sol", "opencode/beam-free"]);
 });
 
 test("blank-model and blank-effort saved presets are not overwritten by stale agent-models.json in pinSettings", () => {

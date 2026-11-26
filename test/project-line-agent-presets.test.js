@@ -129,27 +129,31 @@ test("only available adjustable agents without launch or runtime effort receive 
   );
   ctx.S.agentCheck.agents[0].model = {};
   for (const row of rows) {
+    assert.equal(ctx.presetNotRated(row), [claude.id, "saved"].includes(row.id), row.id);
     document.body.innerHTML = ctx.presetRowHTML(row, "");
-    assert.equal(!!document.querySelector(".kind-tag.is-amber"), [claude.id, "saved"].includes(row.id), row.id);
+    // A CLI with no preset yet is on the Ready to add shelf: one Add preset, no rating chips; a saved one says Not rated.
+    assert.equal(!!document.querySelector(".kind-tag.is-amber"), row.id === "saved", row.id);
     const copy = document.querySelector('[data-act="preset-copy"]');
     if (row.auto) {
-      assert.equal(copy.textContent.replace("&amp;", "&"), "Pin model & effort", row.id);
-      assert.equal(document.querySelector(".sys-acts .kind-tag")?.textContent || "", row === claude ? "Not rated" : row.available ? "Not assignable" : "", row.id);
+      assert.equal(copy.textContent, "Add preset", row.id);
+      assert.equal(document.querySelector(".sys-acts .kind-tag"), null, row.id);
+      assert.equal(document.querySelector('[data-act="preset-edit"]'), null, row.id);
     } else assert.ok(document.querySelector('[data-act="preset-edit"]'));
   }
   ctx.S.agentCheck = null;
   assert.doesNotMatch(ctx.presetRowHTML(claude, ""), /Not rated/);
 });
 
-test("the amber bar counts unrated rows, pins all of them with a suggested effort and remembers dismissal", async () => {
+test("the amber bar counts unrated saved presets, pins all of them with a suggested effort and remembers dismissal", async () => {
   const runner = { id:"claude", name:"Claude Code", available:true, model:{ name:"opus", efforts:["high", "max"] } };
   const { ctx, document, store } = presetEditor(runner);
   const stored = new Map();
   ctx.localStorage = { getItem:key => stored.get(key), setItem:(key, value) => stored.set(key, value) };
   ctx.toast = () => {};
   ctx.S.thisComputer = true;
-  const [auto] = ctx.S.presets.presets;
-  ctx.S.presets = { default:auto.id, presets:[auto, { ...auto, id:"auto:claude-2", name:"Claude Code 2" }] };
+  const first = store.add({ agent:"claude", model:"opus", effort:"", default:true });
+  const second = store.add({ agent:"claude", model:"sonnet", effort:"", name:"Claude Code 2" });
+  ctx.S.presets = store.list();
   ctx.render();
   const strip = () => document.querySelector(".agent-notice");
   assert.match(strip().textContent, /2 agents aren't being rated\./);
@@ -162,13 +166,12 @@ test("the amber bar counts unrated rows, pins all of them with a suggested effor
     ? Array.from(form.querySelectorAll('input[name="pin"]'), el => ({ checked:true, value:el.value }))
     : Array.from(form.querySelectorAll('[name^="effort:"]'), el => ({ name:el.name, value:el.querySelector("option[selected]").value })) });
   const { presets, default:chosen } = store.list();
-  assert.ok(presets.every(x => !x.auto && x.agent === "claude" && x.model === "opus" && x.effort === "high"));
-  assert.ok(presets.some(x => x.id === chosen), "pinning the default agent keeps a default");
+  assert.ok(presets.every(x => !x.auto && x.agent === "claude" && x.effort === "high"));
+  assert.equal(chosen, first.id, "pinning keeps the default preset");
   ctx.S.presets = store.list();
   ctx.render();
   assert.equal(strip(), null);
-  assert.equal(document.querySelectorAll(".kind-tag.is-green").length, presets.length);
-  ctx.S.presets = { default:"", presets:[auto, { ...auto, id:"other", name:"Other" }] };
+  ctx.S.presets = { default:"", presets:[{ ...first, effort:"" }, { ...second, effort:"" }] };
   ctx.render();
   ctx.ACT["dismiss-agents-rating-strip"]();
   assert.equal(stored.get("penecho-agents-rating-strip"), "dismissed");
@@ -190,7 +193,7 @@ test("pinning a found agent opens under its row with an effort chosen and keeps 
   assert.ok(panel.previousElementSibling.matches(`[data-preset="${auto.id}"]`));
   assert.equal(document.querySelector('select[name="effortChoice"] option[selected]').value, "medium");
   assert.equal(document.querySelector('select[name="effortChoice"] option[value=""]'), null);
-  assert.match(document.querySelector('button[type="submit"]').textContent, /Pin &(amp;)? make default/);
+  assert.match(document.querySelector('button[type="submit"]').textContent, /Add &(amp;)? make default/);
   assert.equal(document.querySelector('[data-act="preset-copy"]'), null);
   await ctx.presetSave(document.querySelector(".sys-form"));
   const made = store.list().presets.find(x => !x.auto);
@@ -258,7 +261,7 @@ test("the local Home setup hint updates in place and stays dismissed", () => {
   assert.equal(reopened.agentsSetupHintHTML(), "");
 });
 
-test("dsh renders Model, Change, and Effort in Settings and saves custom presets", async () => {
+test("dsh has no runner model or effort in Local providers, and its presets save custom models and efforts", async () => {
   const { modelOf } = require("../src/server/project-lines/agent-model.js");
   const dshHome = fresh("dsh"), profile = path.join(dshHome, "profiles", "headless");
   fs.mkdirSync(profile, { recursive:true });
@@ -272,26 +275,14 @@ test("dsh renders Model, Change, and Effort in Settings and saves custom presets
     select.querySelector(value ? `option[value="${value}"]` : "option[data-custom]").selected = true;
     select.dispatchEvent(new window.Event("change", { bubbles:true }));
   };
-  ctx.render = () => { document.body.innerHTML = ctx.setupModelHTML(runner); };
-  ctx.render();
-  const modelPicker = document.querySelector('select[aria-label="Model for dsh"]');
-  const effortPicker = document.querySelector('select[aria-label="Effort for dsh"]');
-  assert.ok(modelPicker.querySelector('option[value="deepseek-official/deepseek-v4-pro"]'));
-  assert.ok(effortPicker.querySelector('option[value="max"]'));
-  assert.equal(effortPicker.querySelector('option[value=""]').textContent, "Default (high)");
-  assert.equal(document.querySelector('[data-act="setup-model"]').textContent, "Change");
-  assert.doesNotMatch(document.body.textContent, /controls this in its own settings/);
-  ctx.ACT["setup-model"](document.querySelector('[data-act="setup-model"]'));
-  assert.match(document.body.textContent, /headless profile for its default/);
-  ctx.changeAgentEffort("dsh", "__custom__");
-  assert.ok(document.querySelector('input[aria-label="Effort for dsh"]'));
-  assert.ok(document.querySelector('[data-act="setup-dsh-effort-list"]'));
-  ctx.ACT["setup-dsh-effort-list"]();
-  assert.ok(document.querySelector('select[aria-label="Effort for dsh"]'));
-  model.picked = "local/plain";
-  ctx.render();
-  assert.deepEqual([...document.querySelectorAll('[aria-label="Effort for dsh"] option')].map(el => el.value), ["", "off", "__custom__"]);
-  model.picked = "";
+  // Local providers owns the CLI's health only: models and efforts are chosen in Preset agents.
+  ctx.homeShort = value => value;
+  Object.assign(runner, { where:"/bin/dsh", problems:[] });
+  document.body.innerHTML = ctx.setupRowHTML(runner);
+  for (const gone of ["[data-model-agent]", "[data-effort-agent]", ".setup-model", '[data-act="setup-model"]']) assert.equal(document.querySelector(gone), null, gone);
+  assert.equal(document.querySelector('[data-act="setup-create-preset"]').dataset.agent, "dsh");
+  assert.equal(ctx.setupModelHTML, undefined);
+  assert.equal(ctx.pickAgentModel, undefined);
 
   ctx.render = () => { document.body.innerHTML = ctx.agentsSectionHTML(); };
   ctx.ACT["preset-new"]();
@@ -381,18 +372,18 @@ test("presets update effort by model, accept a custom model, and reopen the save
   bareCtx.ACT['preset-new']();
   assert.deepEqual(Array.from(bare.querySelectorAll('[name="effortChoice"] option:not([data-custom])'), o => o.value), ["", "none", "minimal", "low", "medium", "high", "xhigh", "max"]);
   const { parseHTML } = require('./helpers/dom.js');
-  const setup = about => parseHTML(ctx.setupModelHTML(about)).document;
-  const agy = setup({ id:'antigravity', name:'Antigravity', model:{ choices:['tiered'], effortsFor:{ tiered:['medium'] } } });
-  assert.deepEqual(Array.from(agy.querySelectorAll('select[data-effort-agent] option'), o => o.value), ["", "none", "minimal", "low", "medium", "high", "xhigh", "max"]);
-  assert.ok(agy.querySelector('select[data-model-agent] option[value="tiered"]'));
+  const agyRunner = { id:'antigravity', name:'Antigravity', model:{ choices:['tiered'], effortsFor:{ tiered:['medium'] } } };
+  const agy = parseHTML(`<form>${ctx.presetModelHTML(agyRunner, { model:'' }, agyRunner.model)}${ctx.presetEffortHTML(agyRunner, { model:'' }, agyRunner.model)}</form>`).document;
+  assert.deepEqual(Array.from(agy.querySelectorAll('select[name="effortChoice"] option:not([data-custom])'), o => o.value), ["", "none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+  assert.ok(agy.querySelector('select[name="modelChoice"] option[value="tiered"]'));
 });
 
 test("built-in setup and presets only offer Cloud models, even with an older personal pick", () => {
   const { document, ctx } = presetEditor();
   const runner = { id:"penecho", name:"PenEcho", model:{ name:"worker", choices:["worker"], picked:"personal" } };
-  for (const html of [ctx.setupModelHTML(runner), ctx.presetModelHTML(runner, { model:"personal" }, runner.model)]) {
+  for (const html of [ctx.presetModelHTML(runner, { model:"personal" }, runner.model)]) {
     document.body.innerHTML = html;
-    const picker = document.querySelector('select[data-model-agent], select[name=modelChoice]');
+    const picker = document.querySelector('select[name=modelChoice]');
     assert.deepEqual(Array.from(picker.querySelectorAll('option:not([disabled])'), o => o.value), ["", "worker"]);
     assert.equal(document.querySelector('input'), null);
     assert.doesNotMatch(document.body.textContent, /personal|Type another/);
@@ -407,8 +398,8 @@ test("built-in setup and presets only offer Cloud models, even with an older per
   assert.ok(document.querySelector('[data-act="setup-sign-in"]'));
   assert.equal(document.querySelector('[data-model-agent]'), null);
   runner.model = { choices:[] };
-  document.body.innerHTML = ctx.setupModelHTML(runner);
-  assert.ok(document.querySelector('select[data-model-agent][disabled]'));
+  document.body.innerHTML = ctx.presetModelHTML(runner, { model:"" }, runner.model);
+  assert.ok(document.querySelector('select[name=modelChoice][disabled]'));
   assert.match(document.body.textContent, /No Cloud models available/);
 });
 
@@ -626,15 +617,16 @@ test("Settings default overrides legacy project defaultAgent, and unpicked runne
 
   run("openMenu = (el, rows) => { globalThis.__menu = rows; }");
   run("ACT['unsent-run-pick']({ dataset:{ line:'claude-line', step:'ask-2' } })");
-  assert.equal(run("__menu[1].label"), "Claude Code · opus · high effort");
-  assert.equal(run("__menu[2].label"), "Claude Code · sonnet · xhigh effort");
-  assert.equal(run("__menu[1].on || __menu[2].on"), false, "an implicit runner is not misrepresented as an explicit saved preset");
-  await run("__menu[2].fn()");
+  assert.equal(run("__menu[1].label"), "PenEcho Auto");
+  assert.equal(run("__menu[2].label"), "Claude Code · opus · high effort");
+  assert.equal(run("__menu[3].label"), "Claude Code · sonnet · xhigh effort");
+  assert.equal(run("__menu[2].on || __menu[3].on"), false, "an implicit runner is not misrepresented as an explicit saved preset");
+  await run("__menu[3].fn()");
   assert.equal(acts.at(-1).body.preset, sonnet.id, "picking Sonnet sends that exact preset");
   assert.equal(run("runChoice(project(), lineById(project(), 'claude-line')).name"), "Claude Code · sonnet · xhigh effort");
   run("ACT['unsent-run-pick']({ dataset:{ line:'claude-line', step:'ask-2' } })");
-  assert.equal(run("__menu[2].on"), true);
-  await run("__menu[1].fn()");
+  assert.equal(run("__menu[3].on"), true);
+  await run("__menu[2].fn()");
   assert.equal(acts.at(-1).body.preset, opus.id, "picking Opus sends that exact preset");
   assert.equal(run("runChoice(project(), lineById(project(), 'claude-line')).name"), "Claude Code · opus · high effort");
 
@@ -662,12 +654,12 @@ test("Settings default overrides legacy project defaultAgent, and unpicked runne
   await run("__menu[1].fn()");
   assert.equal(acts.at(-1).body.preset, undefined);
   run("S.presets = { presets:[{ id:'auto:claude', agent:'claude', name:'Claude Code', auto:true, available:true }] }; ACT['unsent-run-pick']({ dataset:{ line:'claude-line', step:'ask-2' } })");
-  assert.equal(run("__menu[1].label"), "Claude Code · opus · high effort");
+  assert.equal(run("__menu[2].label"), "Claude Code · opus · high effort");
   run("S.presets = { presets:[{ id:'custom', agent:'claude', name:'Quick fixes', model:'haiku', effort:'max', available:true }], default:'custom' }; ACT['unsent-run-pick']({ dataset:{ line:'claude-line', step:'ask-2' } })");
-  assert.equal(run("__menu[1].label"), "Quick fixes", "a custom name is preserved");
-  assert.equal(run("__menu[1].note"), "haiku · max effort", "custom names keep visible model and effort details");
+  assert.equal(run("__menu[2].label"), "Quick fixes", "a custom name is preserved");
+  assert.equal(run("__menu[2].note"), "haiku · max effort", "custom names keep visible model and effort details");
   assert.equal(run("runChoice(project(), lineById(project(), 'claude-line')).name"), "Claude Code · opus · high effort", "the latest worker's automatic settings win over a new same-runner default");
-  await run("__menu[1].fn()");
+  await run("__menu[2].fn()");
   assert.equal(run("runChoice(project(), lineById(project(), 'claude-line')).name"), "Quick fixes · haiku · max effort", "an explicit choice still wins");
 
   // PE-558: with a Work running here, Run with says whether it steers into that Work or runs after it.
@@ -693,7 +685,7 @@ test("Settings default overrides legacy project defaultAgent, and unpicked runne
   run("lineById(project(), 'claude-line').runSteers = false");
   assert.match(run(busy), />Run with Claude Code · claude-opus-5-5 next</, "an agent that cannot take words mid-turn still runs next");
   run("lineById(project(), 'claude-line').runSteers = true; S.presets = { presets:[{ id:'quick', agent:'claude', name:'Quick fixes', model:'haiku', effort:'max', available:true }] }; ACT['unsent-run-pick']({ dataset:{ line:'claude-line', step:'ask-2' } })");
-  assert.equal(run("__menu[1].note"), "haiku · max effort · Runs next", "a different model picked on purpose runs next");
+  assert.equal(run("__menu[2].note"), "haiku · max effort · Runs next", "a different model picked on purpose runs next");
   run("S.presets = null");
   await run(`runUnsent(project(), lineById(project(), 'claude-line'), '${claudeAsk.id}', 'claude', '')`);
   assert.equal(acts.at(-1).body.preset, undefined, "the click sends no preset, so the server steers too");
@@ -759,7 +751,7 @@ test("Settings default overrides legacy project defaultAgent, and unpicked runne
     "PenEcho",
     "Pi · magpie/moonshot-cn/kimi-k3.1-pro",
   ], "Run with lists saved agents in case-insensitive alphabetical order");
-  assert.equal(run("__creditAgents.findIndex(a => a.id === 'penecho')"), 6, "runMenuCredits receives agents in the same sorted order as the menu rows");
+  assert.equal(run("__creditAgents.findIndex(a => a.id === 'penecho')"), 7, "runMenuCredits includes PenEcho Auto before the sorted agent rows");
   run("delete globalThis.runMenuCredits; S.agents = [{ id:'claude', name:'Claude Code', available:true, runs:true, opens:true }, { id:'codex', name:'Codex', available:true, runs:true, opens:true }]");
   run("S.presets = null; ACT['carry-on']({ dataset:{ line:'claude-line', step:'work-1' } })");
   assert.equal(run("__menu.filter(r => r.av).map(r => r.av).join()"), "codex", "a server without saved agents lists the other runners");
@@ -965,7 +957,7 @@ test("last Work settings survive edited/deleted presets and launch with the reco
   } finally { service.close(); }
 });
 
-test("Agents page guides setup from the top section and copies install/fix prompts without naming a specific agent", async () => {
+test("Local providers and Preset agents split runtime health from presets, and prompts never name a specific agent", async () => {
   const { document, ctx } = presetEditor({ id:"claude", name:"Claude Code", state:"ready", available:true, problems:[] });
   const copied = [];
   ctx.copyText = (text, note) => copied.push({ text, note });
@@ -979,19 +971,22 @@ test("Agents page guides setup from the top section and copies install/fix promp
     ],
   };
 
-  // Top and bottom section headings/descriptions clearly direct setup to the top section.
-  document.body.innerHTML = `${ctx.agentsSectionHTML()}${ctx.installedSectionHTML()}`;
-  const topTitle = document.querySelector("#sysAgents").textContent;
+  // Preset agents: saved provider + model + effort profiles; several efforts of one model let Auto find the best fit (PE-1190).
+  document.body.innerHTML = ctx.agentsSectionHTML();
   const topSub = document.querySelector("#sysAgents").parentElement.querySelector(".sys-sub").textContent;
-  const bottomTitle = document.querySelector("#sysInstalled").textContent;
+  assert.equal(document.querySelector("#sysAgents").textContent, "Your preset agents");
+  assert.match(topSub, /provider \+ model \+ effort/);
+  assert.match(topSub, /used by Lines, PenEcho Auto, and Orchestrator/);
+  assert.match(topSub, /Save the same model at several efforts \(e\.g\. high and medium\)/);
+  assert.equal(document.querySelector("#sysInstalled"), null, "the installed CLIs are on Local providers");
+  // Local providers: install, sign in, update and verify; models and efforts are in Preset agents.
+  document.body.innerHTML = ctx.installedSectionHTML();
   const bottomSub = document.querySelector("#sysInstalled").parentElement.querySelector(".sys-sub").textContent;
-  assert.equal(topTitle, "Set up your agents");
-  assert.match(topSub, /pin a model and effort/i);
-  // Nothing outside this list is run, and several efforts of one model let Auto find the best fit (PE-1190).
-  assert.match(topSub, /PenEcho Auto and the Orchestrator only use the agents in this list/);
-  assert.match(topSub, /Save the same model at several efforts, such as high and medium/);
-  assert.equal(bottomTitle, "Installed CLIs on this computer");
-  assert.match(bottomSub, /Set up your agents above/i);
+  assert.equal(document.querySelector("#sysInstalled").textContent, "Installed CLIs & built-in runner");
+  assert.match(bottomSub, /Install, sign in, update, and verify local agent runtimes here/);
+  assert.match(bottomSub, /Configure models, efforts, and permissions in Preset agents/);
+  assert.equal(document.querySelector(".sys-flow-step.is-active").dataset.tab, "setup");
+  assert.match(document.querySelector('.sys-flow-step[data-tab="setup"] small').textContent, /1 needs a fix · 1 ready/);
 
   // Remote viewer on the local network still sees the host qualifier and top-section pointer.
   ctx.S.thisComputer = false;
@@ -1120,4 +1115,195 @@ test("dsh preset editor defaults Access to Full access and lets users opt into P
   assert.equal(document.querySelector('select[name="access"] option[selected]').value, "folders");
   assert.match(document.querySelector(".sys-warn").textContent, /Changes files only in this project's folders/);
   assert.match(document.querySelector('input[name="name"]').placeholder, /project folders/);
+});
+
+test("Codex preset editor defaults Access to Full access and lets users opt into Reviewed", () => {
+  const runner = { id:"codex", name:"Codex", state:"ready", available:true, model:{ name:"gpt-6.1-sol" }, access:{ normal:"full", full:true, reviewed:true } };
+  const { document, window, ctx } = presetEditor(runner);
+  ctx.ACT["preset-new"]();
+  const select = document.querySelector('select[name="access"]');
+  assert.ok(select && !select.disabled);
+  assert.deepEqual(Array.from(select.querySelectorAll("option"), o => [o.value, o.textContent]), [
+    ["", "Full access"],
+    ["reviewed", "Reviewed"],
+  ]);
+  assert.equal(select.querySelector("option[selected]").value, "");
+  assert.match(document.querySelector(".sys-warn").textContent, /Runs every command without asking, anywhere on this computer/);
+  select.querySelector('option[value="reviewed"]').selected = true;
+  select.dispatchEvent(new window.Event("change", { bubbles:true }));
+  assert.equal(document.querySelector('select[name="access"] option[selected]').value, "reviewed");
+  assert.match(document.querySelector(".sys-warn").textContent, /agent's own safety check approves each command/);
+  assert.match(document.querySelector('input[name="name"]').placeholder, /reviewed/);
+});
+
+test("a sole saved Codex Reviewed preset is used on new Lines without Make default, and access is recorded, inherited, and displayed", async () => {
+  const vm = require("node:vm");
+  const F = require("../src/server/project-lines/format.js");
+  const home = fresh("home"), stateDir = fresh("state"), docsDir = fresh("docs"), agents = fakeAgents(home, ["codex", "claude"]);
+  const presets = createAgentPresets({ file:path.join(stateDir, "agent-presets.json"), agents });
+  const reviewedCodex = presets.add({ agent:"codex", model:"gpt-6.1-sol", effort:"high", access:"reviewed" });
+  assert.equal(presets.list().default, "", "no global default set");
+
+  const service = new Service({ directory:stateDir, agents, autoWatch:false, memory:{ home, env:{} }, conversations:{ home, env:{} } });
+  service.presets = presets;
+  const project = service.store.create({ name:"ReviewedSole", docsPath:docsDir });
+  try {
+    // 1) Server presetFor resolves the sole saved Reviewed Codex preset for a brand-new Line.
+    const picked = service.presetFor(project, "brand-new", "codex");
+    assert.equal(picked?.id, reviewedCodex.id);
+    assert.equal(picked?.access, "reviewed");
+
+    // 2) startDetail records access & selected access, workFacts exposes them, and follow-up Works inherit reviewed access.
+    const slug = "reviewed-line";
+    service.writeDoc(project, slug, F.initialLine({ title:"Reviewed line", who:"@codex", status:"done", steps:[
+      F.askStep({ words:"First ask" }),
+      { ...F.workStep({ who:"codex" }), done:true, took:"2 min" },
+    ] }));
+    const work1 = F.parseLine(service.readDoc(project, slug)).steps[1];
+    service.startDetail(project, slug, work1, "codex", { title:"Reviewed line", steps:[] }, reviewedCodex);
+    const detailText = service.store.readText(project, F.detailPath(slug, work1.id)).text;
+    assert.match(detailText, /^selected access: reviewed$/m);
+    assert.match(detailText, /^access: reviewed$/m);
+    const state = service.stateOf(project);
+    const lineState = state.lines.find(l => l.slug === slug);
+    assert.equal(lineState.stations[1].access, "reviewed");
+    assert.equal(lineState.stations[1].selectedAccess, "reviewed");
+    const inherited = service.lastWorkPreset(project, slug, "codex");
+    assert.equal(inherited?.access, "reviewed", "follow-up Work inherits reviewed access");
+
+    // Adding a second Codex preset makes the choice ambiguous, so unpicked brand-new Lines stop guessing.
+    const secondCodex = presets.add({ agent:"codex", model:"gpt-6.1-sol", effort:"medium" });
+    assert.equal(service.presetFor(project, "brand-new-2", "codex"), null);
+    presets.remove(secondCodex.id);
+    assert.equal(service.presetFor(project, "brand-new-2", "codex")?.id, reviewedCodex.id);
+  } finally { service.close(); }
+
+  // 3) Client UI runPreset picks the sole saved Reviewed Codex preset on a new Line, and whereParts displays Reviewed.
+  const freshLine = { id:"fresh", slug:"fresh", title:"Fresh", status:"waiting", why:"Not sent", stations:[{ id:"ask-1", kind:"ask", unsent:true, text:"Test", when:"2026-11-26 09:00", files:[], refers:[] }], questions:[], pictures:[], labels:[] };
+  const proj = { id:"p1", name:"ReviewedSole", code:true, trunk:"main", defaultAgent:"", lines:[freshLine], landed:[], backlog:[], notes:[], pictures:[], files:[] };
+  const ctx = vm.createContext({
+    LINE_STATUS:require("../public/lines/line-status.js"),
+    HOSTED:null, EMBED:null, navigationTransition:0,
+    navigator:{ platform:"MacIntel" }, location:{ hash:"" }, localStorage:{ getItem:() => null, setItem() {}, removeItem() {} }, window:{},
+    document:{ getElementById:() => null, addEventListener() {}, documentElement:{ addEventListener() {} }, body:{ append() {} }, querySelector:() => null, querySelectorAll:() => [] },
+    matchMedia:() => ({ matches:false }), addEventListener() {}, requestAnimationFrame:fn => fn(),
+    fetch:async () => ({ ok:true, status:200, json:async () => ({}) }),
+    can:() => true, homeShape:() => "code", embedCanvas:() => ({}), embedShown() {},
+    isWork:s => s.kind === "work", isEnd:s => ["merge", "deliver"].includes(s.kind), canReview:() => false,
+    toast:() => {}, syncComposer() {}, renderPathPreview() {}, railSettingsHTML:() => "",
+  });
+  for (const name of ["core", "state", "panorama", "composer", "pages", "desk", "line", "settings"]) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, `../public/lines/${name}.js`), "utf8"), ctx, { filename:name });
+  }
+  ctx.__proj = proj; ctx.__presets = presets.list();
+  vm.runInContext(`
+    S.cur = "p1"; S.data.p1 = __proj;
+    S.agents = [{ id:"codex", name:"Codex", available:true, runs:true, opens:true }, { id:"claude", name:"Claude Code", available:true, runs:true, opens:true }];
+    S.presets = __presets;
+    S.agentCheck = { agents:[{ id:"codex", model:{ name:"gpt-6.1-sol", effort:"high" }, access:{ normal:"full", full:true, reviewed:true } }] };
+    S.route = { view:"home" };
+  `, ctx);
+  const run = code => vm.runInContext(code, ctx);
+  assert.equal(run("runPreset(project(), lineById(project(), 'fresh'))?.id"), reviewedCodex.id);
+  const split = run("runSplit(project(), lineById(project(), 'fresh'), lineById(project(), 'fresh').stations[0])");
+  assert.match(split, /Run with Codex · gpt-6\.1-sol · high effort · reviewed/);
+  assert.match(split, new RegExp(`data-agent="codex" data-preset="${reviewedCodex.id}"`));
+  const whereHtml = run("whereParts({ id:'fresh', workdir:'/code', branch:'main' }, { id:'work-1', kind:'work', agent:'codex', picked:{ model:'gpt-6.1-sol', effort:'high' }, access:'reviewed', selectedAccess:'reviewed' }).meta");
+  assert.match(whereHtml, /Reviewed/);
+});
+
+test("Preset agents splits saved presets from CLIs ready to add, quick-adds them all, and flags a provider that needs a fix", async () => {
+  const claude = { id:"claude", name:"Claude Code", state:"ready", available:true, problems:[], model:{ name:"opus", efforts:["low", "medium", "high"] } };
+  const codex = { id:"codex", name:"Codex", state:"ready", available:true, problems:[], model:{ name:"gpt-6.2-sol", effort:"xhigh", efforts:["medium", "high", "xhigh"] } };
+  const kimi = { id:"kimi", name:"Kimi", state:"problem", available:true, problems:[{ kind:"fix", title:"Not signed in", fix:"Run kimi login" }], model:{ name:"k3" } };
+  const { document, ctx, store } = presetEditor(claude);
+  const toasts = [];
+  ctx.toast = message => toasts.push(message);
+  ctx.S.thisComputer = true;
+  ctx.S.agentCheck = { problems:1, agents:[claude, codex, kimi] };
+  ctx.runnableAgents = () => [claude, codex, kimi];
+  const auto = id => ({ id:`auto:${id}`, name:{ claude:"Claude Code", codex:"Codex", kimi:"Kimi" }[id], agent:id, auto:true, available:true });
+  ctx.S.presets = { default:"", presets:[auto("codex"), auto("claude"), auto("kimi")] };
+
+  // No saved preset yet: an empty card offers New preset, and the ready CLIs (not the one needing a fix) wait on the shelf.
+  ctx.render();
+  assert.match(document.querySelector(".sys-empty").textContent, /No preset agents yet/);
+  assert.ok(document.querySelector('.sys-empty [data-act="preset-new"]'));
+  const shelf = () => Array.from(document.querySelectorAll('.sys-ready [data-preset]'), el => el.dataset.preset);
+  assert.equal(document.querySelector("#sysReadyProviders").textContent, "Ready to add from Local providers");
+  assert.deepEqual(shelf(), ["auto:claude", "auto:codex"], "alphabetical, without Kimi, whose CLI needs a fix");
+  assert.match(document.querySelector('[data-preset="auto:codex"]').textContent, /Default model gpt-6\.2-sol/);
+  assert.match(document.querySelector('[data-act="preset-quick-add-all"]').textContent, /Quick-add all \(2\)/);
+
+  // Quick-add all saves one preset per ready CLI with its default model and a suggested effort.
+  await ctx.ACT["preset-quick-add-all"]();
+  const saved = store.list().presets.filter(x => !x.auto);
+  assert.deepEqual(saved.map(x => [x.agent, x.model, x.effort, x.showInPicker, x.allowDelegation]).sort(), [["claude", "opus", "medium", true, true], ["codex", "gpt-6.2-sol", "xhigh", true, true]]);
+  assert.deepEqual(toasts, ["Added 2 presets for Auto and Orchestrator."]);
+
+  // Saved presets are listed under Your preset agents; one whose CLI needs a sign-in takes you to Local providers.
+  ctx.S.presets = { default:"", presets:[...saved, { id:"k1", name:"Kimi · k3", agent:"kimi", model:"k3", effort:"", available:true, auto:false }] };
+  ctx.render();
+  assert.equal(document.querySelector(".sys-empty"), null);
+  assert.equal(document.querySelector("#sysReadyProviders"), null, "nothing left to add");
+  const fix = document.querySelector('[data-preset="k1"] [data-act="open-setup"]');
+  assert.equal(fix.textContent, "Provider needs sign-in → Fix");
+  kimi.problems = [{ kind:"fix", title:"Crashes at start", fix:"Reinstall kimi" }];
+  ctx.render();
+  assert.equal(document.querySelector('[data-preset="k1"] [data-act="open-setup"]').textContent, "Provider needs fix → Fix");
+  assert.equal(document.querySelector('[data-preset="k1"] [data-act="preset-edit"]').textContent, "Edit");
+  // The form names its first field Local provider and marks a provider that needs a fix.
+  ctx.ACT["preset-new"]();
+  assert.equal(document.querySelector('.sys-form[data-form="preset"] label span').textContent, "Local provider");
+  assert.deepEqual(Array.from(document.querySelectorAll('select[name="agent"] option'), o => o.textContent), ["Claude Code", "Codex", "Kimi (needs fix)"]);
+  assert.equal(document.querySelector('button[type="submit"]').textContent, "Add preset");
+});
+
+test("Preset agents with nothing to run says so: a check in progress, or the way to Local providers", () => {
+  const { document, ctx } = presetEditor();
+  ctx.S.thisComputer = true;
+  ctx.S.presets = { default:"", presets:[] };
+  ctx.S.agentCheck = null;
+  ctx.render();
+  assert.match(document.querySelector('.sys-empty[role="status"]').textContent, /Checking local providers/);
+  ctx.S.agentCheck = { problems:0, agents:[{ id:"codex", name:"Codex", state:"missing", problems:[] }] };
+  ctx.runnableAgents = () => [];
+  ctx.render();
+  assert.match(document.querySelector(".sys-empty").textContent, /Install or sign in to a CLI tool in Local providers first/);
+  assert.equal(document.querySelector('.sys-empty [data-act="open-setup"]').textContent, "Go to Local providers →");
+  assert.equal(document.querySelector('[data-act="preset-new"]'), null, "no New preset without a provider to run it");
+});
+
+test("a Local providers row says which presets use it and creates a prefilled preset in Preset agents", () => {
+  const codex = { id:"codex", name:"Codex", mono:"Cx", color:"#10a37f", state:"ready", available:true, where:"/bin/codex", problems:[], model:{ name:"gpt-6.2-sol", effort:"high", efforts:["low", "medium", "high"] } };
+  const { document, ctx } = presetEditor(codex);
+  ctx.homeShort = value => value;
+  ctx.S.thisComputer = true;
+  ctx.S.agentCheck = { problems:0, agents:[codex, { id:"workbuddy", name:"WorkBuddy", mono:"Wb", color:"#333", state:"ready", where:"/Applications/WorkBuddy.app", problems:[] }] };
+  ctx.S.presets = { default:"", presets:[{ id:"auto:codex", agent:"codex", name:"Codex", auto:true, available:true }] };
+  document.body.innerHTML = ctx.setupRowHTML(codex);
+  assert.equal(document.querySelector(".setup-linked.is-none").textContent, "No preset yet · default model gpt-6.2-sol");
+  assert.ok(document.querySelector('[data-act="setup-create-preset"][data-agent="codex"]'));
+  assert.equal(document.querySelector(".setup-model"), null);
+  // WorkBuddy runs no Asks: no preset to make from it.
+  document.body.innerHTML = ctx.setupRowHTML(ctx.S.agentCheck.agents[1]);
+  assert.equal(document.querySelector('[data-act="setup-create-preset"]'), null);
+  assert.equal(document.querySelector(".setup-linked"), null);
+
+  ctx.S.presets.presets.push({ id:"p1", agent:"codex", name:"Codex · high", model:"gpt-6.2-sol", effort:"high", available:true }, { id:"p2", agent:"codex", name:"Codex · medium", model:"", effort:"medium", available:true });
+  document.body.innerHTML = ctx.setupRowHTML(codex);
+  assert.match(document.querySelector(".setup-linked").textContent, /2 presets: gpt-6\.2-sol · high effort, gpt-6\.2-sol · medium effort/);
+  assert.ok(document.querySelector('.setup-linked [data-act="open-agents"]'));
+
+  // + Create preset opens Preset agents with a new preset's form filled in for that provider.
+  const opened = [];
+  ctx.openSettings = id => { opened.push(id); ctx.S.shelfPage = "agents"; };
+  ctx.render = () => { document.body.innerHTML = ctx.agentsSectionHTML(); };
+  ctx.ACT["setup-create-preset"]({ dataset:{ agent:"codex" } });
+  assert.deepEqual(opened, ["agents"]);
+  const form = document.querySelector('.sys-form[data-form="preset"]');
+  assert.ok(form && !form.closest(".is-editing"), "the new preset's form is in the main editor slot");
+  assert.equal(form.querySelector('select[name="agent"] option[selected]').value, "codex");
+  assert.equal(form.querySelector('select[name="modelChoice"] option[selected]')?.value ?? form.querySelector('input[name="model"]').value, "gpt-6.2-sol");
+  assert.equal(form.querySelector('select[name="effortChoice"] option[selected]').value, "high");
 });

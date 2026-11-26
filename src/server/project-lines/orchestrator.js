@@ -181,6 +181,15 @@ const TOOLS = [
   ["rebuild-topics", "agent?", "Rebuild the project's Topics on a new Line. Use an eligible agent id, or an eligible Topics or default preset."],
 ];
 
+// Windows refuses the rename while another program has either file open: a virus scanner looking at the new one, a reader of the old.
+// That is over in a moment, so it is tried again. The first price sync on a Windows PC failed here with "Something went wrong" (PE-1217).
+const HELD = new Set(["EPERM", "EACCES", "EBUSY"]), PAUSE = new Int32Array(new SharedArrayBuffer(4));
+function replaceFile(temp, file) {
+  for (let left = process.platform === "win32" ? 50 : 0; ; left--) {
+    try { fs.renameSync(temp, file); return; } catch (error) { if (!left || !HELD.has(error?.code)) throw error; }
+    Atomics.wait(PAUSE, 0, 0, 20);
+  }
+}
 function writeAtomic(file, text, { mode = 0 } = {}) {
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive:true, ...(mode ? { mode:0o700 } : {}) });
@@ -189,7 +198,7 @@ function writeAtomic(file, text, { mode = 0 } = {}) {
   try {
     fs.writeFileSync(temp, text, mode ? { mode } : undefined);
     if (mode) try { fs.chmodSync(temp, mode); } catch { /* Best-effort permission tightening. */ }
-    fs.renameSync(temp, file);
+    replaceFile(temp, file);
   } catch (error) {
     try { fs.unlinkSync(temp); } catch { /* Ignore cleanup failure. */ }
     throw error;
@@ -1437,8 +1446,9 @@ function createOrchestrator({ service, directory, onUsage = () => {}, dice = Mat
       return alone.expected == null ? pooled : { ...pooled, expected:alone.expected * quality(alone) / quality(pooled) };
     };
     const rowsOf = presets => scoredRows(presets, { kind, targetScope, context, recent, judged }).map(r => ({ ...r, of:choiceOf(r.row.resolved || r.row.model, r.row.effort) }));
+    const listed = agents().agents;
     const groups = [];
-    for (const r of rowsOf(agents().agents)) {
+    for (const r of rowsOf(listed)) {
       const same = r.of.model && groups.find(g => sameChoice(g.of, r.of));
       if (same) same.members.push(r); else groups.push({ of:r.of, members:[r] });
     }
@@ -1451,7 +1461,7 @@ function createOrchestrator({ service, directory, onUsage = () => {}, dice = Mat
         given:running.filter(x => g.members.some(r => r.p.id === x.preset) || sameChoice(x.of, g.of)).length });
     }
     const mine = selfAgent(project, session), self = mine ? rowsOf([mine])[0] : null;
-    return { self, groups:groups.filter(g => !self || !self.of.model || !sameChoice(g.of, self.of)) };
+    return { self, groups:groups.filter(g => !self || !self.of.model || !sameChoice(g.of, self.of)), presets:listed.length };
   }
   // The coordinator running now, also when it runs on no saved agent.
   function selfAgent(project, session) {
@@ -1498,8 +1508,11 @@ function createOrchestrator({ service, directory, onUsage = () => {}, dice = Mat
   // What the brief says of who could take a part of a job like this one now. Scores and prices stay out: PenEcho does the choosing.
   function subNow(project, session, kind) {
     const all = subAgents(project, session, kind), names = (role, most) => { const { list } = subChoices(all, role); return list.length ? `${list.slice(0, most).map(g => g.name).join(", ")}${list.length > most ? ` and ${list.length - most} more` : ""}` : ""; };
-    const up = names("decision", 1), down = names("execution", 2);
-    return `For ${kind || "general"} work now. Decision: ${up ? `${up} is rated above you` : "nobody free is rated above you"}. Execution: ${down || "nobody free fits, so it stays with you"}.`;
+    const up = names("decision", 1), down = names("execution", 2), presets = all.presets || 0;
+    const available = !down && presets
+      ? ` ${presets} delegated ${presets === 1 ? "preset is" : "presets are"} available in agents when the person asks for specific, multiple, or all agents.`
+      : "";
+    return `For ${kind || "general"} work now. Decision: ${up ? `${up} is rated above you` : "nobody free is rated above you"}. Execution: ${down || (presets ? "nobody free fits auto-pick, so it stays with you" : "nobody free fits, so it stays with you")}.${available}`;
   }
   const PLAN_DEFAULT_LIMIT = 6;
   // Pick up to `cap` leading non-you candidates (prioritizing proven cheaper agents and at most `maxTrials` trial candidates)
@@ -2522,6 +2535,7 @@ function createOrchestrator({ service, directory, onUsage = () => {}, dice = Mat
       : win
         ? `\`'{"do":"plan"}' | node "$env:PENECHO_ORCH_HELPER"\``
         : `\`node "$PENECHO_ORCH_HELPER" '{"do":"plan"}'\``;
+    const helperRef = builtIn ? "`orchestrate`" : win ? "`$env:PENECHO_ORCH_HELPER`" : "`$PENECHO_ORCH_HELPER`";
     if (mode === "lookup") {
       return [
         `You are this project's orchestrator. Call PenEcho with ${callSyntax}; it survives restarts, so check state before repeating a call.`,
@@ -2544,6 +2558,7 @@ function createOrchestrator({ service, directory, onUsage = () => {}, dice = Mat
     return [
       `You are this project's orchestrator. Call PenEcho with ${callSyntax}; it survives restarts, so check state before repeating a call. Calls: ${BRIEF_CALLS}; help lists the rest.`,
       [
+        `Delegating to sub-agents means creating PenEcho Lines via ${helperRef} (agents / decide / create-line), not using your built-in internal Agent/subagent tool.`,
         "1. The person named agents or models, or asked for several agents (views, a comparison, a round table, parts side by side): do that, naming each part's agent (agents lists them).",
         "2. A question, a simple fix, anything done in about 5 minutes: do it yourself, with no decide call.",
         "3. Longer work: first decide, then do. Make the plan, architecture and hard trade-offs yourself, or ask one stronger model with a part of role:\"decision\". Then hand over the parts that stand on their own with decide {route:\"delegate\"|\"split\", why, parts:[{task, kind, scope?, role?, brief, title?}], wait?}, naming no agent: PenEcho picks one about as good as you at under half your cost, and you keep the parts nobody fits. Send independent parts together and do yours meanwhile; send ordered ones one after another. Keep a change with its tests, parts under 5 minutes, and work that hangs on what you hold.",

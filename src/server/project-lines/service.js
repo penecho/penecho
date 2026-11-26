@@ -20,16 +20,16 @@ const Git = require("./git.js");
 const CA = require("./computer-asks.js");
 const { branchTree, tipsOf } = require("./branches.js");
 const { Store, failure, writeAtomic, safeName, clip, shortFolder, toolsFolder, leftOut, MY_CANVASES_ID } = require("./store.js");
-const { ActivityLog, eventOf, toolRow, partsText, tail, OUTPUT_MAX, TEXT_MAX, cleanThinking, parseLine, parseAppServer, parseDialect, userLine, piRpcInit, piRpcSteer, piRpcUiResponse, claudeControlResponse, isResult, backgroundOf, isAntigravityOAuthError, richQuestionsOf, nowFrom, oneLine, retryRow } = require("./activity.js");
+const { ActivityLog, eventOf, toolRow, partsText, tail, OUTPUT_MAX, TEXT_MAX, cleanThinking, parseLine, parseAppServer, parseDialect, userLine, ompLogError, piRpcInit, piRpcSteer, piRpcUiResponse, claudeControlResponse, isResult, backgroundOf, isAntigravityOAuthError, isCodexSandboxBroken, codexSandboxBrokeIn, richQuestionsOf, nowFrom, oneLine, retryRow } = require("./activity.js");
 const { antigravityLiveTranscript } = require("./antigravity-sessions.js");
 const { readPlain } = require("./agent-sessions.js");
-const { CodexServer, runTurn, followTurn, steerTurn, turnResult } = require("./codex-server.js");
+const { CodexServer, runTurn, followTurn, steerTurn, turnResult, declined, approvalReply, APPROVAL_METHODS } = require("./codex-server.js");
 const { rolloutTurnSettings, rolloutLines, rolloutTurnSpans } = require("./codex-history.js");
 const { Conversations, openQuestion, PI_FAMILY } = require("./conversations.js");
 const { AgentMemory } = require("./agent-memory.js");
 const Memory = require("./memory.js");
 const UserSkill = require("../draw.js");
-const { fromFolder } = require("./agents.js");
+const { fromFolder, accessOf } = require("./agents.js");
 const { prepareAgentEnv } = require("../../providers/agent-env.js");
 const { checkpointOf } = require("./pi-checkpoint.js");
 const Slides = require("../slides.js");
@@ -187,7 +187,7 @@ function gitRefsSig(code) {
 // A task that is worth having because its agent has not seen the Work before.
 const INDEPENDENT = /\bindependent(?:ly)?\b|\bfrom scratch\b|\bfresh (?:eyes|look|start|conversation|session)\b|\bsecond opinion\b|\bunbiased\b|独立|从头/i;
 // What a run under a keeper keeps for a PenEcho started later (keepNote, reattach): plain values only.
-const KEPT_FIELDS = ["agent", "proxyRun", "dialect", "step", "stepId", "kind", "session", "sessionId", "bound", "resumed", "exactResume", "resumeError", "started", "carried", "log", "workdir", "head", "written", "tail", "said", "answer", "aside", "failed", "lastFailed", "recoveredTurn", "hadTurnError", "oauthRetry", "agySaid", "agyText", "agyErrorStep", "agyErrorText", "agyToolStep", "agyAnswerStep", "now", "plainWords", "setup", "taskId", "config", "promptVersion", "lane", "promptHead", "modelSeen", "openCodeMessageId", "openCodeModelId", "threadId", "rolloutPath", "turnId", "modelActivityAt", "turnOver", "turnOverAt", "background", "inputClosed", "runtimeDone", "rpcStreaming", "permissionMode", "unattended", "orchBrief"];
+const KEPT_FIELDS = ["agent", "proxyRun", "dialect", "step", "stepId", "kind", "session", "sessionId", "bound", "resumed", "exactResume", "resumeError", "started", "carried", "log", "workdir", "head", "written", "tail", "said", "answer", "aside", "failed", "lastFailed", "recoveredTurn", "hadTurnError", "oauthRetry", "agySaid", "agyText", "agyErrorStep", "agyErrorText", "agyToolStep", "agyAnswerStep", "now", "plainWords", "setup", "taskId", "config", "promptVersion", "lane", "promptHead", "modelSeen", "openCodeMessageId", "openCodeModelId", "threadId", "rolloutPath", "turnId", "modelActivityAt", "turnOver", "turnOverAt", "background", "inputClosed", "runtimeDone", "rpcStreaming", "permissionMode", "unattended", "orchBrief", "sandboxBroken", "sandboxRecovered"];
 const KEEP_NOTE_MS = 500;
 const piNoiseTypes = new Set(["message_update", "message_start", "turn_start", "turn_end", "tool_execution_update"]);
 const piNoise = /"type"[ \t\r]*:[ \t\r]*"(?:message_update|message_start|turn_start|turn_end|tool_execution_update)"/;
@@ -360,6 +360,8 @@ function stateChanges(was, now) {
   return out;
 }
 const PENECHO_DIED = "PenEcho's agent stopped before it finished. Retry carries on from where it got to.";
+// What a Work says when Codex's Windows sandbox could not start (activity.js isCodexSandboxBroken); its page offers Settings beside it.
+const CODEX_SANDBOX_NOTE = "Codex could not start its sandbox in this folder, so its commands did not run. Set this agent's Access to Full access in Settings, then send again.";
 // Another PenEcho runs these Lines. owner says where it can be opened when it could answer ({ pid, port }).
 function runtimeBusy(owner = {}) {
   const port = Number(owner.port) || 0, pid = Number(owner.pid) || 0;
@@ -378,7 +380,7 @@ const STUCK_STOPPED = "The agent sat still for half an hour twice, waiting on so
 const NOT_STARTED = "Not started. Start to give it to an agent.";
 // How long a running agent has to take words into its turn. Without an answer by then they wait for the next Work, as before.
 const STEER_MS = 10000;
-const setupOf = preset => `${preset?.model || ""}|${preset?.effort || ""}`;
+const setupOf = preset => `${preset?.model || ""}|${preset?.effort || ""}${preset?.access ? `|${preset.access}` : ""}`;
 // A manually saved assignment stays with its Ask as unsent Asks move down the Line.
 // Prefix the id because the held-metadata reader treats digit-only fields as numbers.
 const savedAskPreset = ask => ask.held?.reason === "saved" ? String(ask.held.preset || "").replace(/^@/, "") : "";
@@ -425,14 +427,33 @@ const AGY_OAUTH_NOTE = "Your Google OAuth access token expired mid-run and has b
 // A part an orchestrator gave out: its agent reads the answer, not the person. The brief says the rest, so this holds only what keeps parts
 // apart. Rules on how to work or test cost every part time and tokens and the brief knows better (PE-1190).
 const partOfJob = ctx => `You do one part of a larger job. The agent running that job reads your answer and puts the parts together${ctx.sub.line ? ` (the whole job, only if your part is unclear: ${path.posix.join(ctx.linesFolder || L.LINES, `${ctx.sub.line}.md`)})` : ""}. Do this part yourself, your own way: start no other agents or sub-agents. Others may be changing this folder too, so leave what is not yours. Check your part as the brief asks and no wider. If something stops you, say what and end: nobody is watching this run. Answer with the result first, then the files you changed or made and what the next step must know.`;
+// Explicit user-message authorization for Reviewed runs: Codex's auto-reviewer (guardian) only trusts authorization stated
+// in the user message, and interactive runs also surface approval cards in PenEcho when a runner asks to step outside its sandbox.
+function reviewedPermissionNote(ctx) {
+  if (!ctx || ctx.access !== "reviewed") return "";
+  const workdir = String(ctx.workdir || "").trim(), docs = String(ctx.docs || "").trim();
+  const folders = [];
+  if (ctx.code && workdir && workdir !== docs) folders.push(`the project folder (${workdir})`);
+  if (docs) folders.push(`the project docs folder (${docs})`);
+  else if (workdir) folders.push(`the project folder (${workdir})`);
+  for (const dir of Array.isArray(ctx.extraFolders) ? ctx.extraFolders : []) {
+    const clean = String(dir || "").trim();
+    if (clean && clean !== workdir && clean !== docs && !folders.some(f => f.includes(clean))) folders.push(clean);
+  }
+  const scope = folders.length > 1 ? `${folders.slice(0, -1).join(", ")} and ${folders.at(-1)}` : folders[0] || "the project and docs folders";
+  return `Reviewed mode permissions: the person grants read and write access to ${scope}, and authorizes running commands outside the sandbox when needed (including if the sandbox blocks access or fails to start). If a sandboxed command fails or is blocked, request escalated execution outside the sandbox instead of giving up.`;
+}
 function whatToDo(step, ctx) {
   const dir = path.join(ctx.docs, "files", ctx.slug);
-  if (ctx.sub && step.kind === "work") return partOfJob(ctx);
+  const reviewed = reviewedPermissionNote(ctx);
+  if (ctx.sub && step.kind === "work") return reviewed ? `${partOfJob(ctx)}\n\n${reviewed}` : partOfJob(ctx);
   switch (step.kind) {
     case "grill": return `Before doing any of it, grill the person about this until you both understand it the same way. Ask one question at a time, most important first, and say what you would recommend. If a question has clear options, also add it under "## ${F.QUESTIONS}" above the steps in ${ctx.topicPath} with the options as unticked checkboxes, so they can pick one. Then stop, because their answer comes back to you as the next message. Change nothing yet. When you have nothing left to ask, say so and sum up what was decided.`;
-    case "prototype": return `First read ${path.join(ctx.docs, ".penecho", "design-prototype.md")} and make a clickable prototype as one self-contained HTML file (marked with <html data-penecho-prototype>) at ${path.join(dir, "prototype.html")} (or separate HTML files in ${dir} if they asked for options to choose from, listing the choices under "## ${F.QUESTIONS}" above the steps in ${ctx.topicPath} as unticked checkboxes), with no network requests. Do not change the code yet. Say when it is ready and stop, because the person looks at it first.`;
-    case "review": return `You are an independent reviewer of this change. Read \`git diff ${ctx.base}...HEAD\` against the request. Fix real problems and commit the fixes. Sum up what you found.`;
-    default: return "Do it the way you normally would, right through to the end, and check your own work. Change the code only if the request calls for it. If it is a question, answer it. Nobody is watching this run, so do not stop to ask for permission to carry on.";
+    case "prototype": return `First read ${path.join(ctx.docs, ".penecho", "design-prototype.md")} and make a clickable prototype as one self-contained HTML file (marked with <html data-penecho-prototype>) at ${path.join(dir, "prototype.html")} (or separate HTML files in ${dir} if they asked for options to choose from, listing the choices under "## ${F.QUESTIONS}" above the steps in ${ctx.topicPath} as unticked checkboxes), with no network requests. Do not change the code yet. Say when it is ready and stop, because the person looks at it first.${reviewed ? `\n\n${reviewed}` : ""}`;
+    case "review": return `You are an independent reviewer of this change. Read \`git diff ${ctx.base}...HEAD\` against the request. Fix real problems and commit the fixes. Sum up what you found.${reviewed ? `\n\n${reviewed}` : ""}`;
+    default: return reviewed
+      ? `Do it the way you normally would, right through to the end, and check your own work. Change the code only if the request calls for it. If it is a question, answer it. Do not end the turn just to ask in text for permission to carry on.\n\n${reviewed}`
+      : "Do it the way you normally would, right through to the end, and check your own work. Change the code only if the request calls for it. If it is a question, answer it. Nobody is watching this run, so do not stop to ask for permission to carry on.";
   }
 }
 // Browser work has three routes. PenEcho adds a headless option; it never takes away an agent's own tools.
@@ -582,7 +603,12 @@ const isReviewPrompt = text => {
     || /^Please review [^\n]+ on this Line and rate it according to the scoring standard and report format below\./.test(s)
     || /^Your previous review stopped before you returned the final JSON review form\.\s+Continue from where you left off\b/.test(s);
 };
-const isAskAdminPrompt = text => /^You are the admin of the project "[^"\n]+"\.\s+The person asks how some part of it is going\.\s+Answer from the project's records below and nothing else:/.test(String(text || "").trimStart());
+const isAskAdminPrompt = text => {
+  const s = String(text || "").trimStart();
+  return /^You are the admin of the project "[^"\n]+"\.\s+The person asks how some part of it is going\.\s+Answer from the project's records below and nothing else:/.test(s)
+    || /^You are the agent who looks after the project "[^"\n]+"\./.test(s)
+    || /^You are answering a question about the project "[^"\n]+" in PenEcho\./.test(s);
+};
 const isRunPrompt = text => /(?:^|\n)Current PenEcho Work: [^\n]+\nAuthoritative Line record: (?:lines|topics)\/[^\n]+\.md\./.test(String(text || ""))
   || /^A person using PenEcho asked for this in the project "/.test(String(text || "").trimStart())
   || isReviewPrompt(text)
@@ -614,9 +640,13 @@ function workFacts(info) {
   if (!info) return {};
   const out = {};
   if (info["stop why"]) { out.stopWhy = info["stop why"]; if (info["resets at"]) out.resetsAt = info["resets at"]; }
+  if (info["sandbox failed"] === "yes") out.sandboxFailed = true;
   if (info["saved agent"]) out.savedAgent = String(info["saved agent"]);
   if (info["saved agent id"]) out.savedAgentId = String(info["saved agent id"]);
   if (info["selected model"] || info["selected effort"] || info["recorded selection"]) out.selected = { model:String(info["selected model"] || ""), effort:String(info["selected effort"] || "") };
+  if (info["selected access"]) out.selectedAccess = String(info["selected access"]).trim();
+  const access = String(info.access || info["selected access"] || "").trim();
+  if (access) out.access = access;
   if (info.model || info.effort) out.picked = { ...(info.model ? { model:String(info.model) } : {}), ...(info.effort ? { effort:String(info.effort) } : {}) };
   if (info["resolved model"]) out.resolvedModel = info["resolved model"];
   if (info["ran on"]) out.ranOn = String(info["ran on"]).trim();
@@ -1049,13 +1079,7 @@ class Service {
       this.carryOnLeft = carryOn;
       const restarted = recoverOnStart ? this.#recoverInterrupted(others.filter(entry => !this.leftRunning.includes(entry))) : [];
       if (attached.length || this.leftRunning.length) this.saveActive();
-      try {
-        const keepDirs = new Set([
-          ...this.localRunEntries().map(([, run]) => run.child?.dir || run.keepDir).filter(Boolean),
-          ...(this.leftRunning || []).map(e => e?.keep).filter(Boolean),
-        ]);
-        this.keeper?.sweep(keepDirs);
-      } catch { /* Swept next time. */ }
+      this.sweepKeepers();
       this.codexEndsRepaired = Promise.all(this.store.projects.map(project => this.repairCodexEnds(project).catch(() => {})));
       if (carryOn && restarted.length) this.carriedOn = this.carryOnAll(restarted);
       if (autoWatch) {
@@ -1172,6 +1196,7 @@ class Service {
         child,
         onNote:note => { run.heardAt = Date.now(); raw(`${JSON.stringify(note)}\n`); this.observeTokens(project, slug, run, note); this.applyChanges(project, slug, run, parseAppServer(note)); replayed(); this.keepNote(project, slug, run); },
         onServerRequest:msg => this.handleCodexServerRequest(project, slug, run, server, msg),
+        onApprovalRequest:msg => this.handleCodexApprovalRequest(project, slug, run, server, msg),
         onServerRequestResolved:rid => this.resolvePendingRequest(project, slug, run, String(rid), { state:"done", output:"Resolved" }),
       });
       run.server = server;
@@ -2673,10 +2698,11 @@ class Service {
       // A qualified selection is the runner's route. Recorded runtime names may omit that route.
       const model = defaultModel ? "" : selectedModel.includes("/") ? selectedModel : String(info?.model || selectedModel).trim();
       const effort = String(info?.effort || info?.["selected effort"] || "").trim();
+      const selectedAccess = String(info?.["selected access"] || "").trim();
       // What was chosen too ("opus" where Claude reports claude-opus-5-5), so Run with the same saved agent steers in (PE-558).
-      const chosen = { model:selectedModel || model, effort:String(info?.["selected effort"] || effort).trim() };
-      if (model || effort || (defaultModel && info["recorded selection"] !== "auto")) return { id:"", inherited:true, sourceWorkId:s.id, agent, model, effort, chosen,
-        name:this.presets.nameFor({ agent, model, effort }) };
+      const chosen = { model:selectedModel || model, effort:String(info?.["selected effort"] || effort).trim(), ...(selectedAccess ? { access:selectedAccess } : {}) };
+      if (model || effort || selectedAccess || (defaultModel && info["recorded selection"] !== "auto")) return { id:"", inherited:true, sourceWorkId:s.id, agent, model, effort, ...(selectedAccess ? { access:selectedAccess } : {}), chosen,
+        name:this.presets.nameFor({ agent, model, effort, access:selectedAccess }) };
       const avail = this.presets.list().presets.filter(p => !p.auto && p.available && p.agent === agent);
       const hit = (savedId && avail.find(p => p.id === savedId)) || (savedName && avail.find(p => p.name === savedName)) || null;
       return hit ? this.presets.get(hit.id) : { id:"", inherited:true, sourceWorkId:s.id, agent, auto:true, name:this.agents.nameOf?.(agent) || agent };
@@ -2702,7 +2728,7 @@ class Service {
     const saved = id && this.presets?.get(id), recordedAgent = String(info.who || "").replace(/^@/, "");
     if ((recordedAgent && recordedAgent !== agent) || (saved && saved.agent !== agent)) { source = null; info = {}; id = ""; }
     const fallback = chosen || prior || (source ? saved : this.presetFor(project, slug, agent));
-    const settings = chosen || prior || { ...fallback, agent, id:id || fallback?.id || "", model:info["selected model"] ?? info.model ?? fallback?.model ?? "", effort:info["selected effort"] ?? info.effort ?? fallback?.effort ?? "", access:source ? "" : fallback?.access || "" };
+    const settings = chosen || prior || { ...fallback, agent, id:id || fallback?.id || "", model:info["selected model"] ?? info.model ?? fallback?.model ?? "", effort:info["selected effort"] ?? info.effort ?? fallback?.effort ?? "", access:info["selected access"] ?? (source ? (saved?.access || "") : fallback?.access || "") };
     // The picks of the Agent setup page are for a run with no saved agent. What a saved agent, or the Work before, leaves on Default stays so:
     // the runner's own default runs, as the saved agent's card says, and not a pick made for something else.
     const own = Boolean(settings.id && !String(settings.id).startsWith("auto:")) || Boolean(settings.inherited && !settings.auto) || info["recorded selection"] === "preset" || Boolean(info["saved agent"]);
@@ -2721,7 +2747,11 @@ class Service {
     const prior = this.lastWorkPreset(project, slug, agent, skip);
     if (prior) return prior;
     const chosen = this.presets.defaultPreset();
-    return chosen?.agent === agent ? chosen : null;
+    if (chosen?.agent === agent) return chosen;
+    // When the person replaced this runner's automatic entry with one visible saved preset (e.g. setting Codex to Reviewed),
+    // use that saved preset rather than silently falling back to runner defaults.
+    const saved = (this.presets.list?.()?.presets || []).filter(p => !p.auto && p.available && p.showInPicker !== false && p.agent === agent);
+    return saved.length === 1 ? this.presets.get(saved[0].id) : null;
   }
   // ---------- Topics and notes ----------
   async createTopic(project, { text, title, kinds, path:kindPath, agent, attachments = [], pictures = [], attached = [], start = true, fromNote, conversation = null, at = 0, unsent = false, chosen = {}, plan = false, preset = "", make = null, jobKind = "" }, orchestratorFront = null, beforeCreate = null) {
@@ -4798,6 +4828,8 @@ class Service {
     const detail = this.stepDetail(project, slug, work);
     if (!this.store.exists(project, detail)) return same;
     const front = this.detailOf(project, detail).front, effort = (!preset?.runnerDefaults && preset?.effort) || "", picked = (!preset?.runnerDefaults && preset?.model) || "";
+    const wantedAccess = (!preset?.runnerDefaults && preset?.access) || "";
+    if ((front["selected access"] || "") !== wantedAccess) return false;
     // Two routes of one model are two connections.
     const route = front["selected model"] || "";
     if (picked.includes("/") && route.includes("/") && picked !== route) return same;
@@ -5426,7 +5458,7 @@ class Service {
         return (key === agent || key.startsWith(`${agent}:`)) && rec?.id && rec.workId === previous.id && (rec.kind === "review" || key === `${agent}:review`) === (step.kind === "review");
       }) : "";
     const name = continuation?.name || matchedStepKey || (lane ? stepSessionKey : baseSessionKey);
-    const config = TaskContext.hash(JSON.stringify([agent,(!presetForTask?.runnerDefaults && presetForTask?.model) || "",(!presetForTask?.runnerDefaults && presetForTask?.effort) || "",step.kind === "review" ? "review" : "work"]));
+    const config = TaskContext.hash(JSON.stringify([agent,(!presetForTask?.runnerDefaults && presetForTask?.model) || "",(!presetForTask?.runnerDefaults && presetForTask?.effort) || "",step.kind === "review" ? "review" : "work",...(presetForTask?.access ? [presetForTask.access] : [])]));
     const candidate = lineSessions[matchedStepKey || previousStepKey || (lane ? stepSessionKey : baseSessionKey)];
     const saved = !step.continuedFromWork || matchedStepKey || previousStepKey || candidate?.workId === previous?.id || candidate?.workId === step.id ? candidate : null;
     // Old sessions have frozen Work-specific instructions. Migrate on the next launch, without interrupting an active turn.
@@ -5471,15 +5503,20 @@ class Service {
     if (!continuation) this.notes.delete(key);
     const canvas = await this.runCanvas(project, slug, this.stepCanvas(doc, step));
     const gitDir = branch || ((external || inPlace) && code) ? await Git.commonDir(workdir) : "";
+    const merging = Boolean(doc.front["merge into"]);
+    const mergeDir = merging && code && doc.front["merge into"] ? (await this.mergeFolder(project, doc.front["merge into"])).dir : "";
+    const extraFolders = [...(mergeDir ? [mergeDir] : []), ...(elsewhere ? [elsewhere] : [])];
+    const presetAccess = this.presets?.handOver(presetForTask)?.access || "";
+    const effectiveAccess = presetAccess || accessOf(agent).normal || "";
     const ctx = {
       compact:true, canvas, onCanvas:Boolean(canvas), project:project.name, docs:project.docsPath, code:Boolean(branch) || ((external || inPlace) && Boolean(code)), git:Boolean(gitDir), workdir, slug, branch:elsewhere || (external && !branchFolder) ? null : branch, base, topicPath:this.store.place(project, L.linePath(slug)), detailPath:this.store.place(project, F.detailPath(slug, step.id)), linesFolder:this.store.full(project, L.LINES), memory:project.projectMemory !== false, knowledge:canvas || doc.front.job === BUILD_TOPICS ? "" : !Knowledge.topicsOn(project) ? Knowledge.TOPICS_OFF : this.store.layoutOf(project) === 2 ? Knowledge.knowledgeNote(project.docsPath, slug) : "", words:answers[0]?.text || `Carry on with ${step.label} for this task.`,
       files:attached, said:tellOf.map(a => this.askSaid(project, doc, a)).filter(Boolean), note, moved:Boolean(known) && (known.kind || "work") !== step.kind, continuing:doc.steps.some(s => s.done && F.AGENT_LIKE(s)),
-      merging:Boolean(doc.front["merge into"]), askTitle:F.wantsTitle(doc), sub:this.orchestrator?.assignedBy?.(project, slug, step.id) || null, agent, access:this.presets?.handOver(presetForTask)?.access || "",
+      merging, askTitle:F.wantsTitle(doc), sub:this.orchestrator?.assignedBy?.(project, slug, step.id) || null, agent, access:effectiveAccess, extraFolders,
     };
     // A merge you asked for happens where the target branch is checked out, so the agent may write there too.
     // So may the folder of programs every project shares, which a sandboxed agent could otherwise only fill inside the docs folder.
     const tools = toolsFolder(), shared = (() => { try { fs.mkdirSync(tools, { recursive:true }); return [tools]; } catch { return []; } })();
-    const also = [...(ctx.merging && code && doc.front["merge into"] ? [(await this.mergeFolder(project, doc.front["merge into"])).dir] : []), ...(elsewhere ? [elsewhere] : []), ...shared];
+    const also = [...extraFolders, ...shared];
     // Keep hidden project guidance stable. Put changing Work paths and naming rules in the actual message,
     // because resumed agents can retain their original system/developer instructions.
     const instructions = buildInstructions(ctx, step);
@@ -5542,7 +5579,7 @@ class Service {
     const orchestrating = continuation ? "" : this.orchestrator?.brief(project, slug, doc, orchOpts) || "";
     const orchBriefTier = continuation ? (known?.orchBrief || "") : (this.orchestrator?.briefMode?.(doc, orchOpts) || "");
     const prompt = continuation
-      ? [request, `Continue ${step.label} in ${ctx.topicPath}.`, ctx.canvas ? `Use the current Canvas at ${ctx.canvas.file}.` : "", ctx.note].filter(Boolean).join("\n\n")
+      ? [request, `Continue ${step.label} in ${ctx.topicPath}.`, ctx.canvas ? `Use the current Canvas at ${ctx.canvas.file}.` : "", reviewedPermissionNote(ctx), ctx.note].filter(Boolean).join("\n\n")
       : [request,TaskContext.runEnvelope(ctx,step,task,history?.text),ctx.canvas ? canvasBlock(ctx) : "",whatToDo(step,ctx),orchestrating,makeSays,ctx.note || "",F.metaAsk({ title:ctx.askTitle }),command.ownInstructions ? "" : instructions].filter(Boolean).join("\n\n");
     const manifest = TaskContext.manifestFile(slug,step.id), attemptId = randomUUID();
     let manifests; try { manifests = JSON.parse(this.store.readText(project,manifest).text); } catch { manifests = {schemaVersion:1,attempts:[]}; }
@@ -5659,6 +5696,7 @@ class Service {
           spawnFn:(c, a, o) => this.agentSpawn(c, a, { ...o, keepName:`${slug}-${step.id}`, ...(run.keepDir ? { dir:run.keepDir } : {}) }),
           onNote:note2 => { run.heardAt = Date.now(); raw(`${JSON.stringify(note2)}\n`); this.observeTokens(project,slug,run,note2); this.applyChanges(project, slug, run, parseAppServer(note2)); this.keepNote(project, slug, run); },
           onServerRequest:msg => this.handleCodexServerRequest(project, slug, run, server, msg),
+          onApprovalRequest:msg => this.handleCodexApprovalRequest(project, slug, run, server, msg),
           onServerRequestResolved:rid => this.resolvePendingRequest(project, slug, run, String(rid), { state:"done", output:"Resolved" }),
         });
         run.server = server; run.child = server.child;
@@ -5683,7 +5721,7 @@ class Service {
         });
       } else {
         // Pre-stage initial prompt in keeper dir before spawning keeper so a crash right after spawn never strands prompt delivery.
-        const initialInput = piRpc ? piRpcInit(prompt) : streaming ? userLine(prompt, run.dialect) : (command.promptLast ? "" : prompt);
+        const initialInput = piRpc ? piRpcInit(prompt, { eventFilter:command.rpcEventFilter }) : streaming ? userLine(prompt, run.dialect) : (command.promptLast ? "" : prompt);
         // An agent that reads no words from stdin takes them as its last argument.
         const plainEnv = command.prepareEnv ? command.prepareEnv(childEnv, { ...command.env, ...(orchEnv || {}) }) : prepareAgentEnv(childEnv, { ...command.env, ...(orchEnv || {}) }, { platform:process.platform, sandboxWindowsPath:Boolean(command.sandboxWindowsPath) });
         const child = this.agentSpawn(command.command, command.promptLast ? [...launchArgs, prompt] : launchArgs, { cwd:command.cwd, stdio:["pipe", "pipe", "pipe"], windowsHide:true, env:plainEnv, keepName:`${slug}-${step.id}`, ...(piRpc ? { streamFilter:"pi-rpc" } : {}), ...(run.keepDir ? { dir:run.keepDir, initialInput, closeInput:!streaming } : {}) });
@@ -6013,6 +6051,14 @@ class Service {
         row = this.activity.patch(project, slug, upsertId, upsertFields, run.stepId) || this.activity.add(project, slug, { kind:"tool", ...upsertFields, step:run.stepId });
       }
       const doneRow = row || patchedRow;
+      // Codex's Windows sandbox could not start: say so once, unless a later command runs outside the sandbox and recovers.
+      if (run.agent === "codex" && !run.sandboxBroken && codexSandboxBrokeIn(doneRow)) {
+        run.sandboxBroken = true;
+        this.activity.add(project, slug, { kind:"note", text:CODEX_SANDBOX_NOTE, step:run.stepId });
+      }
+      if (run.agent === "codex" && run.sandboxBroken && doneRow?.kind === "tool" && doneRow.state === "done" && doneRow.verb === "Ran") {
+        run.sandboxRecovered = true;
+      }
       if (doneRow?.kind === "tool" && doneRow.verb === "Read" && doneRow.state === "done" && !doneRow.pictures?.length && doneRow.target && doneRow.id) {
         const img = this.readToolImage(project, run, doneRow.target);
         if (img) {
@@ -6218,6 +6264,12 @@ class Service {
         const rawId = item.rawId !== undefined ? item.rawId : item.id;
         server.pendingServerRequests.set(id, { id:rawId, method:"item/tool/requestUserInput" });
         this.bindCodexPending(project, slug, run, server, { id:rawId, params:{ isBlocking:item.isBlocking } }, item.questions || [], { restored:true, rowId:item.rowId, at:item.at, expiresAt, silent:true });
+      } else if (item.protocol === "codex-approval" && server) {
+        const rawId = item.rawId !== undefined ? item.rawId : item.id;
+        const method = item.method || "item/commandExecution/requestApproval";
+        const params = item.input && typeof item.input === "object" ? item.input : {};
+        server.pendingServerRequests.set(id, { id:rawId, method, params });
+        this.bindCodexApprovalPending(project, slug, run, server, { id, rawId, method, params, toolName:item.toolName || "Codex action", toolInput:item.toolInput || "" }, { restored:true, rowId:item.rowId, at:item.at, expiresAt, silent:true });
       } else if (item.protocol === "pi") {
         this.bindPiPending(project, slug, run, { id, method:item.method, rowId:item.rowId, questions:item.questions || [] }, { restored:true, at:item.at, expiresAt, silent:true });
       } else if (item.protocol === "claude") {
@@ -6292,6 +6344,86 @@ class Service {
       this.resolvePendingRequest(project, slug, run, id, { state:"done", output:isSecret ? "[secret answer omitted]" : JSON.stringify(formatted) });
     };
     this.addPendingRequest(project, slug, run, { id, rawId:msg.id, protocol:"codex", kind:"tool", requestType:"question", rowId, at, isSecret, isBlocking, timeoutMs, expiresAt, questions, answer }, { silent });
+  }
+  summarizeCodexApproval(method, params) {
+    const p = params && typeof params === "object" ? params : {};
+    const reason = String(p.reason || "").trim();
+    if (method === "item/commandExecution/requestApproval" || method === "execCommandApproval") {
+      const cmd = Array.isArray(p.command) ? p.command.join(" ") : String(p.command || "").trim();
+      const cwd = String(p.cwd || "").trim();
+      const outside = /sandbox|escalat/i.test(reason);
+      const toolName = outside ? "Run command outside sandbox" : "Shell command";
+      const toolInput = clip([reason, cmd, cwd ? `Folder: ${cwd}` : ""].filter(Boolean).join("\n"), 1200);
+      return { toolName, toolInput };
+    }
+    if (method === "item/fileChange/requestApproval" || method === "applyPatchApproval") {
+      const root = String(p.grantRoot || "").trim();
+      const files = p.fileChanges && typeof p.fileChanges === "object" ? Object.keys(p.fileChanges).slice(0, 12) : [];
+      const toolName = "File changes";
+      const toolInput = clip([reason, root ? `Folder: ${root}` : "", files.length ? `Files: ${files.join(", ")}` : ""].filter(Boolean).join("\n"), 1200);
+      return { toolName, toolInput };
+    }
+    if (method === "item/permissions/requestApproval") {
+      const perms = p.permissions && typeof p.permissions === "object" ? p.permissions : {};
+      const lines = [reason];
+      const fsPerms = perms.fileSystem && typeof perms.fileSystem === "object" ? perms.fileSystem : null;
+      if (fsPerms) {
+        if (Array.isArray(fsPerms.read) && fsPerms.read.length) lines.push(`Read: ${fsPerms.read.join(", ")}`);
+        if (Array.isArray(fsPerms.write) && fsPerms.write.length) lines.push(`Write: ${fsPerms.write.join(", ")}`);
+        if (Array.isArray(fsPerms.entries) && fsPerms.entries.length) {
+          lines.push(...fsPerms.entries.slice(0, 10).map(e => `${e?.access || "access"}: ${e?.path?.path || e?.path?.pattern || e?.path?.value?.kind || JSON.stringify(e?.path || "")}`));
+        }
+      }
+      if (perms.network?.enabled || perms.network === true) lines.push("Network access");
+      return { toolName:"Additional permissions", toolInput:clip(lines.filter(Boolean).join("\n"), 1200) };
+    }
+    return { toolName:"Codex action", toolInput:clip(reason || JSON.stringify(p), 800) };
+  }
+  handleCodexApprovalRequest(project, slug, run, server, msg) {
+    if (!msg || !APPROVAL_METHODS.has(msg.method)) return;
+    const id = String(msg.id);
+    if (run.answeredRequestIds?.has(id)) return;
+    // Unattended sub-agent runs fail closed, matching Claude Code's residual approval handling.
+    if (run.unattended || run.keepMode?.unattended) {
+      server.replyServer(msg.id, declined(msg.method));
+      return;
+    }
+    const { toolName, toolInput } = this.summarizeCodexApproval(msg.method, msg.params);
+    this.bindCodexApprovalPending(project, slug, run, server, { id, rawId:msg.id, method:msg.method, params:msg.params || {}, toolName, toolInput }, { restored:false });
+  }
+  bindCodexApprovalPending(project, slug, run, server, req, { restored = false, rowId:savedRowId = "", at = Date.now(), expiresAt = 0, silent = false } = {}) {
+    const id = String(req.id);
+    const rowId = savedRowId || this.scopeActivityId(run, `codex-perm-${id}`);
+    const toolName = req.toolName || "Codex action";
+    const toolInput = req.toolInput || "";
+    const approvalQuestion = {
+      id:`approve-${id}`,
+      text:`Allow ${toolName}${toolInput ? `: ${oneLine(toolInput, 200)}` : "?"}`,
+      multiSelect:false,
+      options:["Allow", "Allow for session", "Deny"],
+      optionValues:["allow", "allow_session", "deny"],
+    };
+    if (!restored) {
+      this.activity.add(project, slug, {
+        kind:"tool", id:rowId, state:"running",
+        verb:`Asked permission for ${toolName}`,
+        target:oneLine(toolInput, 200),
+        questions:[{ text:approvalQuestion.text, options:approvalQuestion.options }],
+        step:run.stepId,
+      });
+    }
+    const answer = async ({ answer:ans = "", answers = null, cancelled = false } = {}) => {
+      const raw = cancelled ? "deny" : answers && typeof answers === "object" ? Object.values(answers).flat().map(String).join(" ").trim() : String(ans ?? "").trim();
+      const low = raw.toLowerCase();
+      const decision = low === "allow_session" || low === "allow for session" || low === "acceptforsession" || low === "session"
+        ? "allow_session"
+        : /^(?:allow|yes|approve|approved|accept|ok|true)$/.test(low) ? "allow" : "deny";
+      const ok = server.replyServer(req.rawId, approvalReply(req.method, decision, req.params));
+      if (!ok) throw failure("NOT_RUNNING", "That permission request is no longer open.", 409);
+      run.heardAt = Date.now();
+      this.resolvePendingRequest(project, slug, run, id, { state:"done", output:decision === "allow_session" ? "Allowed for session" : decision === "allow" ? "Allowed" : "Denied" });
+    };
+    this.addPendingRequest(project, slug, run, { id, rawId:req.rawId, protocol:"codex-approval", method:req.method, kind:"tool", requestType:"approval", toolName, toolInput, input:req.params || {}, rowId, at, expiresAt, isBlocking:true, questions:[approvalQuestion], answer }, { silent });
   }
   handlePiAsking(project, slug, run, req) {
     if (!req?.id) return;
@@ -6409,12 +6541,15 @@ class Service {
     const selected = preset && !preset.auto ? preset : null;
     const model = selected ? selected.model : this.agents?.modelFor?.(agent);
     const effort = selected ? selected.effort : this.agents?.effortFor?.(agent);
+    const selectedAccess = selected?.access || "";
+    const effectiveAccess = selectedAccess || accessOf(agent).normal || "";
     const defaults = selected ? "preset" : "auto";
     // Left on Default, the run takes the effort the agent's own settings name: recorded, so the Work is rated with it.
     const ran = effort || (agent === "dsh" && dshSelection?.effort) || this.agents?.configuredEffort?.(agent, agent === "dsh" ? dshSelection?.model || model : model) || "";
     this.store.writeText(project, rel, F.setFront(md, { "started at":existingStart || startedAt.toISOString(),
       "saved agent":selected?.name || null, "saved agent id":selected?.id || null,
-      "selected model":model || null, "selected effort":effort || null, "recorded selection":model || effort ? null : defaults,
+      "selected model":model || null, "selected effort":effort || null, "selected access":selectedAccess || null, access:effectiveAccess || null,
+      "recorded selection":model || effort ? null : defaults,
       "resolved model":concreteModel(agent === "dsh" ? dshSelection?.model : model ? "" : this.agents?.configuredModel?.(agent)),
       "dsh route":dshSelection ? `${dshSelection.provider}/${dshSelection.model}` : null,
       "ran on":this.originId,
@@ -6482,7 +6617,7 @@ class Service {
     const found = this.store.lineOutputNames(project, slug);
     if (found.length) this.folderWatch.touch(project.docsPath, found, { scoped:true });
   }
-  async closeDetail(project, slug, stepId, { result = "", requirement = "", questions = null, stopped = "", why = "", resetsAt = 0, took = "", workdir = "", from = "", to:until = "", branch = "", started = 0, ended = 0, launchId = "", who = "" } = {}) {
+  async closeDetail(project, slug, stepId, { result = "", requirement = "", questions = null, stopped = "", why = "", resetsAt = 0, took = "", workdir = "", from = "", to:until = "", branch = "", started = 0, ended = 0, launchId = "", who = "", sandbox } = {}) {
     // Git may yield while Stop saves this Work. Read and update its detail only after those checks.
     const to = workdir && from ? until || await Git.headOf(workdir) : "";
     const changes = to && to !== from ? await Git.diffFiles(workdir, from, to) : null;
@@ -6530,6 +6665,8 @@ class Service {
     // Why it stopped, when it did (N5): limit, error or stopped, and when a limit resets if the agent said.
     if (stopped) Object.assign(front, { "stop why":why || "error", "resets at":why === "limit" && resetsAt ? new Date(resetsAt).toISOString() : null });
     else Object.assign(front, { "stop why":null, "resets at":null });
+    // Codex's sandbox could not start in this run (CODEX_SANDBOX_NOTE). Said by the run that ends; a close with nothing to say keeps it.
+    if (sandbox !== undefined) front["sandbox failed"] = sandbox ? "yes" : null;
     // What this piece of work changed, not the whole branch.
     if (changes) {
       const add = changes.files.reduce((n, f) => n + f.add, 0), del = changes.files.reduce((n, f) => n + f.del, 0);
@@ -6624,8 +6761,18 @@ class Service {
           else if (!run.stopping) this.conversations.caughtUp(run.agent, run.sessionId);
         }
         if (handed && this.pendingLease.get(key) === handed) { this.pendingLease.delete(key); run.lease = passed; }
+        this.sweepKeepers();
       }
     }
+  }
+  sweepKeepers() {
+    try {
+      const keepDirs = new Set([
+        ...this.localRunEntries().map(([, run]) => run.child?.dir || run.keepDir).filter(Boolean),
+        ...(this.leftRunning || []).map(e => e?.keep).filter(Boolean),
+      ]);
+      this.keeper?.sweep(keepDirs);
+    } catch { /* Swept next time. */ }
   }
   // A run leaves the line: its own run, or a Work alongside it (PE-613).
   dropRun(key, run) {
@@ -6725,7 +6872,7 @@ class Service {
       this.oauthRetried.delete(`${key}:${run.stepId}`);
       const { why, resetsAt } = known || StopWhy.stopWhyOf([run.failed, run.tail, run.said.length < 600 ? run.said : "", reason].join("\n"));
       this.activity.fail(project, slug, reason, run.stepId);
-      const wrote = await this.closeDetail(project, slug, run.stepId, { stopped:reason, why, resetsAt, result:run.said, launchId:run.launchId });
+      const wrote = await this.closeDetail(project, slug, run.stepId, { stopped:reason, why, resetsAt, result:run.said, launchId:run.launchId, sandbox:Boolean(run.sandboxBroken && !run.sandboxRecovered) || (run.agent === "codex" && isCodexSandboxBroken(reason)) });
       if (wrote === false || run.stopping || this.ownerLost(run) || this.isStaleLaunch(project, slug, run.stepId, run.launchId)) return;
       // A Work alongside stops alone: the line and its other Works carry on (PE-613).
       if (run.lane) {
@@ -6766,7 +6913,10 @@ class Service {
     }
     // PenEcho's own agent always says why in its result. With none, its process died (killed, out of memory): said plainly, never as a stack trace.
     if (exit !== 0 && run.agent === "penecho" && !run.failed) { await stopAt(PENECHO_DIED); return; }
-    if (exit !== 0) { await stopAt(clip(oneLine(run.failed, 400) || oneLine(lastLine(run.tail), 400) || `${run.agent} stopped with code ${exit}.`, 400)); return; }
+    const ompWhy = exit !== 0 && run.agent === "omp" && !run.failed && !lastLine(run.tail)
+      ? ompLogError(run.child?.pid || run.agentPid, { started:run.started, home:this.conversations?.home || this.agents?.env?.HOME || this.agents?.env?.USERPROFILE || os.homedir() })
+      : "";
+    if (exit !== 0) { await stopAt(clip(oneLine(run.failed, 400) || oneLine(lastLine(run.tail), 400) || oneLine(ompWhy, 400) || `${run.agent} stopped with code ${exit}.`, 400)); return; }
     // For Antigravity exit 0 (normal exit or watchdog-triggered end), verify the transcript has no pending
     // non-daemon background task or unanswered wakeup before marking the Work cleanly done.
     if (agyState && (agyState.pending || agyState.unansweredWakeup)) { await stopAt(PENDING_TASK_STOPPED, { why:"error", resetsAt:0 }); return; }
@@ -6780,7 +6930,7 @@ class Service {
         const made = await this.followAgentBranch(project, slug, run.stepId, run.started);
         if (run.stopping || this.ownerLost(run)) return;
         if (run.said || run.lane || this.store.exists(project, F.detailPath(slug, run.stepId))) {
-          const wrote = await this.closeDetail(project, slug, run.stepId, { result:run.said, requirement:run.requirement, questions:run.metaQuestions, workdir:run.workdir, from:run.head, branch:doc.front.branch, launchId:run.launchId, who:run.agent, ...this.madeIn(project, made) });
+          const wrote = await this.closeDetail(project, slug, run.stepId, { result:run.said, requirement:run.requirement, questions:run.metaQuestions, workdir:run.workdir, from:run.head, branch:doc.front.branch, launchId:run.launchId, who:run.agent, sandbox:Boolean(run.sandboxBroken && !run.sandboxRecovered), ...this.madeIn(project, made) });
           if (wrote === false || run.stopping || this.ownerLost(run) || this.isStaleLaunch(project, slug, run.stepId, run.launchId)) return;
         } else if (this.isStaleLaunch(project, slug, run.stepId, run.launchId)) {
           return;
@@ -6826,7 +6976,7 @@ class Service {
       return;
     }
     const took = `${Math.max(1, Math.round((Date.now() - run.started) / 60000))} min`, summary = F.summaryOf(run.said);
-    const wrote = await this.closeDetail(project, slug, run.stepId, { result:run.said, requirement:run.requirement, questions:run.metaQuestions, took, workdir:run.workdir, from:run.head, branch:doc.front.branch, launchId:run.launchId, who:run.agent, ...this.madeIn(project, made) });
+    const wrote = await this.closeDetail(project, slug, run.stepId, { result:run.said, requirement:run.requirement, questions:run.metaQuestions, took, workdir:run.workdir, from:run.head, branch:doc.front.branch, launchId:run.launchId, who:run.agent, sandbox:Boolean(run.sandboxBroken && !run.sandboxRecovered), ...this.madeIn(project, made) });
     if (wrote === false || run.stopping || this.ownerLost(run) || this.isStaleLaunch(project, slug, run.stepId, run.launchId)) return;
     let md = this.readDoc(project, slug);
     const fresh = F.parseLine(md), now = fresh.steps.find(s => s.id === run.stepId), queued = now ? fresh.steps[now.index + 1]?.kind === "ask" : false;
@@ -7929,7 +8079,7 @@ class Service {
         const expectedHash = F.hashText(nextMd);
         for (const run of held) {
           if (!stepOwnedByNewer(run.stepId) && this.store.exists(project, F.detailPath(slug, run.stepId))) {
-            await this.closeDetail(project, slug, run.stepId, { stopped:"Stopped by you", why:"stopped", result:run.said, launchId:run.launchId });
+            await this.closeDetail(project, slug, run.stepId, { stopped:"Stopped by you", why:"stopped", result:run.said, launchId:run.launchId, sandbox:Boolean(run.sandboxBroken && !run.sandboxRecovered) });
           }
         }
         if (!superseded) await this.settleAfterStop(project, slug, { expectedHash, stopGen, ignoreRuns:heldSet });
@@ -11137,4 +11287,4 @@ class Service {
 // written the short way inside the home folder, which is how the docs folder field reads.
 const shortParent = folder => shortFolder(path.dirname(folder));
 
-module.exports = { Service, buildPrompt, buildAsk, buildInstructions, canvasBlock, followUpPrompt, safeName, runtimeBusy };
+module.exports = { Service, buildPrompt, buildAsk, buildInstructions, canvasBlock, followUpPrompt, reviewedPermissionNote, safeName, runtimeBusy };

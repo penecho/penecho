@@ -295,7 +295,8 @@ test("Statistics shows an interactive example page when no ratings can be shown,
   assert.equal(exDoc.querySelectorAll(".sx-ex-frame .sx-sum > div").length, 5);
   assert.ok(exDoc.querySelectorAll(".sx-ex-frame .sx-daily .sx-day").length > 0);
   assert.ok(exDoc.querySelectorAll(".sx-ex-frame .sx-share-list li").length >= 3);
-  assert.equal(exDoc.querySelectorAll(".sx-ex-frame .sx-pick").length, 3, "Top rated, Best value, Fastest among the top");
+  assert.equal(exDoc.querySelector(".sx-ex-frame .sx-index .sx-hd").nextElementSibling?.className, "sx-cols");
+  assert.doesNotMatch(exDoc.querySelector(".sx-ex-frame .sx-index").textContent, /Top rated|Best value|Fastest among the top/);
   assert.ok(exDoc.querySelectorAll(".sx-ex-frame .sx-ix-table tr").length >= 6);
   assert.deepEqual([...exDoc.querySelectorAll(".sx-ex-frame .sx-ix-table .sx-pill")].map(el => el.textContent.trim()), ["1", "2", "3", "4", "5", "6"]);
   ctx.STATS_STATE.indexKind = "docs";
@@ -420,7 +421,7 @@ test("Statistics shows an interactive example page when no ratings can be shown,
   assert.match(presetText, /\bsonnet\b/);
   assert.doesNotMatch(presetText, /magpie\//, "gateway prefixes are stripped cleanly");
   assert.doesNotMatch(presetText, /penecho-built-in/i, "built-in penecho preset is excluded");
-  assert.equal(presetDoc.querySelectorAll(".sx-ex-frame .sx-pick").length, 3, "still renders all 3 picks with user presets");
+  assert.ok(presetDoc.querySelectorAll(".sx-ex-frame .sx-ix-table .sx-pill").length > 0, "still ranks user presets");
 });
 
 test("person cannot rate a Review step or a Work with a saved Review assignment", async t => {

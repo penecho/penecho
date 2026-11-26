@@ -255,13 +255,14 @@ test("an orchestrator's run gets the brief and a pass that opens only its projec
   assert.match(run.prompt, /review for them/);
   assert.doesNotMatch(run.prompt, /roundtable/i);
   // PE-1097, PE-1190: short work stays with it, the solo brief stays compact, PenEcho picks who does a part, and wait/rate rules arrive lazily.
+  assert.match(run.prompt, /Delegating to sub-agents means creating PenEcho Lines via `\$PENECHO_ORCH_HELPER` \(agents \/ decide \/ create-line\), not using your built-in internal Agent\/subagent tool\./);
   assert.match(run.prompt, /The person named agents or models, or asked for several agents \(views, a comparison, a round table, parts side by side\): do that, naming each part's agent/);
   assert.match(run.prompt, /anything done in about 5 minutes: do it yourself, with no decide call/);
   assert.match(run.prompt, /Longer work: first decide, then do\..*role:"decision".*naming no agent: PenEcho picks one about as good as you at under half your cost, and you keep the parts nobody fits/);
   assert.match(run.prompt, /Keep a change with its tests, parts under 5 minutes, and work that hangs on what you hold/);
   assert.match(run.prompt, /How to do it and how much to test is theirs/);
-  // Nothing is priced or rated here, so it is told nobody fits.
-  assert.match(run.prompt, /Decision: nobody free is rated above you\. Execution: nobody free fits, so it stays with you\./);
+  // Nothing is priced or rated here, so auto-pick finds nobody, while still noting the 2 delegated presets in agents.
+  assert.match(run.prompt, /Decision: nobody free is rated above you\. Execution: nobody free fits auto-pick, so it stays with you\. 2 delegated presets are available in agents when the person asks for specific, multiple, or all agents\./);
   assert.doesNotMatch(run.prompt, /Wait for Works to settle/, "wait/rating rules stay out of the solo brief");
   assert.match(run.prompt, /Report the job as one result and link what its parts made for the person/);
   assert.doesNotMatch(run.prompt, /your scores, and what is left/);
@@ -1927,4 +1928,52 @@ test("Windows orchestrator brief uses PowerShell stdin piping and orch-call stri
   });
   assert.equal(out.code, 0, out.stderr || out.stdout);
   assert.ok(Array.isArray(JSON.parse(out.stdout).functions), out.stdout);
+});
+
+test("brief clarifies PenEcho Line delegation and subNow reports delegated preset counts when auto-pick finds no match", () => {
+  const { createOrchestrator } = require("../src/server/project-lines/orchestrator.js");
+  const makeOrch = presets => {
+    const directory = path.join(temp, `subnow-brief-${++counter}`);
+    fs.mkdirSync(directory, { recursive:true });
+    const project = { id:`p-subnow-${counter}` };
+    const serviceMock = {
+      stateOf:() => ({ lines:[{ id:"job", stations:[{ id:"work-1", kind:"work", state:"active", agent:"claude", savedAgentId:presets[0]?.id || "", picked:{ model:"claude-sonnet-5", effort:"high" } }] }] }),
+      readDoc:() => "---\nid: PE-1\norchestrator: yes\n---\n\n# Job\n",
+      presets:{ list:() => ({ presets, default:presets[0]?.id || "" }), get:id => presets.find(p => p.id === id) },
+    };
+    return { orch:createOrchestrator({ service:serviceMock, directory }), project };
+  };
+  const doc = { front:{ orchestrator:"yes" } };
+
+  // Multiple delegated presets (plus one with allowDelegation:false excluded): notes count when auto-pick finds no match.
+  const multi = makeOrch([
+    { id:"p1", name:"Claude Code", agent:"claude", model:"claude-sonnet-5", effort:"high", available:true, allowDelegation:true },
+    { id:"p2", name:"Codex", agent:"codex", model:"gpt-5.6", effort:"high", available:true, allowDelegation:true },
+    { id:"p3", name:"Pi", agent:"pi", model:"gpt-6.2", effort:"medium", available:true, allowDelegation:true },
+    { id:"p4", name:"Disabled", agent:"opencode", model:"deepseek-flash", effort:"high", available:true, allowDelegation:false },
+  ]);
+  const macText = multi.orch.brief(multi.project, "job", doc, { agent:"claude", askText:"Ask all sub-agents to report their id", platform:"darwin" });
+  assert.match(macText, /Delegating to sub-agents means creating PenEcho Lines via `\$PENECHO_ORCH_HELPER` \(agents \/ decide \/ create-line\), not using your built-in internal Agent\/subagent tool\./);
+  assert.match(macText, /Decision: nobody free is rated above you\. Execution: nobody free fits auto-pick, so it stays with you\. 3 delegated presets are available in agents when the person asks for specific, multiple, or all agents\./);
+
+  // Windows and built-in PenEcho runner reference their own helper syntax.
+  const winText = multi.orch.brief(multi.project, "job", doc, { agent:"claude", askText:"Ask all sub-agents to report their id", platform:"win32" });
+  assert.match(winText, /Delegating to sub-agents means creating PenEcho Lines via `\$env:PENECHO_ORCH_HELPER` \(agents \/ decide \/ create-line\), not using your built-in internal Agent\/subagent tool\./);
+  const builtInText = multi.orch.brief(multi.project, "job", doc, { agent:"penecho", askText:"Ask all sub-agents to report their id", platform:"darwin" });
+  assert.match(builtInText, /Delegating to sub-agents means creating PenEcho Lines via `orchestrate` \(agents \/ decide \/ create-line\), not using your built-in internal Agent\/subagent tool\./);
+
+  // Singular preset count.
+  const one = makeOrch([
+    { id:"p1", name:"Claude Code", agent:"claude", model:"claude-sonnet-5", effort:"high", available:true, allowDelegation:true },
+  ]);
+  const oneText = one.orch.brief(one.project, "job", doc, { askText:"Refactor auth middleware" });
+  assert.match(oneText, /Execution: nobody free fits auto-pick, so it stays with you\. 1 delegated preset is available in agents when the person asks for specific, multiple, or all agents\./);
+
+  // Zero delegated presets: keeps the plain fallback without claiming presets exist in agents.
+  const none = makeOrch([
+    { id:"p1", name:"Claude Code", agent:"claude", model:"claude-sonnet-5", effort:"high", available:true, allowDelegation:false },
+  ]);
+  const noneText = none.orch.brief(none.project, "job", doc, { askText:"Refactor auth middleware" });
+  assert.match(noneText, /Decision: nobody free is rated above you\. Execution: nobody free fits, so it stays with you\./);
+  assert.doesNotMatch(noneText, /delegated presets? (?:is|are) available in agents/);
 });

@@ -9,7 +9,7 @@ function harness() {
   const listeners = {}, requests = [], storage = new Map(), body = { dataset:{}, innerHTML:"", contains:() => false };
   const p = { id:"p", lines:[{ id:"draft", title:"Draft invoice", status:"notes", stations:[{ id:"ask-1", kind:"ask", text:"invoice", unsent:true }], questions:[] }], landed:[], backlog:[] };
   const context = vm.createContext({
-    LINE_STATUS:STATUS, ACT:{}, HOSTED:false, MOD_ENTER:"Ctrl ↵", AbortController, wordsMd:x => x, S:{ route:{ view:"find" } }, URLSearchParams, setTimeout, clearTimeout, queueMicrotask,
+    LINE_STATUS:STATUS, ACT:{}, HOSTED:false, AbortController, wordsMd:x => x, S:{ route:{ view:"find" } }, URLSearchParams, setTimeout, clearTimeout, queueMicrotask,
     document:{ activeElement:null, addEventListener(type, fn) { listeners[type] = fn; } },
     localStorage:{ getItem:k => (storage.has(k) ? storage.get(k) : null), setItem(k, v) { storage.set(k, String(v)); } },
     $:selector => selector === "#findBody" ? body : null, $$:() => [], project:() => p,
@@ -105,17 +105,17 @@ test("a state change during a foreground search is refreshed after that response
   assert.match(h.body.innerHTML, /Nothing found/);
 });
 
-test("typing and Enter only request matches; explicit Ask sends one question to the selected preset", async () => {
+test("Enter searches without a preset; clicking Ask sends one question to the selected preset", async () => {
   const h = harness();
-  h.context.S.presets = { presets:[
-    { id:"first", name:"First", available:true, answers:true },
-    { id:"chosen", name:"Chosen", available:true, answers:true },
-  ], default:"chosen" };
   h.listeners.input({ target:{ id:"findInput", value:"draft" } });
   h.listeners.keydown({ target:{ id:"findInput", value:"draft" }, key:"Enter", preventDefault() {} });
   assert.deepEqual(h.requests.map(r => r.url.split("?")[0]), ["/projects/p/find"]);
   h.requests[0].resolve(h.data()); await turn();
 
+  h.context.S.presets = { presets:[
+    { id:"first", name:"First", available:true, answers:true },
+    { id:"chosen", name:"Chosen", available:true, answers:true },
+  ], default:"chosen" };
   h.listeners.input({ target:{ id:"findInput", value:"invoice" } });
   const answer = h.run("ACT['find-ask']()");
   assert.equal(h.requests[1].url, "/projects/p/ask");
@@ -130,43 +130,51 @@ test("typing and Enter only request matches; explicit Ask sends one question to 
   assert.equal(h.requests.length, 3);
 });
 
-for (const modifier of ["metaKey", "ctrlKey"]) {
-  test(`${modifier} + Enter asks the selected agent once and preserves pending text matches`, async () => {
-    const h = harness();
-    h.context.S.presets = { presets:[
-      { id:"first", available:true, answers:true }, { id:"chosen", available:true, answers:true },
-    ], default:"chosen" };
-    assert.match(h.run("askControlHTML()"), /aria-keyshortcuts="Meta\+Enter Control\+Enter"/);
-    const target = { id:"findInput", value:"draft" };
-    const enter = { key:"Enter", [modifier]:true, target, preventDefault() {} };
-    h.listeners.input({ target });
-    h.listeners.keydown({ ...enter, isComposing:true });
-    h.listeners.keydown({ ...enter, keyCode:229 });
-    h.listeners.keydown({ ...enter, target:{ id:"findAgent" } });
-    assert.equal(h.requests.length, 0);
+test("plain Enter asks the selected agent once and preserves pending text matches", async () => {
+  const h = harness();
+  h.context.S.presets = { presets:[
+    { id:"first", available:true, answers:true }, { id:"chosen", available:true, answers:true },
+  ], default:"chosen" };
+  const control = h.run("askControlHTML()");
+  assert.match(control, /aria-keyshortcuts="Enter"/);
+  assert.match(control, /<kbd class="cmp-key" aria-hidden="true"><b>↵<\/b><\/kbd>/);
+  const target = { id:"findInput", value:"draft" };
+  const enter = { key:"Enter", target, preventDefault() {} };
+  h.listeners.input({ target });
+  h.listeners.keydown({ ...enter, isComposing:true });
+  h.listeners.keydown({ ...enter, keyCode:229 });
+  h.listeners.keydown({ ...enter, target:{ id:"findAgent" } });
+  assert.equal(h.requests.length, 0);
 
-    h.listeners.keydown(enter);
-    h.listeners.keydown({ ...enter, repeat:true });
-    assert.deepEqual(h.requests.map(r => r.url), ["/projects/p/ask"]);
-    assert.deepEqual({ ...h.requests[0].options.body }, { question:"draft", preset:"chosen" });
-    h.requests[0].resolve({ answer:"Draft found" });
-    await new Promise(resolve => setTimeout(resolve, h.run("FIND_WAIT") + 15));
-    assert.equal(h.requests.length, 2);
-    assert.match(h.requests[1].url, /\/find\?q=draft/);
-    h.requests[1].resolve(h.data()); await turn();
+  h.listeners.keydown(enter);
+  h.listeners.keydown({ ...enter, repeat:true });
+  assert.deepEqual(h.requests.map(r => r.url), ["/projects/p/ask"]);
+  assert.deepEqual({ ...h.requests[0].options.body }, { question:"draft", preset:"chosen" });
+  h.requests[0].resolve({ answer:"Draft found" });
+  await new Promise(resolve => setTimeout(resolve, h.run("FIND_WAIT") + 15));
+  assert.equal(h.requests.length, 2);
+  assert.match(h.requests[1].url, /\/find\?q=draft/);
+  h.requests[1].resolve(h.data()); await turn();
 
-    h.listeners.input({ target:{ ...target, value:" " } });
-    h.listeners.keydown({ ...enter, target:{ ...target, value:" " } });
-    assert.equal(h.requests.length, 2);
-  });
-}
+  h.listeners.input({ target:{ ...target, value:" " } });
+  h.listeners.keydown({ ...enter, target:{ ...target, value:" " } });
+  assert.equal(h.requests.length, 2);
+});
 
 test("opening Search with no preset can reopen and delete a saved answer without asking again", async () => {
   const h = harness(), saved = { id:"saved", name:"Former agent", question:"invoice", answer:"Saved text", lines:[] };
   const page = h.run("findHTML(project(), { view:'find' })");
+  assert.match(page, /<i>search<\/i>/);
+  assert.match(page, /placeholder="Search all lines" aria-label="Search all lines"/);
   assert.match(page, /enterkeyhint="search"/);
   assert.doesNotMatch(page, /data-act="find-ask"/);
   assert.equal(h.run("FIND.q"), "");
+  h.context.S.presets = { presets:[{ id:"chosen", name:"Chosen", available:true, answers:true }], default:"chosen" };
+  const askPage = h.run("findHTML(project(), { view:'find' })");
+  assert.match(askPage, /<i>search<\/i>/);
+  assert.match(askPage, /placeholder="Ask a question about this project" aria-label="Ask a question about this project"/);
+  assert.match(askPage, /enterkeyhint="send"/);
+  h.context.S.presets = null;
   await turn();
   assert.deepEqual(h.requests.map(r => r.url), ["/projects/p/asks"]);
   h.requests[0].resolve({ asks:[saved] }); await turn();
@@ -194,7 +202,7 @@ test("a hosted search link loads its matches without local history or an agent",
   assert.deepEqual(h.requests.map(r => r.url.split("?")[0]), ["/projects/p/find"]);
   h.requests[0].resolve(h.data()); await turn();
   assert.match(h.body.innerHTML, /Draft invoice/);
-  h.listeners.keydown({ target:{ id:"findInput", value:"invoice" }, key:"Enter", ctrlKey:true, preventDefault() {} });
+  h.listeners.keydown({ target:{ id:"findInput", value:"invoice" }, key:"Enter", preventDefault() {} });
   assert.deepEqual(h.requests.map(r => r.url.split("?")[0]), ["/projects/p/find", "/projects/p/find"]);
   h.requests[1].resolve(h.data()); await turn();
 });
@@ -298,4 +306,24 @@ test("Deleting a saved answer also clears it from recent searches and re-enables
   assert.doesNotMatch(h.body.innerHTML, /how does split work\?/);
   assert.match(h.body.innerHTML, /data-act="find-recent-delete" data-q="rating"/);
   assert.deepEqual(JSON.parse(h.storage.get("penecho-find-recent-v1")).p, ["rating"]);
+});
+
+test("Ask answer decorates status badges cleanly and resolves markdown-wrapped [PE-1](lines/...) references", () => {
+  const h = harness();
+  h.context.wordsMd = text => text;
+  h.run("FIND.answers.set(answerKey(project(), 'invoice'), { q:'invoice', name:'Agent', status:'asking', started:Date.now() })");
+  assert.match(h.run("answerHTML(project())"), /Reading the project's docs…/);
+
+  h.run(`FIND.answers.set(answerKey(project(), 'invoice'), {
+    q:'invoice', name:'Agent', status:'done',
+    text:'<p class="md-p md-in-h md-in-h3"><strong>1. Done items</strong></p><dl class="md-defs"><div><dt>Finished</dt><dd>Shipped [PE-1](lines/draft.md)</dd></div><div><dt>To review</dt><dd>Check layout</dd></div></dl><ul><li><strong>To do:</strong> Follow up</li></ul>',
+    lines:[{ ref:'PE-1', slug:'draft', title:'Draft invoice', cited:true }],
+  })`);
+  const html = h.run("answerHTML(project())");
+  assert.match(html, /<p class="md-p md-in-h md-in-h3"><strong>1\. Done items<\/strong><\/p>/, "headings are not turned into badges");
+  assert.match(html, /<dt class="fa-dt-badge"><span class="fa-badge is-done">Finished<\/span><\/dt>/);
+  assert.match(html, /<dt class="fa-dt-badge"><span class="fa-badge is-review">To review<\/span><\/dt>/);
+  assert.match(html, /<li><span class="fa-badge is-todo">To do<\/span> Follow up<\/li>/);
+  assert.match(html, /class="fa-ref" data-act="find-open" data-line="draft"/);
+  assert.doesNotMatch(html, /\(lines\/draft\.md\)/, "markdown file link suffix is consumed into the Line button");
 });

@@ -13,11 +13,11 @@ const F = require("./format.js");
 const Git = require("./git.js");
 const L = require("./layout.js");
 const TaskContext = require("./task-context.js");
-const { spawn } = require("./agent-process.js");
+const { spawn, StringDecoder } = require("./agent-process.js");
 const { stageDshPatch } = require("./dsh-models.js");
 const {
   parseLine, parseDialect, nowFrom, eventOf, userLine,
-  piRpcInit, piRpcUiResponse, claudeControlResponse,
+  isPiNoiseLine, ompLogError, piRpcInit, piRpcUiResponse, claudeControlResponse, isPiTurnEnd,
   isResult, backgroundOf, isAntigravityOAuthError,
 } = require("./activity.js");
 const { isLimitNotice, stopWhyOf } = require("./stop-why.js");
@@ -315,7 +315,11 @@ function runReviewCommand(command, prompt, { cwd, env = process.env, signal, wai
 
     const baseArgs = command.dirFlag && runCwd ? [...launchArgs, command.dirFlag, runCwd] : launchArgs;
     const args = command.promptLast ? [...baseArgs, prompt] : baseArgs;
-    const initialInput = piRpc ? piRpcInit(prompt) : streaming ? userLine(prompt, command.dialect) : (command.promptLast ? "" : prompt);
+    const initialInput = piRpc ? piRpcInit(prompt, { eventFilter:command.rpcEventFilter }) : streaming ? userLine(prompt, command.dialect) : (command.promptLast ? "" : prompt);
+    const started = Date.now();
+    const dropPiNoise = command.dialect === "pi";
+    const piDecoder = dropPiNoise ? new StringDecoder("utf8") : null;
+    let pending = "";
 
     const handleControlLine = line => {
       if (!inputOpen) return;
@@ -325,7 +329,7 @@ function runReviewCommand(command, prompt, { cwd, env = process.env, signal, wai
         if (ev.type === "extension_ui_request" && ev.id && ["select", "confirm", "input", "editor"].includes(ev.method)) {
           try { child?.stdin?.write(piRpcUiResponse(ev.id, ev.method, "", true)); } catch { /* Stdin closed. */ }
         }
-        if (ev.type === "agent_end" || (ev.type === "response" && ev.command === "prompt" && ev.success === false)) {
+        if (isPiTurnEnd(ev) || (ev.type === "response" && ev.command === "prompt" && ev.success === false)) {
           inputOpen = false;
           try { child?.stdin?.end(); } catch { /* Stdin closed. */ }
         }
@@ -351,7 +355,20 @@ function runReviewCommand(command, prompt, { cwd, env = process.env, signal, wai
       }
     };
 
+    const pushPiLine = line => {
+      if (!line.trim() || isPiNoiseLine(line)) return;
+      out += `${line}\n`;
+      handleControlLine(line);
+      if (onLine) try { onLine(line); } catch { /* What is shown never stops the run. */ }
+    };
     const hear = (all = false) => {
+      if (dropPiNoise) {
+        if (!all) return;
+        const tailText = pending + piDecoder.end();
+        pending = "";
+        if (tailText) tailText.split("\n").forEach(pushPiLine);
+        return;
+      }
       const end = all ? out.length : out.lastIndexOf("\n") + 1;
       if (end <= heard) return;
       const lines = out.slice(heard, end).split("\n");
@@ -368,7 +385,17 @@ function runReviewCommand(command, prompt, { cwd, env = process.env, signal, wai
     const timer = setTimeout(() => finish(Object.assign(new Error("The agent took too long to answer."), { code:"TIMEOUT", status:504 })), waitMs);
     if (signal?.aborted) { stop(); return; }
     signal?.addEventListener?.("abort", stop);
-    child.stdout?.on("data", chunk => { out += chunk; hear(); });
+    child.stdout?.on("data", chunk => {
+      if (dropPiNoise) {
+        const text = typeof chunk === "string" ? chunk : piDecoder.write(chunk);
+        const lines = (pending + text).split("\n");
+        pending = lines.pop();
+        lines.forEach(pushPiLine);
+        return;
+      }
+      out += chunk;
+      hear();
+    });
     child.stderr?.on("data", chunk => { if (err.length < 8000) err += chunk; });
     child.stdin?.on("error", () => {});
     if (inputOpen) child.stdin?.write(initialInput);
@@ -379,7 +406,10 @@ function runReviewCommand(command, prompt, { cwd, env = process.env, signal, wai
       const parsed = parseReviewOutput(out, jsonStream, command.dialect);
       if (parsed.answer && !parsed.lastFailed) return finish(null, parsed.answer);
       const stderrWhy = String(err).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").trim().split("\n").filter(Boolean).slice(-2).join(" ");
-      const why = [parsed.failed, stderrWhy].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(" | ");
+      const ompWhy = status && dropPiNoise && !parsed.failed && !stderrWhy && /^omp(?:\.exe)?$/i.test(path.basename(String(command.command || "")))
+        ? ompLogError(child?.pid, { started, home:env?.HOME || env?.USERPROFILE || os.homedir() })
+        : "";
+      const why = [parsed.failed, stderrWhy, ompWhy].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(" | ");
       finish(Object.assign(new Error(`The agent gave no answer${status ? ` (exit ${status})` : ""}${why ? `: ${clip(why, 300)}` : "."}`), { code:"AGENT_FAILED", status:502 }));
     });
   });
@@ -456,8 +486,11 @@ function createOrchReview({ service, dir, prices, writePrices, record, recordsOf
   // One model under the many spellings of its name, as penecho.ai keys its prices: no router or region prefix, dots and underscores as dashes.
   const priceKey = model => String(model || "").trim().toLowerCase().replace(/^.*\//, "").replace(/^(?:us|eu|apac)\.anthropic\./, "").replace(/^anthropic\./, "").replace(/[._]/g, "-").slice(0, 80);
   const price = n => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1e6 ? n : null;
+  // Ratings and prices come and are kept each on their own: one that did not come or could not be saved leaves the other to fill in
+  // what it can (PE-1217). Only when nothing at all could be used does the sync fail.
   async function sync() {
-    const [board, priced] = await Promise.all([download("/leaderboard.json"), download("/model-prices.json", { optional:true })]);
+    const [board, priced] = await Promise.all([download("/leaderboard.json", { optional:true }), download("/model-prices.json", { optional:true })]);
+    if (!board && !priced) throw failure("SYNC_FAILED", "Could not reach penecho.ai. Check the connection and try again.", 502);
     // Ratings: every agent, model and effort the leaderboard lists, per kind of job. Kept apart from this computer's own record.
     const rows = [];
     if (board?.available !== false) {
@@ -468,35 +501,46 @@ function createOrchReview({ service, dir, prices, writePrices, record, recordsOf
       }
     }
     if (!rows.length && !priced) throw failure("SYNC_FAILED", "penecho.ai sent nothing to use. Try again later.", 502);
+    const missed = [];
+    let saveError = null;
+    const keep = (part, write) => { try { write(); return true; } catch (error) { missed.push(part); saveError ||= error; return false; } };
     // Keep the last good starting ratings when penecho.ai's Leaderboard is temporarily unavailable.
-    if (rows.length) {
-      writeAtomic(ratingsFile, JSON.stringify({ at:new Date().toISOString(), rows }));
+    let ratings = 0;
+    if (!rows.length) missed.push("ratings");
+    else if (keep("ratings", () => writeAtomic(ratingsFile, JSON.stringify({ at:new Date().toISOString(), rows })))) {
       cloud = null;
+      ratings = rows.filter(r => r.kind === "all").length || rows.length;
     }
     // Prices: penecho.ai lists every model there is, spelled its own way. Only the models this computer's agents use are taken, under
     // the name they have here, and only where the person has no price of their own (or an earlier sync brought it).
-    const list = prices(), today = new Date().toISOString().slice(0, 10), offered = new Map();
-    for (const m of Array.isArray(priced?.models) ? priced.models : []) {
-      const input = price(m?.input), output = price(m?.output);
-      if (m?.model && input !== null && output !== null && !offered.has(priceKey(m.model))) offered.set(priceKey(m.model), { ...m, input, output });
-    }
-    // Claude Code's short names follow its newest versions, and a dated name is its plain one.
-    const priceOffered = model => { const key = priceKey(model); return offered.get(key) || offered.get(key.replace(/-\d{8}$/, "")) || (/^(?:fable|opus|sonnet|haiku)$/.test(key) ? offered.get(`claude-${key}-latest`) : undefined); };
     let added = 0, kept = 0;
-    for (const model of new Set(models().map(m => clip(concreteModel(m || ""), 120)).filter(Boolean))) {
-      const m = priceOffered(model);
-      if (!m) continue;
-      const at = list.findIndex(x => concreteModel(x.model).toLowerCase() === model.toLowerCase());
-      if (at >= 0 && list[at].source !== SYNC_SOURCE) continue;
-      const entry = { model:at >= 0 ? list[at].model : model, input:m.input, output:m.output, updated:today, source:SYNC_SOURCE };
-      for (const field of ["cached", "cacheWrite"]) if (price(m[field]) !== null) entry[field] = price(m[field]);
-      if (at >= 0) list[at] = entry; else { list.push(entry); added += 1; }
-      kept += 1;
-    }
-    if (kept) writePrices(list.sort((a, b) => a.model.localeCompare(b.model)));
-    const done = { at:new Date().toISOString(), prices:kept, ratings:rows.filter(r => r.kind === "all").length || rows.length };
-    save({ sync:done });
-    return { sync:done, addedPrices:added, settings:settings() };
+    if (!priced) missed.push("prices");
+    else if (!keep("prices", () => {
+      const list = prices(), today = new Date().toISOString().slice(0, 10), offered = new Map();
+      for (const m of Array.isArray(priced?.models) ? priced.models : []) {
+        const input = price(m?.input), output = price(m?.output);
+        if (m?.model && input !== null && output !== null && !offered.has(priceKey(m.model))) offered.set(priceKey(m.model), { ...m, input, output });
+      }
+      // Claude Code's short names follow its newest versions, and a dated name is its plain one.
+      const priceOffered = model => { const key = priceKey(model); return offered.get(key) || offered.get(key.replace(/-\d{8}$/, "")) || (/^(?:fable|opus|sonnet|haiku)$/.test(key) ? offered.get(`claude-${key}-latest`) : undefined); };
+      for (const model of new Set(models().map(m => clip(concreteModel(m || ""), 120)).filter(Boolean))) {
+        const m = priceOffered(model);
+        if (!m) continue;
+        const at = list.findIndex(x => concreteModel(x.model).toLowerCase() === model.toLowerCase());
+        if (at >= 0 && list[at].source !== SYNC_SOURCE) continue;
+        const entry = { model:at >= 0 ? list[at].model : model, input:m.input, output:m.output, updated:today, source:SYNC_SOURCE };
+        for (const field of ["cached", "cacheWrite"]) if (price(m[field]) !== null) entry[field] = price(m[field]);
+        if (at >= 0) list[at] = entry; else { list.push(entry); added += 1; }
+        kept += 1;
+      }
+      if (kept) writePrices(list.sort((a, b) => a.model.localeCompare(b.model)));
+    })) added = kept = 0;
+    // Neither could be kept here: say why rather than that all is well.
+    if (saveError && missed.includes("ratings") && missed.includes("prices")) throw saveError;
+    const done = { at:new Date().toISOString(), prices:kept, ratings };
+    // When it last synced is only a date to show: not keeping it loses nothing that came.
+    try { save({ sync:done }); } catch { /* Shown as not synced until the next one. */ }
+    return { sync:done, addedPrices:added, missed, settings:settings() };
   }
   // Where an agent with too short a record of its own starts: its rating on penecho.ai for this kind of job, else over all kinds.
   // null before a sync, or when penecho.ai has under three ratings of it.

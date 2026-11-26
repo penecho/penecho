@@ -316,6 +316,8 @@ test('the hint syncs in place and says what arrived; a failure shows the server 
   assert.equal(h.settings.sync, null);
   assert.equal(h.c.orchSyncSaid({ addedPrices:0, sync:{ prices:18, ratings:0 } }), 'Prices and ratings are up to date');
   assert.equal(h.c.orchSyncSaid({ addedPrices:1, sync:{ ratings:1 } }), '1 price and 1 agent rating added');
+  assert.equal(h.c.orchSyncSaid({ addedPrices:2, sync:{ ratings:0 }, missed:['ratings'] }), '2 prices added · Ratings could not be synced this time');
+  assert.equal(h.c.orchSyncSaid({ addedPrices:0, sync:{ ratings:0 }, missed:['ratings'] }), 'Prices are up to date · Ratings could not be synced this time');
 });
 
 test('the settings panel has exactly three rows with working defaults; opening it once marks it seen', async () => {

@@ -1024,10 +1024,14 @@ test("the agents are Claude Code and Codex themselves, each carrying on its own 
   assert.ok(!allowed.includes("Bash(sh:*)"), "only that command, not every sh");
   const again = agents.command("claude", { ...options, resume:"s1" }), next = agents.command("codex", { ...options, resume:"t1", plain:true });
   assert.equal(again.args[again.args.indexOf("--resume") + 1], "s1");
-  assert.ok(next.args.includes("resume")); assert.ok(next.args.includes("t1")); assert.ok(next.args.some(a => a.includes("writable_roots") && a.includes("/docs")));
-  assert.deepEqual(codex.turn.sandboxPolicy.writableRoots, ["/docs", "/git"]);
-  assert.equal(codex.thread.approvalPolicy, "on-request", "as Codex's desktop app: what the sandbox blocks may ask to run outside it");
-  assert.equal(codex.thread.approvalsReviewer, undefined, "who answers stays the person's own Codex setting");
+  assert.ok(next.args.includes("resume")); assert.ok(next.args.includes("t1")); assert.ok(next.args.includes('sandbox_mode="danger-full-access"'));
+  assert.deepEqual([codex.thread.approvalPolicy, codex.thread.sandbox, codex.turn.sandboxPolicy.type], ["never", "danger-full-access", "dangerFullAccess"]);
+  const codexReviewed = agents.command("codex", { ...options, access:"reviewed" });
+  assert.deepEqual(codexReviewed.turn.sandboxPolicy.writableRoots, ["/docs", "/git"]);
+  assert.equal(codexReviewed.thread.approvalPolicy, "on-request", "Reviewed mode lets Codex ask to step outside its sandbox");
+  assert.equal(codexReviewed.thread.approvalsReviewer, "auto_review", "Reviewed mode routes escalations to Codex's auto-reviewer like Codex Desktop");
+  const nextReviewed = agents.command("codex", { ...options, resume:"t1", plain:true, access:"reviewed" });
+  assert.ok(nextReviewed.args.some(a => a.includes("writable_roots") && a.includes("/docs")));
   const { declined } = require("../src/server/project-lines/codex-server.js");
   assert.deepEqual(declined("item/commandExecution/requestApproval"), { decision:"decline" });
   assert.deepEqual(declined("item/fileChange/requestApproval"), { decision:"decline" });
@@ -2974,18 +2978,20 @@ test("Codex ignores PenEcho-managed tool directories while Claude still checks ~
   assert.equal(createAgents({ env:{ PATH:"" } }).available().find(a => a.id === "codex").available, false);
 });
 
-test("Codex can write to the shared Git folder of a worktree, and to nothing else extra", async () => {
+test("Sandboxed (Reviewed) Codex can write to the shared Git folder of a worktree, and to nothing else extra", async () => {
   const dir = repo(), worktree = path.join(temp, "wt-codex");
   gitIn(dir, "worktree", "add", "-q", "-b", "side", worktree);
   const Git = require("../src/server/project-lines/git.js");
   const gitDir = await Git.commonDir(worktree);
   assert.equal(fs.realpathSync(gitDir), fs.realpathSync(path.join(dir, ".git")));
   const agents = createAgents({ env:{ PATH:"", CODEX_CLI_PATH:process.execPath } });
-  const withGit = agents.command("codex", { workdir:worktree, docs:"/docs", gitDir }), without = agents.command("codex", { workdir:"/docs", docs:"/docs", gitDir:"" });
+  const def = agents.command("codex", { workdir:worktree, docs:"/docs", gitDir });
+  assert.deepEqual(def.turn.sandboxPolicy, { type:"dangerFullAccess" });
+  const withGit = agents.command("codex", { workdir:worktree, docs:"/docs", gitDir, access:"reviewed" }), without = agents.command("codex", { workdir:"/docs", docs:"/docs", gitDir:"", access:"reviewed" });
   assert.deepEqual(withGit.turn.sandboxPolicy.writableRoots, ["/docs", gitDir]);
   assert.deepEqual(without.turn.sandboxPolicy.writableRoots, ["/docs"]);
   assert.equal(withGit.turn.sandboxPolicy.networkAccess, false);
-  const plain = agents.command("codex", { workdir:worktree, docs:"/docs", gitDir, plain:true }).args;
+  const plain = agents.command("codex", { workdir:worktree, docs:"/docs", gitDir, plain:true, access:"reviewed" }).args;
   assert.equal(plain[plain.indexOf(gitDir) - 1], "--add-dir");
 });
 

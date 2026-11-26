@@ -90,7 +90,9 @@ test("clicking the rail Settings gear dismisses its badge immediately and persis
   assert.equal(first.document.querySelector(".rail-gear .setup-count"), null, "clicking the gear dismisses its badge immediately");
   assert.equal(first.document.querySelector(".rail-gear")?.getAttribute("aria-label"), "Settings");
   assert.equal(storage.get("penecho-rail-settings-badge"), "dismissed");
-  assert.equal(first.document.querySelector("#sysTab-agents .setup-count")?.textContent, "4", "Agents tab inside Settings still shows the count");
+  assert.equal(first.document.querySelector("#sysTab-setup .setup-count")?.textContent, "4", "Local providers tab inside Settings still shows the count");
+  assert.equal(first.document.querySelector("#sysTab-setup")?.getAttribute("aria-selected"), "true", "problems open Settings on Local providers");
+  assert.equal(first.document.querySelector("#sysTab-agents .setup-count"), null, "Preset agents carries no problem count");
 
   first.ctx.ACT["settings-close"]();
   assert.equal(first.document.querySelector(".rail-gear .setup-count"), null, "badge stays dismissed after closing Settings");
@@ -142,7 +144,7 @@ test("embedded rail and other browser tabs dismiss the rail badge via localStora
   embedded.ctx.ACT["open-settings"]();
   assert.equal(embedStorage.get("penecho-rail-settings-badge"), "dismissed");
   assert.equal(embedded.document.querySelector(".rail-gear .setup-count"), null);
-  assert.deepEqual(embedded.told.map((m) => ({ ...m })), [{ leave: "/projects.html#agents" }]);
+  assert.deepEqual(embedded.told.map((m) => ({ ...m })), [{ leave: "/projects.html#setup" }], "problems send the embedded gear to Local providers");
 
   const otherStorage = new Map();
   const otherTab = makeHarness({ storage: otherStorage, problems: 4 });
@@ -152,11 +154,30 @@ test("embedded rail and other browser tabs dismiss the rail badge via localStora
   assert.equal(otherTab.document.querySelector(".rail-gear .setup-count"), null);
 
   // Direct hash navigation to #agents / #setup renders the modal and clears the rail badge before drawing the rail.
-  const hashStorage = new Map();
-  const direct = makeHarness({ storage: hashStorage, problems: 4 });
-  assert.equal(direct.document.querySelector(".rail-gear .setup-count")?.textContent, "4");
-  direct.S.shelfPage = "agents";
-  direct.ctx.render();
-  assert.equal(direct.document.querySelector(".rail-gear .setup-count"), null);
-  assert.equal(hashStorage.get("penecho-rail-settings-badge"), "dismissed");
+  for (const page of ["agents", "setup"]) {
+    const hashStorage = new Map();
+    const direct = makeHarness({ storage: hashStorage, problems: 4 });
+    assert.equal(direct.document.querySelector(".rail-gear .setup-count")?.textContent, "4");
+    direct.S.shelfPage = page;
+    direct.ctx.render();
+    assert.equal(direct.document.querySelector(".rail-gear .setup-count"), null, page);
+    assert.equal(hashStorage.get("penecho-rail-settings-badge"), "dismissed", page);
+    assert.equal(direct.document.querySelector(`#sysTab-${page}`)?.getAttribute("aria-selected"), "true", page);
+  }
+});
+
+test("a late check while Local providers is open dismisses the rail badge, and the tab shows a muted mark while checking", async () => {
+  const storage = new Map();
+  let release;
+  const h = makeHarness({ storage, problems: null, api: () => new Promise((resolve) => { release = resolve; }) });
+  h.ctx.ACT["open-setup"]();
+  assert.equal(h.S.shelfPage, "setup");
+  const pending = h.ctx.checkAgents();
+  assert.equal(h.document.querySelector("#sysTab-setup .sys-nav-muted")?.textContent, "…", "the tab says a check is running");
+  assert.match(h.document.querySelector(".sys-notice.is-checking")?.textContent || "", /Checking local CLI tools/);
+  release({ problems: 2, agents: [] });
+  await pending;
+  assert.equal(h.document.querySelector(".rail-gear .setup-count"), null);
+  assert.equal(storage.get("penecho-rail-settings-badge"), "dismissed");
+  assert.equal(h.document.querySelector("#sysTab-setup .setup-count")?.textContent, "2");
 });

@@ -249,7 +249,9 @@ test('saving menu keeps the chosen saved-agent preset', async () => {
   h.c.runPresets = () => [{id:'preset', agent:'claude', name:'Claude custom'}];
   h.c.presetShouldShowFacts = () => false;
   h.c.presetTitle = x => x.name;
-  h.dispatch('run'); h.document.activeElement.click(); await h.finish();
+  h.dispatch('run');
+  [...h.menu().querySelectorAll('button')].find(button => button.textContent === 'Claude custom').click();
+  await h.finish();
   assert.equal(h.calls[0].agent, 'claude'); assert.equal(h.calls[0].preset, 'preset');
 });
 

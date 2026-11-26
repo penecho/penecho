@@ -29,12 +29,12 @@ function hashToRoute(hash) {
   if (v === 'topics') return { cur:id, route:{ view:'topics', ...(parts[2] ? { topic:parts.slice(2).join('/') } : {}) } };
   return VIEWS[v] ? { cur:id, route:{ view:v } } : { cur:id, route:{ view:'home' } };
 }
-// Addresses that belong to no project. These open the Settings window over the page (settings.js), each on its tab: Agents
-// (#agents[/prices|/canvas|/apps], and bare #settings), Providers, Settings (#settings/canvas, #settings/general) and Archived. Older Settings AI links open Agents;
-// #setup opens its installed agents.
+// Addresses that belong to no project. These open the Settings window over the page (settings.js), each on its tab: Local providers (#setup),
+// Preset agents, Canvas AI and MCP (#agents[/prices|/canvas|/apps], and bare #settings), API providers, Canvas view and General
+// (#settings/canvas, #settings/general) and Archived. Older Settings AI links open Preset agents.
 const OUTSIDE_PAGES = new Set(['#archived', '#agents', '#providers', '#settings', '#setup']);
 const SETTINGS_TABS = new Set(['canvas', 'general']);
-const agentsTabFromHash = hash => ({ '#agents':'agents', '#agents/prices':'prices', '#agents/canvas':'canvas', '#agents/apps':'apps', '#agents/mcp':'apps', '#settings':'agents', '#settings/agents':'agents', '#settings/apps':'apps', '#settings/mcp':'apps', '#setup':'agents' })[hash] || null;
+const agentsTabFromHash = hash => ({ '#agents':'agents', '#agents/prices':'prices', '#agents/canvas':'canvas', '#agents/apps':'apps', '#agents/mcp':'apps', '#settings':'agents', '#settings/agents':'agents', '#settings/apps':'apps', '#settings/mcp':'apps' })[hash] || null;
 const settingsTabFromHash = hash => {
   const m = String(hash || '').match(/^#settings\/([^/?#]+)/);
   return m && SETTINGS_TABS.has(m[1]) ? m[1] : null;
@@ -44,10 +44,11 @@ const settingsHash = hash => hash === '#settings' || hash.startsWith('#settings/
 const outsidePage = hash => OUTSIDE_PAGES.has(hash) || agentsTabFromHash(hash) !== null || settingsHash(hash) || (typeof meetcueHash === 'function' && meetcueHash(hash));
 const parseShelfPage = hash => {
   if (!outsidePage(hash)) return false;
+  if (hash === '#setup') return 'setup';
   const agentsTab = agentsTabFromHash(hash);
   if (agentsTab) {
     if (typeof SET === 'object' && SET) SET.agentsTab = agentsTab;
-    return hash === '#setup' ? 'setup' : 'agents';
+    return 'agents';
   }
   if (settingsHash(hash)) {
     const tab = settingsTabFromHash(hash);
@@ -190,6 +191,7 @@ const homeTop = {};
 let outsideShown = {};
 // What #view holds now: a project's page or New project, or '' for anything else. Settings opens over it and leaves it be.
 let viewShows = '';
+function resetViewCache() { viewShows = ''; }
 const viewKey = () => (S.newPage ? 'new' : `${S.cur || ''}#${routeToHash(S.route)}`);
 function render() {
   if (embedRailOnly()) return;
@@ -203,14 +205,16 @@ function render() {
     }
     renderSettingsModal();
     renderRail();
+    if (typeof linesTranslatePage === 'function' && typeof linesIsZh === 'function' && linesIsZh()) linesTranslatePage();
     return;
   }
   // Closing Settings uncovers the page as it was, brought up to date rather than drawn again.
   const covered = Boolean(document.getElementById('sysModal'));
   dropSettingsModal();
-  if (covered && viewShows && viewShows === viewKey() && !S.shelfPage) { refreshAfterChange(); syncHash(true); return; }
+  if (covered && viewShows && viewShows === viewKey() && !S.shelfPage) { refreshAfterChange(); syncHash(true); if (typeof linesTranslatePage === 'function' && typeof linesIsZh === 'function' && linesIsZh()) linesTranslatePage(); return; }
   renderPage();
   viewShows = S.shelfPage ? '' : viewKey();
+  if (typeof linesTranslatePage === 'function' && typeof linesIsZh === 'function' && linesIsZh()) linesTranslatePage();
 }
 function renderPage() {
   const p = project(), view = $('#view');
@@ -553,14 +557,6 @@ function bindGlobal() {
   });
   $('#lightbox').addEventListener('pointerdown', e => { if (e.target.id === 'lightbox') closeLightbox(); });
   document.addEventListener('change', e => {
-    if (e.target.matches?.('select[data-model-agent]')) {
-      const id = e.target.dataset.modelAgent;
-      if (e.target.value === '__custom__') { S.setupCustomModel = { ...(S.setupCustomModel || {}), [id]:true }; render(); requestAnimationFrame(() => $(`input[data-model-agent="${id}"]`)?.focus()); return; }
-      if (S.setupCustomModel) delete S.setupCustomModel[id];
-      pickAgentModel(id, { model:e.target.value });
-      return;
-    }
-    if (e.target.matches?.('select[data-effort-agent]')) { changeAgentEffort(e.target.dataset.effortAgent, e.target.value); return; }
     if (e.target.id === 'projectMemory' || e.target.id === 'projectTopics') {
       const on = e.target.checked, key = e.target.id, what = key === 'projectMemory' ? 'Project memory' : 'Project Topics';
       patchProject({ [key]:on }).then(() => {

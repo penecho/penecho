@@ -240,6 +240,15 @@ function createProjectLines({ library = null, directory, authorizeRead, authoriz
       ...(!(mine && unread(mine)) && service.firstOpen() ? { firstOpen:true } : {}),
     };
   }
+  // penecho.ai answered but nothing it sent could be kept here: say so, with the system's reason, not "Something went wrong reading this project".
+  async function syncFromCloud() {
+    try { return await orchestrator.sync(); }
+    catch (error) {
+      if (error.status) throw error;
+      console.error("[lines] sync from penecho.ai could not save:", error);
+      throw failure("SYNC_SAVE_FAILED", `PenEcho could not save what penecho.ai sent on this computer${error.code ? ` (${error.code})` : ""}. Try again.`, 500);
+    }
+  }
   async function route(req, res, url, parts) {
     const method = req.method;
     // Agent setup's checks, a short Try and the model an agent runs with: they run on this computer, and answer any device that may use
@@ -283,7 +292,7 @@ function createProjectLines({ library = null, directory, authorizeRead, authoriz
     if (parts[0] === "model-prices") {
       if (!parts[1] && method === "GET") return send(res, 200, orchestrator.modelPrices());
       if (!parts[1] && method === "POST") { orchestrator.setPrice(await readJson(req, 65536)); return send(res, 200, orchestrator.modelPrices()); }
-      if (parts[1] === "sync" && !parts[2] && method === "POST") { const done = await orchestrator.sync(); return send(res, 200, { ...orchestrator.modelPrices(), addedPrices:done.addedPrices }); }
+      if (parts[1] === "sync" && !parts[2] && method === "POST") { const done = await syncFromCloud(); return send(res, 200, { ...orchestrator.modelPrices(), addedPrices:done.addedPrices, missed:done.missed }); }
       return send(res, 405, { error:"Method Not Allowed" });
     }
     // The drawing skill once for every project, in this user's own skill folders: what is there, add it ({ install:true }) or take it out ({ install:false }).
@@ -459,7 +468,7 @@ function createProjectLines({ library = null, directory, authorizeRead, authoriz
       // The reviewer and sync settings by the input box (orch-review.js). Sync only ever runs from this click.
       if (what === "settings" && method === "GET") return send(res, 200, orchestrator.settings());
       if (what === "settings" && method === "POST") return send(res, 200, orchestrator.setSettings(await readJson(req, 4096)));
-      if (what === "sync" && method === "POST") return send(res, 200, await orchestrator.sync());
+      if (what === "sync" && method === "POST") return send(res, 200, await syncFromCloud());
       if (what === "review" && !parts[4] && method === "POST") return send(res, 200, orchestrator.requestReview(project, await readJson(req, 4096)));
       if (what === "review" && parts[4] === "stop" && method === "POST") return send(res, 200, orchestrator.stopReview(project, await readJson(req, 4096)));
       if (what === "review" && parts[4] === "continue" && method === "POST") return send(res, 200, orchestrator.continueReview(project, await readJson(req, 4096)));
@@ -848,6 +857,8 @@ function createProjectLines({ library = null, directory, authorizeRead, authoriz
       const handled = await route(req, res, url, parts);
       if (handled === false) send(res, 404, { error:"Not found." });
     } catch (error) {
+      // What the page only hears as "Something went wrong" is kept in the server's log, so it can be found out afterwards.
+      if (!error.status) console.error(`[lines] ${req.method} /${parts.join("/")} failed:`, error);
       // An answer passed through as it came (Cloud's 402 for a run that could not start).
       if (!res.headersSent && error.body && error.status) send(res, error.status, error.body);
       else if (!res.headersSent) send(res, error.status || 500, { error:error.status ? error.message : "Something went wrong reading this project.", code:error.code, ...(error.owner ? { owner:error.owner } : {}), ...(error.conflict ? { conflict:error.conflict } : {}), ...(error.current !== undefined ? { current:error.current, currentHash:error.currentHash } : {}), ...(error.moved ? { moved:error.moved } : {}) });

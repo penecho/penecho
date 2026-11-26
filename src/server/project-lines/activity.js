@@ -1,6 +1,7 @@
 "use strict";
 const { openCodeModel } = require("./agent-model.js");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const StopWhy = require("./stop-why.js");
@@ -173,6 +174,7 @@ function claudeTool(block) {
     }
     case "Grep": return { verb:"Searched for", target:input.pattern };
     case "Glob": return { verb:"Looked for", target:input.pattern };
+    case "List": return { verb:"Listed", target:input.file_path ?? "." };
     case "WebSearch": return { verb:"Searched the web for", target:input.query };
     case "WebFetch": return { verb:"Opened", target:input.url };
     case "AskUserQuestion": return { verb:"Asked you", target:"", questions:questionsOf(input) };
@@ -296,6 +298,13 @@ function appItem(item, finished) {
     default: return [];
   }
 }
+// Codex's Windows sandbox could not start, so none of its commands run: it must set folder permissions for its sandbox account before each
+// one, and Windows refuses that on a folder owned by another account (a .git made from an admin terminal), or its sandbox account cannot
+// start the shell. Its own words for that, as its log and codex.exe say them. Full access runs no sandbox, so it is the way out.
+const CODEX_SANDBOX_BROKEN = /setup refresh had errors|Failed to create unified exec process: (?:helper|orchestrator)_[a-z_]+|Windows sandbox setup failed|windows sandbox failed|elevated Windows sandbox provisioning (?:is incomplete|recorded a structured failure)|sandbox provisioning: (?:failed|incomplete)|CreateProcessAsUserW failed|failed to prepare (?:process|MXC) sandbox/i;
+const isCodexSandboxBroken = text => CODEX_SANDBOX_BROKEN.test(String(text || ""));
+// A row that says so: a command that failed with those words, or Codex's own note.
+const codexSandboxBrokeIn = row => Boolean(row) && ((row.kind === "tool" && row.state === "failed" && isCodexSandboxBroken(row.output)) || ((row.kind === "note" || row.kind === "error") && isCodexSandboxBroken(row.text)));
 // OpenCode, Pi and dsh name their tools alike, in lower case, with a few spellings between them.
 function toolRow(name, value) {
   const input = value && typeof value === "object" ? value : {}, tool = String(name || "tool"), file = input.file_path || input.filePath || input.path || input.file;
@@ -338,6 +347,8 @@ function piUiQuestion(o) {
   }
   return { id, text:oneLine(o.title || o.placeholder || "Enter a reply", 500), multiSelect:false, options:[] };
 }
+// OMP can end an attempt while it is still retrying the turn or awaiting async work. Legacy Pi/OMP omit the flags on their final event.
+const isPiTurnEnd = event => event?.type === "agent_end" && event.isTerminal !== false && event.yielded !== false && event.willContinue !== true;
 function parsePi(o, state = {}) {
   switch (o.type) {
     case "session": return o.id ? [{ session:o.id }] : [];
@@ -360,7 +371,10 @@ function parsePi(o, state = {}) {
       return [];
     }
     case "agent_start": state.rpcStreaming = true; return [];
-    case "agent_end": state.rpcStreaming = false; return [{ turnEnd:true, keepFailed:true, clearAsking:true }];
+    case "agent_end":
+      if (!isPiTurnEnd(o)) return [];
+      state.rpcStreaming = false;
+      return [{ turnEnd:true, keepFailed:true, clearAsking:true }];
     case "extension_ui_cancel":
     case "extension_ui_timeout":
     case "extension_ui_dismiss":
@@ -546,7 +560,84 @@ function parseDialect(dialect, line, state) {
 // The line an agent reading JSON on stdin takes as your words: Claude Code's shape, or Antigravity's.
 const userLine = (text, dialect = "") => `${JSON.stringify(dialect === "antigravity" ? { event:"user", message:{ content:text } } : { type:"user", message:{ role:"user", content:[{ type:"text", text }] } })}\n`;
 // Pi / OMP RPC mode commands over NDJSON stdio.
-const piRpcInit = prompt => `${JSON.stringify({ id:"init-state", type:"get_state" })}\n${JSON.stringify({ id:"init-prompt", type:"prompt", message:prompt })}\n`;
+// OMP's RPC mode defaults to full-message snapshots on every streamed token (O(N^2) stdout + disk spooling).
+// Request compact delta message updates and drop high-volume frames PenEcho ignores anyway, while keeping
+// delta `message_update` frames so the keeper's `stdoutActivityAt` still sees live streaming progress.
+const OMP_RPC_EVENT_FILTER = Object.freeze({
+  events:Object.freeze([
+    "session",
+    "agent_start",
+    "agent_end",
+    "message_update",
+    "message_end",
+    "tool_execution_start",
+    "tool_execution_end",
+    "auto_retry_start",
+    "auto_retry_end",
+    "auto_compaction_start",
+    "auto_compaction_end",
+    "manual_compaction_start",
+    "manual_compaction_end",
+    "retry_fallback_applied",
+    "retry_fallback_succeeded",
+    "notice",
+  ]),
+  messageUpdates:"delta",
+});
+const PI_NOISE_TYPES = new Set(["message_update", "message_start", "turn_start", "turn_end", "tool_execution_update"]);
+const PI_NOISE_HINT = /"(?:message_update|message_start|turn_start|turn_end|tool_execution_update)"|\\u/;
+function isPiNoiseLine(line) {
+  if (typeof line !== "string" || !line.includes("{") || !PI_NOISE_HINT.test(line)) return false;
+  const event = eventOf(line);
+  return Boolean(event && typeof event === "object" && PI_NOISE_TYPES.has(event.type));
+}
+function ompLogError(pid, { started = 0, home = os.homedir() } = {}) {
+  const pidNum = Number(pid);
+  if (!Number.isInteger(pidNum) || pidNum <= 0 || !home) return "";
+  const dates = [new Date().toISOString().slice(0, 10)];
+  if (started > 0) {
+    const startDate = new Date(started).toISOString().slice(0, 10);
+    if (!dates.includes(startDate)) dates.push(startDate);
+  }
+  const logDir = path.join(home, ".omp", "logs");
+  for (const date of dates) {
+    const file = path.join(logDir, `omp.${date}.${pidNum}.log`);
+    let fd;
+    try { fd = fs.openSync(file, "r"); } catch { continue; }
+    let text = "";
+    try {
+      const size = fs.fstatSync(fd).size;
+      if (size <= 0) continue;
+      const len = Math.min(size, 32768);
+      const buf = Buffer.alloc(len);
+      const got = fs.readSync(fd, buf, 0, len, size - len);
+      text = buf.subarray(0, got).toString("utf8");
+    } catch { continue; } finally { try { fs.closeSync(fd); } catch {} }
+    const lines = text.split(/\r?\n/);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const raw = lines[i].trim();
+      if (!raw || !raw.startsWith("{")) continue;
+      let entry; try { entry = JSON.parse(raw); } catch { continue; }
+      if (!entry || entry.level !== "error") continue;
+      if (entry.pid != null && Number(entry.pid) !== pidNum) continue;
+      if (started > 0) {
+        const ts = Date.parse(entry.timestamp);
+        if (!Number.isFinite(ts) || ts < started - 5000) continue;
+      }
+      const msg = String(entry.message || "").trim(), err = String(entry.error || "").trim();
+      const combined = msg && err && !err.includes(msg) ? `${msg}: ${err}` : (err || msg);
+      if (combined) return combined;
+    }
+  }
+  return "";
+}
+const piRpcInit = (prompt, { eventFilter = null } = {}) => {
+  const frames = [];
+  if (eventFilter) frames.push(JSON.stringify({ id:"init-filter", type:"set_event_filter", ...eventFilter }));
+  frames.push(JSON.stringify({ id:"init-state", type:"get_state" }));
+  frames.push(JSON.stringify({ id:"init-prompt", type:"prompt", message:prompt }));
+  return `${frames.join("\n")}\n`;
+};
 const piRpcSteer = (text, streaming = true, id = "") => `${JSON.stringify({ ...(id ? { id:String(id) } : {}), type:streaming ? "steer" : "prompt", message:text })}\n`;
 const piRpcUiResponse = (id, method, answer, cancelled = false) => {
   if (cancelled) return `${JSON.stringify({ type:"extension_ui_response", id:String(id), cancelled:true })}\n`;
@@ -558,7 +649,7 @@ const piRpcUiResponse = (id, method, answer, cancelled = false) => {
 };
 const claudeControlResponse = (requestId, response) => `${JSON.stringify({ type:"control_response", response:{ subtype:"success", request_id:String(requestId), response } })}\n`;
 // Its turn has ended when it gives its result, in any streaming shape (Claude, Antigravity, Pi/OMP RPC).
-const isResult = line => { try { const o = eventOf(line); return o?.type === "result" || o?.event === "result" || o?.type === "agent_end"; } catch { return false; } };
+const isResult = line => { try { const o = eventOf(line); return o?.type === "result" || o?.event === "result" || isPiTurnEnd(o); } catch { return false; } };
 // How many commands Claude Code still has running in the background, when it says (null otherwise).
 const backgroundOf = line => { try { const o = eventOf(line); return o?.type === "system" && o.subtype === "background_tasks_changed" && Array.isArray(o.tasks) ? o.tasks.length : null; } catch { return null; } };
 function stripCdPrefix(command) {
@@ -742,4 +833,4 @@ class ActivityLog {
   forget(project, slug) { const key = `${project.id}/${slug}`; this.logs.delete(key); this.seqs.delete(key); }
 }
 
-module.exports = { eventOf, retryRow, ActivityLog, parseLine, parseAppServer, parseDialect, userLine, piRpcInit, piRpcSteer, piRpcUiResponse, claudeControlResponse, isResult, backgroundOf, toolRow, kimiTool, agyTool, AGY_OAUTH_EXPIRED, isAntigravityOAuthError, questionsOf, richQuestionsOf, nowFrom, plainCommand, oneLine, partsText, textOf, imagesOf, clip, tail, jsonOf, said, cleanThinking, OUTPUT_MAX, TEXT_MAX };
+module.exports = { eventOf, retryRow, ActivityLog, parseLine, parseAppServer, parseDialect, userLine, OMP_RPC_EVENT_FILTER, isPiNoiseLine, ompLogError, piRpcInit, piRpcSteer, piRpcUiResponse, claudeControlResponse, isPiTurnEnd, isResult, backgroundOf, toolRow, kimiTool, agyTool, AGY_OAUTH_EXPIRED, isAntigravityOAuthError, isCodexSandboxBroken, codexSandboxBrokeIn, questionsOf, richQuestionsOf, nowFrom, plainCommand, oneLine, partsText, textOf, imagesOf, clip, tail, jsonOf, said, cleanThinking, OUTPUT_MAX, TEXT_MAX };

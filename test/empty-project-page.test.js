@@ -229,3 +229,53 @@ test("hosted mode hides computer-only empty page controls", () => {
   assert.ok(hostedSrc.includes("'.empty-agents'"), "hosted.js hides .empty-agents");
   assert.ok(hostedSrc.includes("'.where'"), "hosted.js hides .where");
 });
+
+test("linking a code folder from the empty page starts a sync", async () => {
+  const run = async ({ hosted = false, linked = "", value = "/Users/test/code/asdf", lines = [] } = {}) => {
+    const { context, p } = makeEmptyPageHarness({ hosted });
+    p.code = linked;
+    p.vault.code = linked ? [{ path: linked }] : [];
+    let saved = null, synced = 0;
+    context.allLines = () => lines;
+    context.pathForm = opts => { saved = opts; };
+    // The server keeps the folder as path.resolve gives it, without a trailing slash.
+    context.patchProject = async body => { const path = body.codePath ? require("node:path").resolve(body.codePath) : ""; p.code = path; p.vault.code = path ? [{ path }] : []; };
+    context.ACT["sync-recent"] = () => { synced += 1; };
+    context.ACT["edit-code"]();
+    await saved.onSave(value);
+    return synced;
+  };
+  assert.equal(await run(), 1, "a newly linked folder syncs");
+  assert.equal(await run({ linked: "/Users/test/code/old" }), 1, "a changed folder syncs");
+  assert.equal(await run({ linked: "/Users/test/code/asdf" }), 0, "saving the same folder does not sync again");
+  assert.equal(await run({ linked: "/Users/test/code/asdf", value: "/Users/test/code/asdf/" }), 0, "a trailing slash is the same folder");
+  assert.equal(await run({ value: "" }), 0, "removing the folder does not sync");
+  assert.equal(await run({ lines: [{ id: "l1" }] }), 0, "a project that already has lines is not synced unasked");
+  assert.equal(await run({ hosted: true }), 0, "penecho.ai does not sync a computer's folder");
+});
+
+test("a code folder linked while a sync runs is synced when that one ends", async () => {
+  const { context, p, S } = makeEmptyPageHarness();
+  const calls = [];
+  let finish;
+  context.pathFor = id => `/api/projects/${id}`;
+  context.poll = () => {};
+  context.setInterval = () => 0;
+  context.clearInterval = () => {};
+  context.loadState = async () => {};
+  context.loadProjects = async () => {};
+  context.api = (url, opts) => { calls.push(url); return calls.length === 1 ? new Promise(r => { finish = r; }) : Promise.resolve({ added: 0 }); };
+  context.pathForm = opts => opts.onSave("/Users/test/code/new");
+  context.patchProject = async body => { p.code = body.codePath; p.vault.code = [{ path: body.codePath }]; };
+  const first = context.ACT["sync-recent"]();
+  assert.equal(S.syncing, true);
+  context.ACT["edit-code"]();
+  await new Promise(r => setImmediate(r));
+  assert.equal(calls.length, 1, "the second sync waits for the first");
+  finish({ added: 0 });
+  await first;
+  await new Promise(r => setImmediate(r));
+  assert.equal(calls.length, 2, "the new folder is synced after the first sync ends");
+  assert.equal(S.syncing, false);
+  assert.equal(S.syncAgain, null);
+});

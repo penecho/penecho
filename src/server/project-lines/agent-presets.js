@@ -36,7 +36,12 @@ function createAgentPresets({ file, agents }) {
   // The runner's own name ("Claude Code"), not its app's ("Claude"), as Settings lists it.
   const runnerName = id => runners().find(a => a.id === id)?.name || agents.nameOf?.(id) || id;
   // "Claude Code · opus · high effort", leaving out what is the runner's own. The word effort keeps a level from reading as a model.
-  const accessTag = p => (p.access === "full" && accessOf(p.agent).normal !== "full" ? "full access" : p.access === "folders" && accessOf(p.agent).normal !== "folders" ? "project folders" : "");
+  const accessTag = p => (
+    p.access === "full" && accessOf(p.agent).normal !== "full" ? "full access"
+    : p.access === "folders" && accessOf(p.agent).normal !== "folders" ? "project folders"
+    : p.access === "reviewed" && accessOf(p.agent).normal !== "reviewed" ? "reviewed"
+    : ""
+  );
   const nameFor = p => [runnerName(p.agent), p.model || "", p.effort ? `${p.effort} effort` : "", accessTag(p)].filter(Boolean).join(" · ");
   const known = id => id.startsWith(AUTO) ? runners().some(a => a.id === id.slice(AUTO.length)) : load().presets.some(p => p.id === id);
   function shown(p) {
@@ -76,7 +81,7 @@ function createAgentPresets({ file, agents }) {
   }
   // The model and effort a run with this preset hands to its runner. An automatic one hands over nothing: the runner's own pick stays.
   // Non-default access goes along only when picked, so a run with none keeps the runner's default access.
-  const handOver = p => (p && !p.auto ? { model:p.model || "", effort:p.effort || "", ...(p.access === "full" || p.access === "folders" ? { access:p.access } : {}) } : null);
+  const handOver = p => (p && !p.auto ? { model:p.model || "", effort:p.effort || "", ...(p.access === "full" || p.access === "folders" || p.access === "reviewed" ? { access:p.access } : {}) } : null);
   function fields(body, was = {}) {
     const agent = body.agent === undefined ? was.agent : text(body.agent, 40);
     if (!agent || (agent !== was.agent && !runners().some(a => a.id === agent))) throw Object.assign(new Error("That agent is not on this computer."), { code:"BAD_AGENT" });
@@ -97,7 +102,7 @@ function createAgentPresets({ file, agents }) {
     const allowed = accessOf(agent);
     const rawAccess = body.access === undefined ? was.access || "" : text(body.access, 20);
     const access = rawAccess && rawAccess === allowed.normal && allowed[rawAccess] ? "" : rawAccess;
-    if (access && !(access === "full" && allowed.full || access === "folders" && allowed.folders)) throw Object.assign(new Error("That access is not a choice for this agent."), { code:"BAD_PRESET" });
+    if (access && !(access === "full" && allowed.full || access === "folders" && allowed.folders || access === "reviewed" && allowed.reviewed)) throw Object.assign(new Error("That access is not a choice for this agent."), { code:"BAD_PRESET" });
     out.access = access;
     // A name the person did not type follows the model and effort.
     if (!out.name || out.name === nameFor({ ...was, agent:was.agent || agent })) out.name = "";

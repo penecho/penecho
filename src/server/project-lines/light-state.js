@@ -24,7 +24,7 @@ const DECK = /\.(?:pptx?|key|odp)$/i;
 const HEAVY = new Set(["stations", "ask", "result", "tokens", "pictures", "conversation", "conversations", "decided", "handoffs", "removed", "questions", "questionRev",
   "topicAbsolutePath", "folder", "workdir", "routeWhy", "routeParts", "topicHash", "partList", "activitySeq", "started", "runLaunch", "runSteerMode", "titleBy"]);
 const STATION = ["id", "index", "kind", "label", "state", "off", "agent", "when", "took", "startedAt", "endedAt", "reviewed", "finishedAsk", "unsent", "asked", "reviewing", "stopWhy", "meetingId", "isReview", "from"];
-const STATION_STATS = ["savedAgent", "picked", "selected", "ranOn", "resolvedModel", "diff", "rating", "ratingNote", "ratedAt", "orchScore", "orchNote", "orchScoredAt", "carriedFrom", "resetsAt"];
+const STATION_STATS = ["savedAgent", "picked", "selected", "access", "selectedAccess", "ranOn", "resolvedModel", "diff", "rating", "ratingNote", "ratedAt", "orchScore", "orchNote", "orchScoredAt", "carriedFrom", "resetsAt"];
 const empty = value => value === undefined || value === null || value === "" || value === false || (Array.isArray(value) && !value.length);
 // The words as the row shows them (line.js plainOut, firstLine), cut where they run past it. A line named from its first words does not
 // say them twice, so those are kept besides.
@@ -56,7 +56,7 @@ function statTokens(t) {
     ...(startup ? { startup:{ status:startup.status, ...(cost ? { cost:{ fresh:cost.fresh, resumed:cost.resumed, tokensPercent:cost.tokensPercent, costPercent:cost.costPercent } } : {}) } } : {}) };
 }
 // What the page fills in again (state.js fillLight) is left out: a step's place, "you" on your own steps, a Work's time said twice.
-function lightStation(s, i, said, title, { stats, files, words, made }) {
+function lightStation(s, i, said, title, { stats, files, words }) {
   const out = {}, mine = LINE_STATUS.isYours(s);
   for (const key of STATION) if (!empty(s[key]) || (key === "reviewed" && typeof s[key] === "boolean" && !mine)) out[key] = s[key];
   if (s.index !== i) out.index = s.index;
@@ -71,10 +71,6 @@ function lightStation(s, i, said, title, { stats, files, words, made }) {
     if (s.why) out.why = clip(s.why, title, words);
     if (s.reviewStopped) out.reviewStopped = s.reviewStopped;
     if (s.review && typeof s.review === "object") out.review = { score:s.review.score, verdict:s.review.verdict };
-  }
-  if (made) {
-    if (s.pictures?.length) out.pictures = s.pictures;
-    if (s.outputs?.length) out.outputs = s.outputs;
   }
   if (speaks || files) {
     if (s.files?.length) out.files = s.files;
@@ -108,9 +104,7 @@ function lightLine(line, { stats = false, files = false, words = false } = {}) {
   // The step the row quotes (panorama.js lastWords) and the one an agent may have ended on a question in (state.js askedYou).
   const stations = line.stations || [], back = [...stations].reverse(), said = [back.find(s => !isEnd(s) && (s.unsent || (s.state !== "todo" && s.state !== "off"))) || stations[0], back.find(s => !isEnd(s) && s.kind !== "orch-review")];
   // An archived line is listed by its name; the Home's Works by day still counts its last month.
-  // What an orchestrator's part made is shown on the orchestrator's own line too (line.js lineMade).
-  const made = Boolean(line.orchestratedBySlug || line.orchestratedBy);
-  out.stations = !line.archived || form ? stations.map((s, i) => lightStation(s, i, said, line.title, { stats, files, words, made }))
+  out.stations = !line.archived || form ? stations.map((s, i) => lightStation(s, i, said, line.title, { stats, files, words }))
     : Date.now() - (line.lastActivityAt || 0) > COUNTED_MS ? [] : stations.filter(s => LINE_STATUS.isWork(s) && !s.unsent).map(countedStation);
   if (files) {
     if (line.ask?.files?.length || line.ask?.later?.some(x => x.files?.length)) out.ask = { text:"", when:line.ask.when || "", files:line.ask.files || [], later:(line.ask.later || []).filter(x => x.files?.length).map(x => ({ text:"", files:x.files })) };

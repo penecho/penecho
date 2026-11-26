@@ -62,7 +62,7 @@ function restoreProjectPosition(saved) {
 }
 const DOC_RETURN_LABELS = {
   files:'Canvases & files', canvases:'Canvases & files', stats:'Statistics', orchestrator:'Orchestrator',
-  topics:'Topics', memory:'Memory', vault:'Vault', find:'Search', archive:'Archive', deleted:'Deleted',
+  topics:'Topics', memory:'Memory', vault:'Vault', find:'Ask AI', archive:'Archive', deleted:'Deleted',
   settings:'Project settings', newline:'New line',
 };
 let docRouteProject = null;
@@ -123,7 +123,8 @@ function docBackTarget(p, docPath) {
     } else if (rt.view === 'topics' && p.projectTopics === false) {
       trail.pop(); continue;
     } else if (typeof VIEWS === 'object' && Object.hasOwn(VIEWS, rt.view)) {
-      return { entry, label:DOC_RETURN_LABELS[rt.view] || p.name };
+      const label = rt.view === 'find' && typeof HOSTED !== 'undefined' && HOSTED ? 'Search' : DOC_RETURN_LABELS[rt.view] || p.name;
+      return { entry, label };
     }
     trail.pop();
   }

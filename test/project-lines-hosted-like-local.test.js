@@ -334,19 +334,20 @@ test("opening a hosted Home or Canvas rail consumes one project-state response",
 });
 
 test("a Line and its composer open the editor for the same project with the local actions", async () => {
-  const { document } = require("./helpers/dom.js").parseHTML('<html><body><div id="thread"></div><div class="lp-dock"><form class="composer" data-preview="1"><button data-act="cmp-plus"></button></form></div></body></html>');
-  const project = { id:"garden" }, line = { slug:"plan", stations:[], closed:false }, draws = [], S = { route:{ line:"plan" } };
+  const { document } = require("./helpers/dom.js").parseHTML('<html><body><div id="thread"></div><div id="dock"></div></body></html>');
+  const project = { id:"garden" }, line = { id:"plan", slug:"plan", stations:[], closed:false }, draws = [], S = { cur:"garden", comp:{}, route:{ line:"plan" } };
   const openDrawing = async (p, form, options) => draws.push([p.id, form.className, options?.toLine]);
   const c = vm.createContext({ document, HOSTED:{ key:"garden" }, S, ACT:{}, URLSearchParams, location:{ hash:"#garden/line/plan" },
     LINE_STATUS:require("../public/lines/line-status.js"), navigator:{ platform:"" }, addEventListener() {},
-    project:() => project, lineById:() => line, ic:() => "", questionsHTML:() => "", $:s => document.querySelector(s),
+    project:() => project, lineById:() => line, esc:v => String(v ?? ""), ic:() => "", boxWords:() => "Add to this line", questionsHTML:() => "", $:s => document.querySelector(s),
     openMenu:(_, items) => { c.menu = items; }, setTimeout:fn => fn(), EMBED:null, toast:assert.fail });
   vm.runInContext([constant(hosted, "HOSTED_OFF"), constant(hosted, "can"), extract(read("state.js"), "canvasUrl")].join("\n"), c);
   for (const name of ["composer.js", "line.js"]) vm.runInContext(read(name), c, { filename:name });
   c.openDrawing = openDrawing;
   document.querySelector("#thread").innerHTML = c.threadHTML(project, line);
-  const button = document.querySelector('#thread [data-act="line-draw"]');
-  assert.equal(button.textContent, "Add new canvas");
+  document.querySelector("#dock").innerHTML = `<div class="lp-dock">${c.composerHTML("conv-garden-plan", { placeholder:"Add to this line", preview:true, on:"step", topic:line.id })}</div>`;
+  const button = document.querySelector('.lp-dock [data-act="line-draw"]');
+  assert.equal(button.textContent, "Canvas");
   c.ACT["line-draw"](button);
   c.ACT["cmp-plus"](document.querySelector(".cmp-plus") || document.querySelector('[data-act="cmp-plus"]'));
   assert.deepEqual(Array.from(c.menu, m => m.label), ["Add images or files", "Add new canvas"]);

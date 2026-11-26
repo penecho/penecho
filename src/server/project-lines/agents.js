@@ -13,9 +13,10 @@ const { inDesktop } = require("./kimi-sessions.js");
 const { antigravityInDesktop } = require("./antigravity-sessions.js");
 const { findWindowsWorkBuddy } = require("./windows-workbuddy.js");
 const { WORKBUDDY } = require("./workbuddy-sessions.js");
-const { modelOf, defaultEffortWith, parseOpenCodeModels } = require("./agent-model.js");
+const { modelOf, defaultEffortWith, parseOpenCodeCatalog, parseOpenCodeModels, parseOpenCodeDefault } = require("./agent-model.js");
 const Memory = require("./memory.js");
 const { RUN_COMMANDS } = require("../agent-core/run-commands.js");
+const { OMP_RPC_EVENT_FILTER } = require("./activity.js");
 const { dshHome, dshPlan, stageDshPatch, yamlRows, validDshModel, DEFAULT_PLUGIN } = require("./dsh-models.js");
 
 // The command-line agents PenEcho can start: the same ones you run yourself, with your sign-in and your settings.
@@ -185,7 +186,9 @@ function openCodeKey(launch) {
   const at = [launch.command, ...launch.prefixArgs].map(file => { try { const { mtimeMs, size } = fs.statSync(file); return `${mtimeMs}:${size}`; } catch { return ""; } });
   return [launch.command, ...launch.prefixArgs, ...at].join("\0");
 }
-function openCode2(launch, env) {
+function openCode2(launch, env, knownVersion = "") {
+  const parsed = versionIn(knownVersion);
+  if (parsed) return atLeast(parsed, "2.0.0");
   const key = openCodeKey(launch);
   if (!openCodeVersions.get(key)) {
     let text = "";
@@ -196,20 +199,23 @@ function openCode2(launch, env) {
   return Boolean(version) && atLeast(version, "2.0.0");
 }
 // What `run` takes for the model, its level, the conversation and its own extras, in either version.
-function openCodeRun(launch, env, { model, effort, resume, older }) {
+function openCodeRun(launch, env, { model, effort, resume, older, defaultModel = "" }) {
   if (!openCode2(launch, env)) return ["run", "--format", "json", ...older, ...(model ? ["--model", model] : []), ...(effort ? ["--variant", effort] : []), ...(resume ? ["--session", resume] : [])];
-  const name = model || (effort ? modelOf("opencode", env)?.name || "" : "");
+  const name = model || (effort ? defaultModel || modelOf("opencode", env)?.name || "" : "");
   if (effort && !name) throw Object.assign(Error("OpenCode 2 takes a reasoning level only together with a model. Pick a model too."), { code:"BAD_EFFORT", status:409 });
   return ["run", "--standalone", "--format", "json", ...(older.includes("--auto") ? ["--auto"] : []), ...(name ? ["--model", `${name}${effort ? `#${effort}` : ""}`] : []), ...(resume ? ["--session", resume] : [])];
 }
 // What each agent's Access choice in Settings means for its runs. "" is the default.
-// Claude Code and Codex check each command with their own reviewer by default, with Full access as an option.
+// Claude Code checks each command with its own reviewer by default, with Full access as an option.
+// Codex runs with Full access (danger-full-access, approval-policy never) by default, with Reviewed (workspace-write, on-request with auto_review) as an option.
 // dsh runs with Full access (danger-full-access, approval-policy never) by default, with Project folders (workspace-write) as an option.
 // PenEcho keeps writes to the run's folders. The others take no choice: their command lines have no reviewer that works with nobody there, so they already run every tool, within their own settings.
-const ACCESS = { claude:"reviewed", codex:"reviewed", dsh:"full", penecho:"folders", opencode:"full", pi:"full", omp:"full", kimi:"full", antigravity:"full" };
+const ACCESS = { claude:"reviewed", codex:"full", dsh:"full", penecho:"folders", opencode:"full", pi:"full", omp:"full", kimi:"full", antigravity:"full" };
 const accessOf = id => {
   const base = { normal:ACCESS[id] || "", full:["claude", "codex", "dsh"].includes(id) };
-  return id === "dsh" ? { ...base, folders:true } : base;
+  if (id === "codex") return { ...base, reviewed:true };
+  if (id === "dsh") return { ...base, folders:true };
+  return base;
 };
 // A conversation belongs to the folder it happened in, so a command to carry it on starts from there.
 function fromFolder(command, folder) {
@@ -271,8 +277,11 @@ const ADAPTERS = {
     desktop(launch, id) { return openLink(`claude://resume?session=${encodeURIComponent(id)}`); },
     desktopNew(launch, folder) { return openLink(`claude://code/new?folder=${encodeURIComponent(folder)}`); },
     classify(launch) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--model", "haiku", "--no-session-persistence", "--tools", "", "--output-format", "text"] }; },
-    // A quick answer about the project (the Ask tab): everything it needs is in the words sent, so it gets no tools and keeps no session.
-    answer(launch, { model, effort }) { return { command:launch.command, args:[...launch.prefixArgs, "-p", ...(model ? ["--model", model] : []), ...claudeEffort(effort), "--no-session-persistence", "--tools", "", "--output-format", "text"] }; },
+    // Ask tab: read-only access to the project docs and code folders so it can inspect Lines, Work files and (if needed) code without editing or keeping a session.
+    answer(launch, { model, effort, dirs = [] } = {}) {
+      const extra = [...new Set((dirs || []).filter(Boolean))].flatMap(folder => ["--add-dir", folder]);
+      return { command:launch.command, args:[...launch.prefixArgs, "-p", ...(model ? ["--model", model] : []), ...claudeEffort(effort), "--no-session-persistence", "--strict-mcp-config", "--tools", "Read,Grep,Glob,Bash", "--allowedTools", "Read,Grep,Glob,Bash(rg:*),Bash(ls:*),Bash(git status:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*)", ...extra, "--output-format", "stream-json", "--verbose"], json:true };
+    },
     // A review of finished work: it may read the folders and run commands that change nothing, as often as it needs. Nothing that edits is offered, and nobody is there to approve anything else.
     review(launch, { model, effort, dirs = [] }) { return { command:launch.command, args:[...launch.prefixArgs, "-p", ...(model ? ["--model", model] : []), ...claudeEffort(effort), "--no-session-persistence", "--strict-mcp-config", "--tools", "Read,Grep,Glob,Bash", "--allowedTools", "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)", ...(dirs.length ? ["--add-dir", dirs.join(",")] : []), "--output-format", "stream-json", "--verbose"], json:true }; },
     // Every conversation a process holds right now, Claude's desktop app included. Carrying on one of those from here would make a copy the app never sees.
@@ -306,10 +315,12 @@ const ADAPTERS = {
     command(launch, { workdir, docs, gitDir, also = [], resume, plain, instructions, model, effort, access, network = false }) {
       // Codex's sandbox covers only named folders, and a worktree commits into the main repository's .git folder.
       const roots = [docs, ...(gitDir ? [gitDir] : []), ...also];
-      // An orchestrator's every PenEcho function is a curl to this computer. With the network shut, each one became a request to leave the sandbox,
-      // which Codex's auto-reviewer judged alone and refused for handing a task to another agent (PE-658). Codex has no switch for this computer only.
-      // Full access, picked in Settings: no sandbox and nothing asked, as Codex's own "Full access" (names read in its app-server schema, SandboxMode and SandboxPolicy).
-      const full = access === "full";
+      // Full access (danger-full-access, approval-policy never) is the default so Codex runs as the normal user without
+      // hitting Windows ACL/sandbox setup failures (e.g. admin-owned .git), matching Kimi, dsh, omp, OpenCode, Pi and Antigravity.
+      // Picking Reviewed in Settings opts into Codex's workspace-write sandbox with its built-in auto-reviewer.
+      // In Reviewed mode, an orchestrator's PenEcho calls use this computer's network, so network stays open for them (PE-658).
+      const sandboxed = access === "reviewed";
+      const full = !sandboxed;
       // A model and reasoning level picked for PenEcho go in as settings, which `codex exec` and `codex exec resume` both take.
       const picked = [...(model ? ["-c", `model=${JSON.stringify(model)}`] : []), ...(effort ? ["-c", `model_reasoning_effort=${JSON.stringify(effort)}`] : [])];
       if (plain) {
@@ -318,9 +329,8 @@ const ADAPTERS = {
         return { command:launch.command, args:[...launch.prefixArgs, "exec", "--json", ...picked, ...(full ? ["--sandbox", "danger-full-access"] : ["--sandbox", "workspace-write", ...roots.flatMap(folder => ["--add-dir", folder]), ...(network ? ["-c", "sandbox_workspace_write.network_access=true"] : [])]), "--skip-git-repo-check", "--cd", workdir, "-c", 'approval_policy="never"', "-"], cwd:workdir, stdin:true, steerMode:"interrupt-resume", sandboxWindowsPath:!full };
       }
       // A thread started through the app-server is listed with Codex's own desktop threads, which one from `codex exec` is not. PenEcho's instructions go in as developer instructions, which the app does not show.
-      // Approval as Codex's desktop app runs by default: on request, so something the sandbox blocks (a browser, a local server) can ask to run outside it.
-      // Who answers is the person's own Codex setting: its auto-reviewer decides by itself, and anything sent to PenEcho is declined (codex-server.js).
-      const policy = full ? { approvalPolicy:"never", sandbox:"danger-full-access" } : { approvalPolicy:"on-request", sandbox:"workspace-write" };
+      // In Reviewed mode, route approval requests to Codex's auto-reviewer (matching Codex Desktop; leaving approvalsReviewer unset defaults to "user", which PenEcho declines).
+      const policy = full ? { approvalPolicy:"never", sandbox:"danger-full-access" } : { approvalPolicy:"on-request", approvalsReviewer:"auto_review", sandbox:"workspace-write" };
       return { command:launch.command, args:[...launch.prefixArgs, "app-server"], cwd:workdir, protocol:"app-server", ownInstructions:true, steerMode:"live", sandboxWindowsPath:!full, thread:{ cwd:workdir, ...policy, ...(model ? { model } : {}), ...(instructions ? { developerInstructions:instructions } : {}) }, turn:{ sandboxPolicy:full ? { type:"dangerFullAccess" } : { type:"workspaceWrite", writableRoots:roots, networkAccess:Boolean(network) }, ...(effort ? { effort } : {}) } };
     },
     // Codex's app can be called ChatGPT. A new thread takes the folder as its project, adding it to Codex's list if it is not there yet. That part of the link was read in version 26.1103.
@@ -339,11 +349,51 @@ const ADAPTERS = {
     cli:"opencode", envVar:"OPENCODE_CLI_PATH", install:process.platform === "win32" ? "npm install -g @opencode/cli" : "curl -fsSL https://opencode.ai/v2/install | bash", extraFolders:[".opencode/bin", ".local/bin", "AppData/Roaming/npm"],
     resolve(env) { return findCli(env, this.envVar, this.cli, this.extraFolders); },
     // Nobody is there to answer a permission prompt. Anything your own OpenCode settings deny stays denied.
-    // Its reasoning levels are a model's variants. OpenCode 1's `run --variant` quietly drops one the model does not have and runs with none,
-    // and OpenCode works a model's variants out itself, from more than its settings files say, so its own list is asked for them. OpenCode 2 lists no variants, and turns one the model does not have down itself.
+    // OpenCode 2 exposes its active models and variants via `api --standalone get /api/model` (falling back to `models --standalone`),
+    // and its default model via `api --standalone get /api/model/default`. OpenCode 1 uses `models --verbose`.
+    async catalog(launch, { env, run, platform, version = "", includeDefault = false }) {
+      const childEnv = prepareAgentEnv(env, { ...(launch.env || {}), OPENCODE_DISABLE_AUTOUPDATE:"1" }, { platform });
+      const ask = args => run(launch.command, [...launch.prefixArgs, ...args], { env:childEnv, cwd:os.tmpdir(), timeout:20000, maxBuffer:16 * 1024 * 1024 });
+      const v2 = openCode2(launch, env, version);
+      let parsed = null, usedV2Api = false;
+      const askV2 = async () => {
+        const apiRes = await ask(["api", "--standalone", "get", "/api/model"]);
+        if (apiRes?.status === 0) {
+          parsed = parseOpenCodeCatalog(apiRes.stdout);
+          if (parsed) usedV2Api = true;
+        }
+        if (!parsed) {
+          const listRes = await ask(["models", "--standalone"]);
+          if (listRes?.status === 0) parsed = parseOpenCodeCatalog(listRes.stdout);
+        }
+      };
+      if (v2) {
+        await askV2();
+      } else {
+        const verboseRes = await ask(["models", "--verbose"]);
+        if (verboseRes?.status === 0) parsed = parseOpenCodeCatalog(verboseRes.stdout);
+        // If version detection assumed 1.x on a 2.x CLI, `--verbose` fails as unrecognized: retry with v2 commands.
+        if (!parsed && /unrecognized flag/i.test(`${verboseRes?.stdout || ""}\n${verboseRes?.stderr || ""}`)) {
+          await askV2();
+        } else if (!parsed) {
+          const plainRes = await ask(["models"]);
+          if (plainRes?.status === 0) parsed = parseOpenCodeCatalog(plainRes.stdout);
+        }
+      }
+      if (!parsed) return null;
+      let defaultModel = "";
+      if (includeDefault && (usedV2Api || v2)) {
+        const configured = modelOf("opencode", env)?.name || "";
+        if (!configured || !parsed.choices.includes(configured)) {
+          const defRes = await ask(["api", "--standalone", "get", "/api/model/default"]);
+          if (defRes?.status === 0) defaultModel = parseOpenCodeDefault(defRes.stdout);
+        }
+      }
+      return { ...parsed, defaultModel };
+    },
     levels(launch) { return { command:launch.command, args:[...launch.prefixArgs, "models", "--verbose"], parse:parseOpenCodeModels }; },
     ahead(launch, env, ask) { askAhead(openCodeVersions, launch, ["--version"], env, versionIn, ask, openCodeKey(launch)); },
-    command(launch, { workdir, resume, model, effort, env = process.env }) { return { command:launch.command, args:[...launch.prefixArgs, ...openCodeRun(launch, env, { model, effort, resume, older:["--auto", "--dir", workdir] })], cwd:workdir, stdin:true, dialect:"opencode", steerMode:"interrupt-resume" }; },
+    command(launch, { workdir, resume, model, effort, env = process.env, defaultModel = "" }) { return { command:launch.command, args:[...launch.prefixArgs, ...openCodeRun(launch, env, { model, effort, resume, older:["--auto", "--dir", workdir], defaultModel })], cwd:workdir, stdin:true, dialect:"opencode", steerMode:"interrupt-resume" }; },
     // Its desktop app takes no link to a conversation or a folder: 2.2.5 and 2.2.6 pass `opencode://` to the window, and only the sign-in link is acted on. The terminal program inside it opens either, from the same store. An older `opencode` on the PATH may not: 1.19.5 says "Session not found" for what the app holds.
     macApp:{ names:["OpenCode"], bundle:"ai.opencode.desktop", from:"2.2.5" },
     appProgram:"Contents/Resources/opencode-cli",
@@ -354,7 +404,7 @@ const ADAPTERS = {
     // Claude Code's own instructions are left out: what they send it to read, outside that folder, would be turned down and end the turn with no answer.
     // Passing --dir ensures OpenCode binds the session to the isolated cwd rather than an inherited PWD from the server process.
     // OpenCode 2 has no --dir and works in the folder it is started in.
-    answer(launch, { model, effort, resume, env = process.env } = {}) { return { command:launch.command, args:[...launch.prefixArgs, ...openCodeRun(launch, env, { model, effort, resume, older:["--pure"] })], env:{ OPENCODE_DISABLE_CLAUDE_CODE:"1", OPENCODE_DISABLE_AUTOUPDATE:"1" }, dialect:"opencode", keeps:true, resumes:true, ...(openCode2(launch, env) ? {} : { dirFlag:"--dir" }) }; },
+    answer(launch, { model, effort, resume, env = process.env, defaultModel = "" } = {}) { return { command:launch.command, args:[...launch.prefixArgs, ...openCodeRun(launch, env, { model, effort, resume, older:["--pure"], defaultModel })], env:{ OPENCODE_DISABLE_CLAUDE_CODE:"1", OPENCODE_DISABLE_AUTOUPDATE:"1" }, dialect:"opencode", keeps:true, resumes:true, ...(openCode2(launch, env) ? {} : { dirFlag:"--dir" }) }; },
   },
   pi:{
     name:"Pi", mono:"Pi", color:"#0f766e", role:"Build",
@@ -364,7 +414,7 @@ const ADAPTERS = {
     command(launch, { workdir, resume, model, effort }) { return { command:launch.command, args:[...launch.prefixArgs, "--mode", "rpc", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : []), ...(resume ? ["--session", resume] : [])], cwd:workdir, stdin:true, input:"pi-rpc", dialect:"pi", steerMode:"live" }; },
     terminal:id => `pi --session ${id}`,
     classify(launch) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--no-session", "--no-tools", "--no-extensions", "--no-skills", "--no-context-files"] }; },
-    answer(launch, { model, effort }) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--no-session", "--no-tools", "--no-extensions", "--no-skills", "--no-context-files", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : [])] }; },
+    answer(launch, { model, effort } = {}) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--mode", "json", "--no-session", "--tools", "read,grep,find,ls", "--no-extensions", "--no-skills", "--no-context-files", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : [])], dialect:"pi" }; },
     // Its JSON lines say each step as it goes, for the review's panel.
     review(launch, { model, effort }) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--mode", "json", "--no-session", "--tools", "read,grep,find,ls", "--no-extensions", "--no-skills", "--no-context-files", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : [])], dialect:"pi" }; },
   },
@@ -375,10 +425,10 @@ const ADAPTERS = {
     resolve(env) { return findCli(env, this.envVar, this.cli, this.extraFolders); },
     // Unlike Pi, omp asks before running tools, and nobody is there to answer, so --auto-approve is used. `--mode rpc-ui` enables live steer and extension_ui_request answering.
     // `--model` takes provider/id as its models.yml lists them, and `--thinking` a level (read in its own help).
-    command(launch, { workdir, resume, model, effort }) { return { command:launch.command, args:[...launch.prefixArgs, "--mode", "rpc-ui", "--auto-approve", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : []), ...(resume ? ["--resume", resume] : [])], cwd:workdir, stdin:true, input:"pi-rpc", dialect:"pi", steerMode:"live" }; },
+    command(launch, { workdir, resume, model, effort }) { return { command:launch.command, args:[...launch.prefixArgs, "--mode", "rpc-ui", "--auto-approve", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : []), ...(resume ? ["--resume", resume] : [])], cwd:workdir, stdin:true, input:"pi-rpc", rpcEventFilter:OMP_RPC_EVENT_FILTER, dialect:"pi", steerMode:"live" }; },
     terminal:id => `omp --resume ${id}`,
     classify(launch) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--no-session", "--no-tools", "--no-extensions", "--no-skills", "--no-context-files", "--no-title"] }; },
-    answer(launch, { model, effort }) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--no-session", "--no-tools", "--no-extensions", "--no-skills", "--no-context-files", "--no-title", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : [])] }; },
+    answer(launch, { model, effort } = {}) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--mode=json", "--no-session", "--tools=read,grep,glob", "--auto-approve", "--no-extensions", "--no-skills", "--no-context-files", "--no-title", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : [])], dialect:"pi" }; },
     // Only tools that read are offered, so approving them all changes nothing.
     review(launch, { model, effort }) { return { command:launch.command, args:[...launch.prefixArgs, "-p", "--mode=json", "--no-session", "--tools=read,grep,glob", "--auto-approve", "--no-extensions", "--no-skills", "--no-context-files", "--no-title", ...(model ? ["--model", model] : []), ...(effort ? ["--thinking", effort] : [])], dialect:"pi" }; },
   },
@@ -448,8 +498,11 @@ const ADAPTERS = {
     appHolds:id => inDesktop(id),
     cliTerminal:true,
     terminal:(id, program = "kimi") => (id && !inDesktop(id) ? `${program} --session ${id}` : ""),
-    // A quick answer (the Ask tab). --prompt cannot be had with --plan, and it keeps the conversation, so it runs outside the project's folders, with nothing there to change.
-    answer(launch, { model, effort, resume } = {}) { return { command:launch.command, args:[...launch.prefixArgs, ...(resume ? ["--session", resume] : []), ...(model ? ["--model", model] : []), "--output-format", "stream-json", "--prompt"], promptLast:true, env:{ KIMI_CODE_NO_AUTO_UPDATE:"1", ...(effort ? { KIMI_MODEL_THINKING_EFFORT:effort } : {}) }, dialect:"kimi", keeps:true, resumes:true }; },
+    // Ask tab: --prompt cannot be had with --plan, and it keeps the conversation, so it runs in an isolated folder with --add-dir pointing at the project folders it may read.
+    answer(launch, { model, effort, resume, dirs = [] } = {}) {
+      const extra = [...new Set((dirs || []).filter(Boolean))].flatMap(folder => ["--add-dir", folder]);
+      return { command:launch.command, args:[...launch.prefixArgs, ...(resume ? ["--session", resume] : []), ...(model ? ["--model", model] : []), ...extra, "--output-format", "stream-json", "--prompt"], promptLast:true, env:{ KIMI_CODE_NO_AUTO_UPDATE:"1", ...(effort ? { KIMI_MODEL_THINKING_EFFORT:effort } : {}) }, dialect:"kimi", keeps:true, resumes:true };
+    },
   },
   // Google's Antigravity: the agy command runs in the background, and its desktop app is where you paste.
   antigravity:{
@@ -477,11 +530,11 @@ const ADAPTERS = {
     appHolds:(id, agentEnv) => antigravityInDesktop(id, agentEnv),
     cliTerminal:true,
     terminal:(id, program = "agy", agentEnv) => (id && !antigravityInDesktop(id, agentEnv) ? `${program} --conversation ${id}` : ""),
-    // A quick answer (the Ask tab). Without --dangerously-skip-permissions a tool that needs approval is turned down. Its -p takes the words as its own value, so they go last.
-    // It keeps the conversation, so it runs outside the project's folders.
-    answer(launch, { model, effort, resume } = {}) {
+    // Ask tab: without --dangerously-skip-permissions edits and shell tools need approval and are turned down, while read tools inside --add-dir folders work. Its -p takes the words last, and it runs in an isolated folder because it keeps the conversation.
+    answer(launch, { model, effort, resume, dirs = [] } = {}) {
       const tier = effort && model?.match(/^(.*)-(low|medium|high|xhigh|max)$/i);
-      return { command:launch.command, args:[...launch.prefixArgs, "--output-format", "stream-json", "--disable-slash-commands", ...(resume ? ["--conversation", resume] : []), ...((tier ? tier[1] : model) ? ["--model", tier ? tier[1] : model] : []), ...(effort ? ["--effort", effort] : []), "-p"], promptLast:true, dialect:"antigravity", keeps:true, resumes:true };
+      const extra = [...new Set((dirs || []).filter(Boolean))].flatMap(folder => ["--add-dir", folder]);
+      return { command:launch.command, args:[...launch.prefixArgs, "--output-format", "stream-json", "--disable-slash-commands", ...(resume ? ["--conversation", resume] : []), ...((tier ? tier[1] : model) ? ["--model", tier ? tier[1] : model] : []), ...(effort ? ["--effort", effort] : []), ...extra, "-p"], promptLast:true, dialect:"antigravity", keeps:true, resumes:true };
     },
   },
   // Tencent's WorkBuddy runs CodeBuddy Code inside its app, which it starts itself and ships no command for, so nothing runs in the background: its app is where you paste.
@@ -514,7 +567,8 @@ const ADAPTERS = {
       if (!run) return null;
       const blank = Object.fromEntries(Object.keys(env).filter(name => SECRET_NAME.test(name)).map(name => [name, ""]));
       const folders = [...(docs ? ["--docs", docs] : []), ...also.flatMap(folder => ["--add-dir", folder]), ...(gitDir ? ["--git-dir", gitDir] : [])];
-      return { command:launch.command, args:[...launch.prefixArgs, ...(resume ? ["--resume", resume] : []), ...(exactResume ? ["--require-session"] : []), "--sessions", launch.sessions, ...folders, ...(docs ? ["--allow-command", Memory.commandFor(docs)] : []), ...(instructions ? ["--instructions", instructions] : [])],
+      const memoryCommand = docs ? (process.platform === "win32" ? `sh '${path.join(docs, ".penecho", "memory").replaceAll("\\", "/").replaceAll("'", `'\\''`)}'` : Memory.commandFor(docs)) : "";
+      return { command:launch.command, args:[...launch.prefixArgs, ...(resume ? ["--resume", resume] : []), ...(exactResume ? ["--require-session"] : []), "--sessions", launch.sessions, ...folders, ...(memoryCommand ? ["--allow-command", memoryCommand] : []), ...(instructions ? ["--instructions", instructions] : [])],
         cwd:workdir, stdin:true, input:"stream-json", ownInstructions:true, steerMode:"live", proxyRun:run.id, env:{ ...blank, ...launch.env, PENECHO_MODEL_PROXY_URL:run.url, PENECHO_MODEL_PROXY_SECRET:run.secret, ...(run.endpointFile ? { PENECHO_MODEL_PROXY_ENDPOINT:run.endpointFile } : {}), ...(run.proxyToken ? { PENECHO_MODEL_PROXY_TOKEN:run.proxyToken } : {}), ...(run.instanceId ? { PENECHO_MODEL_PROXY_INSTANCE:run.instanceId } : {}) } };
     },
   },
@@ -561,27 +615,61 @@ function createAgents(options = {}) {
   const modelFor = id => (typeof pickOf(id).model === "string" ? pickOf(id).model : "");
   const effortFor = id => (typeof pickOf(id).effort === "string" ? pickOf(id).effort : "");
   const configuredModel = id => {
-    if (id !== "dsh") return modelOf(id, env, id === "penecho" ? where.penecho : null)?.name || "";
+    if (id !== "dsh") return aboutOf(id)?.name || "";
     const plan = dshPlan(env, "", "");
     return plan.verify ? "" : plan.selection?.model || "";
   };
-  // An agent that works its models' levels out itself (`levels` above) is asked for its own list, now and then, since asking starts it.
+  // An agent that resolves its own models and levels (`catalog` / `levels` above) is asked for its own list now and then, since asking starts it.
   // Only the real server asks: a test's agents are not real ones, unless the test brings its own way to run them.
   const run = options.run || (fromApps && env.NODE_ENV !== "test" ? runCommand : null), listed = new Map();
   const runAhead = options.runAhead || (fromApps && env.NODE_ENV !== "test" ? runCommand : null);
-  function listLevels(id, { fresh = false } = {}) {
+  function listCatalog(id, { fresh = false, version = "", includeDefault = false } = {}) {
     const adapter = all[id], known = listed.get(id);
-    if (!adapter?.levels || !run) return Promise.resolve(null);
-    if (known && !fresh && Date.now() - known.at < 30000) return known.reading;
+    if ((!adapter?.catalog && !adapter?.levels) || !run) return Promise.resolve(null);
+    if (known && !fresh && Date.now() - known.at < 30000 && (!includeDefault || known.hasDefault)) return known.reading;
     const launch = launchOf(id);
     if (!launch || launch.app) return Promise.resolve(null);
-    const { command:cmd, args, parse } = adapter.levels(launch);
     // A list that could not be read leaves the last one standing.
-    const entry = { at:Date.now(), effortsFor:known?.effortsFor || null, reading:null };
-    entry.reading = Promise.resolve().then(() => run(cmd, args, { env:prepareAgentEnv(env, launch.env, { platform }), timeout:20000, maxBuffer:16 * 1024 * 1024 }))
-      .then(answer => { const read = answer?.status === 0 ? parse(answer.stdout) : null; if (read) entry.effortsFor = read; return entry.effortsFor; }, () => entry.effortsFor);
+    const entry = {
+      at:Date.now(),
+      choices:known?.choices || null,
+      effortsFor:known?.effortsFor || null,
+      defaultModel:known?.defaultModel || "",
+      hasDefault:Boolean(includeDefault),
+      reading:null,
+    };
+    const snapshot = () => (entry.choices || entry.effortsFor || entry.defaultModel
+      ? { choices:entry.choices || [], effortsFor:entry.effortsFor, defaultModel:entry.defaultModel }
+      : null);
+    const ask = adapter.catalog
+      ? Promise.resolve().then(() => adapter.catalog(launch, { env, run, platform, version, includeDefault }))
+      : Promise.resolve().then(() => {
+          const { command:cmd, args, parse } = adapter.levels(launch);
+          return run(cmd, args, { env:prepareAgentEnv(env, launch.env, { platform }), timeout:20000, maxBuffer:16 * 1024 * 1024 })
+            .then(answer => {
+              const read = answer?.status === 0 ? parse(answer.stdout) : null;
+              return read ? { choices:[], effortsFor:read, defaultModel:"" } : null;
+            });
+        });
+    entry.reading = ask.then(read => {
+      if (read) {
+        if (read.choices?.length) entry.choices = read.choices;
+        if (read.effortsFor) entry.effortsFor = read.effortsFor;
+        if (read.defaultModel) entry.defaultModel = read.defaultModel;
+        else if (includeDefault && read.choices?.length) entry.defaultModel = "";
+      } else {
+        entry.hasDefault = Boolean(known?.hasDefault);
+      }
+      return snapshot();
+    }, () => {
+      entry.hasDefault = Boolean(known?.hasDefault);
+      return snapshot();
+    });
     listed.set(id, entry);
     return entry.reading;
+  }
+  function listLevels(id, options = {}) {
+    return listCatalog(id, options).then(catalog => catalog?.effortsFor || null);
   }
   // While PenEcho updates an agent (agent-check.js), a Work of it starts after the update, or after a minute, whichever is first.
   const updating = new Map();
@@ -598,8 +686,16 @@ function createAgents(options = {}) {
   }
   // What is known of an agent's models: what its settings say, and over that what it last listed itself.
   const aboutOf = id => {
-    const about = modelOf(id, env, id === "penecho" ? where.penecho : null), known = listed.get(id)?.effortsFor;
-    return about && known ? { ...about, effortsFor:{ ...about.effortsFor, ...known } } : about;
+    const about = modelOf(id, env, id === "penecho" ? where.penecho : null), known = listed.get(id);
+    if (!about || !known) return about;
+    const effortsFor = known.effortsFor ? { ...about.effortsFor, ...known.effortsFor } : about.effortsFor;
+    if (!known.choices?.length) return { ...about, effortsFor };
+    const hasConfigured = Boolean(about.name && known.choices.includes(about.name));
+    const name = !hasConfigured && known.defaultModel ? known.defaultModel : about.name;
+    const effort = !hasConfigured && known.defaultModel ? "" : about.effort;
+    const from = !hasConfigured && known.defaultModel ? "" : about.from;
+    const choices = [...new Set([name && known.choices.includes(name) ? name : "", ...known.choices].filter(Boolean))].slice(0, 300);
+    return { ...about, name, effort, from, choices, effortsFor };
   };
   // A level its model is known not to take is never handed over. Pi and omp would quietly run at another level, OpenCode with none, and Kimi Code with none
   // or with a level its settings do not give the model, while PenEcho went on showing the one picked. Known means these agents' own word on that very model;
@@ -680,7 +776,7 @@ function createAgents(options = {}) {
     if (!adapter) return null;
     const launch = adapter.resolve(env, where);
     if (!launch) return null;
-    const given = { env, model:modelFor(id), effort:effortFor(id), ...options };
+    const given = { env, model:modelFor(id), effort:effortFor(id), ...(id === "opencode" ? { defaultModel:aboutOf(id)?.name || "" } : {}), ...options };
     sure(id, given.model, given.effort);
     return withLaunchEnv(launch, adapter.command(launch, given), adapter, platform);
   }
@@ -759,14 +855,14 @@ function createAgents(options = {}) {
     }
     return null;
   }
-  // Ask tab: the one-off command that answers a question about the project with this agent, or null when it has no such mode.
+  // Ask tab: the one-off read-only command that answers a question about the project with this agent, or null when it has no such mode.
   const canAnswer = id => Boolean(all[id]?.answer);
-  function answerer(id, { model = "", effort = "", resume = "" } = {}) {
+  function answerer(id, { model = "", effort = "", resume = "", dirs = [] } = {}) {
     if (!all[id]?.answer) return null;
     const launch = launchOf(id);
     if (!launch || launch.app) return null;
     sure(id, model, effort);
-    return withLaunchEnv(launch, all[id].answer(launch, { model, effort, resume, env }), all[id], platform);
+    return withLaunchEnv(launch, all[id].answer(launch, { model, effort, resume, dirs, env, ...(id === "opencode" ? { defaultModel:aboutOf(id)?.name || "" } : {}) }), all[id], platform);
   }
   // The orchestrator's reviewer: the command that reads the code folder itself (tools:true), else the plain answer with what PenEcho hands it.
   // Simple no-edit tasks pass noTools:true to run a single fast no-tool turn without launching workspace tools.
@@ -808,7 +904,7 @@ function createAgents(options = {}) {
       };
     });
   }
-  return { available, setUpdating, whenUpdated, command, hasResumeSession, creditsRefusal, creditsRefused, clearCreditsRefusal, endRun, onModelRetry, desktop, desktopNew, openApp, appOnly, terminal, terminalLine, nameOf, launch:launchOf, classifier, canAnswer, canReviewWithTools, answerer, reviewer, openNow, describe, useModelFile, pickModel, modelFor, effortFor, configuredModel, configuredEffort, listLevels, refusal, env, reset() { cached = null; apps.clear(); found.clear(); listed.clear(); openCache = null; dshVersions.clear(); claudeModes.clear(); } };
+  return { available, setUpdating, whenUpdated, command, hasResumeSession, creditsRefusal, creditsRefused, clearCreditsRefusal, endRun, onModelRetry, desktop, desktopNew, openApp, appOnly, terminal, terminalLine, nameOf, launch:launchOf, classifier, canAnswer, canReviewWithTools, answerer, reviewer, openNow, describe, useModelFile, pickModel, modelFor, effortFor, configuredModel, configuredEffort, listCatalog, listLevels, refusal, env, reset() { cached = null; apps.clear(); found.clear(); listed.clear(); openCache = null; dshVersions.clear(); claudeModes.clear(); openCodeVersions.clear(); } };
 }
 
 module.exports = { createAgents, dshInApp, dshSavedKeys, dshTakesFolders, fromFolder, accessOf };

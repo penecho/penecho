@@ -396,8 +396,8 @@ test("core.js Canvas AI lets Guests switch across multiple free models while pre
   assert.match(document.getElementById("settingsCanvasAiStatus").textContent, /8 \/ 10 left today/);
 });
 
-test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General and Archived are its tabs", async () => {
-  const { document, window } = parseHTML("<!doctype html><html><head></head><body><main id='app'></main></body></html>");
+test("Settings is one window: Project agents, Canvas, Integrations and App groups hold its tabs", async () => {
+  const { document, window } = parseHTML("<!doctype html><html><head></head><body><main id='app'></main><div id='view'></div></body></html>");
   const app = document.getElementById("app");
   const storage = new Map();
   const sStorage = new Map([[
@@ -419,6 +419,11 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
     projects: [{ id: "old", name: "Old", archived: true }],
   };
   const ACT = {};
+  const signedInAccount = S.cloudAccount;
+  let account = signedInAccount;
+  let readModels;
+  const catalog = { ok:true, json:async () => ({ accountId:"acc-1", origin:"https://penecho.ai", models:[{ id:"m-cloud", displayName:"Cloud Pro", available:true, enabled:true, multiplier:1 }] }) };
+  const timers = [];
   const context = vm.createContext({
     window,
     document,
@@ -438,6 +443,16 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
     VIEWS: {},
     COMMANDS: [],
     HOSTED: null,
+    ICONS: {},
+    addEventListener() {},
+    setInterval(fn) { return timers.push(fn); },
+    clearInterval() {},
+    project: () => null,
+    api: async (url) => {
+      if (url === "/cloud/account") return account;
+      if (url === "/cloud/sign-in") return { authorizationUrl:"https://penecho.ai/dashboard.html" };
+      return {};
+    },
     SETUP_ORDER: { ready: 0, setup: 1, none: 2 },
     setupRowHTML: (a) => `<div class="setup-row">${a.name}</div>`,
     $: (sel, root = document) => root.querySelector(sel),
@@ -446,6 +461,7 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
     toast() {},
     themeRow: () => '<div class="set-theme"></div>',
     agentInfo: (id) => ({ name: id }),
+    av: (id) => `<span class="av">${id}</span>`,
     installedAgentHTML: () => '<div id="installed"></div>',
     archivedProjectsHTML: () => '<div id="archivedList">Old</div>',
     checkAgents() {},
@@ -454,16 +470,16 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
     render() { context.renderSettingsModal(); },
     fetch: async (url) => {
       if (url === "/api/cloud/models") {
-        return { ok: true, json: async () => ({ accountId: "acc-1", origin: "https://penecho.ai", models: [{ id: "m-cloud", displayName: "Cloud Pro", available: true, enabled: true, multiplier: 1 }] }) };
+        return readModels();
       }
-      if (url === "/api/lines/connections") {
-        return { ok: true, json: async () => ({ connections: [{ id: "api-1", provider: "api", name: "DeepSeek Key", apiModel: "deepseek-chat", apiUrl: "https://api.deepseek.com/v1", hasApiKey: true }] }) };
+      if (url === "/api/settings/connections") {
+        return { ok: true, json: async () => ({ connections:[] }) };
       }
       if (url === "/api/mcp/status?inspectClients=1") {
         return { ok: true, json: async () => ({ http: { initialUrl: "http://127.0.0.1:3888/mcp" }, config: { command: "node", args: [] }, canConfigureLocalClients: true, configuredClients: {} }) };
       }
       if (url === "/api/suggest/status") {
-        return { ok: true, json: async () => ({ access: { signedIn: true, subscribed: false, paidEnabled: false, dailyCreditLimit: 50, spentToday: 0 } }) };
+        return { ok: true, json: async () => ({ access: { signedIn:account.signedIn, subscribed:false, paidEnabled:false, dailyCreditLimit:50, spentToday:0 } }) };
       }
       return { ok: true, json: async () => ({}) };
     },
@@ -472,35 +488,73 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
 
   vm.runInContext(read("public/lines/settings.js"), context, { filename: "public/lines/settings.js" });
 
-  // Opening Settings by default lands on the Agents tab, even after visiting General or Canvas.
+  // With no preset saved yet the gear opens Local providers, step 1 of Project agents; once one is saved, Preset agents.
   const selected = () => document.querySelector('.sysm-tabs [aria-selected="true"]').dataset.tab;
   const title = () => document.querySelector(".sysm-head h3").textContent;
+  const domain = () => document.querySelector(".sysm-head .sys-domain-tag").textContent;
   context.ACT["open-settings"]();
   await settle();
-  assert.equal(selected(), "agents", "open-settings defaults to Agents");
-  assert.equal(title(), "Agents");
-  assert.equal(location.hash, "#agents");
-  assert.ok(document.getElementById("sysAgents"));
+  assert.equal(selected(), "setup", "no saved preset yet: open-settings starts at Local providers");
+  assert.equal(title(), "Local providers");
+  assert.equal(domain(), "Project agents · Step 1");
+  assert.equal(location.hash, "#setup", "#setup is a tab of its own");
+  assert.ok(document.getElementById("sysInstalled"));
+  assert.equal(document.getElementById("sysAgents"), null);
+  assert.equal(document.querySelector('#sysPanel .sys-flow-step.is-active').dataset.tab, "setup");
+  assert.deepEqual([...document.querySelectorAll('#sysPanel .sys-flow-step')].map((el) => el.dataset.tab), ["setup", "agents"]);
+  S.presets = { default: "", presets: [{ id: "p-cloud", agent: "penecho", name: "PenEcho · worker", model: "worker", effort: "", available: true, auto: false }] };
+  S.computer = { id: "mac-1", runsAsks: false };
   context.openSettingsTab("general");
   await settle();
   assert.equal(selected(), "general");
+  assert.equal(domain(), "App");
+  // General: Preferences, PenEcho Cloud sync, About, and Help us improve PenEcho at the very bottom.
+  // (An earlier test leaves the shared window on the cloud runtime, where Help us improve PenEcho is not offered.)
+  const generalHeads = [...document.querySelectorAll("#sysPanel > section")].map((el) => el.querySelector("h2")?.textContent);
+  assert.deepEqual(generalHeads.slice(0, 3), ["Preferences", "PenEcho Cloud sync", "About"]);
+  assert.ok(generalHeads.length === 3 || generalHeads[3] === "Help us improve PenEcho", generalHeads.join(", "));
+  assert.ok(document.querySelector('#sysCloudAsks [data-act="computer-asks-toggle"]'));
   context.ACT["open-settings"]();
   await settle();
-  assert.equal(selected(), "agents", "open-settings opens Agents by default after visiting General");
+  assert.equal(selected(), "agents", "with a saved preset, open-settings opens Preset agents");
+  assert.equal(title(), "Preset agents");
+  assert.equal(domain(), "Project agents · Step 2");
   assert.equal(location.hash, "#agents");
+  assert.ok(document.getElementById("sysAgents"));
+  assert.equal(document.getElementById("sysCloudAsks"), null, "PenEcho Cloud sync moved to General");
+  assert.equal(document.getElementById("sysInstalled"), null, "the installed CLIs are on Local providers");
+  assert.match(document.querySelector('#sysPanel .sys-flow-step[data-tab="agents"]').textContent, /1 saved preset active/);
   context.openSettingsTab();
   await settle();
-  assert.equal(selected(), "agents", "openSettingsTab() with no argument defaults to Agents");
+  assert.equal(selected(), "agents", "openSettingsTab() with no argument uses the same default");
+  S.agentCheck.problems = 1;
+  context.ACT["open-settings"]();
+  await settle();
+  assert.equal(selected(), "setup", "a CLI that needs a fix opens Local providers");
+  assert.equal(document.querySelector("#sysTab-setup .setup-count")?.textContent, "1");
+  S.agentCheck.problems = 0;
+  // Step 2 of the flow strip goes to Preset agents, and arrows move across the groups.
+  context.ACT["settings-tab"](document.querySelector('#sysPanel .sys-flow-step[data-tab="agents"]'));
+  await settle();
+  assert.equal(selected(), "agents");
+  const arrow = new window.Event("keydown", { bubbles: true });
+  Object.defineProperty(arrow, "key", { value: "ArrowDown" });
+  document.getElementById("sysTab-agents").dispatchEvent(arrow);
+  await settle();
+  assert.equal(selected(), "providers", "ArrowDown from the last Project agents tab reaches the first Canvas tab");
 
   context.openSettingsTab("canvas");
   await settle();
 
-  // One window over the page, its tabs down the left: the AI parts first, then Canvas and General, then Archived.
+  // One window over the page, its tabs down the left in four groups: two workflows, the MCP integration, then the app.
   const tabs = [...document.querySelectorAll('.sysm-tabs [role="tab"]')].map((el) => el.textContent.trim());
-  assert.deepEqual(tabs, ["Agents", "Canvas AI", "MCP", "Providers", "Canvas", "General", "Archived1"]);
-  assert.equal(document.querySelectorAll(".sysm-tabs hr").length, 2);
+  assert.deepEqual(tabs, ["Local providers", "Preset agents1", "API providers", "Canvas AI", "View", "MCP", "General", "Archived1"]);
+  assert.deepEqual([...document.querySelectorAll(".sysm-tabs .sysm-group-label")].map((el) => el.textContent), ["Project agents", "Canvas", "Integrations", "App"]);
+  assert.deepEqual([...document.querySelectorAll(".sysm-tabs .sysm-group")].map((g) => [...g.querySelectorAll('[role="tab"]')].map((el) => el.dataset.tab)), [["setup", "agents"], ["providers", "canvas-ai", "canvas"], ["apps"], ["general", "archived"]]);
+  assert.equal(document.querySelectorAll(".sysm-tabs hr").length, 0);
   assert.equal(selected(), "canvas");
-  assert.equal(title(), "Canvas");
+  assert.equal(title(), "Canvas view");
+  assert.equal(domain(), "Canvas");
   assert.equal(location.hash, "#settings/canvas");
   assert.equal(app.innerHTML, "", "the page beneath is left as it was");
   assert.equal(document.querySelector("[data-canvas-ai]"), null);
@@ -513,9 +567,9 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
   assert.deepEqual([...rail.querySelectorAll("button")].map((el) => el.dataset.act), ["open-settings"]);
   context.openSettingsTab("agents");
   await settle();
-  assert.equal(location.hash, "#agents", "an old Agents tab link opens Agents");
+  assert.equal(location.hash, "#agents", "an old Agents tab link opens Preset agents");
   assert.equal(selected(), "agents");
-  assert.equal(title(), "Agents");
+  assert.equal(title(), "Preset agents");
   assert.equal(document.querySelectorAll(".sysm").length, 1, "tabs change inside the one window");
   assert.ok(document.getElementById("sysAgents"), "saved agents are on Agents");
   assert.doesNotMatch(document.getElementById("sysPanel").textContent, /runs on dsh/i);
@@ -525,12 +579,21 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
   context.ACT["open-providers"]();
   await settle();
   assert.equal(location.hash, "#providers");
-  assert.equal(title(), "Providers");
+  assert.equal(title(), "API providers");
+  assert.equal(domain(), "Canvas AI · Step 1");
+  assert.deepEqual([...document.querySelectorAll('#sysPanel .sys-flow-step')].map((el) => el.dataset.tab), ["providers", "canvas-ai"]);
+  assert.equal(document.querySelector('#sysPanel .sys-flow-step.is-active').dataset.tab, "providers");
+  assert.match(document.querySelector('#sysPanel .sys-flow-step[data-tab="providers"]').textContent, /PenEcho Cloud/);
   const subsecs = [...document.querySelectorAll("#sysPanel .sys-subsec")];
   assert.equal(subsecs.length, 2);
   assert.match(subsecs[0].textContent, /PenEcho Cloud/);
-  assert.doesNotMatch(subsecs[0].textContent, /Add API key/, "PenEcho Cloud section has no Add API key");
-  assert.match(document.getElementById("sysKeys").textContent, /Add API key/, "API keys for Canvas AI has Add API key");
+  assert.match(subsecs[0].textContent, /Zero-key managed models for Canvas AI/);
+  assert.match(subsecs[0].textContent, /Connected/);
+  assert.equal(subsecs[0].querySelector('[data-act="settings-tab"]').dataset.tab, "canvas-ai", "Pick Cloud model goes to Canvas AI");
+  assert.doesNotMatch(subsecs[0].textContent, /Add API provider/, "PenEcho Cloud section has no Add API provider");
+  assert.match(document.getElementById("sysKeys").textContent, /Your API keys & local model servers/);
+  assert.match(document.getElementById("sysKeys").textContent, /Add API provider/);
+  assert.ok(document.querySelector('#sysKeys .sys-inline-link[data-act="open-setup"]'), "project agents are pointed to Local providers");
   // OpenCode is a relay with Zen and Go; its saved key keeps the preset that makes the server send OpenCode's session header.
   context.FormData = class { constructor(form) { this.form = form; } get(name) { return this.form.querySelector(`[name="${name}"]`)?.value ?? null; } };
   context.ACT["key-new"]();
@@ -552,17 +615,64 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
   assert.equal(vm.runInContext("keyPlaceLabel(savedOpenCode)", context), "OpenCode · Zen");
   assert.equal(vm.runInContext("keyFormFor(savedOpenCode).url", context), "https://opencode.ai/zen/v1", "the form shows the base address, not the Messages path");
   assert.equal(vm.runInContext("keyFormFor(savedOpenCode).saved.preset", context), "opencode-zen-global-api");
+  // A new key is used by Canvas AI right away unless that box is cleared; another saved key is one click away.
+  const localKey = `penecho-ai-connection-id:local:${location.origin}`;
+  context.ACT["key-new"]();
+  await settle();
+  context.ACT["key-pick"](document.querySelector('#sysKeys .pk-tile[data-service="openai"]'));
+  await settle();
+  assert.ok(document.querySelector('.sys-form[data-form="key"] input[name="useNow"]').hasAttribute("checked"));
+  const savedKey = { id: "k-new", provider: "api", apiFormat: "openai", apiUrl: "https://api.openai.com/v1", apiModel: "gpt-5.6-sol", hasApiKey: true, removable: true };
+  const otherKey = { id: "k-old", provider: "api", apiFormat: "openai", apiUrl: "https://api.deepseek.com/v1", apiModel: "deepseek-chat", hasApiKey: true, removable: true };
+  const baseFetch = context.fetch;
+  context.fetch = async (url, init) => (url === "/api/settings/connections" && init?.method === "POST"
+    ? { ok: true, json: async () => ({ connections: [savedKey, otherKey], savedId: "k-new" }) }
+    : baseFetch(url, init));
+  context.keySave();
+  await settle();
+  context.fetch = baseFetch;
+  assert.equal(storage.get(localKey), "k-new");
+  assert.equal(storage.get("penecho-ai-connection-id"), "k-new");
+  const keyRow = (id) => document.querySelector(`#sysKeys [data-key="${id}"]`);
+  assert.match(keyRow("k-new").textContent, /Active in Canvas AI/);
+  assert.equal(keyRow("k-new").querySelector('[data-act="settings-tab"]').textContent, "Open Canvas AI →");
+  const useOther = keyRow("k-old").querySelector('[data-act="key-use"]');
+  assert.equal(useOther.textContent, "Use in Canvas AI");
+  context.ACT["key-use"](useOther);
+  assert.equal(storage.get(localKey), "k-old");
+  assert.equal(storage.get("penecho-ai-connection-id"), "k-old");
+  assert.match(keyRow("k-old").textContent, /Active in Canvas AI/);
+  assert.doesNotMatch(keyRow("k-new").textContent, /Active in Canvas AI/);
+  assert.match(document.querySelector('#sysPanel .sys-flow-step[data-tab="providers"]').textContent, /PenEcho Cloud · 2 API keys/);
+  vm.runInContext("SET.keys = []", context);
+  storage.delete(localKey);
+  storage.delete("penecho-ai-connection-id");
   assert.match(document.querySelector(".sys-back").textContent, /Back to Forecast layout/);
   context.openSettingsTab("apps");
   await settle();
   assert.equal(location.hash, '#agents/apps', 'an old Settings apps link opens MCP');
   assert.ok(document.getElementById('sysApps'));
   assert.equal(selected(), 'apps');
+  assert.equal(domain(), 'External integration');
+  assert.match(document.querySelector('#sysPanel > .sys-notice').textContent, /Separate external integration: MCP lets outside AI apps connect into PenEcho/);
+  assert.equal(document.getElementById('sysApps').textContent, 'Local MCP bridge');
+  assert.match(document.getElementById('sysPanel').textContent, /Listening/);
+  assert.deepEqual([...document.querySelectorAll('#sysPanel [data-act="mcp-configure"]')].map((el) => [el.dataset.client, el.textContent]), [['claude', 'Configure Claude'], ['codex', 'Configure Codex']]);
+  assert.ok(document.getElementById('sysMcpClients'));
+  assert.ok(document.querySelector('[aria-labelledby="sysMcpSession"] #prefKeepAwake'));
+  vm.runInContext('SET.mcp.connectedCanvases = 2; SET.mcp.configuredClients = { codex:{ configured:true } }; render();', context);
+  assert.equal(document.querySelector('#sysTab-apps .sys-nav-ok').textContent, '2 live');
+  assert.equal(document.querySelector('#sysPanel [data-client="codex"]').textContent, 'Reconfigure');
+  assert.match(document.querySelector('#sysPanel [data-client="codex"]').closest('.sys-row').textContent, /Configured/);
   context.ACT["settings-tab"]({ dataset: { tab: "archived" } });
   assert.equal(location.hash, "#archived");
   assert.equal(title(), "Archived");
   assert.ok(document.getElementById("archivedList"), "archived projects are a Settings tab");
 
+  account = { signedIn:false };
+  window.open = () => {};
+  vm.runInContext(read("public/lines/cloud.js"), context, { filename:"public/lines/cloud.js" });
+  await settle();
   context.openAgents('canvas');
   await settle();
   assert.equal(location.hash, "#agents/canvas");
@@ -571,16 +681,46 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
   assert.ok(document.getElementById('sysCanvasDraw'));
   assert.ok(document.getElementById('sysSuggestSpend'));
 
-  // Canvas AI card links directly to the Providers settings page.
+  const canvasCard = () => document.querySelector(".sys-canvas-ai");
+  const modelPicker = () => canvasCard().querySelector("[data-canvas-ai]");
+  const signInButton = () => canvasCard().querySelector('[data-act="cloud-sign-in"]');
+  assert.ok(signInButton());
+  assert.ok(canvasCard().querySelector('[data-act="settings-go-keys"]'));
+
+  // Complete desktop sign-in while Canvas AI is still open. A slow or failed
+  // model request must not turn the already signed-in account back into Sign in.
+  let finishModels;
+  readModels = () => new Promise(resolve => { finishModels = resolve; });
+  await context.ACT["cloud-sign-in"](signInButton());
+  account = signedInAccount;
+  await timers.at(-1)();
+  assert.equal(document.querySelector('#sysPanel [data-act="cloud-sign-in"]'), null);
+  assert.match(canvasCard().textContent, /Signed in to PenEcho Cloud\. Loading Cloud models/);
+  finishModels({ ok:false, status:503 });
+  await settle();
+  assert.match(canvasCard().textContent, /Couldn’t load Cloud models/);
+  assert.equal(signInButton(), null);
+  const retry = canvasCard().querySelector('[data-act="canvas-ai-retry"]');
+  assert.ok(retry);
+  context.ACT[retry.dataset.act](retry);
+  assert.match(canvasCard().textContent, /Loading Cloud models/);
+  finishModels(catalog);
+  await settle();
+  assert.ok(modelPicker().querySelector('option[value="hosted:m-cloud"]'));
+  assert.equal(signInButton(), null);
+
+  // Canvas AI card links directly to the API providers settings page, under the same two steps.
+  assert.equal(document.querySelector('#sysPanel .sys-flow-step.is-active').dataset.tab, "canvas-ai");
+  assert.equal(domain(), "Canvas AI · Step 2");
   const providersLink = document.querySelector('.sys-canvas-ai button[data-act="open-providers"]');
-  assert.ok(providersLink, "Canvas AI card has a link to Providers");
-  assert.equal(providersLink.textContent.trim(), "Manage providers");
+  assert.ok(providersLink, "Canvas AI card has a link to API providers");
+  assert.equal(providersLink.textContent.trim(), "Manage API providers");
   assert.equal(providersLink.dataset.focusId, "sysTab-providers");
   context.ACT[providersLink.dataset.act](providersLink);
   await settle();
   assert.equal(location.hash, "#providers");
   assert.equal(selected(), "providers");
-  assert.equal(title(), "Providers");
+  assert.equal(title(), "API providers");
   assert.ok(document.getElementById("sysKeys"));
   context.openAgents('canvas');
   await settle();
@@ -595,7 +735,8 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
   assert.equal(storage.get("penecho-ai-connection-id"), "hosted:m-cloud");
   const providersLinkSelected = document.querySelector('.sys-canvas-ai button[data-act="open-providers"]');
   assert.ok(providersLinkSelected, "Canvas AI card keeps the Providers link after picking a model");
-  assert.match(document.querySelector(".sys-canvas-ai small").textContent, /Currently using Cloud Pro · Manage providers/);
+  assert.match(document.querySelector(".sys-canvas-ai small").textContent, /Currently using Cloud Pro · Manage API providers/);
+  assert.match(document.querySelector('#sysPanel .sys-flow-step[data-tab="canvas-ai"]').textContent, /Using Cloud Pro/);
 
   // Thinking effort for Canvas AI, beside the model: the same entry the Canvas AI bar uses.
   const effort = document.querySelector('select[data-canvas-effort]');
@@ -614,6 +755,28 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
   const wheelSwitch = document.getElementById("prefWheelZoom");
   wheelSwitch.click();
   assert.equal(storage.get("penecho-wheel-zoom"), "true");
+
+  // Signed in as someone else between two account checks: the first account's models are not kept.
+  context.openAgents('canvas');
+  await settle();
+  account = { ...signedInAccount, id:"acct-other", name:"Other" };
+  readModels = () => new Promise(resolve => { finishModels = resolve; });
+  await context.loadCloudAccount();
+  assert.equal(modelPicker(), null);
+  assert.match(canvasCard().textContent, /Loading Cloud models/);
+  finishModels(catalog);
+  await settle();
+  assert.ok(modelPicker().querySelector('option[value="hosted:m-cloud"]'));
+
+  // A response from before sign-out must not repopulate the model picker.
+  context.openAgents('canvas');
+  const pending = context.loadCloudModels();
+  account = { signedIn:false };
+  await context.loadCloudAccount();
+  finishModels(catalog);
+  await pending;
+  assert.equal(modelPicker(), null);
+  assert.ok(signInButton());
 
   // Back button navigates to stored return route
   context.ACT["settings-return"]();
@@ -638,7 +801,7 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
     assert.equal(vm.runInContext('SET.agentsTab', context), section, hash);
   }
   assert.equal(vm.runInContext("parseShelfPage('#setup')", context), 'setup');
-  assert.equal(vm.runInContext('SET.agentsTab', context), 'agents');
+  assert.equal(vm.runInContext('SET.agentsTab', context), 'apps', '#setup is a tab of its own and leaves the Agents section as it was');
   for (const hash of ['#agents/unknown', '#agents/apps/extra', '#agents-extra']) assert.equal(vm.runInContext(`parseShelfPage(${JSON.stringify(hash)})`, context), false, hash);
   assert.equal(vm.runInContext("parseShelfPage('#settings/canvas')", context), 'settings');
   assert.equal(vm.runInContext('SET.tab', context), 'canvas');
@@ -647,6 +810,9 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
 
   // Hosted Projects render the same destinations, with computer-only setup omitted.
   context.HOSTED = { computers:[] };
+  context.hostedFetch = async () => catalog;
+  account = signedInAccount;
+  await context.loadCloudAccount();
   S.thisComputer = false;
   context.openAgents('apps');
   await settle();
@@ -654,19 +820,28 @@ test("Settings is one window: Agents, Canvas AI, MCP, Providers, Canvas, General
   assert.ok(document.getElementById('sysApps'));
   assert.equal(document.querySelector('[data-act="mcp-configure"]'), null);
   assert.equal(document.getElementById('sysTab-archived'), null, 'penecho.ai lists no archived projects');
-  assert.equal(document.querySelectorAll('.sysm-tabs hr').length, 1);
+  assert.equal(document.querySelectorAll('.sysm-tabs .sysm-group').length, 4);
+  assert.match(document.querySelector('#sysPanel > .sys-notice').textContent, /Separate external integration/);
+  assert.ok(document.querySelector('#sysPanel #prefKeepAwake'));
   context.openAgents('canvas');
   await settle();
   assert.ok(document.querySelector('[data-canvas-effort]'));
-  assert.equal(document.querySelector('.sys-canvas-ai button[data-act="open-providers"]')?.textContent.trim(), 'Manage providers');
+  assert.equal(document.querySelector('.sys-canvas-ai button[data-act="open-providers"]')?.textContent.trim(), 'Manage API providers');
   vm.runInContext('SET.cloud = { models: [] }; SET.keys = []; render();', context);
-  assert.equal(document.querySelector('.sys-canvas-ai button[data-act="open-providers"]')?.textContent.trim(), 'Providers');
+  assert.equal(document.querySelector('.sys-canvas-ai button[data-act="open-providers"]')?.textContent.trim(), 'API providers');
+  assert.match(canvasCard().textContent, /Signed in to PenEcho Cloud\. No Cloud models are available/);
+  assert.equal(signInButton(), null);
   S.thisComputer = true;
   vm.runInContext('render();', context);
-  assert.equal(document.querySelector('.sys-canvas-ai button[data-act="open-providers"]')?.textContent.trim(), 'Providers');
+  assert.equal(document.querySelector('.sys-canvas-ai button[data-act="open-providers"]')?.textContent.trim(), 'API providers');
+  assert.equal(document.querySelector('.sys-canvas-ai [data-act="settings-go-keys"]')?.textContent.trim(), 'Add API provider');
   S.thisComputer = false;
-  context.openAgents();
+  context.ACT["open-settings"]();
+  assert.equal(selected(), 'agents', 'penecho.ai opens Preset agents');
+  context.openSettingsTab('setup');
   assert.match(document.getElementById('sysPanel').textContent, /On your computers/);
+  assert.match(document.querySelector('#sysPanel .sys-flow-step[data-tab="setup"]').textContent, /Connected computers/);
+  context.openAgents();
 
   // Delayed responses refresh their active destination, never another AI panel.
   context.HOSTED = null;

@@ -42,6 +42,15 @@ async function fixture(t, agent, recover) {
     readline.createInterface({ input:process.stdin }).on("line", line => {
       const { type } = JSON.parse(line);
       if (type === "fixture_tick") process.stdout.write(${JSON.stringify(burst)});
+      if (type === "fixture_retry") {
+        console.log(JSON.stringify({ type:"agent_start" }));
+        console.log(JSON.stringify({ type:"message_end", message:{ role:"assistant", stopReason:"error", errorMessage:"Retrying the model" } }));
+        console.log(JSON.stringify({ type:"agent_end", isTerminal:false, yielded:false, messages:["x".repeat(2048)] }));
+      }
+      if (type === "fixture_finish") {
+        console.log(JSON.stringify({ type:"message_end", message:{ role:"assistant", stopReason:"stop", content:[{ type:"text", text:"Done" }] } }));
+        console.log(JSON.stringify({ type:"agent_end", isTerminal:true, yielded:true }));
+      }
       if (type === "fixture_exit") process.exit(0);
     });
   `);
@@ -78,6 +87,25 @@ async function fixture(t, agent, recover) {
   }
   return { service, run, dir, pid };
 }
+
+test("a reattached OMP keeper keeps input open through an interim end", async t => {
+  const { run, dir } = await fixture(t, "omp", true);
+  const send = type => run.child.stdin.write(JSON.stringify({ type }) + "\n");
+  const endMarker = path.join(dir, "input-end");
+  let interimDelivered = false;
+  run.child.stdout.on("data", bytes => {
+    if (JSON.parse(bytes).yielded === false) interimDelivered = true;
+  });
+  send("fixture_retry");
+  await until(() => interimDelivered, "reattached process to read the interim end");
+  assert.equal(run.lastFailed, true);
+  assert.equal(run.rpcStreaming, true);
+  assert.equal(fs.existsSync(endMarker), false);
+  send("fixture_finish");
+  await until(() => fs.existsSync(endMarker), "final end to close input");
+  assert.equal(run.lastFailed, false);
+  assert.equal(run.answer, "Done");
+});
 
 for (const agent of ["pi", "omp"]) {
   for (const recover of [false, true]) {

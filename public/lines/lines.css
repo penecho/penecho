@@ -1225,6 +1225,7 @@ button.file-ref:hover { background: var(--soft); }
 .at-error { display: flex; align-items: flex-start; gap: 7px; padding: 9px 11px; color: var(--red); font-size: 14px; background: var(--red-soft); border-radius: 9px; overflow-wrap: anywhere; }
 .at-error .ic { margin-top: 2px; }
 .at-error.is-off { color: var(--ink2); background: var(--soft); }
+.at-error.at-fixable .btn { flex: none; margin-left: auto; align-self: center; }
 .at { min-width: 0; font-size: 13.5px; color: var(--ink2); }
 .at, .at > summary { display: flex; align-items: center; gap: 7px; min-height: 24px; }
 details.at { display: block; }
@@ -1602,7 +1603,7 @@ details.at:not([open]) > .at-body { display: none; }
 @media (max-width: 760px) { .ex-row { grid-template-columns: minmax(0, 1fr); } }
 .dock-wrap.is-inviting .composer { box-shadow: 0 0 0 4px var(--accent-soft), 0 10px 30px rgba(15, 23, 42, .12); }
 .dock-wrap.is-inviting .cmp-input { min-height: 54px; font-size: 15.5px; }
-/* New project: header, 8 equal points in a 2×4 grid above, and the Create project form centered below (PE-823).
+/* New project: 8 feature points above the form and local architecture diagram.
    The example projects are already in the sidebar (hosted mode shows them inside the form card). */
 .np-page { container: np-page / inline-size; padding: 28px 32px 56px; }
 .np-grid { display: flex; flex-direction: column; gap: 22px; max-width: 1120px; margin: 0 auto; }
@@ -1610,7 +1611,14 @@ details.at:not([open]) > .at-body { display: none; }
 .np-title { margin: 0; font-size: 25px; font-weight: 650; line-height: 1.2; letter-spacing: -.02em; }
 .np-tagline { margin: 0; color: var(--ink3); font-size: 14px; line-height: 1.4; }
 .np-gives { width: 100%; min-width: 0; }
-.np-grid > .np-card { width: min(680px, 100%); margin: 0 auto; min-width: 0; }
+.np-setup { display: grid; gap: 20px; width: min(680px, 100%); margin: 0 auto; }
+.np-setup > * { min-width: 0; }
+.np-architecture { display: block; color: var(--ink2); text-align: center; font-size: 13px; }
+.np-architecture img { display: block; width: 100%; height: auto; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 12px; }
+.np-architecture:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 12px; }
+@container np-page (min-width: 840px) {
+  .np-setup:has(> .np-architecture) { width: 100%; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+}
 .np-skill-on { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 13.5px; font-weight: 560; }
 .np-card { padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); box-shadow: 0 6px 18px rgba(17, 24, 39, .07); }
 .np-card .pls-form { border: 0; padding: 0; background: none; border-radius: 0; }

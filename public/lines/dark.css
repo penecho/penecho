@@ -120,6 +120,10 @@
 :root[data-mode="dark"] .pk-img.is-mono { filter: invert(1); }
 /* The Settings window: the page beneath dims as much as it does in Light. */
 :root[data-mode="dark"] .sysm-scrim { background: rgba(0, 0, 0, .55); }
+/* Its workflow steps: the step on show lifts off the strip, as the paper does in Light. */
+:root[data-mode="dark"] .sys-flow { background: var(--paper); }
+:root[data-mode="dark"] .sys-flow-step.is-active { background: var(--soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+:root[data-mode="dark"] .sys-flow-step.is-active .sys-flow-num { color: #0b1220; background: var(--accent-label); }
 :root[data-mode="dark"] .lp-panel-backdrop { background: rgba(0, 0, 0, .58); }
 :root[data-mode="dark"] .lp-panel.is-popped { border-color: var(--line2); }
 

@@ -5554,6 +5554,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       else if (event.key === "penecho-canvas-hints-enabled") setCanvasHintsEnabled(event.newValue !== "false");
       else if (event.key === "penecho-widget-shadow") setWidgetShadowEnabled(event.newValue === "true");
       else if (event.key === "penecho-auto-ai") setAutoEnabled(event.newValue === "true", false);
+      else if (event.key === "penecho-language") {
+        const next = event.newValue === "zh" ? "zh" : "en";
+        if (next !== state.language) { state.language = next; applyLanguage(); }
+      }
       else if (event.key.startsWith(AI_CONNECTION_STORAGE_KEY)) { renderConnectionLists(); syncLocalConnectionSelection(); }
     });
   }
@@ -37212,8 +37216,8 @@ var canvasDocumentIdentity = (() => {
       spark = element.querySelector(".assist-spark"),
       docked = element.classList.contains("in-ai-bar"),
       viewport = canvasViewportMetrics().width,
-      // Inside the AI bar, leave room for the AI button and the bar's own edges.
-      width = docked ? Math.min(560, Math.max(0, viewport - 40 - (assistAiRun?.offsetWidth || 0)))
+      // Below the AI bar, keep the attached shelf within the Canvas viewport.
+      width = docked ? Math.min(560, Math.max(0, viewport - 24))
         : Math.min(640, Math.max(0, viewport - 16)),
       anchor = ask.parentElement === element ? ask : more,
       // Ask inside ⋯ takes no room on the bar, even with its box open.
@@ -37244,10 +37248,10 @@ var canvasDocumentIdentity = (() => {
     runtimeElementStyle(element, "assist-bar")?.setProperty("--assist-action-max-width", `${Math.max(40, available - fixedWidth - layout.gap * (count + 3))}px`);
     layout.key = key;
   }
-  // On a wide Canvas, suggestions for new ink and their results sit inside the
-  // AI bar, in place of its model, reasoning, Auto and colour, until they are
-  // used or closed. Selections, shape tools, allowance notices and narrow
-  // screens keep the floating bar beside the ink.
+  // On a wide Canvas, suggestions for new ink and their results dock in an
+  // attached shelf directly beneath the Canvas AI bar, keeping model,
+  // reasoning, Auto, colour and Favorites visible. Selections, shape tools,
+  // allowance notices and narrow screens keep the floating bar beside the ink.
   function assistInAiBar(bar) {
     if (!assistAiBar || !bar || !["suggest", "working", "result", "followup"].includes(bar.mode)) return false;
     if (bar.target?.selection || bar.cluster?.selection || bar.element.classList.contains("has-access-notice")) return false;

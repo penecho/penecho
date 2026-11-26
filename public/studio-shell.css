@@ -1144,22 +1144,20 @@ body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-
   body[data-theme="studio"] .primary-tools > .ai-tools-section > #aiToolbarRun.ai-section-label:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--studio-text) 85%, var(--studio-panel)); }
 }
 body[data-theme="studio"] #aiModelControl { position: relative; display: flex; align-items: center; min-width: 0; }
-/* Suggestions for new ink sit inside the Canvas AI bar (wide Canvas, set by smart-suggestions.js): they take the place of
-   the model, reasoning, Auto and colour until used or closed. A dot on AI keeps Auto visible. */
+/* Suggestions for new ink dock in a slim shelf directly beneath the Canvas AI bar (wide Canvas,
+   set by smart-suggestions.js), aligned to its right edge so model, reasoning, Auto, colour and
+   Favorites stay visible and usable at all times. */
 body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar {
-  position: relative; top: auto; left: auto; order: 1; flex: 0 1 auto; min-width: 0; max-width: none; height: 30px; gap: 2px; padding: 0;
-  border: 0; border-radius: 8px; background: transparent; box-shadow: none; transform: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+  position: absolute; z-index: 1; top: calc(100% + 6px); right: -1px; left: auto;
+  width: max-content; min-width: 0; max-width: calc(100vw - var(--pe-shell-right, 0px) - 24px);
+  height: 36px; min-height: 36px; box-sizing: border-box; gap: 2px; padding: 3px 4px;
+  border: 1px solid var(--studio-line); border-radius: 11px; background: var(--pe-shell-dock-surface); box-shadow: var(--pe-shell-float-shadow);
+  transform: none; -webkit-backdrop-filter: none; backdrop-filter: none;
   color: var(--studio-text); font-size: 12.5px; animation: none;
 }
-body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar::before { order: 1; flex: none; width: 1px; height: 20px; margin-left: 2px; background: var(--studio-line); content: ""; }
 body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar:is(:not(.visible), .is-request-hidden) { display: none; }
 body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar.is-writing { visibility: visible; opacity: .45; }
 body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar:has(.assist-llm-info) { flex-wrap: nowrap; }
-body[data-theme="studio"] #aiToolsSection:has(> .assist-bar.in-ai-bar.visible:not(.is-request-hidden)) > :is(#aiModelControl, #effortControl, #autoControl, [data-color-control="ai"], #craftsControl) { display: none; }
-body[data-theme="studio"] #aiToolsSection:has(> .assist-bar.in-ai-bar.visible:not(.is-request-hidden)) > #aiToolbarRun { position: relative; }
-body[data-theme="studio"] #aiToolsSection:has(> .assist-bar.in-ai-bar.visible:not(.is-request-hidden)):has(#auto.active) > #aiToolbarRun::after {
-  position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; box-sizing: border-box; border: 2px solid var(--pe-shell-dock-surface, #fff); border-radius: 50%; background: var(--pe-success, #16a34a); content: "";
-}
 body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar button { min-height: 28px; height: 28px; padding: 0 9px; gap: 6px; border-radius: 8px; }
 body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar button:is(:hover, :focus-visible) { background: var(--canvas-tool-hover, rgba(15, 23, 42, .06)); }
 body[data-theme="studio"] #aiToolsSection > .assist-bar.in-ai-bar > .assist-action { max-width: min(150px, var(--assist-action-max-width, 150px)); color: var(--studio-text); font-weight: 600; }

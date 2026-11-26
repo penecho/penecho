@@ -254,7 +254,7 @@ test("a test run that answers marks the agent, and its own words repeated back a
 });
 
 // A stand-in for Pi in RPC mode: it reads JSON commands, and quits with code 0 as soon as stdin closes, answered or not.
-function fakePiRpc({ answer = "OK", reject = "", dialog = false } = {}) {
+function fakePiRpc({ answer = "OK", reject = "", dialog = false, retry = false } = {}) {
   const { EventEmitter } = require("node:events");
   const seen = { lines:[], ended:false };
   const spawnFn = () => {
@@ -269,8 +269,16 @@ function fakePiRpc({ answer = "OK", reject = "", dialog = false } = {}) {
           if (reject) { say({ id:command.id, type:"response", command:"prompt", success:false, error:reject }); continue; }
           say({ id:command.id, type:"response", command:"prompt", success:true });
           if (dialog) { say({ type:"extension_ui_request", id:"d1", method:"confirm", title:"Go on?" }); continue; }
-          say({ type:"message_end", message:{ role:"assistant", content:[{ type:"text", text:answer }], stopReason:answer ? "stop" : "error", errorMessage:answer ? undefined : "No API key for provider" } });
-          say({ type:"agent_end" });
+          const finish = () => {
+            if (seen.ended) return;
+            say({ type:"message_end", message:{ role:"assistant", content:[{ type:"text", text:answer }], stopReason:answer ? "stop" : "error", errorMessage:answer ? undefined : "No API key for provider" } });
+            say({ type:"agent_end", ...(retry ? { isTerminal:true, yielded:true } : {}) });
+          };
+          if (retry) {
+            say({ type:"message_end", message:{ role:"assistant", stopReason:"error", errorMessage:"Retrying the model" } });
+            say({ type:"agent_end", isTerminal:false, yielded:false });
+            setImmediate(finish);
+          } else finish();
         }
         if (command.type === "extension_ui_response") {
           say({ type:"message_end", message:{ role:"assistant", content:[{ type:"text", text:"OK" }], stopReason:"stop" } });
@@ -296,6 +304,58 @@ test("a test run of Pi in RPC mode sends a JSON prompt and keeps stdin open unti
   const asked = fakePiRpc({ dialog:true });
   assert.equal((await tryOne(tryList([agent("pi")], rpc), "pi", { env, spawnFn:asked.spawnFn })).ok, true);
   assert.deepEqual(asked.seen.lines.find(line => line.type === "extension_ui_response"), { type:"extension_ui_response", id:"d1", cancelled:true }, "a dialog is cancelled, with nobody there to answer");
+});
+
+test("Agent Setup accepts OMP's successful reply after a retry", async () => {
+  const { OMP_RPC_EVENT_FILTER } = require("../src/server/project-lines/activity.js");
+  const rpc = { command:"/bin/omp", args:["--mode", "rpc-ui"], cwd:"/tmp", stdin:true, input:"pi-rpc", rpcEventFilter:OMP_RPC_EVENT_FILTER, dialect:"pi" };
+  const checked = fakePiRpc({ retry:true });
+  assert.deepEqual(await tryOne(tryList([agent("omp")], rpc), "omp", { env, spawnFn:checked.spawnFn }), { ok:true, said:"OK", error:"" });
+  assert.equal(checked.seen.lines[0]?.type, "set_event_filter");
+  assert.equal(checked.seen.lines[0]?.messageUpdates, "delta");
+  const failed = fakePiRpc({ retry:true, answer:"" });
+  assert.equal((await tryOne(tryList([agent("omp")], rpc), "omp", { env, spawnFn:failed.spawnFn })).error, "No API key for provider");
+
+  // Older OMP without set_event_filter replies success:false for set_event_filter; Agent Setup still succeeds.
+  const { EventEmitter } = require("node:events");
+  const legacySpawn = () => {
+    const child = new EventEmitter(), say = event => setImmediate(() => child.stdout.emit("data", `${JSON.stringify(event)}\n`));
+    child.pid = 77711; child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
+    child.kill = () => setImmediate(() => child.emit("close", null));
+    child.stdin = { on() {}, end() { setImmediate(() => child.emit("close", 0)); }, write(text) {
+      for (const line of text.split("\n").filter(Boolean)) {
+        const cmd = JSON.parse(line);
+        if (cmd.type === "set_event_filter") say({ id:cmd.id, type:"response", command:"set_event_filter", success:false, error:"Unknown command: set_event_filter" });
+        if (cmd.type === "prompt") {
+          say({ id:cmd.id, type:"response", command:"prompt", success:true });
+          say({ type:"message_end", message:{ role:"assistant", content:[{ type:"text", text:"OK" }], stopReason:"stop" } });
+          say({ type:"agent_end" });
+        }
+      }
+    } };
+    return child;
+  };
+  assert.deepEqual(await tryOne(tryList([agent("omp")], rpc), "omp", { env, spawnFn:legacySpawn }), { ok:true, said:"OK", error:"" });
+
+  // Silent code-1 exit surfaces matching ~/.omp/logs error.
+  const ompHome = fs.mkdtempSync(path.join(home, "omp-log-"));
+  const crashPid = 77712;
+  const crashSpawn = () => {
+    const child = new EventEmitter();
+    child.pid = crashPid; child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
+    child.kill = () => {};
+    child.stdin = { on() {}, end() {}, write() {
+      const logDir = path.join(ompHome, ".omp", "logs");
+      fs.mkdirSync(logDir, { recursive:true });
+      const date = new Date().toISOString().slice(0, 10);
+      fs.writeFileSync(path.join(logDir, `omp.${date}.${crashPid}.log`), JSON.stringify({ timestamp:new Date().toISOString(), level:"error", pid:crashPid, message:"RPC output delivery failed", error:"Error: ENOSPC: no space left on device, write" }) + "\n");
+      setImmediate(() => child.emit("close", 1));
+    } };
+    return child;
+  };
+  const crashed = await tryOne(tryList([agent("omp")], rpc), "omp", { env:{ ...env, HOME:ompHome, USERPROFILE:ompHome }, spawnFn:crashSpawn });
+  assert.equal(crashed.ok, false);
+  assert.match(crashed.error, /RPC output delivery failed: Error: ENOSPC/);
 });
 
 test("omp's hint after its error keeps the error", async () => {
@@ -361,6 +421,29 @@ test("a failed test run becomes a fix, with what the agent said in its prompt", 
   const p = a.problems.find(x => x.title === "A test run failed");
   assert.match(p.prompt, /What it said: no API key for provider route/);
   assert.match(p.prompt, /Settings PenEcho added for it: SOME_SETTING/);
+});
+
+test("a successful retry clears the startup warning and updates the problem count", async () => {
+  const agents = tryList([agent("kimi"), agent("pi", { configured:path.join(home, "missing-pi") })], { command:"/bin/kimi", args:[], cwd:home, stdin:true });
+  const { run } = runner({ "kimi --version":{ status:null, timedOut:true }, "pi --version":{ status:0, stdout:"1.0.0" } });
+  let spawnFn = fakeSpawn({ stderr:"Model unavailable", code:1 }).spawnFn;
+  const check = createAgentCheck(agents, { env, run, spawnFn:(...args) => spawnFn(...args) });
+  const initial = await check.check();
+  assert.equal(initial.agents[0].problems[0].detail, "No answer in 15 seconds.");
+  assert.equal(initial.problems, 2);
+
+  const failed = await check.tryRun("kimi");
+  assert.equal(failed.agents[0].tried.ok, false);
+  assert.deepEqual(failed.agents[0].problems.map(p => p.title), ["Found, but it does not start", "A test run failed"]);
+
+  spawnFn = fakeSpawn({ stdout:"OK\n" }).spawnFn;
+  const answered = await check.tryRun("kimi");
+  assert.equal(answered.agents[0].tried.ok, true);
+  assert.equal(answered.agents[0].state, "ready");
+  assert.deepEqual(answered.agents[0].problems, []);
+  assert.deepEqual(answered.agents[1].problems, initial.agents[1].problems);
+  assert.equal(answered.problems, 1);
+  assert.deepEqual((await check.check()).agents[0].problems, []);
 });
 
 test("an error on stderr is shown whole, not only the log path after it", async () => {

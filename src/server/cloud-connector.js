@@ -506,9 +506,10 @@ class CloudConnector {
 
   async hostedModels({ refresh = false } = {}) {
     const configuration = this.requireCloudAccount();
-    const [catalog, wallet] = await Promise.all([this.refreshHostedCatalog({ force:refresh }), this.cloudRequest("/api/v1/credits")]);
+    // The models are what is asked for: a wallet Cloud does not answer leaves credits unknown, not the list empty.
+    const [catalog, wallet] = await Promise.all([this.refreshHostedCatalog({ force:refresh }), this.cloudRequest("/api/v1/credits").catch(() => null)]);
     if (accountToken(this.configuration) !== configuration.accountToken || this.configuration?.origin !== configuration.origin) throw cloudSignInRequiredError("Cloud account changed. Refresh the model list.");
-    return { models:catalog.models, credits:wallet.credits, origin:configuration.origin, accountId:this.account?.id || null };
+    return { models:catalog.models, credits:wallet?.credits ?? null, origin:configuration.origin, accountId:this.account?.id || null };
   }
 
   async prepareHostedConnection(connectionId) {

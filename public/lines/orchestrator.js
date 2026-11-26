@@ -268,7 +268,7 @@ function orchAgentDetails(preset) {
   const model = preset.effectiveModel || preset.model || 'Runner default model';
   const level = preset.effectiveEffort || preset.effort;
   const effort = level ? `${level} effort${preset.effortUnsupported ? ' (not supported by this model)' : ''}` : 'Runner default effort';
-  const accessNote = preset.pickerName && (preset.access === 'full' && preset.agent !== 'dsh' ? 'full access' : preset.access === 'folders' && preset.agent === 'dsh' ? 'project folders' : '');
+  const accessNote = preset.pickerName && (preset.access === 'full' && preset.agent !== 'dsh' && preset.agent !== 'codex' ? 'full access' : preset.access === 'folders' && preset.agent === 'dsh' ? 'project folders' : preset.access === 'reviewed' && preset.agent === 'codex' ? 'reviewed' : '');
   return [model, effort, accessNote].filter(Boolean).join(' · ');
 }
 function orchAgentLabel(preset) {
@@ -343,7 +343,7 @@ function orchBoxHTML() {
     <input type="file" id="orchFilePick" class="orch-pick" multiple hidden aria-label="Add images or files">
     <div class="cmp-bar orch-bar">
       <span class="orch-gear-slot" id="orchGearSlot">${orchGearHTML()}</span>
-      <button type="button" class="icon-btn cmp-plus" data-act="orch-attach" aria-haspopup="menu" aria-label="Add" title="Add">${ic('plus', 19)}</button>
+      <button type="button" class="icon-btn cmp-plus" data-act="orch-attach" aria-haspopup="menu" aria-expanded="false" aria-label="Add" title="Add">${ic('plus', 19)}</button>
       <div class="cmp-chips" id="chips-${key}" role="group" aria-label="What to make"></div>
       <div class="cmp-path"></div>
       <button type="button" id="orchAgent" class="orch-picker" data-act="orch-agent" data-orch-preset="${esc(chosen.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Agent that orchestrates: ${esc(label)}" title="${esc(label)}">${orchAgentInnerHTML(chosen, label)}</button>
@@ -618,10 +618,13 @@ function orchGearHTML() {
 const orchSyncDay = at => { const d = new Date(at); return Number.isFinite(d.getTime()) ? d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) : ''; };
 const orchPlural = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
 // What one sync brought, in one line: "18 prices and 16 agent ratings added".
+// What came is kept even when the other part did not (PE-1217); that part is named, so "up to date" is never said of it.
 function orchSyncSaid(r) {
   const prices = Number.isFinite(r?.addedPrices) ? r.addedPrices : Number(r?.sync?.prices) || 0, ratings = Number(r?.sync?.ratings) || 0;
+  const missed = Array.isArray(r?.missed) ? r.missed : [], lost = missed.includes('prices') ? 'Prices' : missed.includes('ratings') ? 'Ratings' : '';
   const parts = [prices > 0 && orchPlural(prices, 'price'), ratings > 0 && orchPlural(ratings, 'agent rating')].filter(Boolean);
-  return parts.length ? `${parts.join(' and ')} added` : 'Prices and ratings are up to date';
+  const got = parts.length ? `${parts.join(' and ')} added` : `${{ Prices:'Ratings are', Ratings:'Prices are' }[lost] || 'Prices and ratings are'} up to date`;
+  return lost ? `${got} · ${lost} could not be synced this time` : got;
 }
 const orchSyncButton = (label, cls = 'btn sm') => `<button type="button" class="${cls}" data-act="orch-sync" ${ORCHSET.syncing ? 'disabled' : ''}>${label}</button>`;
 // The third row of the panel: when it last synced, and Sync.
@@ -1457,12 +1460,17 @@ ACT['orch-starter'] = el => {
   syncComposer(form);
   ta.focus(); ta.setSelectionRange?.(ta.value.length, ta.value.length);
 };
-// + opens the menu for files and what to make, as on the home and line boxes.
+// + opens the menu for attachments and what to make, as on the home and line boxes.
 ACT['orch-attach'] = el => {
   const pick = () => { if (!can('files')) { orchCantAdd(); return; } $('#orchFilePick')?.click(); };
   const form = el?.closest?.('.composer');
   if (!form || typeof makePlusItems !== 'function') { pick(); return; }
-  openMenu(el, [{ label:'Add images or files', icon:'clip', fn:pick }, ...makePlusItems(form)]);
+  if (el.getAttribute('aria-expanded') === 'true') { closeMenu(); return; }
+  openMenu(el, [
+    { label:'Add images or files', icon:'clip', fn:pick },
+    ...(can('canvas') ? [{ label:'Add new canvas', icon:'canvas', fn:() => ACT['cmp-draw'](el) }] : []),
+    ...makePlusItems(form),
+  ]);
 };
 ACT['orch-remove'] = el => {
   const file = ORCH.draft.files.find(x => x.id === el.dataset.file);

@@ -88,11 +88,19 @@ function parseInputLog(text) {
 
 // Codex's documented app-server: newline-delimited JSON requests, answers and notifications over stdio.
 // Threads started this way are interactive threads, the same kind Codex's own desktop app lists.
+const APPROVAL_METHODS = new Set([
+  "item/commandExecution/requestApproval",
+  "item/fileChange/requestApproval",
+  "item/permissions/requestApproval",
+  "execCommandApproval",
+  "applyPatchApproval",
+]);
+
 class CodexServer {
   // child: an app-server already running (one a PenEcho before this one started, under its keeper); it was set up then.
-  constructor({ command, args = [], cwd, env = process.env, spawnFn = spawn, onNote = null, onResponse = null, onServerRequest = null, onServerRequestResolved = null, clientName = "penecho", child = null, sandboxWindowsPath = true }) {
+  constructor({ command, args = [], cwd, env = process.env, spawnFn = spawn, onNote = null, onResponse = null, onServerRequest = null, onApprovalRequest = null, onServerRequestResolved = null, clientName = "penecho", child = null, sandboxWindowsPath = true }) {
     // Requests of an earlier PenEcho may still be answered on an attached server: these ids never meet theirs.
-    this.seq = child ? 1e9 + Math.floor(Math.random() * 1e6) : 0; this.waiting = new Map(); this.pendingServerRequests = new Map(); this.buffer = ""; this.tail = ""; this.onNote = onNote; this.onResponse = onResponse; this.onServerRequest = onServerRequest; this.onServerRequestResolved = onServerRequestResolved; this.alive = true; this.detached = Boolean(child?.detached); this.clientName = clientName;
+    this.seq = child ? 1e9 + Math.floor(Math.random() * 1e6) : 0; this.waiting = new Map(); this.pendingServerRequests = new Map(); this.buffer = ""; this.tail = ""; this.onNote = onNote; this.onResponse = onResponse; this.onServerRequest = onServerRequest; this.onApprovalRequest = onApprovalRequest; this.onServerRequestResolved = onServerRequestResolved; this.alive = true; this.detached = Boolean(child?.detached); this.clientName = clientName;
     this.outputDecoder = new StringDecoder("utf8");
     const extraEnv = !child && command === process.execPath && process.versions?.electron && Array.isArray(args) && args.length && !env?.ELECTRON_RUN_AS_NODE
       ? { ELECTRON_RUN_AS_NODE:"1" }
@@ -130,6 +138,11 @@ class CodexServer {
         if (this.onServerRequest && message.method === "item/tool/requestUserInput") {
           this.pendingServerRequests.set(String(message.id), message);
           this.onServerRequest(message);
+          continue;
+        }
+        if (this.onApprovalRequest && APPROVAL_METHODS.has(message.method)) {
+          this.pendingServerRequests.set(String(message.id), message);
+          this.onApprovalRequest(message);
           continue;
         }
         this.answerServer(message);
@@ -195,6 +208,25 @@ function declined(method = "") {
   return {};
 }
 
+// Schema-valid reply for a user's explicit decision on a Codex app-server approval request.
+function approvalReply(method = "", choice = "deny", params = {}) {
+  const raw = String(choice || "").trim().toLowerCase();
+  const forSession = raw === "allow_session" || raw === "allow-session" || raw === "acceptforsession" || raw === "session";
+  const allowed = forSession || /^(?:allow|yes|approve|approved|accept|ok|true)$/.test(raw);
+  if (!allowed) return declined(method);
+  if (method === "item/permissions/requestApproval") {
+    const requested = params?.permissions && typeof params.permissions === "object" ? params.permissions : {};
+    return { permissions:requested, scope:forSession ? "session" : "turn" };
+  }
+  if (method === "item/commandExecution/requestApproval" || method === "item/fileChange/requestApproval") {
+    return { decision:forSession ? "acceptForSession" : "accept" };
+  }
+  if (method === "execCommandApproval" || method === "applyPatchApproval") {
+    return { decision:forSession ? "approved_for_session" : "approved" };
+  }
+  return {};
+}
+
 function turnResult(note) {
   const turn = note.params?.turn;
   return { code:turn?.status === "completed" ? 0 : 1, reason:turn?.error?.message || (turn?.status === "interrupted" ? "It was interrupted." : "") };
@@ -209,6 +241,21 @@ function matchesOutcome(outcome, threadId, turnId, turnRequest) {
   if (![0, 1].includes(outcome.result?.code) || typeof outcome.result.reason !== "string") return false;
   if (outcome.requestId !== undefined) return !turnId && outcome.result.code === 1 && outcome.requestId === turnRequest?.id;
   return typeof outcome.turnId === "string" && Boolean(outcome.turnId) && (!turnId || outcome.turnId === turnId);
+}
+
+const APPROVALS_REVIEWER_REJECTED = /approvalsReviewer|approvals_reviewer|auto_review/i;
+async function openThread(server, resume, thread) {
+  const method = resume ? "thread/resume" : "thread/start";
+  const params = resume ? { threadId:resume, ...(thread || {}) } : (thread || {});
+  try {
+    return await server.request(method, params);
+  } catch (error) {
+    if (params.approvalsReviewer && error?.rpc && APPROVALS_REVIEWER_REJECTED.test(String(error.message || ""))) {
+      const { approvalsReviewer, ...fallback } = params;
+      return await server.request(method, fallback);
+    }
+    throw error;
+  }
 }
 
 // One piece of work: start or resume a thread, run one turn, and say when it has ended.
@@ -242,7 +289,7 @@ function runTurn(server, { resume, thread, turn, input, onInitialized, onThread,
   (async () => {
     await server.ready;
     onInitialized?.();
-    const opened = resume ? await server.request("thread/resume", { threadId:resume, ...thread }) : await server.request("thread/start", thread);
+    const opened = await openThread(server, resume, thread);
     threadId = opened.thread.id;
     onThread?.(threadId, opened.thread);
     onBeforeTurn?.(threadId);
@@ -410,7 +457,7 @@ function followTurn(server, { threadId = null, turnId = null, savedOutcome = nul
             onThread?.(observedThreadId, opened.thread);
           }
         } else {
-          const opened = resume ? await server.request("thread/resume", { threadId:resume, ...(thread || {}) }) : await server.request("thread/start", thread || {});
+          const opened = await openThread(server, resume, thread);
           if (ownerGone()) return;
           observedThreadId = opened.thread.id;
           onThread?.(observedThreadId, opened.thread);
@@ -458,4 +505,4 @@ function steerTurn(server, { threadId, turnId, input }) {
   return server.request("turn/steer", { threadId, expectedTurnId:turnId, input:[{ type:"text", text:input }] });
 }
 
-module.exports = { CodexServer, runTurn, followTurn, steerTurn, turnResult, declined };
+module.exports = { CodexServer, runTurn, followTurn, steerTurn, turnResult, declined, approvalReply, APPROVAL_METHODS };

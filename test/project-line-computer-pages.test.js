@@ -113,7 +113,10 @@ test("only the computer that syncs this project is offered its Asks, even when a
   assert.equal(page.c.S.presets.default, "mac-claude");
 });
 
-test("Agents page owns the Run Asks sent from penecho.ai switch across signed-in, signed-out, LAN, and hosted views", () => {
+// A one-line `const name = …` from a page's source.
+const constLine = (source, name) => { const start = source.indexOf(`const ${name} = `); assert.ok(start >= 0, name); return source.slice(start, source.indexOf("\n", start)); };
+
+test("Settings General owns the Run Asks sent from penecho.ai switch across signed-in, signed-out, LAN, and hosted views", () => {
   const ctx = (S, HOSTED = null) => {
     const c = vm.createContext({
       HOSTED,
@@ -123,12 +126,14 @@ test("Agents page owns the Run Asks sent from penecho.ai switch across signed-in
       sysSwitchRowHTML:(id, title, sub, checked, attr, extra = '') =>
         `<div class="sys-row"><strong id="${id}Lbl">${title}</strong><small>${sub}</small>${extra}<button type="button" id="${id}" role="switch" aria-checked="${checked}" ${attr}></button></div>`,
     });
-    vm.runInContext(`${extract(settings, "cloudAsksSectionHTML")}\n${extract(settings, "installedSectionHTML")}`, c);
+    vm.runInContext([...["settingsHosted", "savedPresetsCount", "agentsScanning", "sysFlowHTML"].map(name => constLine(settings, name)),
+      ...["cloudAsksSectionHTML", "installedSectionHTML", "agentsFlowStripHTML", "sysFlowStepHTML"].map(name => extract(settings, name))].join("\n"), c);
     return c;
   };
 
   const offHtml = ctx({ thisComputer:true, cloudAccount:{ signedIn:true }, computer:{ id:"mac-1", runsAsks:false } }).cloudAsksSectionHTML();
   assert.match(offHtml, /id="sysCloudAsks"/);
+  assert.match(offHtml, />PenEcho Cloud sync</);
   assert.match(offHtml, /id="prefComputerAsks"[^>]*aria-checked="false"[^>]*data-act="computer-asks-toggle"/);
   assert.match(offHtml, /Run Asks sent from penecho\.ai/);
   assert.match(offHtml, /only after you click Run with an agent on penecho\.ai/);
@@ -152,15 +157,25 @@ test("Agents page owns the Run Asks sent from penecho.ai switch across signed-in
   const hostedList = hostedCtx.installedSectionHTML();
   assert.match(hostedList, /Runs Asks sent from penecho\.ai/);
   assert.match(hostedList, /Cloud Asks off/);
+  // penecho.ai's Local providers step is the account's computers.
+  assert.match(hostedList, /Connected computers/);
+  assert.match(hostedList, /1 computer connected/);
+  assert.match(hostedList, /On your computers/);
+
+  // General places the switch between Preferences and About, with Help us improve PenEcho at the very bottom.
+  const general = settings.slice(settings.indexOf("function generalSectionHTML()"), settings.indexOf("function sysBodyHTML("));
+  const order = ['id="sysGeneral"', "${cloudAsksSectionHTML()}", 'id="sysAbout"', "${helpImproveSectionHTML(lang)}"].map(mark => general.indexOf(mark));
+  assert.ok(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1])), `General order: ${order}`);
+  assert.equal(settings.slice(settings.indexOf("function sysBodyHTML("), settings.indexOf("function sysNavBadgeHTML(")).includes("cloudAsksSectionHTML"), false, "Preset agents no longer carries it");
 });
 
-test("account menu omits Run Asks sent from penecho.ai while computer-asks-toggle posts to /computer and re-renders Agents", async () => {
+test("account menu omits Run Asks sent from penecho.ai while computer-asks-toggle posts to /computer and re-renders General", async () => {
   const menus = [], calls = [];
   let renders = 0;
   const c = vm.createContext({
     HOSTED:null,
-    SET:{ agentsTab:"agents" },
-    S:{ thisComputer:true, shelfPage:"agents", cloudAccount:{ signedIn:true, credits:{ available:1200 } }, computer:{ id:"mac-1", runsAsks:false } },
+    SET:{ agentsTab:"agents", tab:"general" },
+    S:{ thisComputer:true, shelfPage:"settings", cloudAccount:{ signedIn:true, credits:{ available:1200 } }, computer:{ id:"mac-1", runsAsks:false } },
     ACT:{},
     $:() => ({}),
     cloudNumber:n => String(n),
@@ -209,7 +224,7 @@ test("a browser on another device asks the computer running PenEcho for its agen
     const asked = [];
     const c = vm.createContext({ HOSTED, S:{ route:{}, ...S }, api:async url => { asked.push(url); return { agents:[{ id:"codex", state:"ready" }] }; },
       ACT:{}, render() {}, renderRail() {}, refreshEmptyAgents() {}, refreshRunLabels() {}, loadAgents:async () => {} });
-    vm.runInContext(`${setup.slice(0, setup.indexOf("// The agents installed here are on the Agents page."))}\nthis.checkAgents = checkAgents;`, c);
+    vm.runInContext(`${setup.slice(0, setup.indexOf("// The agents installed here are on Settings"))}\nthis.checkAgents = checkAgents;`, c);
     await c.checkAgents();
     return { asked, S:c.S };
   };

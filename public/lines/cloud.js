@@ -26,7 +26,9 @@ S.cloudKept = {};         // project id → what its own Cloud answer said last,
 async function loadCloudAccount() {
   let account = null;
   try { account = await api('/cloud/account'); } catch { account = null; }
+  const previous = S.cloudAccount;
   S.cloudAccount = account;
+  if (typeof refreshCloudSettings === 'function') refreshCloudSettings(previous, account);
   if (account && !account.unavailable) loadComputer();
   if (account?.signedIn) {
     // The list is left as it was when Cloud does not answer, so a row never flickers away.
@@ -667,12 +669,12 @@ function heldComputerHTML(p, l, s) {
 async function loadComputer() {
   if (typeof HOSTED === 'object' && HOSTED) return;
   try { S.computer = await api('/computer'); } catch { /* An older server: no switch. */ }
-  if (S.shelfPage === 'agents' && typeof SET !== 'undefined' && SET.agentsTab === 'agents' && typeof settingsRender === 'function' && $('#view')) settingsRender();
+  if (typeof SET !== 'undefined' && ((S.shelfPage === 'settings' && SET.tab === 'general') || (S.shelfPage === 'agents' && SET.agentsTab === 'agents')) && typeof settingsRender === 'function' && $('#view')) settingsRender();
 }
 async function setComputerAsks(on) {
   if (S.computerBusy) return;
   S.computerBusy = true;
-  if (S.shelfPage === 'agents' && typeof SET !== 'undefined' && SET.agentsTab === 'agents' && typeof settingsRender === 'function' && $('#view')) settingsRender();
+  if (typeof SET !== 'undefined' && ((S.shelfPage === 'settings' && SET.tab === 'general') || (S.shelfPage === 'agents' && SET.agentsTab === 'agents')) && typeof settingsRender === 'function' && $('#view')) settingsRender();
   try {
     S.computer = await api('/computer', { method:'POST', body:{ runsAsks:Boolean(on) } });
     toast(on ? 'Asks sent from penecho.ai now run on this computer.' : 'Asks sent from penecho.ai wait until you turn this on.');
@@ -680,7 +682,7 @@ async function setComputerAsks(on) {
   } catch (error) { toast(error.message); }
   finally {
     S.computerBusy = false;
-    if (S.shelfPage === 'agents' && typeof SET !== 'undefined' && SET.agentsTab === 'agents' && typeof settingsRender === 'function' && $('#view')) settingsRender();
+    if (typeof SET !== 'undefined' && ((S.shelfPage === 'settings' && SET.tab === 'general') || (S.shelfPage === 'agents' && SET.agentsTab === 'agents')) && typeof settingsRender === 'function' && $('#view')) settingsRender();
   }
 }
 ACT['computer-asks-on'] = () => setComputerAsks(true);

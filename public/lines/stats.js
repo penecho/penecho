@@ -457,17 +457,6 @@
       .catch(error => { if (INDEX.loading === key) { INDEX.error = error.message || 'Could not count the agent index.'; INDEX.key = key; INDEX.at = Date.now(); } })
       .finally(() => { if (INDEX.loading === key) INDEX.loading = ''; refreshStats(true); });
   }
-  function indexPicks(ranked) {
-    if (!ranked.length) return '';
-    const [top, second] = ranked, near = ranked.filter(r => r.score >= top.score * 0.7 && r.model !== top.model);
-    const value = near.filter(r => r.costPerWork && top.costPerWork && r.costPerWork < top.costPerWork).sort((a, b) => b.score / b.costPerWork - a.score / a.costPerWork)[0];
-    const fast = near.filter(r => r.minutes && top.minutes && r.minutes <= top.minutes * 0.85 && r.model !== value?.model).sort((a, b) => a.minutes - b.minutes)[0];
-    const pick = (label, r, note) => `<div class="sx-pick"><p class="sx-eyebrow">${label}</p><p class="sx-pick-name">${swatch(r.provider)}<span>${escHtml(r.model)}</span></p><p class="sx-pick-meta">${escHtml(r.agentName)} · ${escHtml(r.effort ? `${r.effort} effort` : 'default effort')}</p><p class="sx-pick-note">${escHtml(note)}</p></div>`;
-    const cards = [pick('Top rated', top, `Score ${top.score.toFixed(1)}${second ? (top.score > second.score ? `, ${(top.score - second.score).toFixed(1)} points above rank 2` : ', tied for rank 1') : ''}.`)];
-    if (value) cards.push(pick('Best value', value, `${Math.round(100 * value.score / top.score)}% of the top score at 1/${Math.max(2, Math.round(top.costPerWork / value.costPerWork))} of the cost.`));
-    if (fast) cards.push(pick('Fastest among the top', fast, `${fast.minutes.toFixed(1)} min per Work, against ${top.minutes.toFixed(1)} for the top pick.`));
-    return `<div class="sx-picks">${cards.join('')}</div>`;
-  }
   function makerLegend(rows, interval = true) {
     const makers = [...new Set(rows.map(r => r.provider || 'Other'))];
     return `<div class="sx-legend">${makers.map(m => `<span>${swatch(m === 'Other' ? '' : m)}${escHtml(m)}</span>`).join('')}${interval ? '<span class="sx-legend-ci"><em aria-hidden="true"></em>95% interval</span>' : ''}</div>`;
@@ -553,7 +542,7 @@
     const tabs = `<div class="seg sx-seg-sm" role="tablist" aria-label="Kind of job">${[['all', 'All jobs'], ...JOB_KINDS].map(([k, l]) => `<button type="button" role="tab" aria-selected="${kind === k}" data-act="stats-index-kind" data-kind="${k}">${l}<em>${data.tables[k]?.ranked.length || 0}</em></button>`).join('')}</div>`;
     const head = `<div><p class="sx-eyebrow">${escHtml(scope)}</p><h2>Agent index</h2><p class="sx-muted">${about}</p></div>${tabs}`;
     const hint = !onCloud() ? ' Rate Works yourself (optional) or use the Orchestrator (auto-rates) to rank pairings and make Orchestrator decisions more accurate.' : '';
-    const body = table.ranked.length ? `${indexPicks(table.ranked)}${indexColumns(table.ranked)}${indexTable(table.ranked)}`
+    const body = table.ranked.length ? `${indexColumns(table.ranked)}${indexTable(table.ranked)}`
       : `<div class="sx-empty"><b>Not enough rated Works yet</b><p class="sx-muted">A pairing is ranked after ${data.thresholds.works} Works with at least ${data.thresholds.rated} rating${data.thresholds.rated === 1 ? '' : 's'}${data.thresholds.installs ? `, from ${data.thresholds.installs} installs` : ''}, from the Orchestrator or from ${onCloud() ? 'people' : 'you'}.${hint}</p></div>`;
     const waiting = table.collecting.length ? `<details class="sx-collect"><summary>Not ranked yet (${table.collecting.length})</summary><ul>${table.collecting.slice(0, 40).map(r => `<li><span>${escHtml(pairName(r))}</span><span class="sx-muted">${r.works} Work${r.works === 1 ? '' : 's'} · ${r.rated != null ? `${r.rated} rated` : `${r.installs} install${r.installs === 1 ? '' : 's'}`}</span></li>`).join('')}</ul></details>` : '';
     return `${card('sx-index', head, body + waiting)}${indexHeatmap(data, kind, example)}${indexValue(table.ranked, example)}`;

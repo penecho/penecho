@@ -1086,3 +1086,106 @@ svg.fly-layer { position: fixed; inset: 0; z-index: 40; width: var(--lines-viewp
 .lpp-orch-foot { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .lpp-orch-rate.is-stopped { background: color-mix(in srgb, var(--red) 6%, var(--paper)); border-color: color-mix(in srgb, var(--red) 28%, var(--line)); }
 .lpp-orch-rate.is-off { background: var(--raised); border-color: var(--line); }
+
+/* ---------- Focused Toolbar (Design C) & quiet Line page buttons ----------
+   Secondary actions stay borderless with soft hover fills; solid CTAs (.btn.primary, .btn.unsent-go, .run-split),
+   question option cards (.q-choice), and Edit on canvas (.line-pic-edit / .t-pic-edit) keep their full contrast. */
+
+/* Header metadata: calm inline text instead of heavy pill boxes; hide duplicate single-agent desktop button when toolbar shows it. */
+.lp-head .lp-meta :where(.lp-role-badge, .chip:not(.c-error)) { height: auto; padding: 0; background: transparent; border: 0; font-size: 12.5px; font-weight: 560; }
+.lp-head .lp-meta .lp-role-badge { color: var(--ink3); }
+.lp-head .lp-meta .lp-role-badge svg { color: var(--accent-label); }
+.lp-head .lp-meta > * + *::before { content: "·"; margin-right: 10px; color: var(--line2); font-weight: 400; }
+.lp-head .lp-meta > :where(.legacy-parent, .row-diff, .commit)::before { content: none; margin: 0; }
+.lp.has-panel:has(.lpp-toolbar [data-act="open-desktop"]) .lp-head .chat-direct:not(.chat-faces) { display: none; }
+
+/* Inline Canvas button inside the Line composer bar (replaces floating Add new canvas below the thread). */
+.cmp-canvas-btn { display: inline-flex; flex: none; align-items: center; gap: 5px; height: 28px; padding: 0 9px 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--ink2); font-size: 12.5px; font-weight: 560; white-space: nowrap; transition: background .12s, color .12s; }
+.cmp-canvas-btn svg { flex: none; color: var(--c-canvas); }
+.cmp-canvas-btn:hover, .cmp-canvas-btn:focus-visible { background: var(--c-canvas-soft); color: var(--ink); }
+
+/* End-of-thread review bar: clean top-divider strip instead of a boxed card. */
+.lp-sheet .lp-end.lp-work,
+.lp-sheet .lp-end.lp-end-pending { padding: 8px 4px; background: transparent; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.lp-sheet .lp-end.lp-work:hover { background: var(--hover); border-radius: 8px; border-top-color: transparent; box-shadow: none; }
+.lp-sheet .lp-end.lp-work.on { background: var(--selected); border-radius: 8px; border-top-color: transparent; box-shadow: none; }
+.lp-sheet .lp-all-reviewed { background: var(--soft); border-color: transparent; color: var(--ink); font-weight: 580; }
+.lp-sheet .lp-all-reviewed:hover { background: var(--pressed); border-color: transparent; color: var(--ink); }
+
+/* Quiet secondary buttons inside thread & panel — (0,1,0) specificity beats plain .btn/.rev-split while keeping
+   solid CTAs (.btn.primary, .btn.unsent-go, .run-split), question cards (.q-choice), and Edit on canvas intact. */
+:is(.lp-sheet, .lp-panel) :where(.btn:not(.primary):not(.unsent-go):not(.run-main):not(.run-pick):not(.danger):not(.q-choice):not(.line-pic-edit):not(.t-pic-edit):not(.lp-all-reviewed), .lpp-act-btn, .rev-split, .wc-act, .wc-split, .lp-rate-btn, .lp-scope-btn, .lp-newcv, .lp-newmake) { background: transparent; border-color: transparent; box-shadow: none; }
+:is(.lp-sheet, .lp-panel) :where(.btn:not(.primary):not(.unsent-go):not(.run-main):not(.run-pick):not(.danger):not(.q-choice):not(.line-pic-edit):not(.t-pic-edit):not(.lp-all-reviewed), .lpp-act-btn, .wc-act, .lp-rate-btn, .lp-scope-btn, .lp-newcv, .lp-newmake):hover,
+:is(.lp-sheet, .lp-panel) :where(.rev-split, .wc-split):is(:hover, .is-open) { background: var(--hover); border-color: transparent; }
+:is(.lp-sheet, .lp-panel) :where(.btn.sm:not(.primary):not(.unsent-go):not(.run-main):not(.run-pick):not(.danger):not(.q-choice):not(.line-pic-edit):not(.t-pic-edit):not(.lp-all-reviewed)) { font-weight: 540; color: var(--ink2); }
+:is(.lp-sheet, .lp-panel) :where(.btn.sm:not(.primary):not(.unsent-go):not(.run-main):not(.run-pick):not(.danger):not(.q-choice):not(.line-pic-edit):not(.t-pic-edit):not(.lp-all-reviewed)):hover { color: var(--ink); }
+.lp-panel .rev-split.is-done { background: transparent; border-color: transparent; }
+:is(.lp-sheet, .lp-panel) :where(.rev-main, .rev-pick, .wc-split-main, .wc-split-copy):hover { background: var(--hover); }
+:is(.lp-sheet, .lp-panel) :where(.rev-pick, .wc-split-copy) { border-left-color: transparent; }
+:is(.lp-sheet, .lp-panel) :where(.rev-split, .wc-split):hover :where(.rev-pick, .wc-split-copy) { border-left-color: var(--line); }
+:is(.lp-sheet, .lp-panel) .rev-split.is-busy { background: var(--soft); }
+:is(.lp-sheet, .lp-panel) .btn[aria-pressed="true"]:not(.q-choice):not(.primary):not(.unsent-go) { color: var(--accent-label); background: var(--selected); border-color: transparent; }
+
+/* Soften User assigned pill on review cards so it reads as metadata, not a button. */
+:where(.lp-orch-review, .lpp-orch-rate) .rv-mode.is-user { height: auto; padding: 0; background: transparent; border: 0; color: var(--ink3); font-weight: 540; }
+
+/* Work panel header: quiet inline status + soft Reviewed toggle. */
+.lpp-title .chip { height: auto; padding: 0; background: transparent; border: 0; font-size: 12.5px; font-weight: 580; }
+.lpp-tools .lp-mark { background: var(--soft); border-color: transparent; font-weight: 560; }
+.lpp-tools .lp-mark:hover { background: var(--pressed); border-color: transparent; }
+.lpp-tools .lp-mark[aria-checked="true"] { background: var(--green-soft); border-color: transparent; }
+.lpp-tools .lp-mark[aria-checked="true"]:hover { background: color-mix(in srgb, var(--green) 18%, transparent); }
+
+/* Sticky Focused Utility Toolbar right below the Work panel header. */
+.lpp-toolbar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 5px 12px; background: var(--raised); border-bottom: 1px solid var(--line); }
+.lpp-toolbar[hidden], .lpp-toolbar:empty { display: none; }
+.lpp-tb-btn, .lpp-toolbar .wc-act { display: inline-flex; flex: none; align-items: center; gap: 5px; height: 27px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--ink2); font-size: 12.5px; font-weight: 540; white-space: nowrap; transition: background .12s, color .12s; }
+.lpp-tb-btn svg, .lpp-toolbar .wc-act svg { flex: none; color: var(--ink3); transition: color .12s; }
+.lpp-tb-btn:hover, .lpp-toolbar .wc-act:hover { background: var(--hover); color: var(--ink); }
+.lpp-tb-btn:hover svg, .lpp-toolbar .wc-act:hover svg { color: var(--ink2); }
+.lpp-tb-btn.is-busy { background: var(--soft); color: var(--c-run-label); }
+.lpp-tb-btn.is-busy .spin { width: 11px; height: 11px; border-width: 1.8px; }
+.lpp-toolbar .wc-desktop { display: none; }
+.lpp-tb-copy { margin-left: auto; width: 27px; height: 27px; color: var(--ink3); border-radius: 7px; }
+.lpp-tb-copy:hover { color: var(--ink); background: var(--hover); }
+.lp-panel.is-popped .lpp-toolbar { padding: 6px 22px; }
+
+/* In-place Review button below Work output: stays right where the user finishes reading, quiet until hover. */
+.lpp-actions { margin-top: 12px; }
+.lpp-actions:empty { display: none; }
+
+/* Orchestrator review summary in Work detail panel: calm banner with ALL review notes shown unfolded by default. */
+.lpp-orch-rate { margin-top: 12px; padding: 10px 12px; background: color-mix(in srgb, var(--accent-soft) 34%, var(--paper)); border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-radius: 10px; }
+.lpp-orch-rate-head { gap: 6px 8px; }
+.lpp-orch-rate-score { margin-left: 0; }
+.lpp-orch-open { margin-left: auto; height: 26px; padding: 0 7px; gap: 3px; font-size: 12px; }
+.lpp-orch-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-top: 5px; }
+.lpp-orch-meta .lpp-orch-why { margin: 0; color: var(--ink3); font-size: 12px; }
+.lpp-orch-note { display: block; -webkit-line-clamp: unset; overflow: visible; margin: 7px 0 0; color: var(--ink2); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lpp-orch-extra-notes { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--line); color: var(--ink2); font-size: 13px; line-height: 1.5; }
+.lpp-orch-extra-notes > :first-child { margin-top: 0; }
+.lpp-orch-extra-notes > :last-child { margin-bottom: 0; }
+
+/* Compact single-row Feedback + Difficulty dropdown (Design C). */
+.lpp-rate-box { margin-top: 10px; padding: 8px 10px; background: var(--raised); border: 0; border-radius: 9px; gap: 8px; }
+.lpp-rate-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.lpp-rate-main { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lpp-rate-label { font-size: 12.5px; font-weight: 520; color: var(--ink3); }
+.lpp-rate-box .lp-rate-btn { height: 27px; padding: 0 8px; border-radius: 7px; font-size: 12.5px; }
+.lpp-rate-box .lp-rate-btn.is-good[aria-pressed="true"] { color: var(--green); background: var(--green-soft); border-color: transparent; font-weight: 600; }
+.lpp-rate-box .lp-rate-btn.is-bad[aria-pressed="true"] { color: var(--red); background: var(--red-soft); border-color: transparent; font-weight: 600; }
+.lp-scope-trigger { display: inline-flex; align-items: center; gap: 4px; height: 27px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--ink2); font-size: 12px; font-weight: 560; white-space: nowrap; transition: background .12s, color .12s; }
+.lp-scope-trigger:hover { background: var(--hover); color: var(--ink); }
+.lp-scope-trigger .lp-scope-k { color: var(--ink3); font-weight: 460; }
+.lp-scope-trigger.is-set { color: var(--accent-label); background: var(--accent-soft); }
+.lp-scope-trigger.is-set .lp-scope-k { color: inherit; opacity: .82; }
+.lp-scope-trigger svg { color: var(--ink3); flex: none; }
+.lpp-rate-box .rate-note-save { background: var(--soft); border-color: transparent; color: var(--ink); font-weight: 560; }
+.lpp-rate-box .rate-note-save:hover { background: var(--pressed); }
+
+/* Clean footer: Details toggle + quiet where metadata. */
+.lpp-bottom { background: var(--paper); }
+
+@container panel (max-width: 440px) {
+  .lpp-toolbar { padding: 5px 8px; }
+}

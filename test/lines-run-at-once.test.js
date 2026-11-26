@@ -170,16 +170,22 @@ test('Run with while a followed app conversation is live runs next and keeps the
   assert.deepEqual(h.toasts, ['Runs with Antigravity when Codex finishes.']);
 });
 
-test('an ordinary unsent Ask visibly offers PenEcho Auto and sends it without changing the manual choice', async () => {
+test('an unsent Ask without a code folder offers PenEcho Auto directly and first in Run with', async () => {
   const h = harness(), line = h.line(), draft = line.stations.at(-2), p = h.S.data.p;
   const manual = { id:'manual', agent:'codex', name:'Codex · gpt-6.2-astra · xhigh effort', available:true };
+  p.vault = { code:[] };
   h.S.presets = { presets:[manual] };
   h.S.runWith = { one:'codex' };
   h.S.runPresetOn = { one:manual.id };
-  Object.assign(h.c, { can:() => true, fileEntry:() => null, agentInfo:() => ({ name:'Codex' }) });
+  let menu;
+  Object.assign(h.c, {
+    can:() => true, fileEntry:() => null, agentInfo:() => ({ name:'Codex' }),
+    presetTitle:x => x.name, presetShouldShowFacts:() => false, openMenu:(_anchor, rows) => { menu = rows; },
+  });
   const view = h.c.document.querySelector('#view');
   const render = () => { view.innerHTML = h.c.unsentFoot(p, line, draft); };
   const autoButton = () => view.querySelector('[data-act="unsent-run-auto"]');
+  const picker = () => view.querySelector('[data-act="unsent-run-pick"]');
 
   render();
   assert.deepEqual([...view.querySelectorAll('.unsent-acts > *')].map(el => el.textContent), [
@@ -187,9 +193,11 @@ test('an ordinary unsent Ask visibly offers PenEcho Auto and sends it without ch
   ]);
   h.S.presets.presets = [{ ...manual, showInPicker:false }]; render();
   assert.equal(Boolean(autoButton()), false);
+  assert.equal(picker(), null);
   h.S.presets.presets = [manual];
   h.c.HOSTED = {}; render();
   assert.equal(Boolean(autoButton()), false);
+  assert.equal(picker(), null);
   h.c.HOSTED = false;
 
   Object.assign(line, { running:true, runAgent:'codex', runSteers:true, runSetup:'|' });
@@ -199,8 +207,17 @@ test('an ordinary unsent Ask visibly offers PenEcho Auto and sends it without ch
   assert.equal(auto.textContent, 'Run with PenEcho Auto next');
   const saved = [];
   h.c.whenAskSaved = (_project, _line, _step, run) => saved.push(run);
+  h.c.ACT['unsent-run-pick'](picker());
+  const [autoRow, manualRow] = menu.filter(row => row.label);
+  assert.equal(autoRow.label, 'PenEcho Auto');
+  assert.equal(autoRow.note, 'Model and effort chosen automatically · Runs next');
+  assert.equal(autoRow.on, false);
+  assert.equal(manualRow.label, manual.name);
+  assert.equal(manualRow.on, true);
+  autoRow.fn();
+  assert.equal(saved.length, 1);
   h.c.ACT['unsent-run-auto'](auto);
-  h.c.ACT['unsent-run-auto'](auto);
+  assert.equal(saved.length, 2);
   assert.equal(h.requests.length, 0);
   for (const run of saved) run();
   assert.equal(h.requests.length, 1);

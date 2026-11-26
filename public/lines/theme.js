@@ -2,6 +2,10 @@
 // The Canvas pages never load it, so they stay as they are.
 (() => {
   const KEY = 'penecho-lines-theme', MODES = ['light', 'dark', 'system'];
+  try {
+    const savedLang = localStorage.getItem('penecho-language');
+    if (savedLang === 'zh' || savedLang === 'en') document.documentElement.lang = savedLang === 'zh' ? 'zh-CN' : 'en';
+  } catch {}
   const dark = matchMedia('(prefers-color-scheme: dark)');
   const read = () => { try { const m = localStorage.getItem(KEY); return MODES.includes(m) ? m : 'system'; } catch { return 'system'; } };
   let mode = read();

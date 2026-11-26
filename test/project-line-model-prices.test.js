@@ -116,3 +116,47 @@ test("the prices have routes of their own, with no project", async t => {
   assert.deepEqual([synced.body.addedPrices, synced.body.models[0].source, synced.body.missing, Boolean(synced.body.sync.at)], [1, "penecho.ai", [], true]);
   assert.equal((await call("", { method:"DELETE" })).status, 405);
 });
+
+test("on Windows a sync rides out a file held open for a moment, and one held for good says what came could not be saved", async t => {
+  const { lines, orchestrator, preset } = setup(t);
+  preset("fake", "nova");
+  orchestrator.reviews.use({ fetch:async url => ({ ok:true, status:200, json:async () => (new URL(url).pathname === "/model-prices.json" ? { models:[{ model:"nova", input:3, output:4 }] } : { tables:{ all:{ ranked:[{ agent:"fake", model:"nova", rating:4, rated:5 }] } } }) }) });
+  const platform = Object.getOwnPropertyDescriptor(process, "platform"), rename = fs.renameSync, logged = console.error;
+  let refusals = 0;
+  Object.defineProperty(process, "platform", { ...platform, value:"win32" });
+  fs.renameSync = (...args) => { if (refusals > 0) { refusals--; throw Object.assign(new Error("EPERM: operation not permitted, rename"), { code:"EPERM" }); } return rename(...args); };
+  console.error = () => {};
+  t.after(() => { Object.defineProperty(process, "platform", platform); fs.renameSync = rename; console.error = logged; });
+  const server = http.createServer(async (req, res) => {
+    try { if (await lines.handle(req, res, new URL(req.url, "http://localhost"))) return; res.writeHead(404).end("{}"); }
+    catch (error) { res.writeHead(error.status || 500, { "content-type":"application/json" }).end(JSON.stringify({ error:error.message })); }
+  });
+  await new Promise(r => server.listen(0, "127.0.0.1", r));
+  t.after(() => server.close());
+  const sync = async () => { const r = await fetch(`http://127.0.0.1:${server.address().port}/api/lines/model-prices/sync`, { method:"POST", headers:{ "content-type":"application/json" }, body:"{}" }); return { status:r.status, body:await r.json() }; };
+  refusals = 3;
+  const held = await sync();
+  assert.deepEqual([held.status, held.body.addedPrices, names(held.body.models)], [200, 1, ["nova"]]);
+  refusals = Infinity;
+  const stuck = await sync();
+  assert.deepEqual([stuck.status, stuck.body.code, stuck.body.error], [500, "SYNC_SAVE_FAILED", "PenEcho could not save what penecho.ai sent on this computer (EPERM). Try again."]);
+});
+
+test("what penecho.ai sends is taken even when the other part does not come or cannot be saved", async t => {
+  const { orchestrator, preset, directory } = setup(t);
+  preset("fake", "nova");
+  const board = { tables:{ all:{ ranked:[{ agent:"fake", model:"nova", rating:4, rated:5 }] } } }, priced = { models:[{ model:"nova", input:3, output:4 }] };
+  const serve = files => orchestrator.reviews.use({ fetch:async url => { const body = files[new URL(url).pathname]; if (!body) throw new Error("offline"); return { ok:true, status:200, json:async () => body }; } });
+  serve({ "/model-prices.json":priced });
+  const noBoard = await orchestrator.sync();
+  assert.deepEqual([noBoard.addedPrices, noBoard.missed, names(orchestrator.prices())], [1, ["ratings"], ["nova"]]);
+  orchestrator.setPrice({ model:"nova", remove:true });
+  // The ratings file cannot be replaced: the prices are still kept.
+  fs.mkdirSync(path.join(directory, "orchestrator", "cloud-ratings.json"), { recursive:true });
+  fs.writeFileSync(path.join(directory, "orchestrator", "cloud-ratings.json", "x"), "");
+  serve({ "/leaderboard.json":board, "/model-prices.json":priced });
+  const unsaved = await orchestrator.sync();
+  assert.deepEqual([unsaved.addedPrices, unsaved.missed, unsaved.sync.ratings, names(orchestrator.prices())], [1, ["ratings"], 0, ["nova"]]);
+  serve({});
+  await assert.rejects(orchestrator.sync(), { code:"SYNC_FAILED", status:502 });
+});

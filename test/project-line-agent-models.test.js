@@ -37,7 +37,9 @@ test("each agent lists the models its own settings name, and never anything else
   assert.equal(pi.name, "magpie/auto/kimi-k3.1-pro", "a model id with a slash still gets its provider");
   assert.deepEqual(pi.choices, ["magpie/auto/kimi-k3.1-pro", "magpie/glm-5.3", "ollama/qwen3.8:latest"]);
   assert.deepEqual(modelOf("kimi", env).choices, ["magpie/auto/kimi-k3.1-pro", "kimi-code/k3"]);
-  assert.deepEqual(modelOf("claude", env).choices, ["fable", "opus", "sonnet", "haiku"], "Claude Code's own short names");
+  assert.deepEqual(modelOf("claude", env).choices, ["fable", "opus", "sonnet", "haiku", "claude-fable-5-1", "claude-fable-5-1[1m]", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
+    "Claude Code's own short names, and the newest full names when it keeps none, as with CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC");
+  assert.deepEqual(modelOf("claude", { HOME:home, ANTHROPIC_BASE_URL:"https://proxy.example" }).choices, ["fable", "opus", "sonnet", "haiku"], "not for models behind another address");
   assert.deepEqual(modelOf("claude", { HOME:home, ANTHROPIC_DEFAULT_SONNET_MODEL:"glm-5.3", ANTHROPIC_DEFAULT_FABLE_MODEL:"kimi-k3" }).choices, ["fable", "opus", "sonnet", "haiku", "kimi-k3", "glm-5.3"]);
   // The full names Claude Code keeps for its /model menu and its prices, newest first in each family. Nothing else in that file.
   put(home, ".claude.json", JSON.stringify({ oauthAccount:{ emailAddress:"me@example.com" }, primaryApiKey:"sk-hidden",

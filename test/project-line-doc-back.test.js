@@ -184,8 +184,8 @@ test("multi-hop md -> md -> doc-back returns step-by-step and markup round-trips
   assert.deepEqual(plain(c.S.route), { view:"line", line:"one", step:"work-6" });
 });
 
-test("opening md from files, vault, archive, or home returns to that page with the right label", () => {
-  for (const [view, label] of [["files", "Canvases &amp; files"], ["vault", "Vault"], ["archive", "Archive"], ["home", "Alpha"]]) {
+test("opening md from files, vault, archive, find, or home returns to that page with the right label", () => {
+  for (const [view, label] of [["files", "Canvases &amp; files"], ["vault", "Vault"], ["archive", "Archive"], ["find", "Ask AI"], ["home", "Alpha"]]) {
     const c = setup({ route:{ view }, hash:`#a/${view}` });
     c.nodes["#view"].scrollTop = view === "home" ? 0 : 245;
     c.run("openDoc('files/one/understanding.md')");

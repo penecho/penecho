@@ -69,6 +69,8 @@ function claudeKnownModels(env, home) {
   const priced = config.additionalModelCostsCache && typeof config.additionalModelCostsCache === "object" ? Object.keys(config.additionalModelCostsCache) : [];
   return unique([...offered, ...priced]).filter(id => CLAUDE_ID.test(id)).sort(claudeOrder);
 }
+// The newest full name in each family, for a Claude Code that keeps none: one with CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC never fetches them, as seen on Windows.
+const CLAUDE_LATEST = ["claude-fable-5-1", "claude-fable-5-1[1m]", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
 // How hard each agent thinks, as its own command takes it. Codex and OpenCode list the levels per model instead, in effortsFor.
 // Claude Code's `--effort`, Pi's `--thinking` (read in its own list of them), and Kimi Code's [thinking] effort, which PenEcho maps to these three.
 const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"], PI_EFFORTS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"], KIMI_EFFORTS = ["low", "high", "max"];
@@ -128,7 +130,9 @@ const MODEL = {
     // The level a run takes when PenEcho hands over none: a CLAUDE_CODE_EFFORT_LEVEL in the settings' own `env` comes before the shell's.
     // The settings' "effortLevel" is not read: an unattended run did not take it, and went at the model's own level (read on the wire, 2.1.300).
     const effort = text(settings.env?.CLAUDE_CODE_EFFORT_LEVEL) || text(env.CLAUDE_CODE_EFFORT_LEVEL);
-    const known = claudeKnownModels(env, home);
+    // Not where its models go elsewhere, through another address or other names for them.
+    const own = !text(env.ANTHROPIC_BASE_URL) && !text(settings.env?.ANTHROPIC_BASE_URL) && !mapped.some(Boolean);
+    const found = claudeKnownModels(env, home), known = found.length || !own ? found : CLAUDE_LATEST;
     if (text(env.ANTHROPIC_MODEL)) return { name:text(env.ANTHROPIC_MODEL), effort, from:"ANTHROPIC_MODEL", change:"Change or remove the ANTHROPIC_MODEL setting PenEcho was started with.", choices:unique([env.ANTHROPIC_MODEL, ...CLAUDE_NAMES, ...mapped, ...known]), efforts:CLAUDE_EFFORTS };
     // An ANTHROPIC_MODEL in the settings' env comes before their "model".
     const name = text(settings.env?.ANTHROPIC_MODEL) || text(settings.model);
@@ -147,17 +151,45 @@ const MODEL = {
     return { name, effort, from:name || effort ? where : "", change:`Pick one with \`/model\` in Codex, or set \`model\` in \`${where}\`.`, choices:unique([name, ...profiles, ...cached]), efforts, effortsFor };
   },
   opencode(env, home) {
-    const dir = path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode");
-    const files = [env.OPENCODE_CONFIG, ...["opencode.json", "opencode.jsonc", "config.json"].map(name => path.join(dir, name))].filter(Boolean);
-    const file = files.find(candidate => text(readJson(candidate)?.model)) || "";
-    const where = short(file || path.join(dir, "opencode.json"), home);
-    const name = file ? text(readJson(file).model) : "";
-    // Each provider's models, as provider/model, from every settings file it reads.
-    const models = files.flatMap(candidate => Object.entries(readJson(candidate)?.provider || {}).flatMap(([provider, entry]) => Object.entries(entry?.models || {}).map(([model, about]) => [`${provider}/${model}`, about])));
-    // A model's variants are its reasoning levels, which `opencode run --variant` takes. An explicit `"variants": {}` means none,
-    // while a model omitting `variants` stays open until OpenCode's own list says them all (parseOpenCodeModels).
-    const effortsFor = Object.fromEntries(models.filter(([, about]) => about && typeof about === "object" && Object.hasOwn(about, "variants")).map(([id, about]) => [id, openCodeVariants(about.variants)]));
-    return { name, from:file ? where : "", change:`Set \`"model"\` in \`${where}\`, as provider/model.`, choices:unique([name, ...models.map(([id]) => id)]), effortsFor };
+    const dir = env.OPENCODE_CONFIG_DIR || path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode");
+    // OpenCode 2 loads opencode.json, then opencode.jsonc, then OPENCODE_CONFIG, and ignores legacy config.json.
+    // Fall back to config.json only when none of the current files exist (older OpenCode 1.x installs).
+    const currentFiles = [env.OPENCODE_CONFIG, path.join(dir, "opencode.jsonc"), path.join(dir, "opencode.json")].filter(Boolean);
+    const legacyFile = path.join(dir, "config.json");
+    const existing = currentFiles.filter(candidate => readJson(candidate) !== null);
+    const files = existing.length ? existing : readJson(legacyFile) !== null ? [legacyFile] : [];
+    const chosen = files.map(candidate => ({ candidate, ...openCodeConfigModel(readJson(candidate)?.model) })).find(entry => entry.name) || null;
+    const where = short(chosen?.candidate || existing[0] || path.join(dir, "opencode.json"), home);
+    const name = chosen?.name || "", effort = chosen?.effort || "";
+    // Merge lowest- to highest-precedence files, reading v1 `provider` before v2 `providers` so newer definitions win.
+    const disabledProviders = new Set();
+    const models = new Map();
+    for (const candidate of [...files].reverse()) {
+      const cfg = readJson(candidate);
+      if (!cfg || typeof cfg !== "object") continue;
+      if (Array.isArray(cfg.disabled_providers)) for (const id of cfg.disabled_providers) if (text(id)) disabledProviders.add(text(id));
+      for (const key of ["provider", "providers"]) {
+        const map = cfg[key];
+        if (!map || typeof map !== "object" || Array.isArray(map)) continue;
+        for (const [provider, entry] of Object.entries(map)) {
+          if (!entry || typeof entry !== "object") continue;
+          if (entry.disabled === true || entry.enabled === false) {
+            for (const id of [...models.keys()]) if (id.startsWith(`${provider}/`)) models.delete(id);
+            continue;
+          }
+          for (const [model, about] of Object.entries(entry.models || {})) {
+            const id = `${provider}/${model}`;
+            if (about && typeof about === "object" && (about.disabled === true || about.enabled === false)) models.delete(id);
+            else models.set(id, about);
+          }
+        }
+      }
+    }
+    for (const id of [...models.keys()]) if (disabledProviders.has(id.split("/", 1)[0])) models.delete(id);
+    // A model's variants are its reasoning levels (`opencode run --variant` in v1, `--model provider/model#level` in v2).
+    // Explicit empty variants (`{}` or `[]`) mean none, while omitted variants stay open until OpenCode's own list says them all.
+    const effortsFor = Object.fromEntries([...models.entries()].filter(([, about]) => about && typeof about === "object" && Object.hasOwn(about, "variants")).map(([id, about]) => [id, openCodeVariants(about.variants)]));
+    return { name, effort, from:chosen ? where : "", change:`Set \`"model"\` in \`${where}\`, as provider/model.`, choices:unique([name, ...models.keys()]), effortsFor };
   },
   pi(env, home) {
     const agentDir = env.PI_CODING_AGENT_DIR || path.join(home, ".pi", "agent"), file = path.join(agentDir, "settings.json"), where = short(file, home), settings = readJson(file) || {};
@@ -274,17 +306,90 @@ const defaultEffortWith = (model, about) => {
   const level = model && about?.defaultEffortFor ? about.defaultEffortFor[model] || "" : about?.effort || "", name = model || about?.name || "";
   return level && Object.hasOwn(about?.effortsFor || {}, name) && !about.effortsFor[name].includes(level) ? "" : level;
 };
-const openCodeVariants = variants => (variants && typeof variants === "object" && !Array.isArray(variants) ? unique(Object.entries(variants).filter(([, about]) => !about?.disabled).map(([level]) => level)) : []);
-// `opencode models --verbose` prints each model as provider/model on a line of its own, then what OpenCode knows of it as JSON, whose variants are the levels `--variant` takes for it.
-// A model with none takes none. null when the output is not that list.
-function parseOpenCodeModels(output) {
-  const out = {};
-  for (const part of String(output || "").split(/^(?=[^\s{}[\]"][^\n]*\n\{)/m)) {
+// OpenCode's `model` config field accepts v1/v2 strings ("provider/model" or "provider/model#variant")
+// as well as v2 objects ({ providerID, model, variant? }).
+function openCodeConfigModel(value) {
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) return { name:"", effort:"" };
+    const hash = raw.lastIndexOf("#");
+    if (hash > 0 && hash < raw.length - 1 && !raw.slice(hash + 1).includes("/")) {
+      const name = qualifiedModel("", raw.slice(0, hash)), level = text(raw.slice(hash + 1));
+      return { name, effort:name && !/^default$/i.test(level) ? level : "" };
+    }
+    return { name:qualifiedModel("", raw), effort:"" };
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const name = qualifiedModel(value.providerID, value.model ?? value.modelID ?? value.id);
+    const level = text(value.variant);
+    return { name, effort:name && !/^default$/i.test(level) ? level : "" };
+  }
+  return { name:"", effort:"" };
+}
+// OpenCode 1 stores variants as an object ({ low:{}, high:{ disabled:true } }), while OpenCode 2 stores an array ([{ id:"low" }]).
+function openCodeVariants(variants) {
+  if (Array.isArray(variants)) return unique(variants.filter(v => (v && typeof v === "object" ? !v.disabled : Boolean(v))).map(v => (typeof v === "string" ? v : v?.id)).filter(level => !/^default$/i.test(level)));
+  if (variants && typeof variants === "object") return unique(Object.entries(variants).filter(([, about]) => !about?.disabled).map(([level]) => level).filter(level => !/^default$/i.test(level)));
+  return [];
+}
+const OPENCODE_MODEL_LINE = /^[a-z0-9][a-z0-9._-]*\/[^/\s\\][^\s\\]*$/i;
+// Parses live OpenCode CLI model output across v2 and v1:
+// 1. OpenCode 2 `api --standalone get /api/model`: JSON `{ data: [{ providerID, id, variants, enabled }] }` (or array) -> choices + effortsFor.
+// 2. OpenCode 1 `models --verbose`: `<provider/model>\n{ ...JSON... }` blocks -> choices + effortsFor.
+// 3. Plain `models` (`opencode models --standalone` / `opencode models`): one `provider/model` per line -> choices (effortsFor: null).
+function parseOpenCodeCatalog(output) {
+  const clean = String(output || "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\r\n?/g, "\n");
+  const trimmed = clean.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.data) ? parsed.data : null;
+      if (list) {
+        const choices = [], effortsFor = {};
+        for (const item of list) {
+          if (!item || typeof item !== "object" || item.enabled === false) continue;
+          const id = qualifiedModel(item.providerID, item.id ?? item.modelID);
+          if (!id) continue;
+          choices.push(id);
+          if (Object.hasOwn(item, "variants")) effortsFor[id] = openCodeVariants(item.variants);
+        }
+        const ordered = [...new Set(choices)].sort((a, b) => a.localeCompare(b));
+        return ordered.length ? { choices:ordered, effortsFor } : null;
+      }
+    } catch { /* Fall through to verbose/line parsers. */ }
+  }
+  const verboseChoices = [], verboseEfforts = {};
+  for (const part of clean.split(/^(?=[^\s{}[\]"][^\n]*\n\{)/m)) {
     const cut = part.indexOf("\n"), id = part.slice(0, cut).trim();
     if (cut < 0 || !/^[^\s/]+\/\S+$/.test(id)) continue;
-    try { const about = JSON.parse(part.slice(cut + 1)); if (about && typeof about === "object") out[id] = openCodeVariants(about.variants); } catch { /* Not a model's lines. */ }
+    try {
+      const about = JSON.parse(part.slice(cut + 1));
+      if (about && typeof about === "object") {
+        verboseChoices.push(id);
+        verboseEfforts[id] = openCodeVariants(about.variants);
+      }
+    } catch { /* Not a model's lines. */ }
   }
-  return Object.keys(out).length ? out : null;
+  if (verboseChoices.length) return { choices:[...new Set(verboseChoices)], effortsFor:verboseEfforts };
+  const lines = trimmed.split("\n").map(line => line.trim()).filter(line => OPENCODE_MODEL_LINE.test(line) && !line.includes("://"));
+  return lines.length ? { choices:[...new Set(lines)], effortsFor:null } : null;
+}
+// Returns per-model variants from OpenCode 1 `models --verbose` or OpenCode 2 `api get /api/model`, or null when none are present.
+function parseOpenCodeModels(output) {
+  const catalog = parseOpenCodeCatalog(output);
+  return catalog?.effortsFor && Object.keys(catalog.effortsFor).length ? catalog.effortsFor : null;
+}
+// OpenCode 2 `api --standalone get /api/model/default` returns `{ data: { providerID, id, modelID } | null }`.
+function parseOpenCodeDefault(output) {
+  const trimmed = String(output || "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").trim();
+  if (!trimmed || !trimmed.startsWith("{")) return "";
+  try {
+    const parsed = JSON.parse(trimmed);
+    const item = parsed && typeof parsed === "object" && "data" in parsed ? parsed.data : parsed;
+    if (!item || typeof item !== "object") return "";
+    return qualifiedModel(item.providerID, item.id ?? item.modelID ?? item.model);
+  } catch { return ""; }
 }
 
-module.exports = { modelOf, qualifiedModel, openCodeModel, effortsWith, defaultEffortWith, BASIC_EFFORTS, tomlTop, parseAntigravityModels, parseOpenCodeModels };
+module.exports = { modelOf, qualifiedModel, openCodeModel, effortsWith, defaultEffortWith, BASIC_EFFORTS, tomlTop, parseAntigravityModels, parseOpenCodeCatalog, parseOpenCodeModels, parseOpenCodeDefault };

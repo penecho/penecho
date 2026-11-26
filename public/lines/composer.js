@@ -19,6 +19,7 @@ function composerHTML(name, { placeholder = 'Ask for anything', preview = false,
     <div class="cmp-bar">
       ${sharedNote ? hostedGuestBar() : `
       <button type="button" class="icon-btn cmp-plus" data-act="cmp-plus" aria-haspopup="menu" aria-label="Add" title="Add">${ic('plus', 19)}</button>
+      ${on === 'step' && preview && (typeof can !== 'function' || can('canvas')) ? `<button type="button" class="cmp-canvas-btn" data-act="line-draw" title="Add a new drawing canvas">${ic('pen', 14)}<span>Canvas</span></button>` : ''}
       ${preview ? `<div class="cmp-chips" id="chips-${key}" role="group" aria-label="What to make"></div>` : ''}
       <div class="cmp-path" id="path-${key}"></div>
       ${preview ? `<div class="cmp-end"><div class="cmp-branch" id="branch-${key}"></div><div class="cmp-send" id="send-${key}"></div></div>` : `<button type="submit" class="send-btn" aria-label="Send" title="Send (Enter)">${ic('send', 18)}</button>`}

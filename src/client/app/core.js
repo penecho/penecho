@@ -3449,6 +3449,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       else if (event.key === "penecho-canvas-hints-enabled") setCanvasHintsEnabled(event.newValue !== "false");
       else if (event.key === "penecho-widget-shadow") setWidgetShadowEnabled(event.newValue === "true");
       else if (event.key === "penecho-auto-ai") setAutoEnabled(event.newValue === "true", false);
+      else if (event.key === "penecho-language") {
+        const next = event.newValue === "zh" ? "zh" : "en";
+        if (next !== state.language) { state.language = next; applyLanguage(); }
+      }
       else if (event.key.startsWith(AI_CONNECTION_STORAGE_KEY)) { renderConnectionLists(); syncLocalConnectionSelection(); }
     });
   }

@@ -379,6 +379,7 @@ function renderRail() {
   const projects = [...pinned, ...recent], picks = new Map(projects.map(p => [p.id, railPick(p)]));
   draft.innerHTML = railPinned(projects, picks) + railProjectsHead() + pinned.map((p, i) => railItem(p, i, picks.get(p.id))).join('') + (pinned.length && recent.length ? '<hr>' : '') + recent.map((p, i) => railItem(p, pinned.length + i, picks.get(p.id))).join('');
   if (typeof cloudRail === 'function') cloudRail(draft);   // Cloud: a mark on projects kept there, and the ones that are only there (cloud.js)
+  if (typeof linesTranslateTree === 'function' && typeof linesIsZh === 'function' && linesIsZh()) linesTranslateTree(draft);
   if (host.innerHTML === draft.innerHTML) { if (footChanged) keepRailSoon(); return; }
   // Only the rows that changed are written, so the row under the pointer or holding the focus stays where it is.
   const top = host.scrollTop, focused = document.activeElement;
@@ -596,9 +597,10 @@ function renderProjbar() {
   const name = esc(p.name), identity = HOSTED?.shared
     ? `<span class="project-name" title="${name}"><span>${name}</span></span>`
     : `<button type="button" class="project-name proj-switch" data-act="open-switcher" aria-label="Switch project, current project ${name}" title="${name}"><span>${name}</span>${ic('down', 14)}</button>`;
+  const findLabel = HOSTED ? 'Search' : 'Ask AI', findTitle = HOSTED ? 'Search project' : 'Ask AI about this project';
   const html = `${toggle}${typeof historyHTML === 'function' ? historyHTML() : ''}${identity}
     <nav class="subnav" aria-label="${esc(p.name)}">${items.map(([k, label, icon]) => { const on = v === k || (k === 'files' || k === 'canvases') && (v === 'files' || v === 'canvases'); const grewHere = k === 'topics' && !on && Boolean(tabHint); return `<button type="button" data-act="go-view" data-view="${k}" class="${[on ? 'on' : '', grewHere ? 'grew' : ''].filter(Boolean).join(' ')}" ${on ? 'aria-current="page"' : ''}>${ic(icon, 17)}<span>${label}</span>${grewHere ? `<i class="grew-spark" aria-label="Topics changed">${ic('spark', 13)}</i>` : ''}</button>`; }).join('')}${moreBtn}</nav>
-    <div class="bar-right"><button type="button" class="canvas-link bar-search" data-act="go-view" data-view="find" aria-label="Search project" title="Search project"${v === 'find' ? ' aria-current="page"' : ''}>${ic('navSearch', 16)}<span>Search</span></button><button type="button" class="canvas-link bar-share" data-act="project-share" aria-label="Share project" title="Share project">${ic('navShare', 16)}<span>Share</span></button></div>`;
+    <div class="bar-right"><button type="button" class="canvas-link bar-search" data-act="go-view" data-view="find" aria-label="${findTitle}" title="${findTitle}"${v === 'find' ? ' aria-current="page"' : ''}>${ic('navSearch', 16)}<span>${findLabel}</span></button><button type="button" class="canvas-link bar-share" data-act="project-share" aria-label="Share project" title="Share project">${ic('navShare', 16)}<span>Share</span></button></div>`;
   const keep = typeof keepable === 'function' && keepable(p);
   const syncedAt = HOSTED?.onComputer && !HOSTED.shared ? Number((HOSTED.list || []).find(c => c.key === HOSTED.key)?.computerSyncedAt) || 0 : 0;
   const syncAge = syncedAt && typeof cloudAgo === 'function' ? cloudAgo(syncedAt) : '';
@@ -607,6 +609,7 @@ function renderProjbar() {
   delete bar.dataset.projbarSig;
   bar.classList.remove('bare');
   bar.innerHTML = html;
+  if (typeof linesTranslateTree === 'function' && typeof linesIsZh === 'function' && linesIsZh()) linesTranslateTree(bar);
   if (tabHint) $('.subnav .grew', bar)?.setAttribute('style', `--grew-ms:${tabHint.duration}ms;--grew-delay:-${tabHint.elapsed}ms`);
   if (typeof cloudBar === 'function') cloudBar(bar, p);   // Cloud: Keep in Cloud, before Share (cloud.js)
   // Statistics, then Orchestrator, go back under More when the bar has no room for them (PE-431, PE-613).
@@ -762,7 +765,7 @@ function whereRow(p, { compact = false, change = true } = {}) {
     <div class="where-item"><span class="where-k">${ic('code', 16)}Code folder</span>${code ? `<code title="${esc(code)}">${esc(code)}</code>${folderOpens('code', code)}` : change ? '' : '<span class="muted">None</span>'}${change || !code ? `<button type="button" class="btn sm" data-act="edit-code">${code ? 'Change' : 'Add'}</button>` : ''}${!code && change ? `<span class="where-hint">${CODE_WHY}</span>` : ''}${code ?`<button type="button" class="ghost tiny-g" data-act="copy-pointer" title="Tell agents in the code folder where these docs are">Copy pointer for AGENTS.md</button>` : ''}${codeConflict}</div>
   </div>`;
 }
-const modelExplainerHTML = () => `<div class="pls">${PenEchoProjects.followHTML('en', S.agents)}${PenEchoProjects.visionHTML('en')}${PenEchoProjects.explainerHTML()}</div>`;
+const modelExplainerHTML = () => { const lang = typeof linesLang === 'function' ? linesLang() : 'en'; return `<div class="pls">${PenEchoProjects.followHTML(lang, S.agents)}${PenEchoProjects.visionHTML(lang)}${PenEchoProjects.explainerHTML()}</div>`; };
 // ---------- The drawing skill ----------
 const MEMORY_WHY = "Tells Claude, Codex and your other agents, in their own apps too, to read MEMORY.md first and to change it only with its command, which keeps it to 60 short lines.";
 const SKILL_WHY = "When you ask Claude or Codex to draw in their own app, they don't know about PenEcho's Canvas, so you get text art. This skill tells them, and the picture shows up here, ready to edit.";
@@ -784,9 +787,10 @@ const SYNC_WHY = 'Your latest 50 conversations in this project\'s folders.';
 const SYNC_MORE_WHY = 'Up to 50 more unsynced conversations in this project\'s folders, newest first.';
 const syncOfferHTML = () => `<section class="sync-offer" aria-label="Sync recent conversations">${syncButton()}<p>${SYNC_WHY}</p></section>`;
 // Each conversation becomes a line as soon as it is read, so the page looks again often while a sync runs: the first line shows at once, not after all 50.
+// Asked again while one runs, as when a new code folder is linked, it syncs once more when that one ends.
 ACT['sync-recent'] = async () => {
   const p = project();
-  if (S.syncing) return;
+  if (S.syncing) { S.syncAgain = p.id; return; }
   S.syncing = true; render();
   const looking = setInterval(() => { if (S.cur === p.id) poll(); }, 600);
   try {
@@ -795,7 +799,11 @@ ACT['sync-recent'] = async () => {
     await loadState(p.id, { force:true });
     await loadProjects();
   } catch (error) { toast(error.message); }
-  finally { clearInterval(looking); S.syncing = false; render(); }
+  finally {
+    clearInterval(looking); S.syncing = false;
+    const again = S.syncAgain; S.syncAgain = null;
+    if (again && again === project()?.id) ACT['sync-recent'](); else render();
+  }
 };
 // A new project made with a code folder brings in its conversations by itself. If none come, its empty page stays, with the other ways to start.
 function syncIfNew(id) {
@@ -1204,7 +1212,16 @@ function pathForm({ title, label, value, hint = '', onSave, pick, code = false }
 }
 async function patchProject(body) { const p = project(); await api(pathFor(p.id), { method:'PATCH', body }); await loadState(p.id, { force:true }); await loadProjects(); }
 ACT['choose-folder'] = () => { const p = project(); pathForm({ title:'Docs folder', label:'Where PenEcho stores your Lines as plain Markdown (.md) files, along with drawings, notes, and project memory.', value:p.vault.path, hint:'PenEcho reads the folder you choose. Moving files between folders is up to you.', pick:'Choose the docs folder', onSave:async v => { await patchProject({ docsPath:v }); S.docs = {}; render(); } }); };
-ACT['edit-code'] = () => { const p = project(); pathForm({ title:'Code folder', label:'Your existing source code or repository folder, kept separate from Docs. Leave empty if there is no code.', value:(p.vault.code[0] || {}).path || '', pick:'Choose the code folder', code:true, onSave:async v => { await patchProject({ codePath:v }); render(); } }); };
+// Linking a code folder to a project with no lines yet brings in its conversations at once, as the start page's sync card does.
+ACT['edit-code'] = () => {
+  const p = project(), was = (p.vault.code[0] || {}).path || '';
+  pathForm({ title:'Code folder', label:'Your existing source code or repository folder, kept separate from Docs. Leave empty if there is no code.', value:was, pick:'Choose the code folder', code:true, onSave:async v => {
+    await patchProject({ codePath:v }); render();
+    // The server's own path, so /code/ and /code are the same folder.
+    const now = project(), linked = (now?.vault?.code?.[0] || {}).path || '';
+    if (linked && linked !== was && now.id === p.id && now.code && !allLines(now).length && !HOSTED) ACT['sync-recent']();
+  } });
+};
 ACT['download-folder'] = () => downloadFolder(project());
 // The computer running PenEcho can write its own clipboard, whatever this window is allowed to do.
 async function pasteboard(body) {
@@ -2053,26 +2070,36 @@ function npAgentState(a) {
   return a.available ? 'ready' : 'off';
 }
 ACT['np-recheck'] = async () => { const run = checkAgents({ fresh:true }); refreshEmptyAgents(); await run; refreshEmptyAgents(); };
-// New project: header, the 8 simple feature points above, and the Create project form centered below (PE-823).
-// The example projects are in the sidebar already; penecho.ai has no Orchestrator, so hosted copy omits it.
+// The architecture shows how jobs and local folders work on this computer.
+// The hosted page has its own form and benefits without the local workflow.
 const newProjectHTML = () => `<div class="page np-page">
     <div class="np-grid">
       <header class="np-head">
         <h1 class="np-title">New project</h1>
         <p class="np-tagline">Not another AI agent. A better way to work with yours.</p>
       </header>
-      <section class="np-gives">${PenEchoProjects.benefitsHTML('en', S.agents, { agentsRow:false, heading:false, orchestrator:!HOSTED })}</section>
-      <section class="np-card" aria-label="Create a project"><div id="startPanel"></div></section>
+      <section class="np-gives">${PenEchoProjects.benefitsHTML(typeof linesLang === 'function' ? linesLang() : 'en', S.agents, { agentsRow:false, heading:false, orchestrator:!HOSTED })}</section>
+      <div class="np-setup">
+        <section class="np-card" aria-label="Create a project"><div id="startPanel"></div></section>
+        ${HOSTED ? '' : `<a class="np-architecture" href="lines/penecho-lines-architecture.svg" target="_blank" rel="noopener">
+          <img src="lines/penecho-lines-architecture.svg" width="1120" height="810" alt="PenEcho sends jobs directly to agents or through the Orchestrator. Agents work in the project folder and update the shared Markdown project docs.">
+          <span>View architecture full size</span>
+        </a>`}
+      </div>
     </div>
   </div>`;
 function mountNewProject() {
   // On penecho.ai a project needs only its name, and the examples are offered here to add one by one (each takes room in Cloud).
   const cloud = typeof hostedNewProject === 'function' ? hostedNewProject() : null;
-  PenEchoProjects.mount($('#startPanel'), { projects:S.projects, agents:S.agents, showExamples:Boolean(cloud), showTitle:false, showBenefits:false, ...(cloud || {}), onCreated:async (made, extra) => {
+  PenEchoProjects.mount($('#startPanel'), { lang:typeof linesLang === 'function' ? linesLang() : 'en', projects:S.projects, agents:S.agents, showExamples:Boolean(cloud), showTitle:false, showBenefits:false, ...(cloud || {}), onCreated:async (made, extra) => {
     S.newPage = false;
     await openMade(made, extra);
   } });
-  $('#startPanel [name=name]')?.focus();
+  const name = $('#startPanel [name=name]');
+  // Keep the heading in view when the feature cards push the form below the fold.
+  if (name && name.getBoundingClientRect().bottom <= $('#view').getBoundingClientRect().bottom) {
+    name.focus({ preventScroll:true });
+  }
 }
 ACT['sw-open'] = el => { const s = summaryOf(el.dataset.p); if (s?.missing) { SW.i = SW.list.indexOf(s); renderSwitcher(); return; } closeSwitcher(); switchProject(el.dataset.p); };
 ACT['sw-relocate'] = el => {
@@ -2151,7 +2178,7 @@ ACT['more-views'] = el => {
 };
 const welcomeHTML = () => `<div class="page empty-page welcome-page"><div class="empty-inner" id="welcomePanel"></div></div>`;
 function mountWelcome() {
-  PenEchoProjects.mount($('#welcomePanel'), { projects:S.projects, agents:S.agents, showModel:true, onExample:async made => { await loadProjects(); await switchProject(made.id); }, onCreated:openMade });
+  PenEchoProjects.mount($('#welcomePanel'), { lang:typeof linesLang === 'function' ? linesLang() : 'en', projects:S.projects, agents:S.agents, showModel:true, onExample:async made => { await loadProjects(); await switchProject(made.id); }, onCreated:openMade });
 }
 
 // A warning closes like the Needs you strip, and a different warning for the same line still shows.

@@ -45,8 +45,10 @@ test('renderProjbar places Orchestrator immediately after Home', () => {
   h.c.renderProjbar();
   assert.deepEqual(h.views(), ['home', 'orchestrator', 'topics', 'files', 'stats']);
   const search = h.document.querySelector('.bar-right [data-view="find"]');
-  assert.equal(search.textContent, 'Search');
-  assert.equal(search.getAttribute('aria-label'), 'Search project');
+  assert.equal(search.textContent, 'Ask AI');
+  assert.equal(search.getAttribute('aria-label'), 'Ask AI about this project');
+  assert.equal(search.getAttribute('title'), 'Ask AI about this project');
+  assert.equal(search.querySelector('svg').dataset.icon, 'navSearch');
   h.S.route.view = 'find';
   h.c.renderProjbar();
   assert.equal(h.document.querySelector('.bar-search').getAttribute('aria-current'), 'page');

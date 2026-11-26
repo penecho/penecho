@@ -193,17 +193,10 @@
   .sx-share-track { display: none; }
 }
 
-/* Agent index (all projects on this computer): picks, score columns, ranked table, heatmap, score against cost */
+/* Agent index: score columns, ranked table, heatmap, score against cost */
 .sx-sw { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; }
 .sx-index .sx-hd { align-items: flex-end; }
 .sx-index .seg em { font-style: normal; opacity: .55; margin-left: 5px; font-size: 11px; }
-.sx-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); border-top: 1px solid var(--line); }
-.sx-pick { padding: 14px 18px 14px 0; }
-.sx-pick + .sx-pick { padding-left: 18px; border-left: 1px solid var(--line); }
-.sx-pick-name { display: flex; align-items: center; margin: 6px 0 0; font-family: var(--sx-serif); font-size: 26px; line-height: 1.1; overflow-wrap: anywhere; }
-.sx-pick-name .sx-sw { width: 13px; height: 13px; }
-.sx-pick-meta { margin: 4px 0 0; color: var(--ink2); font-size: 13px; }
-.sx-pick-note { margin: 6px 0 0; color: var(--ink3); font-size: 13px; }
 
 .sx-cols { margin: 6px 0 4px; overflow-x: auto; }
 .sx-cols-plot, .sx-cols-labels { display: grid; grid-template-columns: repeat(var(--n), minmax(52px, 120px)); gap: 8px; min-width: calc(var(--n) * 58px); margin-left: 32px; }
@@ -275,7 +268,6 @@
 .sx-v-dot:hover circle { stroke: var(--ink); }
 .sx-v-dot text { fill: var(--ink); font-size: 12px; paint-order: stroke; stroke: var(--paper); stroke-width: 3px; }
 @media (max-width: 760px) {
-  .sx-pick + .sx-pick { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
   .sx-ci { width: 80px; }
 }
 

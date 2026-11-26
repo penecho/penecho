@@ -1,4 +1,4 @@
-/* Model prices: Settings → Agents → Model prices, and Statistics (prices.js). */
+/* Model prices: Settings → Preset agents → Model prices, and Statistics (prices.js). */
 .agents-tabs { margin-bottom: 16px; }
 .agents-tabs em.setup-count { min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 9px; background: var(--amber-soft); color: var(--amber); font-style: normal; font-size: 11px; font-weight: 700; }
 button.kind-tag.is-link { gap: 2px; padding-right: 4px; cursor: pointer; }

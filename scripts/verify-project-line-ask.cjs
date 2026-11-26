@@ -15,9 +15,9 @@ let passed = 0;
 const check = (label, value) => { assert.ok(value, label); passed++; console.log(`ok ${label}`); };
 const pause = ms => new Promise(r => setTimeout(r, ms));
 
-// The stand-in reads the prompt and answers after a moment, citing the first Line it was given.
+// The stand-in reads the prompt and answers after a moment, citing the first Line it was given in the unified format.
 const script = path.join(temp, "answer.js");
-fs.writeFileSync(script, `let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const ref=(s.match(/^\\[(PE-\\d+)\\]/m)||[])[1]||"?";const slow=/slowly/.test(s.split("<question>")[1]||"");setTimeout(()=>process.stdout.write("**Summary**\\nThe Canvas menu is fixed and not committed ["+ref+"].\\n\\n**Done**\\n- Removed Take off its line ["+ref+"]\\n\\n**Left to do**\\n- Check the notice in a browser ["+ref+"]\\n"),slow?4000:700);});`);
+fs.writeFileSync(script, `let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const ref=((s.split("<starting-hints")[1]||"").match(/\\[(PE-\\d+)\\]/)||[])[1]||"?";const slow=/slowly/.test(s.split("<question>")[1]||"");setTimeout(()=>process.stdout.write("The Canvas menu fix removed the extra item and is currently local and uncommitted ["+ref+"].\\n\\n### 1. Canvas menu cleanup ["+ref+"]\\nYou asked to remove Take off its line from the Canvas menu. The agent removed it in Work 1 and noted the edit is still local.\\n\\n## Progress & Status\\n- **Finished:** Removed Take off its line ["+ref+"]\\n- **To do:** Check the notice in a browser and commit changes\\n\\n## Key Lines\\n- ["+ref+"] **Canvas menu fixes** — removed Take off its line from the Canvas menu\\n"),slow?4000:700);});`);
 const agents = { available:() => [{ id:"tester", name:"Test agent", mono:"Ts", color:"#3457c9", available:true, runs:true }, { id:"tester2", name:"Second agent", mono:"T2", color:"#b4532a", available:true, runs:true }],
   nameOf:id => id, desktop:() => null, terminal:() => "", env:process.env, canAnswer:id => id === "tester" || id === "tester2", answerer:() => ({ command:process.execPath, args:[script] }) };
 const api = createProjectLines({ directory:path.join(temp, "state"), agents, serviceOptions:{ autoWatch:false, memory:{ home:path.join(temp, "home"), env:{} } }, isThisComputer:() => true, authorizeRead:() => null, authorizeWrite:() => null,
@@ -49,30 +49,34 @@ let browser, server;
 
   await page.goto(`${base}/projects.html#${p.id}`); await page.reload();
   await page.waitForSelector(".subnav");
-  check("the header offers Search and the project tabs fit", (await page.locator('.bar-right [data-view="find"]').textContent()).trim() === "Search" && await page.locator(".subnav").evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+  check("the header offers Ask AI and the project tabs fit", (await page.locator('.bar-right [data-view="find"]').textContent()).trim() === "Ask AI" && await page.locator(".subnav").evaluate(n => n.scrollWidth <= n.clientWidth + 1));
   await page.click('.bar-right [data-view="find"]');
   await page.waitForSelector("#findInput");
-  check("the box says it searches or asks", await page.getAttribute("#findInput", "placeholder") === "Search, or ask about this project");
+  check("the box asks a question about this project", await page.getAttribute("#findInput", "placeholder") === "Ask a question about this project");
   check("an agent picker lists the saved agents that can answer", await page.locator("#findAgent option").count() === 2);
-  check("an Ask button sits in the box", await page.locator(".find-box .find-ask").isVisible());
+  check("an Ask button with an Enter hint sits in the box", await page.locator(".find-box .find-ask").isVisible() && (await page.locator(".find-ask kbd").textContent()) === "↵");
 
   await page.fill("#findInput", "what is done on the canvas menu?");
   await page.waitForFunction(() => FIND.data?.q === "what is done on the canvas menu?");
   check("typing still searches at once, with no answer yet", await page.locator(".fl").count() >= 1 && await page.locator(".find-answer").count() === 0);
   const asks = [];
   page.on("request", r => { if (r.method() === "POST" && new URL(r.url()).pathname.endsWith("/ask")) asks.push(r); });
-  await Promise.all([page.waitForResponse(r => new URL(r.url()).pathname.endsWith("/find")), page.press("#findInput", "Enter")]);
-  check("Enter searches without sending the question", asks.length === 0);
-  await page.click(".find-ask");
+  await Promise.all([page.waitForRequest(r => r.method() === "POST" && new URL(r.url()).pathname.endsWith("/ask")), page.press("#findInput", "Enter")]);
+  check("Enter sends one question without a modifier", asks.length === 1);
   await page.waitForSelector(".find-answer.asking");
   check("while it answers, it shows who answers, the seconds and Stop", /Test agent/.test(await page.locator(".find-answer").textContent()) && await page.locator('[data-act="find-ask-stop"]').isVisible());
   await page.screenshot({ path:path.join(shots, "1-asking.png") });
   await page.waitForSelector(".find-answer:not(.asking)", { timeout:15000 });
-  check("the answer has its parts", /Summary/.test(await page.locator(".fa-body").textContent()) && await page.locator(".fa-body li").count() === 2);
-  check("each cited Line is a link in the text", await page.locator(".fa-body .fa-ref").count() === 3 && (await page.locator(".fa-body .fa-ref").first().textContent()) === "PE-584");
+  check("the answer has headings, status badges, and details", await page.locator(".fa-body .md-in-h").count() >= 3 && await page.locator(".fa-body .fa-badge.is-done").count() === 1 && await page.locator(".fa-body .fa-badge.is-todo").count() === 1);
+  check("each cited Line is a link in the text", await page.locator(".fa-body .fa-ref").count() === 4 && (await page.locator(".fa-body .fa-ref").first().textContent()) === "PE-584");
   check("the cited Lines are listed under the answer with their state", await page.locator(".fa-line").count() === 1 && /Canvas menu fixes/.test(await page.locator(".fa-line").textContent()));
   check("the search results stay below", await page.locator("#findBody .fl").count() >= 1);
   await page.screenshot({ path:path.join(shots, "2-answer.png") });
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  check("the header holds one Copy icon, so the answer gets no taller", await page.locator('.find-answer > header [data-act="find-answer-copy"]').count() === 1);
+  await page.click('[data-act="find-answer-copy"]');
+  await page.waitForFunction(() => navigator.clipboard.readText().then(t => t.startsWith("The Canvas menu fix")), null, { timeout:5000 });
+  check("Copy puts the answer's Markdown on the clipboard", /## Key Lines/.test(await page.evaluate(() => navigator.clipboard.readText())));
 
   await page.click(".fa-line");
   await page.waitForFunction(() => S.route.view === "line" && S.route.line === "canvas-menu");
@@ -98,7 +102,7 @@ let browser, server;
   check("the list is still there after a reload", await page.locator(".find-asked .find-row").count() === 1);
   await page.click(".find-asked .fr-open");
   await page.waitForSelector(".find-answer");
-  check("opening one shows its kept answer, with no new run", await page.locator(".find-answer.asking").count() === 0 && /Removed Take off its line/.test(await page.locator(".fa-body").textContent()) && await page.locator(".fa-body .fa-ref").count() === 3);
+  check("opening one shows its kept answer, with no new run", await page.locator(".find-answer.asking").count() === 0 && /Removed Take off its line/.test(await page.locator(".fa-body").textContent()) && await page.locator(".fa-body .fa-ref").count() === 4);
   await page.click('.find-answer [data-act="find-ask"]');
   await page.waitForSelector(".find-answer.asking");
   check("Ask again runs the agent again", true);

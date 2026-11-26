@@ -97,6 +97,8 @@ const ICONS = {
   setCanvasAi: '<path d="M11 5.5c.6 4 2.5 6.4 6.5 7-4 .6-5.9 3-6.5 7-.6-4-2.5-6.4-6.5-7 4-.6 5.9-3 6.5-7z"/><circle cx="18.7" cy="5.3" r="1.3"/>',
   setMcp: '<rect x="4" y="7.5" width="6" height="9" rx="2.5"/><rect x="14" y="7.5" width="6" height="9" rx="2.5"/><path d="M10 12h4"/><circle cx="12" cy="5.3" r="1.3"/>',
   setProviders: '<circle cx="8.5" cy="15" r="4.3"/><circle cx="8.5" cy="15" r="1.3"/><path d="M11.54 11.96L19 4.5M16.6 6.9l1.9 1.9M14.4 9.1l1.5 1.5"/>',
+  setLocalProviders: '<polyline points="4.5 16.5 10 11.5 4.5 6.5"/><path d="M11.5 17.5h8"/><circle cx="18.2" cy="6.2" r="1.3"/>',
+  arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   setGeneral: '<path d="M4 6.5h9.2M15.8 6.5H20M4 12h3.2M9.8 12H20M4 17.5h10.2M16.8 17.5H20"/><circle cx="14.5" cy="6.5" r="1.3"/><circle cx="8.5" cy="12" r="1.3"/><circle cx="15.5" cy="17.5" r="1.3"/>',
   // Deep-sea live activity icons (live.js), matching the Tidecraft Monoline deep-sea set above.
   liveFiles: '<path d="M12 7.6c-2-1.3-4.6-1.7-7.5-1.2v12.1c2.9-.5 5.5-.1 7.5 1.2 2-1.3 4.6-1.7 7.5-1.2V6.4c-2.9-.5-5.5-.1-7.5 1.2zM12 7.6v12.1"/><circle cx="18.6" cy="4.8" r="1.3"/>',
@@ -196,7 +198,8 @@ let toastTimer = 0;
 function toast(msg, action) {
   const el = $('#toast');
   if (!el) return;
-  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button" class="link" id="toastAct">${esc(action.label)}</button>` : ''}`;
+  const tr = typeof linesT === 'function' ? linesT : v => v;
+  el.innerHTML = `<span>${esc(tr(msg))}</span>${action ? `<button type="button" class="link" id="toastAct">${esc(tr(action.label))}</button>` : ''}`;
   el.hidden = false; el.classList.remove('leaving');
   // Above the box at the foot of the page, however tall it has grown.
   const dock = pageRect($('.dock-wrap')), vp = pageViewport();
@@ -276,16 +279,18 @@ function openMenu(anchor, items, { align = 'left', className = '', resolveAnchor
   const rows = [];
   function renderItems(items) {
     const visible = typeof hostedMenu === 'function' ? hostedMenu(items) : items;
+    const tr = typeof linesT === 'function' ? linesT : v => v;
     return visible.map(it => {
       if (it.group) {
         const contents = renderItems(it.items);
-        return contents ? `<div role="group" aria-label="${esc(it.group)}"><div class="menu-head" aria-hidden="true">${esc(it.group)}</div>${contents}</div>` : '';
+        const groupLabel = tr(it.group);
+        return contents ? `<div role="group" aria-label="${esc(groupLabel)}"><div class="menu-head" aria-hidden="true">${esc(groupLabel)}</div>${contents}</div>` : '';
       }
       const i = rows.push(it) - 1;
       if (it.sep) return '<hr>';
-      if (it.head) return `<div class="menu-head">${esc(it.head)}</div>`;
+      if (it.head) return `<div class="menu-head">${esc(tr(it.head))}</div>`;
       const state = typeof it.checked === 'boolean' ? `role="menuitemradio" aria-checked="${it.checked}"` : 'role="menuitem"';
-      return `<button type="button" ${state} data-i="${i}" class="${it.on ? 'on' : ''} ${it.note ? 'has-note' : ''}" ${it.disabled ? 'disabled' : ''}>${it.icon ? ic(it.icon, 16) : ''}${it.glyph ? `<b class="menu-glyph" aria-hidden="true">${esc(it.glyph)}</b>` : ''}${it.av ? av(it.av, 20) : ''}<span>${esc(it.label)}${it.note ? `<small>${esc(it.note)}</small>` : ''}</span>${it.key ? `<kbd class="menu-key">${esc(it.key)}</kbd>` : ''}${it.on ? ic('check', 15) : ''}</button>`;
+      return `<button type="button" ${state} data-i="${i}" class="${it.on ? 'on' : ''} ${it.note ? 'has-note' : ''}" ${it.disabled ? 'disabled' : ''}>${it.icon ? ic(it.icon, 16) : ''}${it.glyph ? `<b class="menu-glyph" aria-hidden="true">${esc(it.glyph)}</b>` : ''}${it.av ? av(it.av, 20) : ''}<span>${esc(tr(it.label))}${it.note ? `<small>${esc(tr(it.note))}</small>` : ''}</span>${it.key ? `<kbd class="menu-key">${esc(it.key)}</kbd>` : ''}${it.on ? ic('check', 15) : ''}</button>`;
     }).join('');
   }
   m.innerHTML = renderItems(items);

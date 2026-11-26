@@ -182,3 +182,10 @@ test("nothing blurs what is behind it: one block at the end switches frosted gla
   assert.doesNotMatch(block, /blur\(/);
   assert.doesNotMatch(read("public/lines/lines.css"), /backdrop-filter/);
 });
+
+test("Canvas ink suggestions dock in an attached shelf below the AI bar without hiding model or effort controls", () => {
+  const css = read("public/studio-shell.css");
+  assert.match(css, /#aiToolsSection > \.assist-bar\.in-ai-bar \{[^}]*position: absolute;[^}]*top: calc\(100% \+ 6px\);[^}]*right: -1px;/);
+  assert.doesNotMatch(css, /#aiToolsSection:has\(> \.assist-bar\.in-ai-bar[^)]*\) > :is\([^)]*#aiModelControl/);
+  assert.doesNotMatch(css, /#aiToolsSection:has\(> \.assist-bar\.in-ai-bar[^)]*\) > :is\([^)]*#effortControl/);
+});

@@ -160,7 +160,12 @@ test("sync brings prices and ratings from penecho.ai, and never replaces a price
   await orchestrator.sync();
   assert.equal(orchestrator.reviews.cloudStart("other", "model-b", "", "code"), 4.5, "unavailable Leaderboard keeps last good starting ratings");
   assert.equal(orchestrator.prices().find(p => p.model === "model-a").input, 5, "prices still update");
+  // No Leaderboard at all: the prices are still taken, and the ratings are named as not synced.
   delete files["/leaderboard.json"];
+  files["/model-prices.json"].models[0].input = 6;
+  assert.deepEqual((await orchestrator.sync()).missed, ["ratings"]);
+  assert.equal(orchestrator.prices().find(p => p.model === "model-a").input, 6);
+  delete files["/model-prices.json"];
   await assert.rejects(orchestrator.sync(), /Could not reach penecho\.ai/);
   void project; void fast; void other;
 });
@@ -893,31 +898,44 @@ rl.on("line", line => {
   assert.equal(parsedStream.verdict, "ready");
   assert.deepEqual(JSON.parse(parsedStream.note), [["req-read", "allow"], ["req-edit", "deny"]]);
 
-  // 3. pi-rpc protocol (Pi / omp): sends piRpcInit, cancels extension_ui_request, closes stdin on agent_end, and respects keepFailed on error.
+  // 3. Pi RPC: send set_event_filter for OMP, drop message_update noise, cancel a dialog, wait through an interim OMP end and close stdin after the final reply.
+  const { OMP_RPC_EVENT_FILTER } = require("../src/server/project-lines/activity.js");
   const piScript = path.join(temp, `pi-reviewer-${counter}.cjs`);
   fs.writeFileSync(piScript, `
 const readline = require("node:readline");
 const say = o => console.log(JSON.stringify(o));
 const rl = readline.createInterface({ input:process.stdin });
+let retry, sawFilter = false;
+rl.on("close", () => clearTimeout(retry));
 rl.on("line", line => {
   const msg = JSON.parse(line);
+  if (msg.type === "set_event_filter") { sawFilter = msg.messageUpdates === "delta"; say({ type:"response", id:msg.id, command:"set_event_filter", success:true }); }
   if (msg.type === "get_state") say({ type:"response", id:msg.id, command:"get_state", success:true, data:{ sessionId:"pi-rev-1" } });
-  if (msg.type === "prompt") say({ type:"extension_ui_request", id:"ui-1", method:"confirm", title:"Proceed?" });
+  if (msg.type === "prompt") {
+    say({ type:"message_update", message:{ role:"assistant" }, assistantMessageEvent:{ type:"thinking_delta", delta:"x".repeat(4096) } });
+    say({ type:"extension_ui_request", id:"ui-1", method:"confirm", title:"Proceed?" });
+  }
   if (msg.type === "extension_ui_response" && msg.cancelled) {
-    const final = JSON.stringify({ verdict:"ready", outcome:5, verification:null, safety:null, requirements:[{ text:"Reply", state:"done" }], findings:[], note:"Pi RPC worked." });
-    say({ type:"message_end", message:{ role:"assistant", stopReason:"end_turn", content:[{ type:"text", text:final }] } });
-    say({ type:"agent_end" });
+    say({ type:"message_end", message:{ role:"assistant", stopReason:"error", errorMessage:"Retrying the model" } });
+    say({ type:"agent_end", isTerminal:false, yielded:false });
+    retry = setTimeout(() => {
+      const final = JSON.stringify({ verdict:"ready", outcome:5, verification:null, safety:null, requirements:[{ text:"Reply", state:"done" }], findings:[], note:sawFilter ? "Pi RPC worked." : "Missing filter" });
+      say({ type:"message_end", message:{ role:"assistant", stopReason:"end_turn", content:[{ type:"text", text:final }] } });
+      say({ type:"agent_end", isTerminal:true, yielded:true });
+    }, 100);
   }
 });
 `);
+  const seenLines = [];
   const piOut = await runReviewCommand(
-    { command:process.execPath, args:[piScript], input:"pi-rpc", dialect:"pi" },
+    { command:process.execPath, args:[piScript], input:"pi-rpc", rpcEventFilter:OMP_RPC_EVENT_FILTER, dialect:"pi" },
     "Review prompt",
-    { cwd:temp, waitMs:10000 }
+    { cwd:temp, waitMs:10000, onLine:l => seenLines.push(l) }
   );
   const parsedPi = parseReview(piOut);
   assert.equal(parsedPi.verdict, "ready");
   assert.equal(parsedPi.note, "Pi RPC worked.");
+  assert.equal(seenLines.some(l => l.includes('"message_update"')), false, "pi-rpc noise frames are dropped from review accumulation");
   void t;
 });
 

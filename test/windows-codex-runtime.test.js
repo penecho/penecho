@@ -435,11 +435,15 @@ test("CodexServer, agents.js (Codex + Claude), ask.js, router.js, and agent-chec
   const winAgents = createAgents({ env:{ PATH:path.dirname(fakeCodex), HOME:root, NODE_EXTRA_CA_CERTS:missingCa }, platform:"win32" });
   const codexDefault = winAgents.command("codex", { workdir:root, docs:root, also:[] });
   const codexFull = winAgents.command("codex", { workdir:root, docs:root, also:[], access:"full" });
-  assert.equal(codexDefault.sandboxWindowsPath, true);
+  const codexReviewed = winAgents.command("codex", { workdir:root, docs:root, also:[], access:"reviewed" });
+  assert.equal(codexDefault.sandboxWindowsPath, false);
   assert.equal(codexFull.sandboxWindowsPath, false);
-  const defaultPathDirs = codexDefault.prepareEnv({ Path:`${winApps};C:\\Tools` }).Path.split(";");
-  assert.equal(defaultPathDirs.includes(winApps), false, "sandboxed Codex strips WindowsApps");
-  assert.equal(defaultPathDirs.includes("C:\\Tools"), true, "sandboxed Codex preserves normal PATH entries");
+  assert.equal(codexReviewed.sandboxWindowsPath, true);
+  const reviewedPathDirs = codexReviewed.prepareEnv({ Path:`${winApps};C:\\Tools` }).Path.split(";");
+  assert.equal(reviewedPathDirs.includes(winApps), false, "sandboxed (Reviewed) Codex strips WindowsApps");
+  assert.equal(reviewedPathDirs.includes("C:\\Tools"), true, "sandboxed (Reviewed) Codex preserves normal PATH entries");
+  assert.equal(codexDefault.prepareEnv({ Path:`${winApps};C:\\Tools`, CODEX_CA_CERTIFICATE:missingCa }).Path, `${winApps};C:\\Tools`);
+  assert.equal(codexDefault.prepareEnv({ Path:`${winApps};C:\\Tools`, CODEX_CA_CERTIFICATE:missingCa }).CODEX_CA_CERTIFICATE, undefined);
   assert.equal(codexFull.prepareEnv({ Path:`${winApps};C:\\Tools`, CODEX_CA_CERTIFICATE:missingCa }).Path, `${winApps};C:\\Tools`);
   assert.equal(codexFull.prepareEnv({ Path:`${winApps};C:\\Tools`, CODEX_CA_CERTIFICATE:missingCa }).CODEX_CA_CERTIFICATE, undefined);
 

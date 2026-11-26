@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { test, after } = require("node:test");
 const { createAgents } = require("../src/server/project-lines/agents.js");
 const { createAgentCheck } = require("../src/server/project-lines/agent-check.js");
@@ -15,12 +15,13 @@ const { createPenEchoSource } = require("../src/server/agent-core/penecho-source
 const { checkCommand, RUN_COMMANDS } = require("../src/server/agent-core/run-commands.js");
 
 const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pe-runner-")));
+const loadRunner = () => import("../src/server/project-lines/penecho-runner.mjs");
 const closing = [];
 after(async () => { for (const close of closing) await close(); fs.rmSync(temp, { recursive:true, force:true }); });
 const REAL_KEY = "sk-real-own-key-0123456789", ACCOUNT_TOKEN = "account-token-abcdef";
 
 // A model that answers from a script: each request gets the next step, as tool calls or as words.
-function stubModel(steps) {
+function stubModel(steps, format = "openai") {
   const requests = [];
   const server = http.createServer((req, res) => {
     let body = "";
@@ -29,7 +30,22 @@ function stubModel(steps) {
       const request = { url:req.url, method:req.method, headers:req.headers, body:JSON.parse(body || "{}") };
       requests.push(request);
       const step = steps[Math.min(requests.length - 1, steps.length - 1)], model = request.body.model, base = { id:`chatcmpl-${requests.length}`, object:"chat.completion.chunk", created:1, model };
+      if (step.hold) return step.hold();
       if (step.status) { res.writeHead(step.status, { "content-type":"application/json" }); return res.end(JSON.stringify({ error:{ message:step.message } })); }
+      if (format === "anthropic") {
+        const block = step.tool ? { type:"tool_use", id:`toolu_${requests.length}`, name:step.tool, input:{} } : { type:"text", text:"" };
+        const delta = step.tool ? { type:"input_json_delta", partial_json:JSON.stringify(step.args) } : { type:"text_delta", text:step.text };
+        const events = [
+          { type:"message_start", message:{ id:`msg_${requests.length}`, type:"message", role:"assistant", model, content:[], stop_reason:null, stop_sequence:null, usage:{ input_tokens:30, output_tokens:1 } } },
+          { type:"content_block_start", index:0, content_block:block },
+          { type:"content_block_delta", index:0, delta },
+          { type:"content_block_stop", index:0 },
+          { type:"message_delta", delta:{ stop_reason:step.length ? "max_tokens" : step.tool ? "tool_use" : "end_turn", stop_sequence:null }, usage:{ output_tokens:25 } },
+          { type:"message_stop" },
+        ];
+        res.writeHead(200, { "content-type":"text/event-stream" });
+        return res.end(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(""));
+      }
       const chunks = step.tool
         ? [{ ...base, choices:[{ index:0, delta:{ role:"assistant", tool_calls:[{ index:0, id:`call_${requests.length}`, type:"function", function:{ name:step.tool, arguments:JSON.stringify(step.args) } }] }, finish_reason:null }] }, { ...base, choices:[{ index:0, delta:{}, finish_reason:"tool_calls" }] }]
         : [{ ...base, choices:[{ index:0, delta:{ role:"assistant", content:step.text }, finish_reason:null }] }, { ...base, choices:[{ index:0, delta:{}, finish_reason:"stop" }] }];
@@ -43,28 +59,29 @@ function stubModel(steps) {
     resolve({ requests, url:`http://127.0.0.1:${server.address().port}/v1` });
   }));
 }
-function cloudSourceFor(url) {
-  const hostedCatalog = { models:[{ id:"stub-model", apiFormat:"openai", worker:true }] };
+function cloudSourceFor(url, apiFormat = "openai") {
+  const hostedCatalog = { models:[{ id:"stub-model", apiFormat, worker:true }] };
   const connector = {
     hostedCatalog,
     status:() => ({ accountSession:{ signedIn:true } }),
     refreshHostedCatalog:async () => hostedCatalog,
     hostedModels:async () => ({ ...hostedCatalog, credits:100 }),
-    prepareHostedConnection:async id => ({ id, provider:"api", apiFormat:"openai", apiUrl:url, apiModel:id.slice(7), apiKey:ACCOUNT_TOKEN, hosted:true }),
+    prepareHostedConnection:async id => ({ id, provider:"api", apiFormat, apiUrl:url, apiModel:id.slice(7), apiKey:ACCOUNT_TOKEN, hosted:true }),
   };
   return createPenEchoSource({ cloud:() => connector });
 }
 const userLine = text => `${JSON.stringify({ type:"user", message:{ role:"user", content:[{ type:"text", text }] } })}\n`;
 // One run the way PenEcho starts it: words in as a JSON line, its input closed once it gives its result.
-function runOnce(command, env, words) {
+function runOnce(command, env, words, onSpawn) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command.command, command.args, { cwd:command.cwd, env:{ ...env, ...command.env }, stdio:["pipe", "pipe", "pipe"] });
+    const child = spawn(command.command, command.args, { cwd:command.cwd, env:{ ...env, ...command.env }, windowsHide:true, stdio:["pipe", "pipe", "pipe"] });
     let stdout = "", stderr = "";
     const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`The run did not end.\n${stdout}\n${stderr}`)); }, 60000);
     child.stdout.on("data", chunk => { stdout += chunk; if (/"type":"result"/.test(stdout) && !child.stdin.writableEnded) child.stdin.end(); });
     child.stderr.on("data", chunk => { stderr += chunk; });
     child.on("error", reject);
     child.on("close", code => { clearTimeout(timer); resolve({ code, stderr, lines:stdout.split("\n").filter(Boolean).map(line => JSON.parse(line)), raw:stdout.split("\n").filter(Boolean) }); });
+    onSpawn?.(child);
     child.stdin.write(userLine(words));
   });
 }
@@ -86,7 +103,9 @@ test("PenEcho emits per-request measured usage with stable IDs for the local tok
   assert.equal(usage.inputTokens,320,JSON.stringify(messages[0].message.usage));assert.equal(usage.outputTokens,40);assert.equal(usage.cacheReadInputTokens,120);
 });
 
-test("a run with the PenEcho agent writes inside its folders only, speaks Claude's JSON lines and holds no key", async () => {
+test("a run with the PenEcho agent writes inside its folders only, speaks Claude's JSON lines and holds no key", async t => {
+  const { findBash } = await loadRunner();
+  if (!findBash()) return t.skip("requires Bash");
   const workdir = path.join(temp, "work"), docs = path.join(temp, "docs"), outside = path.join(temp, "outside"), state = path.join(temp, "state");
   for (const dir of [workdir, docs, outside, state]) fs.mkdirSync(dir, { recursive:true });
   const model = await stubModel([
@@ -94,7 +113,7 @@ test("a run with the PenEcho agent writes inside its folders only, speaks Claude
     { tool:"write", args:{ file_path:path.join(outside, "escape.txt"), content:"no\n" } },
     { tool:"write", args:{ file_path:path.join(docs, "topics.md"), content:"docs are allowed\n" } },
     { tool:"bash", args:{ command:"env" } },
-    { tool:"bash", args:{ command:`echo no > ${path.join(outside, "shell.txt")}` } },
+    { tool:"bash", args:{ command:`echo no > '${path.join(outside, "shell.txt")}'` } },
     { tool:"bash", args:{ command:"node -e \"for (const [k, v] of Object.entries(process.env)) console.log(k + '=' + v)\" && cat notes/inside.txt" } },
     { text:"OK. Wrote notes/inside.txt." },
   ]);
@@ -143,7 +162,7 @@ test("a run with the PenEcho agent writes inside its folders only, speaks Claude
 
   // What a command sees: no key, no token, not even the run's own secret.
   const shown = results[5].content;
-  assert.match(shown, /^PATH=/m);
+  assert.match(shown, /^PATH=/im);
   assert.doesNotMatch(shown, new RegExp(`${REAL_KEY}|${ACCOUNT_TOKEN}|${secret}`));
   assert.doesNotMatch(shown, /KEY|TOKEN|SECRET|PENECHO_MODEL_PROXY/);
   assert.match(results[5].content, /made by PenEcho/);
@@ -157,7 +176,7 @@ test("a run with the PenEcho agent writes inside its folders only, speaks Claude
   const first = JSON.stringify(model.requests[0].body.messages);
   assert.match(first, /Project instructions: say OK when done\./);
   assert.match(first, /Write the note, then say OK\./);
-  assert.deepEqual(model.requests[0].body.tools.map(tool => tool.function.name).sort(), ["bash", "edit", "read", "write"]);
+  assert.deepEqual(model.requests[0].body.tools.map(tool => tool.function.name).sort(), ["bash", "edit", "list", "read", "write"]);
 
   // Carried on later by a new process: the same conversation, with what was said before and the instructions it began with.
   const again = agents.command("penecho", { workdir, docs, gitDir:"", also:[], resume:init.session_id, instructions:"" });
@@ -185,16 +204,18 @@ test("a run with the PenEcho agent writes inside its folders only, speaks Claude
   assert.equal(model.requests.length, 8, "none of those reached the model");
 });
 
-test("words said while it works join its turn, and Stop ends it with the command it was running", async () => {
+test("words said while it works join its turn, and Stop ends it with the command it was running", async t => {
+  const { findBash } = await loadRunner();
+  if (!findBash()) return t.skip("requires Bash");
   const workdir = path.join(temp, "steer"); fs.mkdirSync(workdir, { recursive:true });
   const wait = "node -e \"require('fs').writeFileSync('pid.txt', String(process.pid)); setTimeout(() => {}, 60000)\"";
   const model = await stubModel([{ tool:"bash", args:{ command:"node -e \"setTimeout(() => {}, 1200)\"" } }, { tool:"bash", args:{ command:wait } }, { text:"never reached" }]);
   const source = cloudSourceFor(model.url);
   closing.push(() => source.close());
   await source.listening;
-  const env = { PATH:process.env.PATH, HOME:process.env.HOME }, agents = createAgents({ env, paths:{ penecho:source, stateDir:path.join(temp, "state") }, appFolders:[] });
+  const env = { PATH:process.env.PATH, HOME:process.env.HOME, SystemRoot:process.env.SystemRoot, USERPROFILE:process.env.USERPROFILE }, agents = createAgents({ env, paths:{ penecho:source, stateDir:path.join(temp, "state") }, appFolders:[] });
   const command = agents.command("penecho", { workdir, docs:workdir, also:[] });
-  const child = spawn(command.command, command.args, { cwd:command.cwd, env:{ ...env, ...command.env }, stdio:["pipe", "pipe", "pipe"] });
+  const child = spawn(command.command, command.args, { cwd:command.cwd, env:{ ...env, ...command.env }, windowsHide:true, stdio:["pipe", "pipe", "pipe"] });
   let stdout = "", steered = false;
   const closed = new Promise(resolve => child.on("close", (code, signal) => resolve({ code, signal })));
   const pidFile = path.join(workdir, "pid.txt");
@@ -210,12 +231,112 @@ test("words said while it works join its turn, and Stop ends it with the command
   assert.equal(alive(), true);
   assert.match(JSON.stringify(model.requests[1].body.messages), /Also keep it short\./, "the words joined the turn it was on");
   // Stop, as PenEcho's thread does it.
-  child.kill();
+  if (process.platform === "win32") spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { stdio:"ignore", windowsHide:true });
+  else child.kill();
   const exit = await closed;
   assert.notEqual(exit.code, 0);
   await until(() => !alive(), 5000);
   assert.equal(model.requests.length, 2, "nothing more was asked of the model");
   assert.equal(source.models().name, "stub-model");
+});
+
+test("the local runner lists scoped directories and continues a hosted answer once after truncation", async () => {
+  const { findBash } = await loadRunner();
+  const hasBash = Boolean(findBash());
+  const workdir = path.join(temp, "local discovery"), docs = path.join(temp, "project docs"), outside = path.join(temp, "unlisted");
+  for (const dir of [workdir, docs, outside]) fs.mkdirSync(dir);
+  fs.symlinkSync(outside, path.join(workdir, "linked"), "junction");
+  fs.writeFileSync(path.join(outside, "private.txt"), "private");
+  fs.writeFileSync(path.join(workdir, "source.txt"), "benchmark evidence");
+  for (let i = 0; i < 201; i++) fs.writeFileSync(path.join(docs, `entry-${String(i).padStart(3, "0")}.txt`), "");
+  const output = path.join(docs, "result.txt");
+  const model = await stubModel([
+    { tool:"list", args:{} },
+    { tool:"list", args:{ file_path:outside } },
+    { tool:"list", args:{ file_path:"../unlisted" } },
+    { tool:"list", args:{ file_path:"linked" } },
+    { tool:"list", args:{ file_path:docs } },
+    { tool:"list", args:{ file_path:docs, offset:200 } },
+    { tool:"read", args:{ file_path:"source.txt", limit:1 } },
+    { tool:"write", args:{ file_path:output, content:"Created from benchmark evidence." } },
+    { text:"I will finish the report", length:true },
+    { text:"The report is ready." },
+  ], "anthropic");
+  const source = cloudSourceFor(model.url, "anthropic");
+  closing.push(() => source.close());
+  await source.listening;
+  const env = { PATH:process.env.PATH, SystemRoot:process.env.SystemRoot, AI_API_KEY:REAL_KEY, PENECHO_ACCOUNT_TOKEN:ACCOUNT_TOKEN };
+  const agents = createAgents({ env, paths:{ penecho:source, stateDir:path.join(temp, "discovery-state") }, appFolders:[] });
+  const run = await runOnce(agents.command("penecho", { workdir, docs }), env, "Find the benchmark and produce a report.");
+  assert.equal(run.code, 0, run.stderr || run.lines.at(-1)?.result);
+  const [first] = model.requests;
+  assert.match(first.url, /\/messages$/);
+  assert.deepEqual(first.body.tools.map(tool => tool.name).sort(), [...(hasBash ? ["bash"] : []), "edit", "list", "read", "write"]);
+  assert.equal(run.lines[0].tools.includes("Bash"), hasBash);
+  assert.equal(run.lines[0].tools.includes("List"), true);
+  assert.equal(JSON.stringify(first.body.system).includes("bash runs foreground"), hasBash);
+  assert.match(JSON.stringify(first.body.system), /Use list to discover files/);
+  assert.doesNotMatch(JSON.stringify(first.body), new RegExp(`${REAL_KEY}|${ACCOUNT_TOKEN}`));
+  const results = toolResults(run.lines);
+  assert.deepEqual(results.map(r => Boolean(r.is_error)), [false, true, true, true, false, false, false, false]);
+  assert.match(results[0].content, /link\s+"linked"/);
+  assert.match(results[0].content, /file\s+"source.txt"/);
+  for (const denied of results.slice(1, 4)) assert.match(denied.content, /outside the folders this run may use/);
+  assert.doesNotMatch(JSON.stringify(results), /private\.txt/);
+  assert.match(results[4].content, /offset 200/);
+  assert.doesNotMatch(results[4].content, /entry-200/);
+  assert.match(results[5].content, /entry-200/);
+  assert.match(results[6].content, /benchmark evidence/);
+  assert.equal(fs.readFileSync(output, "utf8"), "Created from benchmark evidence.");
+  assert.ok(run.raw.flatMap(line => parseLine(line)).some(change => change.add?.verb === "Listed" && change.add.target === "."));
+  assert.equal(model.requests.length, 10);
+  assert.match(JSON.stringify(model.requests.at(-1).body.messages), /The previous response reached its output limit/);
+  assert.match(JSON.stringify(model.requests.at(-1).body.messages), /Created from benchmark evidence/);
+  assert.equal(run.lines.filter(line => line.subtype === "retry").length, 1);
+  assert.deepEqual(run.lines.filter(line => line.type === "result").map(line => [line.is_error, line.result]), [[false, "The report is ready."]]);
+});
+
+test("the runner stops after a second truncated answer or a truncated tool call", async () => {
+  const workdir = path.join(temp, "output limits");
+  fs.mkdirSync(workdir);
+  const output = path.join(workdir, "unfinished.txt");
+  for (const scenario of [
+    { steps:[{ text:"Still working", length:true }], requests:2, retries:1 },
+    { steps:[{ tool:"write", args:{ file_path:output, content:"must not run" }, length:true }], requests:1, retries:0 },
+  ]) {
+    const model = await stubModel(scenario.steps, "anthropic");
+    const source = cloudSourceFor(model.url, "anthropic");
+    closing.push(() => source.close());
+    await source.listening;
+    const env = { ...process.env };
+    const agents = createAgents({ env, paths:{ penecho:source, stateDir:path.join(temp, "output-state") }, appFolders:[] });
+    const run = await runOnce(agents.command("penecho", { workdir, docs:workdir }), env, "Finish the report.");
+    assert.equal(run.code, 1, run.stderr);
+    assert.equal(model.requests.length, scenario.requests, run.stderr || run.lines.at(-1)?.result);
+    assert.equal(run.lines.filter(line => line.subtype === "retry").length, scenario.retries);
+    assert.equal(run.lines.filter(line => line.type === "result").length, 1);
+    assert.equal(run.lines.at(-1).is_error, true);
+    assert.match(run.lines.at(-1).result, /ran out of room/);
+    assert.equal(run.lines.at(-1).result.includes("unfinished tool calls did not run"), scenario.retries === 0);
+    assert.equal(fs.existsSync(output), false);
+  }
+});
+
+test("Stop ends the runner while it is waiting for the output-limit continuation", async () => {
+  const workdir = path.join(temp, "stop-recovery");
+  fs.mkdirSync(workdir);
+  let child;
+  const model = await stubModel([{ text:"Incomplete answer", length:true }, { hold:() => child.kill() }], "anthropic");
+  const source = cloudSourceFor(model.url, "anthropic");
+  closing.push(() => source.close());
+  await source.listening;
+  const env = { PATH:process.env.PATH, SystemRoot:process.env.SystemRoot };
+  const agents = createAgents({ env, paths:{ penecho:source, stateDir:path.join(temp, "stop-recovery-state") }, appFolders:[] });
+  const run = await runOnce(agents.command("penecho", { workdir, docs:workdir }), env, "Produce a report.", started => { child = started; });
+  assert.notEqual(run.code, 0);
+  assert.equal(model.requests.length, 2);
+  assert.equal(run.lines.filter(line => line.subtype === "retry").length, 1);
+  assert.ok(!run.lines.some(line => line.type === "result" && !line.is_error));
 });
 
 test("a run that the model refuses ends as a failed result the thread can show", async () => {
@@ -328,17 +449,76 @@ test("R1b: when Cloud marks its worker model, only that worker is available to t
 });
 
 test("the commands an unattended run may use are one list, checked the same for every run", () => {
-  const roots = { cwd:temp, folders:[path.join(temp, "docs")], extra:[`sh '${path.join(temp, "docs", ".penecho", "memory")}'`] };
+  const memory = path.join(temp, "docs", ".penecho", "memory").replaceAll("\\", "/");
+  const roots = { cwd:temp, folders:[path.join(temp, "docs")], extra:[`sh '${memory}'`] };
   const ok = command => checkCommand(command, roots).ok;
   assert.ok(RUN_COMMANDS.includes("git") && !RUN_COMMANDS.includes("rm") && !RUN_COMMANDS.includes("env"));
-  for (const command of ["git status", "npm test && git diff | head -20", "echo hi > notes.txt", "echo hi 2>&1 >/dev/null", `sh "${path.join(temp, "docs", ".penecho", "memory")}" show`, `cd ${path.join(temp, "docs")} && touch a.md`, "find . -name '*.js'", "awk '$3 > 5' a.txt", "git config --get user.name", "sort -o sorted.txt a.txt", "sed -n 1,5p a.txt", "ls a#b"]) assert.equal(ok(command), true, command);
+  for (const command of ["git status", "npm test && git diff | head -20", "echo hi > notes.txt", "echo hi 2>&1 >/dev/null", `sh "${memory}" show`, "cd docs && touch a.md", "find . -name '*.js'", "awk '$3 > 5' a.txt", "git config --get user.name", "sort -o sorted.txt a.txt", "sed -n 1,5p a.txt", "ls a#b"]) assert.equal(ok(command), true, command);
   // Review finding 2: what hid a second command, or wrote or ran outside the rules.
   for (const command of ["ls $'a\\x3b rm -rf .'", 'ls $"x"', "ls #; rm x", "find . -name '*.js' -exec wc -l {} \\;", "find . -delete", "find . -fprint /tmp/x", "awk 'BEGIN{system(\"id\")}'", "awk '{print > \"/tmp/x\"}' a", "awk -f prog.awk a", "git -c alias.x='!sh' x", "git config alias.x '!sh'", "git rebase -x id main", "git submodule foreach id", "sort -o /tmp/x a.txt", "curl -o /tmp/x http://example.com", "curl --output=/tmp/x http://example.com", "curl -K cfg", "sed 's/a/b/w /tmp/x' a", "sed -e '1e id' a", "cp -t /tmp a.txt", "mv --target-directory=/tmp a.txt", "gh alias set x '!id'"]) assert.equal(ok(command), false, command);
   // Where there is no OS sandbox, reading outside the run's folders is refused by the check too.
   assert.equal(checkCommand("cat /etc/passwd", { ...roots, strictReads:true }).ok, false);
+  assert.equal(checkCommand("cat < /etc/passwd", { ...roots, strictReads:true }).ok, false);
   assert.equal(checkCommand("cat ../../x", { ...roots, strictReads:true }).ok, false);
-  assert.equal(checkCommand(`cat ${path.join(temp, "docs", "a.md")}`, { ...roots, strictReads:true }).ok, true);
+  assert.equal(checkCommand(`cat '${path.join(temp, "docs", "a.md")}'`, { ...roots, strictReads:true }).ok, true);
   for (const command of ["rm -rf .", "FOO=1 node x.js", "cat $(ls)", "echo `id`", "echo hi > /etc/hosts", "echo hi > $HOME/x", "mkdir /tmp/elsewhere", "cp a /tmp/b", "cd / && touch x", "node a.js &", "cat <<EOF\nx\nEOF", "sudo ls", "bash -c ls", "(ls)"]) assert.equal(ok(command), false, command);
+
+  // Windows path confinement under Git Bash (no OS sandbox -> strictReads:true).
+  const winRoots = { cwd:"C:\\Users\\msi\\work", folders:["C:\\Users\\msi\\docs"], strictReads:true, platform:"win32" };
+  for (const allowed of [
+    'ls -la "C:/Users/msi/docs/sub"',
+    "cat 'C:\\Users\\msi\\work\\a.txt'",
+    'cat "C:\\Users\\msi\\work\\a.txt"',
+    "cat /c/Users/msi/docs/a.md",
+    "cd /c/Users/msi/docs && cat a.md",
+    "echo hi > /dev/null",
+    "git status && node -v",
+  ]) assert.equal(checkCommand(allowed, winRoots).ok, true, allowed);
+  for (const denied of [
+    "cat C:/Windows/win.ini",
+    "cat 'C:\\Windows\\win.ini'",
+    'cat "C:\\Users\\msi\\.penecho\\connections.json"',
+    "cat /c/Windows/win.ini",
+    "cat /etc/passwd",
+    "cat /work/a.txt",
+    "cat '..\\outside\\secret.txt'",
+    "cat '\\\\server\\share\\secret.txt'",
+    "cat < C:/Windows/win.ini",
+    "cat C:secret.txt",
+    "echo hi > 'C:\\Users\\msi\\outside\\x.txt'",
+  ]) assert.equal(checkCommand(denied, winRoots).ok, false, denied);
+});
+
+test("findBash discovers Git Bash on Windows while rejecting WSL and WindowsApps shims", async () => {
+  const { findBash } = await loadRunner();
+  const makeIsFile = files => {
+    const set = new Set(files.map(f => f.toLowerCase()));
+    return file => set.has(String(file).toLowerCase());
+  };
+  // Ignores WSL System32\bash.exe and WindowsApps alias even when set as override or on PATH.
+  assert.equal(findBash({
+    platform:"win32",
+    env:{ PENECHO_GIT_BASH_PATH:"C:\\Windows\\System32\\bash.exe", CLAUDE_CODE_GIT_BASH_PATH:"C:\\Users\\msi\\AppData\\Local\\Microsoft\\WindowsApps\\bash.exe", PATH:"C:\\Windows\\System32;C:\\Users\\msi\\AppData\\Local\\Microsoft\\WindowsApps" },
+    isFile:makeIsFile(["C:\\Windows\\System32\\bash.exe", "C:\\Users\\msi\\AppData\\Local\\Microsoft\\WindowsApps\\bash.exe"]),
+  }), "");
+  // Discovers Git Bash relative to git.exe on PATH and prefers bin\bash.exe over usr\bin\bash.exe.
+  assert.equal(findBash({
+    platform:"win32",
+    env:{ PATH:"C:\\Custom\\Git\\cmd;C:\\Windows\\System32" },
+    isFile:makeIsFile(["C:\\Custom\\Git\\cmd\\git.exe", "C:\\Custom\\Git\\bin\\bash.exe", "C:\\Custom\\Git\\usr\\bin\\bash.exe"]),
+  }), "C:\\Custom\\Git\\bin\\bash.exe");
+  // Falls back to standard Program Files Git install.
+  assert.equal(findBash({
+    platform:"win32",
+    env:{ ProgramFiles:"C:\\Program Files", PATH:"C:\\Windows\\System32" },
+    isFile:makeIsFile(["C:\\Program Files\\Git\\usr\\bin\\bash.exe"]),
+  }), "C:\\Program Files\\Git\\usr\\bin\\bash.exe");
+  // Honors explicit safe PENECHO_GIT_BASH_PATH override.
+  assert.equal(findBash({
+    platform:"win32",
+    env:{ PENECHO_GIT_BASH_PATH:"D:\\Tools\\Git\\bin\\bash.exe", ProgramFiles:"C:\\Program Files" },
+    isFile:makeIsFile(["D:\\Tools\\Git\\bin\\bash.exe", "C:\\Program Files\\Git\\bin\\bash.exe"]),
+  }), "D:\\Tools\\Git\\bin\\bash.exe");
 });
 
 test("review finding 1: a command the PenEcho agent runs cannot read the stored keys or anything outside its folders", { skip:!["darwin", "linux"].includes(process.platform) && "no OS sandbox here" }, async () => {

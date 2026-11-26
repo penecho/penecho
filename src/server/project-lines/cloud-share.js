@@ -855,7 +855,7 @@ function createCloudShare({ store, connector, assertOwner = () => {}, signIn = n
     let who = null, origin = "";
     try { who = account(); origin = cloud().status().origin || ""; } catch { /* Still starting. */ }
     const workspace = who?.workspace || null;
-    return { signedIn:Boolean(who), name:who?.name || "", plan:isPlus(who) ? (who.membership.tier === "pro" ? "Pro" : "Plus") : who ? "Free" : "", origin,
+    return { signedIn:Boolean(who), id:who?.id || "", name:who?.name || "", plan:isPlus(who) ? (who.membership.tier === "pro" ? "Pro" : "Plus") : who ? "Free" : "", origin,
       storage:workspace?.storageLimitBytes ? { used:Number(workspace.storageUsedBytes || 0), limit:Number(workspace.storageLimitBytes) } : null };
   }
   async function signOut() {

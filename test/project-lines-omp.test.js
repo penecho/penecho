@@ -73,3 +73,46 @@ test("omp transcript contextSnapshot matches live message_end checkpoint without
   assert.equal(alreadyHandled({ at:liveCp.at, hashes:[liveCp.hash] }, fileCp), true);
   assert.ok("contextSnapshot" in transcriptRow.message, "checkpointOf must not mutate the parsed message");
 });
+
+test("omp requests delta message updates via set_event_filter while pi omits it, and ompLogError surfaces silent code-1 crashes", () => {
+  const { OMP_RPC_EVENT_FILTER, piRpcInit, isPiTurnEnd, isPiNoiseLine, ompLogError } = require("../src/server/project-lines/activity.js");
+  const home = fresh("omp-filter");
+  const omp = program(path.join(home, ".local", "bin", "omp"));
+  const pi = program(path.join(home, ".local", "bin", "pi"));
+  const agents = createAgents({ env:{ HOME:home, PATH:"" } });
+
+  const ompCmd = agents.command("omp", { workdir:home, docs:home, gitDir:"" });
+  const piCmd = agents.command("pi", { workdir:home, docs:home, gitDir:"" });
+  assert.equal(ompCmd.command, omp);
+  assert.equal(piCmd.command, pi);
+  assert.deepEqual(ompCmd.rpcEventFilter, OMP_RPC_EVENT_FILTER);
+  assert.equal(ompCmd.rpcEventFilter.messageUpdates, "delta");
+  assert.ok(ompCmd.rpcEventFilter.events.includes("message_update"), "delta message_update stays enabled for watchdog activity");
+  assert.ok(!ompCmd.rpcEventFilter.events.includes("tool_execution_update"), "high-volume tool_execution_update is filtered at source");
+  assert.equal(piCmd.rpcEventFilter, undefined, "pi does not receive omp-only set_event_filter");
+
+  const ompFrames = piRpcInit("hello", { eventFilter:ompCmd.rpcEventFilter }).trim().split("\n").map(l => JSON.parse(l));
+  assert.deepEqual(ompFrames.map(f => f.type), ["set_event_filter", "get_state", "prompt"]);
+  assert.equal(ompFrames[0].messageUpdates, "delta");
+  const piFrames = piRpcInit("hello", { eventFilter:piCmd.rpcEventFilter }).trim().split("\n").map(l => JSON.parse(l));
+  assert.deepEqual(piFrames.map(f => f.type), ["get_state", "prompt"]);
+
+  assert.equal(isPiTurnEnd({ type:"agent_end", willContinue:true }), false);
+  assert.equal(isPiNoiseLine(JSON.stringify({ type:"message_update", message:{ role:"assistant" } })), true);
+  assert.equal(isPiNoiseLine(JSON.stringify({ type:"tool_execution_update", toolCallId:"t1" })), true);
+  assert.equal(isPiNoiseLine(JSON.stringify({ type:"message_end", message:{ role:"assistant" } })), false);
+
+  const logsDir = path.join(home, ".omp", "logs");
+  fs.mkdirSync(logsDir, { recursive:true });
+  const now = Date.now();
+  const date = new Date(now).toISOString().slice(0, 10);
+  const pid = 504504;
+  fs.writeFileSync(path.join(logsDir, `omp.${date}.${pid}.log`), [
+    JSON.stringify({ timestamp:new Date(now - 60000).toISOString(), level:"error", pid, message:"Stale reused PID error", error:"old" }),
+    JSON.stringify({ timestamp:new Date(now + 100).toISOString(), level:"error", pid, message:"RPC output delivery failed", error:"Error: ENOSPC: no space left on device, write" }),
+    JSON.stringify({ timestamp:new Date(now + 110).toISOString(), level:"debug", pid, message:"Session exit recorded" }),
+  ].join("\n") + "\n");
+  assert.equal(ompLogError(pid, { started:now, home }), "RPC output delivery failed: Error: ENOSPC: no space left on device, write");
+  assert.equal(ompLogError(pid, { started:now + 30000, home }), "", "ignores earlier entries from a reused PID");
+  assert.equal(ompLogError(999999, { started:now, home }), "");
+});

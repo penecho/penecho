@@ -565,6 +565,23 @@ test('a picture pasted into the job becomes a chip', () => {
   assert.match(h.document.querySelector('#orchFiles').textContent, /shot\.png/);
 });
 
+test('Add new canvas opens a blank drawing for the Orchestrator draft when editing is allowed', () => {
+  const h = harness(), add = h.document.querySelector('[data-act="orch-attach"]');
+  const canvasItem = () => {
+    h.c.ACT['orch-attach'](add);
+    return h.menus.at(-1).items.find(item => item.label === 'Add new canvas');
+  };
+  let opened;
+  h.c.openDrawing = async (project, form, options) => { opened = [project.id, form.dataset.comp, options]; };
+  const item = canvasItem();
+  assert.equal(item.icon, 'canvas');
+  item.fn();
+  assert.deepEqual(opened, ['project', 'orch-project', undefined]);
+  h.c.can = what => what !== 'canvas';
+  assert.equal(canvasItem(), undefined);
+  assert.equal(h.requests.length, 0);
+});
+
 test('dropping on the shared job composer adds once and clears the page overlay', () => {
   const h = harness(), handlers = {};
   h.document.body.insertAdjacentHTML('beforeend', '<div id="dropOverlay" hidden></div><input id="filePick" type="file">');
@@ -587,7 +604,7 @@ test('Slides and its template are job requirements, not text edits or a separate
   let plusMenu = null;
   h.c.openMenu = (_el, items) => { plusMenu = items; };
   h.c.ACT['orch-attach'](find('[data-act="orch-attach"]'));
-  assert.deepEqual(Array.from(plusMenu.filter(item => !item.sep), item => item.label), ['Add images or files', 'Diagram', 'Explorer', 'Slides', 'Note card', 'MeetCue']);
+  assert.deepEqual(Array.from(plusMenu.filter(item => !item.sep), item => item.label), ['Add images or files', 'Add new canvas', 'Diagram', 'Explorer', 'Slides', 'Note card', 'MeetCue']);
   type(h, 'Show the decision to the board.');
   plusMenu.find(item => item.label === 'Slides').fn();
   assert.deepEqual([...h.document.querySelectorAll('.orch-bar [data-kind]')].map(el => el.textContent), ['Slides']);

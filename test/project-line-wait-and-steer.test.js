@@ -186,7 +186,7 @@ test("CodexServer holds item/tool/requestUserInput open for replyServer, auto-de
 // =========================================================================
 // 3. Pi & OMP RPC mode: flags, steer, extension_ui_request/response, EOF
 // =========================================================================
-test("Pi and OMP launch in RPC mode, parse get_state/extension_ui_request/agent_end, support steer & UI answering, and close cleanly on agent_end", async t => {
+test("Pi and OMP launch in RPC mode and an OMP Work can still be steered after an interim end", async t => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "pi-omp-rpc-"));
   const binDir = path.join(tmpHome, ".local", "bin");
   fs.mkdirSync(binDir, { recursive: true });
@@ -211,27 +211,32 @@ test("Pi and OMP launch in RPC mode, parse get_state/extension_ui_request/agent_
   const uiChanges = parseDialect("pi", JSON.stringify({ type: "extension_ui_request", id: "u1", method: "select", title: "Pick framework", options: ["React", "Vue"] }), st);
   assert.equal(uiChanges.some(c => c.asking?.id === "u1"), true);
   assert.equal(isResult(JSON.stringify({ type: "agent_end" })), true);
+  assert.equal(isResult({ type:"agent_end", isTerminal:false, yielded:true }), false);
+  assert.equal(isResult({ type:"agent_end", isTerminal:true, yielded:false }), false);
 
-  // Full Service run with Pi RPC: initial prompt -> extension_ui_request -> answer -> steer -> agent_end -> stdin EOF
+  // Full OMP Work using the shared Pi RPC protocol.
   const stateDir = path.join(tmpHome, "state"), docsDir = path.join(tmpHome, "docs");
   fs.mkdirSync(stateDir, { recursive: true });
   let piChild = null;
   const fakeAgents = {
-    available: () => [{ id: "pi", available: true, name: "Pi" }],
+    available: () => [{ id: "omp", available: true, name: "omp" }],
     classifier: () => null,
-    command: (_id, opts) => ({ command: "pi", args: ["--mode", "rpc"], cwd: opts.workdir, stdin: true, input: "pi-rpc", dialect: "pi", steerMode: "live" }),
+    command: (_id, opts) => ({ ...ompCmd, cwd:opts.workdir }),
   };
   const service = new Service({ directory: stateDir, agents: fakeAgents, autoWatch: false, spawnFn: () => { piChild = makeFakeChild(93001); return piChild; } });
   t.after(() => { service.runs.clear(); service.close(); fs.rmSync(tmpHome, { recursive: true, force: true }); });
 
   const project = service.store.create({ name: "PiRpc", docsPath: docsDir });
-  project.defaultAgent = "pi"; service.store.save();
-  const created = await service.createTopic(project, { text: "Build app", agent: "pi", kinds: ["ask", "work"], start: true });
+  project.defaultAgent = "omp"; service.store.save();
+  const created = await service.createTopic(project, { text: "Build app", agent: "omp", kinds: ["ask", "work"], start: true });
   await until(() => Boolean(piChild), "pi child spawned");
 
-  // Initial input contains get_state + prompt
+  // Initial input contains set_event_filter (delta) + get_state + prompt for OMP
   const initJoined = piChild.stdinChunks.join("");
-  assert.ok(initJoined.includes('"command"') === false && initJoined.includes('"type":"get_state"') && initJoined.includes('"type":"prompt"'));
+  const initFrames = initJoined.trim().split("\n").map(l => JSON.parse(l));
+  assert.deepEqual(initFrames.map(f => f.type), ["set_event_filter", "get_state", "prompt"]);
+  assert.equal(initFrames[0].messageUpdates, "delta");
+  assert.equal(initJoined.includes('"command"'), false);
 
   // Emit get_state response + agent_start + extension_ui_request
   piChild.stdout.write(`${JSON.stringify({ id: "init-state", type: "response", command: "get_state", success: true, data: { sessionId: "pi-s1", model: { id: "kimi-k3" } } })}\n`);
@@ -253,11 +258,21 @@ test("Pi and OMP launch in RPC mode, parse get_state/extension_ui_request/agent_
   const uiReplyLine = piChild.stdinChunks.find(c => c.includes('"extension_ui_response"'));
   assert.deepEqual(JSON.parse(uiReplyLine), { type: "extension_ui_response", id: "req-pi-1", value: "Postgres" });
 
-  // Mid-run live steer via steerAction (correlates Pi RPC response frame)
+  // A recoverable model failure is followed by an interim agent_end before OMP retries.
+  const run = service.runs.get(service.key(project, created.slug));
+  piChild.stdout.write(JSON.stringify({ type:"message_end", message:{ role:"assistant", stopReason:"error", errorMessage:"Retrying the model" } }) + "\n");
+  piChild.stdout.write(JSON.stringify({ type:"agent_end", isTerminal:false, yielded:false }) + "\n");
+  assert.equal(run.lastFailed, true);
+  assert.equal(run.rpcStreaming, true);
+  assert.equal(Boolean(run.turnOver), false);
+  assert.equal(piChild.stdin.writableEnded, false);
+
+  // Live steer still uses the ongoing turn.
   const steerPromise = service.steerAction(project, created.slug, { text: "Also add migrations", mode: "live" });
   await until(() => piChild.stdinChunks.some(c => c.includes('"type":"steer"')), "steer frame written");
   const steerLine = piChild.stdinChunks.find(c => c.includes('"type":"steer"'));
   const steerFrame = JSON.parse(steerLine);
+  assert.equal(steerFrame.type, "steer");
   assert.ok(steerFrame.id, "steer frame includes correlation id");
   assert.ok(steerFrame.message.includes("Also add migrations"));
   piChild.stdout.write(`${JSON.stringify({ id: steerFrame.id, type: "response", command: "steer", success: true })}\n`);
@@ -266,11 +281,52 @@ test("Pi and OMP launch in RPC mode, parse get_state/extension_ui_request/agent_
 
   // agent_end closes stdin cleanly
   piChild.stdout.write(`${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Done with Postgres and migrations." }] } })}\n`);
-  piChild.stdout.write(`${JSON.stringify({ type: "agent_end" })}\n`);
+  piChild.stdout.write(`${JSON.stringify({ type: "agent_end", isTerminal:true, yielded:true })}\n`);
   await until(() => piChild.stdin.writableEnded, "pi stdin closed on agent_end");
   piChild.emit("close", 0);
   await until(() => !service.runs.size && !service.finishing.size, "pi run finished");
   assert.equal(F.parseLine(service.readDoc(project, created.slug)).status, "done");
+});
+
+test("OMP silent code-1 exit surfaces ~/.omp/logs error and sweeps finished keeper folders after completion", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "omp-silent-exit-"));
+  const stateDir = path.join(root, "state"), docsDir = path.join(root, "docs"), homeDir = path.join(root, "home");
+  const script = path.join(root, "omp-crash.cjs");
+  fs.mkdirSync(stateDir, { recursive:true });
+  fs.mkdirSync(path.join(homeDir, ".omp", "logs"), { recursive:true });
+  fs.writeFileSync(script, `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const readline = require("node:readline");
+    const rl = readline.createInterface({ input:process.stdin });
+    rl.on("line", line => {
+      const msg = JSON.parse(line);
+      if (msg.type === "prompt") {
+        const logDir = path.join(${JSON.stringify(homeDir)}, ".omp", "logs");
+        const date = new Date().toISOString().slice(0, 10);
+        fs.writeFileSync(path.join(logDir, "omp." + date + "." + process.pid + ".log"),
+          JSON.stringify({ timestamp:new Date().toISOString(), level:"error", pid:process.pid, message:"RPC output delivery failed", error:"Error: ENOSPC: no space left on device, write" }) + "\\n");
+        process.exit(1);
+      }
+    });
+  `);
+  const fakeAgents = {
+    env:{ ...process.env, HOME:homeDir, USERPROFILE:homeDir },
+    available:() => [{ id:"omp", available:true, name:"omp" }],
+    classifier:() => null,
+    command:(_id, opts) => ({ command:process.execPath, args:[script], cwd:opts.workdir, stdin:true, input:"pi-rpc", dialect:"pi", steerMode:"live" }),
+  };
+  const service = new Service({ directory:stateDir, agents:fakeAgents, autoWatch:false, conversations:{ home:homeDir, env:fakeAgents.env } });
+  t.after(() => { service.close(); fs.rmSync(root, { recursive:true, force:true }); });
+
+  const project = service.store.create({ name:"OmpDiag", docsPath:docsDir });
+  project.defaultAgent = "omp"; service.store.save();
+  const created = await service.createTopic(project, { text:"Trigger crash", agent:"omp", kinds:["ask", "work"], start:true });
+  await until(() => F.parseLine(service.readDoc(project, created.slug)).status === "stopped", "OMP work settled as stopped");
+  const doc = F.parseLine(service.readDoc(project, created.slug));
+  assert.match(doc.front.why, /RPC output delivery failed: Error: ENOSPC: no space left on device, write/);
+  const keepRoot = path.join(stateDir, "keep");
+  await until(() => !fs.existsSync(keepRoot) || fs.readdirSync(keepRoot).length === 0, "finished keeper folder swept");
 });
 
 // =========================================================================

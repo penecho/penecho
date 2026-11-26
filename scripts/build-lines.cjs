@@ -51,6 +51,7 @@ const HEAD_JS_SOURCES = [
 
 const BODY_JS_SOURCES = [
   "public/lines/start.js",
+  "public/lines/i18n.js",
   "public/lines/core.js",
   "public/lines/embed.js",
   "public/lines/hosted.js",

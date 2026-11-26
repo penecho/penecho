@@ -1,7 +1,8 @@
 "use strict";
-// Suggestions for new ink sit inside the Canvas AI bar on a wide Canvas, in
-// place of its settings, with three choices; selections and narrow windows keep
-// the floating bar. Isolated data, no AI requests.
+// Suggestions for new ink dock in an attached shelf directly beneath the Canvas
+// AI bar on a wide Canvas, keeping model, reasoning, Auto, colour and Favorites
+// visible; selections and narrow windows keep the floating bar. Isolated data,
+// no AI requests.
 const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), assert = require("node:assert/strict"), { Readable } = require("node:stream");
 const root = path.resolve(__dirname, ".."), temporary = fs.mkdtempSync(path.join(os.tmpdir(), "suggest-in-ai-bar-"));
@@ -57,21 +58,39 @@ app.whenReady().then(async () => {
 
     const docked = await page(`seed();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
       const bar=a.bar.element,chips=[...bar.querySelectorAll(':scope > .assist-action')].filter(shown),outline=document.querySelector('.assist-target-outline');
+      const sectionRect=section.getBoundingClientRect(),shelfRect=bar.getBoundingClientRect();
       return {mode:a.bar.mode,inBar:bar.parentElement===section&&bar.classList.contains('in-ai-bar'),settings:settings(),run:shown(section.querySelector('#aiToolbarRun')),
-        chips:chips.map(c=>c.textContent.trim()),askInMenu:Boolean(bar.querySelector('.assist-menu > .assist-ask')),width:section.getBoundingClientRect().width,runPosition:runPosition(),
-        height:section.getBoundingClientRect().height,outline:Boolean(outline),layerHidden:document.querySelector('#smartSuggestLayer').hidden};`);
+        chips:chips.map(c=>c.textContent.trim()),askInMenu:Boolean(bar.querySelector('.assist-menu > .assist-ask')),width:sectionRect.width,runPosition:runPosition(),
+        height:sectionRect.height,shelfHeight:shelfRect.height,shelfBelow:shelfRect.top>=sectionRect.bottom+4,shelfRightAligned:Math.abs(shelfRect.right-sectionRect.right)<=1.5,
+        outline:Boolean(outline),layerHidden:document.querySelector('#smartSuggestLayer').hidden};`);
     report.docked = docked;
     assert.equal(docked.mode, "suggest");
-    assert.ok(docked.inBar, "new-ink suggestions sit inside the AI bar");
-    assert.deepEqual(docked.settings, [false, false, false, false], "suggestions take the settings' place");
+    assert.ok(docked.inBar, "new-ink suggestions dock in the attached shelf");
+    assert.deepEqual(docked.settings, [true, true, true, true], "all AI bar settings stay visible while suggesting");
     assert.ok(docked.run, "AI stays in the bar");
-    assert.deepEqual(docked.runPosition, before.runPosition, "AI does not move when suggestions replace the settings");
+    assert.deepEqual(docked.runPosition, before.runPosition, "AI does not move when suggestions appear");
+    assert.ok(Math.abs(docked.width - before.width) < 1, "the AI bar keeps its exact width");
     assert.equal(docked.chips.length, 3, "three suggestions show: " + docked.chips.join(", "));
     assert.ok(docked.askInMenu, "Ask is inside ⋯");
-    assert.ok(docked.height <= 42, "the bar keeps one row");
+    assert.ok(docked.height <= 42, "the AI bar keeps one row");
+    assert.ok(docked.shelfHeight <= 38 && docked.shelfBelow && docked.shelfRightAligned, "attached shelf sits directly beneath the AI bar, right-aligned: " + JSON.stringify(docked));
     assert.equal(docked.outline, false, "no box is drawn around the ink");
-    report.checks.push(`Suggest: inside the AI bar, settings hidden, 3 suggestions (${docked.chips.join(" · ")}), bar ${Math.round(before.width)} → ${Math.round(docked.width)} px, no box around the ink`);
+    report.checks.push(`Suggest: attached shelf beneath AI bar, all settings visible, 3 suggestions (${docked.chips.join(" · ")}), AI bar unchanged (${Math.round(docked.width)} px)`);
     await shot("suggest");
+
+    const menusAboveShelf = await page(`const shelfRect=a.bar.element.getBoundingClientRect();
+      document.querySelector('#aiModelButton').click();await new Promise(r=>requestAnimationFrame(r));
+      const modelMenu=document.querySelector('#aiModelMenu'),modelOpen=shown(modelMenu);
+      const modelZ=Number(getComputedStyle(modelMenu).zIndex||0),shelfZ=Number(getComputedStyle(a.bar.element).zIndex||0);
+      document.querySelector('#aiModelButton').click();await new Promise(r=>requestAnimationFrame(r));
+      document.querySelector('#aiEffortButton').click();await new Promise(r=>requestAnimationFrame(r));
+      const effortPopover=document.querySelector('#effortPopover'),effortOpen=shown(effortPopover);
+      const effortZ=Number(getComputedStyle(effortPopover).zIndex||0);
+      document.querySelector('#aiEffortButton').click();await new Promise(r=>requestAnimationFrame(r));
+      return {modelOpen,modelAbove:modelZ>shelfZ,effortOpen,effortAbove:effortZ>45,shelfTop:shelfRect.top};`);
+    assert.ok(menusAboveShelf.modelOpen && menusAboveShelf.modelAbove, "Model chooser opens above the suggestion shelf: " + JSON.stringify(menusAboveShelf));
+    assert.ok(menusAboveShelf.effortOpen && menusAboveShelf.effortAbove, "Thinking effort opens above the suggestion shelf: " + JSON.stringify(menusAboveShelf));
+    report.checks.push("Model chooser and Thinking effort menus open cleanly above the attached shelf");
 
     const menu = await page(`a.bar.element.querySelector('.assist-more > button').click();await new Promise(r=>requestAnimationFrame(r));
       const m=a.bar.element.querySelector('.assist-menu'),rect=m.getBoundingClientRect();
@@ -80,39 +99,33 @@ app.whenReady().then(async () => {
       await new Promise(r=>requestAnimationFrame(r));
       return {shown:shown(m),inside:rect.left>=0&&rect.right<=innerWidth+1,first:m.firstElementChild.classList.contains('assist-ask'),input:Boolean(input)&&document.activeElement===input,
         chips:[...a.bar.element.querySelectorAll(':scope > .assist-action')].filter(shown).length};`);
-    assert.ok(menu.shown && menu.inside && menu.first && menu.input, "⋯ opens below the bar with Ask first, and Ask opens its box: " + JSON.stringify(menu));
-    assert.equal(menu.chips, 3, "the three suggestions stay on the bar while Ask is open");
+    assert.ok(menu.shown && menu.inside && menu.first && menu.input, "⋯ opens below the shelf with Ask first, and Ask opens its box: " + JSON.stringify(menu));
+    assert.equal(menu.chips, 3, "the three suggestions stay on the shelf while Ask is open");
     report.checks.push("⋯ opens inside the window with Ask first; Ask opens its text box there");
     await shot("menu-ask");
 
-    const auto = await page(`seed();document.querySelector('#auto').classList.add('active');await new Promise(r=>requestAnimationFrame(r));
-      const dot=getComputedStyle(document.querySelector('#aiToolbarRun'),'::after').content;document.querySelector('#auto').classList.remove('active');
-      const none=getComputedStyle(document.querySelector('#aiToolbarRun'),'::after').content;return {dot,none};`);
-    assert.ok(auto.dot !== "none" && auto.none === "none", "a dot on AI shows Auto while its control is hidden: " + JSON.stringify(auto));
-    report.checks.push("A dot on AI shows Auto is on while the settings are hidden");
-
     const closed = await page(`a.bar.element.querySelector('.assist-close').click();await new Promise(r=>requestAnimationFrame(r));
       return {bar:Boolean(a.bar),inSection:Boolean(section.querySelector('.assist-bar')),settings:settings(),outline:Boolean(document.querySelector('.assist-target-outline')),width:section.getBoundingClientRect().width,runPosition:runPosition()};`);
-    assert.deepEqual([closed.bar, closed.inSection, closed.outline], [false, false, false], "× removes the suggestion");
-    assert.deepEqual(closed.settings, [true, true, true, true], "the settings come back after ×");
-    assert.ok(Math.abs(closed.width - before.width) < 1, "the AI bar returns to its width");
+    assert.deepEqual([closed.bar, closed.inSection, closed.outline], [false, false, false], "× removes the suggestion shelf");
+    assert.deepEqual(closed.settings, [true, true, true, true], "all settings remain visible after ×");
+    assert.ok(Math.abs(closed.width - before.width) < 1, "the AI bar keeps its width");
     assert.deepEqual(closed.runPosition, before.runPosition, "AI does not move when suggestions close");
-    report.checks.push("× brings model, reasoning, Auto and colour back at the original width");
+    report.checks.push("× closes the attached shelf while keeping the AI bar steady");
 
     const working = await page(`seed();s.activeAI={test:true};const target=a.bar.target;t.renderAssist({mode:'working',label:'Plotting graph',box:target.box,target});
       await new Promise(r=>requestAnimationFrame(r));const bar=a.bar.element;
       return {inBar:bar.parentElement===section,settings:settings(),text:bar.textContent,outline:Boolean(document.querySelector('.assist-target-outline')),runPosition:runPosition()};`);
-    assert.ok(working.inBar && working.settings.every(value => !value) && /Plotting graph/.test(working.text), "Working shows in the AI bar");
+    assert.ok(working.inBar && working.settings.every(Boolean) && /Plotting graph/.test(working.text), "Working shows in the attached shelf while settings stay visible");
     assert.equal(working.outline, false, "no box is drawn around the ink");
-    assert.deepEqual(working.runPosition, before.runPosition, "AI does not move when the bar shows progress");
-    report.checks.push("Working shows inside the AI bar");
+    assert.deepEqual(working.runPosition, before.runPosition, "AI does not move when the shelf shows progress");
+    report.checks.push("Working shows in the attached shelf while AI bar settings remain visible");
     await shot("working");
     await page(`s.activeAI=null;t.hideAssist('test');`);
 
     const writing = await page(`seed();a.bar.element.classList.add('is-writing');const style=getComputedStyle(a.bar.element);
       const out={visibility:style.visibility,opacity:style.opacity,settings:settings()};a.bar.element.classList.remove('is-writing');return out;`);
-    assert.ok(writing.visibility === "visible" && Number(writing.opacity) < 1 && writing.settings.every(value => !value), "writing dims the bar without bringing the settings back");
-    report.checks.push("While writing the bar dims in place instead of swapping back to the settings");
+    assert.ok(writing.visibility === "visible" && Number(writing.opacity) < 1 && writing.settings.every(Boolean), "writing dims the shelf while keeping settings visible");
+    report.checks.push("While writing the attached shelf dims in place while settings stay visible");
 
     const selection = await page(`seed();t.captureSelection([{x:330,y:330},{x:600,y:330},{x:600,y:460},{x:330,y:460}]);
       for(let i=0;i<100&&!(a.bar?.mode==='suggest'&&a.bar.target?.selection);i++)await new Promise(r=>setTimeout(r,20));

@@ -212,6 +212,11 @@ export function runShellArgv(support, command, { roots = [], runtimeRoot, read =
 
 export function killProjectProcess(child) {
   if (!child?.pid) return
+  if (process.platform === 'win32') {
+    try { spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio:'ignore', windowsHide:true, timeout:5_000 }) } catch {}
+    try { child.kill('SIGKILL') } catch {}
+    return
+  }
   try { process.kill(-child.pid, 'SIGKILL') } catch { try { child.kill('SIGKILL') } catch {} }
 }
 

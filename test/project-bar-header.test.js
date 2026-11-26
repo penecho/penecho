@@ -54,7 +54,7 @@ function headerHarness(opts = {}) {
   return { c, p, S, document, went };
 }
 
-test('project header has 3 clear zones: identity, primary views (with Statistics and Canvases & files), and Search + Share utilities only', () => {
+test('project header has 3 clear zones: identity, primary views (with Statistics and Canvases & files), and Ask AI + Share utilities only', () => {
   const h = headerHarness();
   h.c.renderProjbar();
 
@@ -66,14 +66,17 @@ test('project header has 3 clear zones: identity, primary views (with Statistics
 
   const right = bar.querySelector('.bar-right');
   const rightButtons = [...right.querySelectorAll('button')];
-  assert.equal(rightButtons.length, 2, 'only Search and Share stay in the top-right utility zone');
+  assert.equal(rightButtons.length, 2, 'only Ask AI and Share stay in the top-right utility zone');
   assert.equal(bar.querySelector('.bar-skill'), null, 'Add drawing skill is removed from the header');
   assert.equal(bar.querySelector('.bar-settings'), null, 'Project settings gear is removed from top-right');
 
   const search = right.querySelector('.bar-search');
   const share = right.querySelector('.bar-share');
-  assert.equal(search.textContent, 'Search');
-  assert.equal(search.querySelector('span').textContent, 'Search');
+  assert.equal(search.textContent, 'Ask AI');
+  assert.equal(search.querySelector('span').textContent, 'Ask AI');
+  assert.equal(search.getAttribute('aria-label'), 'Ask AI about this project');
+  assert.equal(search.getAttribute('title'), 'Ask AI about this project');
+  assert.equal(search.querySelector('svg').dataset.icon, 'navSearch');
   assert.equal(share.textContent, 'Share');
   assert.equal(share.querySelector('span').textContent, 'Share');
 });
@@ -123,9 +126,12 @@ test('More menu handles overflowed Statistics, bare My Canvases, and read-only h
   const bareTokens = [...bare.document.querySelector('#menu').children].map(el => (el.tagName === 'HR' ? '---' : el.textContent.trim()));
   assert.deepEqual(bareTokens, ['Project settings']);
 
-  // Read-only hosted link hides Deleted and Project settings without trailing dividers.
+  // Read-only hosted link hides Deleted and Project settings without trailing dividers, and keeps Search where Ask AI is unavailable.
   const ro = headerHarness({ hosted:{ read:true, shared:true } });
   ro.c.renderProjbar();
+  assert.equal(ro.document.querySelector('.bar-search').textContent, 'Search');
+  assert.equal(ro.document.querySelector('.bar-search').getAttribute('aria-label'), 'Search project');
+  assert.equal(ro.document.querySelector('.bar-search svg').dataset.icon, 'navSearch');
   ro.c.ACT['more-views'](ro.document.querySelector('.subnav-more'));
   const roTokens = [...ro.document.querySelector('#menu').children].map(el => (el.tagName === 'HR' ? '---' : el.textContent.trim()));
   assert.deepEqual(roTokens, ['Memory', 'Vault', '---', 'Archive']);

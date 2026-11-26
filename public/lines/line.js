@@ -397,7 +397,7 @@ function lineHeadHTML(p, l) {
   return `<div class="lp-head-row${state === 'error' || l.archived ? ' has-key-status' : ''}">${projectsToggleHTML()}<button type="button" class="icon-btn lp-show" data-act="line-side" aria-label="Show the line" title="Show the line">${ic('panel', 18)}</button>
     <h1 id="lpTitle" title="${esc(l.title)}">${esc(l.title)}</h1>
     <div class="lp-meta">${legacyParentHTML(p, l)}${roleBadge}${stateChip(state, l)}${l.branch ? branchChip(p, l) : l.newBranchFrom ? `<span class="row-branch is-new" title="Starts when you paste this">${ic('branch', 13)}New branch from ${esc(l.newBranchFrom)}</span>` : ''}${diff}${l.commit ? `<code class="commit">${esc(l.commit)}</code>` : ''}</div>
-    <div class="lp-acts">${walkHTML(p, l)}${chatButtons(l)}${lineHeadActions(p, l, state, currentStation(l))}${l.archived ? '' : `<button type="button" class="icon-btn lp-pin" data-act="line-pin" data-line="${esc(l.id)}" aria-pressed="${pinned}" aria-label="${pinned ? 'Unpin' : 'Pin'} this line" title="${pinned ? 'Unpin' : 'Pin'} this line">${ic('star', 17)}</button>`}<button type="button" class="icon-btn" data-act="line-menu" data-line="${esc(l.id)}" aria-label="More for this Line" aria-haspopup="menu">${ic('more', 18)}</button></div></div>${parentBar}${typeof tokenLineHTML === 'function' ? tokenLineHTML(l) : ''}${madeHTML(p, l)}`;
+    <div class="lp-acts">${walkHTML(p, l)}${chatButtons(l)}${lineHeadActions(p, l, state, currentStation(l))}${l.archived ? '' : `<button type="button" class="icon-btn lp-pin" data-act="line-pin" data-line="${esc(l.id)}" aria-pressed="${pinned}" aria-label="${pinned ? 'Unpin' : 'Pin'} this line" title="${pinned ? 'Unpin' : 'Pin'} this line">${ic('star', 17)}</button>`}<button type="button" class="icon-btn" data-act="line-menu" data-line="${esc(l.id)}" aria-label="More for this Line" aria-haspopup="menu">${ic('more', 18)}</button></div></div>${parentBar}${typeof tokenLineHTML === 'function' ? tokenLineHTML(l) : ''}`;
 }
 
 // ---------- The next line in the same filter ----------
@@ -587,13 +587,17 @@ function runPreset(p, l) {
   const selected = prev?.selected?.model;
   const model = prev?.selected && (!selected || selected.includes('/')) ? selected || '' : prev?.picked?.model || selected || '';
   const effort = prev?.picked?.effort || prev?.selected?.effort || '';
-  const prior = prev?.agent === a.id && (model || effort || (prev.selected && prev.savedAgent))
-    ? { id:'', inherited:true, sourceWorkId:prev.id, agent:a.id, model, effort, name:[a.name, model, effort ? `${effort} effort` : ''].filter(Boolean).join(' · ') }
+  const access = prev?.selectedAccess || '';
+  const accessTag = access && typeof presetAccessTag === 'function' ? presetAccessTag(a.id, access) : '';
+  const prior = prev?.agent === a.id && (model || effort || access || (prev.selected && prev.savedAgent))
+    ? { id:'', inherited:true, sourceWorkId:prev.id, agent:a.id, model, effort, ...(access ? { access } : {}), name:[a.name, model, effort ? `${effort} effort` : '', accessTag].filter(Boolean).join(' · ') }
     : prev?.agent === a.id && (prev.savedAgentId || prev.savedAgent)
     ? presets.find(x => !x.auto && x.agent === a.id && prev.savedAgentId && x.id === prev.savedAgentId) || presets.find(x => !x.auto && x.agent === a.id && prev.savedAgent && x.name === prev.savedAgent) || null
     : null;
   const inherited = prior || (prev?.agent === a.id ? { id:'', inherited:true, sourceWorkId:prev.id, agent:a.id, name:a.name, auto:true } : null);
-  return picked?.agent === a.id ? picked : inherited || (chosen?.agent === a.id ? chosen : presets.find(x => x.agent === a.id && x.auto) || null);
+  const savedForAgent = presets.filter(x => !x.auto && x.agent === a.id && x.showInPicker !== false);
+  const fallback = chosen?.agent === a.id ? chosen : presets.find(x => x.agent === a.id && x.auto) || (savedForAgent.length === 1 ? savedForAgent[0] : null);
+  return picked?.agent === a.id ? picked : inherited || fallback;
 }
 // The runner's own settings are still a concrete choice, even when no saved agent is selected.
 function runLabel(a, preset) {
@@ -602,7 +606,7 @@ function runLabel(a, preset) {
   return [x.name, facts].filter(Boolean).join(' · ');
 }
 // With a Work running here, Run with either steers into it (same agent, model and effort, and it can take words mid-turn) or runs next (PE-558).
-const setupOf = preset => preset && !preset.auto ? `${preset.model || ''}|${preset.effort || ''}` : '|';
+const setupOf = preset => preset && !preset.auto ? `${preset.model || ''}|${preset.effort || ''}${preset.access ? `|${preset.access}` : ''}` : '|';
 // Inherited from the Work running now, it is that run's own setup, even when the agent has since reported a model the run was not started with (PE-618).
 const fromRunningWork = (l, preset) => Boolean(preset?.inherited && preset.sourceWorkId && stationById(l, preset.sourceWorkId)?.state === 'active');
 const draftHasRefs = s => Boolean(s && (s.hasRefs || (s.files && s.files.length) || (s.pictures && s.pictures.length) || (s.refers && s.refers.length) || s.canvas || s.make));
@@ -623,9 +627,11 @@ const orchAutoChoice = (p, l, s = null) => {
   }
   return s?.savedAgentId === 'auto' || S.runPresetOn?.[l.id] === 'auto';
 };
+const showRunAuto = (l, picks) => !HOSTED && !l.orchestratorRef && picks.length > 0;
 function runChoice(p, l, s = null) {
   const picks = typeof runPresets === 'function' ? runPresets() : [];
   const allowAuto = orchAutoChoice(p, l, s);
+  const offerAuto = allowAuto || showRunAuto(l, picks);
   const explicitAuto = allowAuto && S.runPresetOn?.[l.id] === 'auto';
   const explicitPick = Boolean(S.runWith?.[l.id] || S.runPresetOn?.[l.id]);
   if (explicitAuto || (!explicitPick && allowAuto && s?.savedAgentId === 'auto')) {
@@ -636,7 +642,7 @@ function runChoice(p, l, s = null) {
     const savedPreset = presetById(s.savedAgentId);
     const savedRunner = savedPreset && savedPreset.available !== false ? runnableAgents().find(x => x.id === savedPreset.agent) : null;
     if (savedPreset && savedRunner) {
-      const more = runnableAgents().length > 1 || picks.some(x => x.id !== savedPreset.id) || allowAuto || !can('agents');
+      const more = runnableAgents().length > 1 || picks.some(x => x.id !== savedPreset.id) || offerAuto || !can('agents');
       return { a:savedRunner, preset:savedPreset, name:runLabel(savedRunner, savedPreset), more, mode:runMode(l, savedRunner.id, savedPreset, s) };
     }
   }
@@ -647,7 +653,7 @@ function runChoice(p, l, s = null) {
     const cloudModel = hostedModelLabel(hostedModelSelection(l.slug || l.id));
     if (cloudModel) name = `PenEcho · ${cloudModel}`;
   }
-  const more = runnableAgents().length > 1 || picks.some(x => x.id !== preset?.id) || allowAuto || !can('agents');   // Hosted: one agent, and the menu says what it runs on (hosted.js)
+  const more = runnableAgents().length > 1 || picks.some(x => x.id !== preset?.id) || offerAuto || !can('agents');   // Hosted: one agent, and the menu says what it runs on (hosted.js)
   return { a, preset, name, more, mode:runMode(l, a.id, preset, s) };
 }
 const runSnapAttrs = (l, mode) => mode === 'steer'
@@ -660,7 +666,7 @@ function runSplit(p, l, s) {
   return `<span class="run-split${more ? '' : ' is-one'}"><button type="button" class="btn sm run-main" data-act="unsent-run" data-agent="${esc(a.id)}" data-preset="${esc(preset?.id || '')}"${runSnapAttrs(l, mode)} ${step}${why ? ` title="${esc(why)}"` : ''}>${ic('play', 13)}<span>${esc(runVerb(mode, name))}</span></button>${more ? `<button type="button" class="btn sm run-pick" data-act="unsent-run-pick" ${step} aria-haspopup="menu" aria-label="Run with another agent" title="Run with another agent">${ic('down', 14)}</button>` : ''}</span>`;
 }
 function runAutoButton(l, step) {
-  if (HOSTED || l.orchestratorRef || typeof runPresets !== 'function' || !runPresets().length) return '';
+  if (typeof runPresets !== 'function' || !showRunAuto(l, runPresets())) return '';
   const label = runVerb(l.running && l.runAgent ? 'next' : '', 'PenEcho Auto');
   return `<button type="button" class="btn sm" data-act="unsent-run-auto" ${step}>${ic('spark', 14)}${label}</button>`;
 }
@@ -865,7 +871,7 @@ ACT['unsent-run-pick'] = el => {
   };
   const when = mode => ({ steer:'Steers in', next:'Runs next' })[mode] || '';
   const autoMode = l.running && l.runAgent ? 'next' : '';
-  const autoEntries = orchAutoChoice(p, l, draft)
+  const autoEntries = showRunAuto(l, saved) || orchAutoChoice(p, l, draft)
     ? [{ row:{ label:'PenEcho Auto', icon:'spark', note:['Model and effort chosen automatically', when(autoMode)].filter(Boolean).join(' · '), on:on === 'auto', fn:run('', 'auto', autoMode) }, credit:{ id:'' } }]
     : [];
   const entries = (hasPresets
@@ -1093,9 +1099,19 @@ function askedHTML(l, s = null) {
     const qs = Array.isArray(a.questions) ? a.questions : [];
     const drafts = (S.qDrafts && S.qDrafts[qDraftKey(l.id, a.id || '', '', project()?.id, ownerStep)]) || {};
     if (a.approval || a.requestType === 'approval') {
-      const toolLabel = esc(a.toolName || 'Tool');
+      const rawTool = String(a.toolName || 'Tool');
+      const wants = /^run\s+/i.test(rawTool) ? `wants permission to ${rawTool.charAt(0).toLowerCase()}${rawTool.slice(1)}` : `wants permission to use ${rawTool}`;
       const inputBlock = a.toolInput ? `<pre class="q-tool-input"><code>${esc(a.toolInput)}</code></pre>` : '';
-      return `<article class="q-card lpp-asked is-answerable is-approval" data-req-card="${req}"${step ? ` data-step="${step}"` : ''}><div class="q-from">${av(a.agent, 22)}<span>${esc(agentInfo(a.agent).name)} wants permission to use ${toolLabel}</span></div>${inputBlock}<div class="q-opts"><button type="button" class="btn sm primary" data-act="answer-tool" data-line="${line}" data-req="${req}" data-step="${step}" data-launch="${launch}" data-q="${esc(qs[0]?.id || 'approve')}" data-a="allow">Allow</button><button type="button" class="btn sm" data-act="answer-tool" data-line="${line}" data-req="${req}" data-step="${step}" data-launch="${launch}" data-q="${esc(qs[0]?.id || 'approve')}" data-a="deny">Deny</button></div></article>`;
+      const q0 = qs[0] || {}, qid = esc(q0.id || 'approve');
+      const opts = Array.isArray(q0.options) && q0.options.length ? q0.options : ['Allow', 'Deny'];
+      const vals = Array.isArray(q0.optionValues) ? q0.optionValues : null;
+      const buttons = opts.map((o, oi) => {
+        const label = typeof o === 'string' ? o : String(o?.label ?? o?.value ?? '');
+        const val = vals && vals[oi] !== undefined ? String(vals[oi]) : (typeof o === 'string' ? o.toLowerCase() : String(o?.value ?? o?.label ?? ''));
+        const primary = oi === 0 && /^allow\b/i.test(val) ? ' primary' : '';
+        return `<button type="button" class="btn sm${primary}" data-act="answer-tool" data-line="${line}" data-req="${req}" data-step="${step}" data-launch="${launch}" data-q="${qid}" data-a="${esc(val)}">${esc(label)}</button>`;
+      }).join('');
+      return `<article class="q-card lpp-asked is-answerable is-approval" data-req-card="${req}"${step ? ` data-step="${step}"` : ''}><div class="q-from">${av(a.agent, 22)}<span>${esc(agentInfo(a.agent).name)} ${esc(wants)}</span></div>${inputBlock}<div class="q-opts">${buttons}</div></article>`;
     }
     const isMultiQ = qs.length > 1;
     const blocks = qs.map((q, qi) => {
@@ -1381,21 +1397,24 @@ function orchRateCardHTML(s, l = null) {
   if (!hasScore && !(r && (r.verdict === 'unverified' || r.ignored))) return '';
   const mode = r ? reviewModeLabel(r) : '';
   const verdict = r ? reviewVerdictOf(r) : '';
+  const headline = r ? reviewHeadlineOf(r) : null;
   const headBadge = r?.ignored
     ? '<span class="rv-ignored-badge">Ignored in stats</span>'
     : verdict === 'unverified'
       ? '<strong class="rv-score v-unverified">Unverified</strong>'
       : verdict
-        ? `<strong class="lpp-orch-rate-score">${esc(reviewHeadlineOf(r).text)}</strong>`
+        ? `<strong class="lpp-orch-rate-score rv-score ${esc(headline.cls)}">${esc(headline.text)}</strong>`
         : `<strong class="lpp-orch-rate-score">${score}/5</strong>`;
   const byText = r ? (reviewBySummary(r) || s.orchBy) : s.orchBy;
   const noteText = s.orchNote || (r ? reviewNoteOf(r) : '');
-  const openBtn = hasReview && lineId ? `<button type="button" class="btn sm lpp-orch-open" data-act="line-work" data-line="${esc(lineId)}" data-step="${esc(reviewStepId(s.id))}">View review details</button>` : '';
+  const extraNotes = r?.notes ? String(r.notes).trim() : '';
+  const showExtraNotes = Boolean(extraNotes && extraNotes !== String(noteText || '').trim());
+  const openBtn = hasReview && lineId ? `<button type="button" class="btn sm lpp-orch-open" data-act="line-work" data-line="${esc(lineId)}" data-step="${esc(reviewStepId(s.id))}">View review details${ic('right', 13)}</button>` : '';
   return `<section class="lpp-orch-rate${r?.ignored ? ' is-off' : ''}" aria-label="${hasReview ? 'Orchestrator review' : 'Orchestrator rating'}">
-    <div class="lpp-orch-rate-head"><span class="lpp-orch-rate-label">${ic('orchestrate', 14)}<span>${hasReview ? 'Orchestrator review' : 'Orchestrator rating'}</span></span>${mode ? `<span class="rv-mode is-${esc(r.mode)}">${esc(mode)}</span>` : ''}${headBadge}${byText ? `<span class="lpp-orch-by">${esc(byText)}</span>` : ''}</div>
-    ${r?.why ? `<p class="lpp-orch-why">${esc(r.why)}</p>` : ''}
+    <div class="lpp-orch-rate-head"><span class="lpp-orch-rate-label">${ic('orchestrate', 14)}<span>${hasReview ? 'Orchestrator review' : 'Orchestrator rating'}</span></span>${mode ? `<span class="rv-mode is-${esc(r.mode)}">${esc(mode)}</span>` : ''}${headBadge}${openBtn}</div>
+    ${byText || r?.why ? `<div class="lpp-orch-meta">${byText ? `<span class="lpp-orch-by">${esc(byText)}</span>` : ''}${r?.why ? `<span class="lpp-orch-why">${esc(r.why)}</span>` : ''}</div>` : ''}
     ${noteText ? `<p class="lpp-orch-note">${esc(noteText)}</p>` : ''}
-    ${openBtn ? `<div class="lpp-orch-foot">${openBtn}</div>` : ''}
+    ${showExtraNotes ? `<div class="at-say lpp-orch-extra-notes">${typeof sayHTML === 'function' ? sayHTML(extraNotes) : `<p>${esc(extraNotes)}</p>`}</div>` : ''}
   </section>`;
 }
 // ---------- On-demand Work review button (Quiet Split beside Refer) ----------
@@ -1477,6 +1496,27 @@ function workReviewButtonHTML(p, l, s) {
     </button>
     <button type="button" class="rev-pick" data-act="work-review-pick" data-line="${esc(l.id)}" data-step="${esc(s.id)}" aria-haspopup="menu" aria-label="Choose reviewer" title="Choose reviewer"${busy ? ' disabled' : ''}>${ic('down', 13)}</button>
   </span>`;
+}
+function workToolbarReviewHTML(p, l, s) {
+  if (!canManualReview(l, s) || typeof orchSettings !== 'function') return '';
+  const info = workReviewCandidates(p, s);
+  if (!info) {
+    if (typeof loadOrchSettings === 'function' && typeof ORCHSET === 'object' && !ORCHSET.missing && !ORCHSET.loading) {
+      queueMicrotask(() => loadOrchSettings(p));
+    }
+    return '';
+  }
+  if (!info.eligible.length) return '';
+  const selected = workReviewSelected(p, l, s, info);
+  const busy = Boolean(s.reviewing);
+  const done = !busy && Boolean(s.review && typeof s.review === 'object');
+  const label = stepLabel(s);
+  const targetName = busy ? (s.reviewPending?.by || selected.name) : selected.name;
+  if (busy) {
+    return `<button type="button" class="lpp-tb-btn is-busy" data-act="work-review" data-line="${esc(l.id)}" data-step="${esc(s.id)}" title="${esc(`Reviewing ${label} with ${targetName} — click to open review`)}"><span class="spin" aria-hidden="true"></span><span>Reviewing…</span></button>`;
+  }
+  const tip = done ? `Review ${label} again (default: ${selected.name})` : `Review ${label} (default: ${selected.name})`;
+  return `<button type="button" class="lpp-tb-btn" data-act="work-review-pick" data-line="${esc(l.id)}" data-step="${esc(s.id)}" aria-haspopup="menu" title="${esc(tip)}">${ic(done ? 'retry' : 'eye', 13)}<span>Review</span>${ic('down', 11)}</button>`;
 }
 // ---------- The Orchestrator's reviewer node and right-panel detail ----------
 // PenEcho draws it in a separate node from the Work so the reviewer never looks like the Work agent reviewing itself.
@@ -1909,12 +1949,22 @@ function scopeChipsHTML(l, s) {
     return `<button type="button" class="lp-scope-btn${isManual ? ' is-set' : isAuto ? ' is-auto' : ''}" data-act="work-scope" data-line="${lid}" data-step="${sid}" data-scope="${key}" aria-pressed="${isManual}" title="${esc(label)}">${label}</button>`;
   }).join('')}</div></div>`;
 }
+function scopeMenuButtonHTML(l, s) {
+  if (!canRate(s)) return '';
+  const lid = esc(l.id), sid = esc(s.id);
+  const manual = s.scope || '', current = manual || s.orchScope || 'standard';
+  const label = WORK_SCOPES.find(([key]) => key === current)?.[1] || 'Standard';
+  const hint = manual ? 'Task difficulty (set by you) · click to change' : s.orchScope ? `Task difficulty (auto: ${s.orchScopeSource || 'orchestrator'}) · click to override` : 'Task difficulty (default: standard) · click to override';
+  return `<button type="button" class="lp-scope-trigger${manual ? ' is-set' : ''}" data-act="work-scope-menu" data-line="${lid}" data-step="${sid}" aria-haspopup="menu" title="${esc(hint)}"><span class="lp-scope-k">Difficulty:</span><span class="lp-scope-v">${esc(label)}</span>${ic('down', 12)}</button>`;
+}
 function rateBoxHTML(l, s) {
   if (!canRate(s)) return '';
   const lid = esc(l.id), sid = esc(s.id), rated = s.rating === 'good' || s.rating === 'bad';
   return `<div class="lpp-rate-box" data-rate-box="${sid}">
-    <div class="lpp-rate-row"><span class="lpp-rate-label">Was this work helpful?</span>${rateButtonsHTML(l, s, 'is-box')}</div>
-    ${scopeChipsHTML(l, s)}
+    <div class="lpp-rate-row">
+      <div class="lpp-rate-main"><span class="lpp-rate-label">Was this work helpful?</span>${rateButtonsHTML(l, s, 'is-box')}</div>
+      ${scopeMenuButtonHTML(l, s)}
+    </div>
     ${rated ? `<div class="lpp-rate-note"><input type="text" class="rate-note-input" data-step="${sid}" maxlength="280" value="${esc(s.ratingNote || '')}" placeholder="Optional: why did this go well or poorly?"><button type="button" class="btn sm rate-note-save" data-act="work-rate-note" data-line="${lid}" data-step="${sid}">Save note</button></div>` : ''}
   </div>`;
 }
@@ -1957,9 +2007,8 @@ function outputsHTML(p, l, s, more = []) {
   const card = o => { const name = outputName(p, o), away = o.kind === 'artifact' || o.code; return `<button type="button" class="lp-out" data-act="open-output" data-kind="${esc(o.kind)}" data-path="${esc(o.path)}"${o.line ? ` data-line="${esc(o.line)}"` : ''}${o.code ? ` data-code="1" data-topic="${esc(l.id)}" data-step="${esc(s.id)}"` : ''} title="${esc(o.code ? shortPath(o.path) : name)}"><span class="lp-out-ic">${ic(OUT_ICON[o.kind] || FILE_ICON(o.path), 17)}</span><strong>${esc(name)}</strong>${ic(away ? 'expand' : 'right', 14)}</button>`; };
   return `${pics.length ? `<div class="lp-pics lp-out-pics">${pics.map(o => `<div class="lp-pic" title="${esc(outputName(p, o))}">${picturePreview(p, o.path, outputName(p, o))}</div>`).join('')}</div>` : ''}${rest.length ? `<div class="lp-outs">${rest.map(card).join('')}</div>` : ''}`;
 }
-// What the line's Works made, in one row under its name, so nobody opens Work after Work to find it (PE-1190): each Canvas with its page,
-// document, deck, table, video, Artifact and prototype, newest first, and on an orchestrator's line its parts' too. Plain pictures stay
-// on the Works they were made for. A line of one Work shows them on that Work alone.
+// What a job and its parts made, as a row on the Orchestrator's card (orchestrator.js orchMadeHTML): each Canvas with its page, document,
+// deck, table, video, Artifact and prototype, newest first. The Line page lists none under its name: each Work shows its own.
 const MADE_FIRST = 6, MADE_ICON = { drawn:'canvas', ...OUT_ICON };
 function madeItems(p, made) {
   const seen = new Set(), out = [];
@@ -1973,15 +2022,6 @@ function madeItems(p, made) {
   // A prototype is one thing: its page, found again as a link of its own, is the Canvas's.
   return out.filter(o => o.source || !out.some(x => x.page === o.path));
 }
-function lineMade(p, l) {
-  const made = [];
-  for (const x of [l, ...(l.orchestratorRef ? subLinesOf(p, l) : [])]) for (const s of [...(x.stations || [])].reverse()) {
-    if (!isWork(s) || s.state === 'todo' || s.off === 'discarded') continue;
-    for (const pic of s.pictures || []) made.push({ kind:'drawn', path:pic.path, title:pic.title, line:x.id, step:s.id });
-    for (const o of s.outputs || []) if (o.kind !== 'picture' && o.kind !== 'line' && outputThere(p, o)) made.push({ ...o, line:x.id, step:s.id });
-  }
-  return madeItems(p, made);
-}
 function madeChips(p, items, key) {
   const all = Boolean(S.madeAll?.[key]), shown = all ? items : items.slice(0, MADE_FIRST), left = items.length - shown.length;
   const chip = o => {
@@ -1989,13 +2029,6 @@ function madeChips(p, items, key) {
     return `<span class="made-item"><button type="button" class="made-open" data-act="open-made" data-kind="${esc(kind)}" data-path="${esc(path)}"${o.code ? ` data-code="1" data-topic="${esc(o.line)}" data-step="${esc(o.step)}"` : ''} title="${esc(name)}">${ic(MADE_ICON[o.page ? 'page' : o.slides ? 'slides' : o.kind] || FILE_ICON(o.path), 15)}<span>${esc(name)}</span></button>${o.source ? `<button type="button" class="made-edit" data-act="open-canvas" data-canvas="${esc(o.source)}" aria-label="Edit ${esc(name)} on canvas" title="Edit on canvas">${ic('pen', 13)}</button>` : ''}</span>`;
   };
   return `<div class="made" role="group" aria-label="Deliverables">${shown.map(chip).join('')}${left ? `<button type="button" class="made-more" data-act="made-all" data-key="${esc(key)}">+${left}</button>` : ''}</div>`;
-}
-function madeHTML(p, l) {
-  if (EMBED) return '';
-  const subs = l.orchestratorRef && typeof subLinesOf === 'function' ? subLinesOf(p, l).length : 0;
-  if (!subs && l.stations.filter(s => isWork(s) && s.state !== 'todo').length < 2) return '';
-  const items = lineMade(p, l);
-  return items.length ? madeChips(p, items, l.id) : '';
 }
 ACT['made-all'] = el => {
   (S.madeAll ||= {})[el.dataset.key] = true;
@@ -2171,9 +2204,8 @@ function kindLine(l, s) {
 }
 const itemHTML = (p, l, s) => isOrchReview(s) ? orchReviewItem(p, l, s) : s.kind === 'ask' ? askItem(p, l, s) : s.kind === 'note' ? noteItem(p, l, s) : s.kind === 'canvas' ? canvasItem(p, l, s) : s.kind === 'meeting' && typeof meetingItem === 'function' ? meetingItem(p, l, s) : isEnd(s) ? endItem(p, l, s) : workItem(p, l, s);
 function threadHTML(p, l) {
-  // A drawing of your own. What an agent can make is in the box right below, so no Make with AI here (PE-478).
-  const adds = l.archived || l.closed ? '' : `<div class="lp-thread-adds"><button type="button" class="lp-newcv" data-act="line-draw">${ic('plus', 16)}<span>Add new canvas</span></button></div>`;
-  return threadStations(l).map(s => { const item = itemHTML(p, l, s); return item ? (isEnd(s) || s.state !== 'todo' ? kindLine(l, s) : '') + item : ''; }).join('') + `<div id="lpAsks">${questionsHTML(p, l)}</div>${adds}`;
+  // New Canvas now lives cleanly in the composer bar beside +, keeping the bottom of the thread uncluttered.
+  return threadStations(l).map(s => { const item = itemHTML(p, l, s); return item ? (isEnd(s) || s.state !== 'todo' ? kindLine(l, s) : '') + item : ''; }).join('') + `<div id="lpAsks">${questionsHTML(p, l)}</div>`;
 }
 // The real Canvas opens; what you draw comes back as a Canvas node at the end of this line.
 ACT['line-draw'] = el => {
@@ -2223,14 +2255,33 @@ function whereParts(l, s) {
       : refs
         ? `<button type="button" class="wc-act" data-act="copy-refs" data-refs="${esc(refs)}" aria-label="Copy Line file path" title="${esc(`Copy path\n${refs}`)}">${ic('copy', 12)}<span>Copy path</span></button>`
         : '';
+  const workFile = s.detail
+    ? `<button type="button" class="lpp-tb-btn lpp-doc" data-act="preview-work-file" data-doc="${esc(s.detail)}" title="Open Work file (${esc(full(s.detail))})">${ic('doc', 13)}<span>Work file</span></button>`
+    : '';
+  const copyRefs = refs
+    ? `<button type="button" class="icon-btn lpp-tb-copy" data-act="copy-refs" data-refs="${esc(refs)}" aria-label="${s.detail ? 'Copy Work and Line file paths' : 'Copy Line file path'}" title="${esc(`${s.detail ? 'Copy paths' : 'Copy path'}\n${refs}`)}">${ic('copy', 14)}</button>`
+    : '';
   const folder = l.workdir ? `<button type="button" class="wc-folder" data-act="copy-path" data-path="${esc(l.workdir)}" aria-label="Copy this folder's path" title="Copy folder path: ${esc(l.workdir)}">${ic('files', 12)}${endFirst(shortPath(l.workdir), l.workdir)}<span class="wc-copy-ic">${ic('copy', 11)}</span></button>` : '';
   const branch = l.branch ? `<span class="wc-branch" title="${esc(l.branch)}">${ic('branch', 12)}<code>${esc(l.branch)}</code></span>` : '';
   const place = folder || branch ? `<span class="wc-place${folder ? '' : ' is-branch-only'}">${folder}${branch}</span>` : '';
   const model = typeof WORK_PRICING !== 'undefined' ? WORK_PRICING.modelOf(s) : '', effort = s.picked?.effort || s.selected?.effort;
+  const accessLabels = { full:'Full access', reviewed:'Reviewed', folders:'Project folders' };
+  const accessName = (s.selectedAccess || (['claude', 'codex', 'dsh'].includes(who) ? s.access : '')) && accessLabels[s.access || s.selectedAccess] || '';
   const how = who && who !== 'you' ? `<span class="wc-how">${model || effort
     ? `${model ? `<code title="${esc(model)}">${esc(model)}</code>` : '<span>Model not recorded</span>'}<span class="wc-sep" aria-hidden="true">·</span>${effort ? `<span>${esc(effort)} effort</span>` : '<span>effort not recorded</span>'}`
-    : '<span>Model and effort not recorded</span>'}</span>` : '';
-  return { acts:[way, file].filter(Boolean).join(''), meta:[place, how].filter(Boolean).join('') };
+    : '<span>Model and effort not recorded</span>'}${accessName ? `<span class="wc-sep" aria-hidden="true">·</span><span>${esc(accessName)}</span>` : ''}</span>` : '';
+  return { acts:[way, file].filter(Boolean).join(''), way, workFile, copyRefs, meta:[place, how].filter(Boolean).join('') };
+}
+function workToolbarInnerHTML(p, l, s) {
+  if (!l || !s || !isWork(s) || isOrchReview(s)) return '';
+  const refer = l.archived || l.closed ? '' : `<button type="button" class="lpp-tb-btn" data-act="line-refer" data-step="${esc(s.id)}">${ic('refer', 13)}<span>Refer</span></button>`;
+  const review = workToolbarReviewHTML(p, l, s);
+  const { way, workFile, copyRefs } = whereParts(l, s);
+  return [refer, review, way, workFile, copyRefs].filter(Boolean).join('');
+}
+function workToolbarHTML(p, l, s) {
+  const inner = workToolbarInnerHTML(p, l, s);
+  return `<div class="lpp-toolbar" id="lppToolbar" role="toolbar" aria-label="Work actions"${inner ? '' : ' hidden'}>${inner}</div>`;
 }
 const whereActions = (l, s) => whereParts(l, s).acts;
 function whereCard(l, s) {
@@ -2347,7 +2398,8 @@ function panelBody(p, l, s) {
     return `<div class="lpp-scroll" id="lppScroll"><div class="sc-todo">${ic(s.isTodo ? 'box' : 'check', 30)}<h3>${s.state === 'todo' ? 'Not finished yet' : stepLabel(s)}</h3>${files.length || folders.length ? `<div class="msg-files center">${folders.map(folderChip).join('')}${files.map(fileChip).join('')}</div>` : ''}</div></div>`;
   }
   const latest = latestWork(l) === s, open = detailsOpen(s);
-  return `<div class="lpp-scroll" id="lppScroll">
+  return `${workToolbarHTML(p, l, s)}
+  <div class="lpp-scroll" id="lppScroll">
     <div class="lpp-summary">
       <div id="lppTokens">${typeof tokenWorkHTML === 'function' ? tokenWorkHTML(s,l.id) : ''}</div>
       <div id="lppResultTools"></div>
@@ -2364,7 +2416,6 @@ function panelBody(p, l, s) {
   <footer class="lpp-bottom">
     <div class="lpp-bottom-bar">
       <button type="button" class="lpp-foot" id="lppFoot" data-act="panel-details" data-step="${esc(s.id)}" aria-expanded="${open}" aria-controls="lppDetails"><span>Details<span id="lppCount"></span></span>${ic(open ? 'down' : 'up', 14)}</button>
-      <div class="lpp-foot-acts" id="lppWhereActs">${whereActions(l, s)}</div>
     </div>
     <div id="lppWhere">${whereCard(l, s)}</div>
   </footer>`;
@@ -2478,6 +2529,14 @@ function resultToolsHTML(p, l, s, md) {
   const tools = text ? `<button type="button" class="icon-btn lpp-src" data-act="result-mode" data-mode="${source ? 'read' : 'source'}" aria-pressed="${source}" aria-label="Markdown source" title="${source ? 'Back to reading' : 'Markdown source'}">${ic('code', 16)}</button>` : '';
   return tools || canCopy ? `<div class="lpp-result-tools${source || copiedNow(l, s) ? ' is-held' : ''}">${canCopy ? `<div class="lpp-copy">${resultCopyHTML(l, s, copying)}</div>` : ''}${tools}</div>` : '';
 }
+// Codex's Windows sandbox could not start, so its commands did not run (service.js CODEX_SANDBOX_NOTE): Full access in Settings is the way out.
+const sandboxHintHTML = s => isWork(s) && s.sandboxFailed ? `<div class="at-error at-fixable" role="alert">${ic('hint', 16)}<span><strong>Codex could not start its sandbox in this folder, so its commands did not run.</strong><br>Set this agent's Access to Full access, then send again.</span><button type="button" class="btn sm" data-act="sandbox-settings" data-id="${esc(s.savedAgentId || '')}">Open Settings</button></div>` : '';
+// The saved agent the Work ran with opens for editing, its Access field there; one PenEcho made itself has no Access to change.
+ACT['sandbox-settings'] = el => {
+  openSettings('agents');
+  const x = settingsUp() && savedPreset(el.dataset.id);
+  if (x && !x.auto) openPresetForm(x);
+};
 function resultHTML(p, l, s, doc) {
   const md = doc?.md;
   const { pics, text, stopped, links } = resultParts(p, s, md), source = S.resultMode === 'source';
@@ -2489,12 +2548,13 @@ function resultHTML(p, l, s, doc) {
   // An error says what went wrong under its plain words; a limit or your Stop says all there is in them.
   const raw = stopped && (!why || stopWhyOf(s) === 'error') ? stopped : '';
   const panelChooser = topicChooserHTML(p, l, s, { inPanel:true });
-  return `${stopped || why ? `<div class="at-error ${s.state === 'off' ? 'is-off' : ''}" role="alert">${ic('hint', 16)}<span>${why ? `<strong>${esc(why)}</strong>` : ''}${raw ? `${why ? '<br>' : ''}${esc(raw)}` : ''}</span></div>` : ''}
+  const reviewBtn = l.archived || l.closed ? '' : workReviewButtonHTML(p, l, s);
+  return `${sandboxHintHTML(s)}${stopped || why ? `<div class="at-error ${s.state === 'off' ? 'is-off' : ''}" role="alert">${ic('hint', 16)}<span>${why ? `<strong>${esc(why)}</strong>` : ''}${raw ? `${why ? '<br>' : ''}${esc(raw)}` : ''}</span></div>` : ''}
     ${pics.length ? `<div class="result-pics">${pics.map(pic => `<figure class="lpp-fig">${picButton(p, l, pic, 'result-pic')}<figcaption><span>${esc(pic.title)}</span>${l.archived || l.closed ? '' : `<button type="button" class="link" data-act="conv-about" data-path="${esc(pic.path)}">Ask about this</button>`}</figcaption></figure>`).join('')}</div>` : ''}
     ${text ? `<div class="result-text">${source ? `<div class="src">${highlightSource(text)}</div>` : `<div class="at-say">${sayHTML(withoutShownPictures(p, s, pics, text), (label, href) => workFileAnchor(label, href, p, doc || { path:s.detail }))}</div>`}</div>` : !pics.length && !stopped && s.state === 'done' ? '<p class="muted lpp-empty">The agent left no message for this one.</p>' : ''}
     ${links.length ? `<div class="result-files">${links.map(f => fileChip({ path:f.path, workPreview:true })).join('')}</div>` : ''}
     ${panelChooser}
-    ${l.archived || l.closed ? '' : `<div class="lpp-actions" role="group" aria-label="Work actions"><button type="button" class="lpp-act-btn" data-act="line-refer" data-step="${esc(s.id)}">${ic('refer', 13.5)}<span>Refer</span></button>${workReviewButtonHTML(p, l, s)}</div>`}
+    ${reviewBtn ? `<div class="lpp-actions" role="group" aria-label="Review actions">${reviewBtn}</div>` : ''}
     ${orchRateCardHTML(s, l)}
     ${rateBoxHTML(l, s)}`;
 }
@@ -3713,6 +3773,7 @@ function refreshLine() {
       } else {
         // Only the latest Work shows what the line made: a Work that went back to Not started has made nothing.
         const made = $('#lppMade'); if (made) { const nextMade = latestWork(l) === s ? panelMade(p, l) : ''; if (made.dataset.h !== nextMade) { made.dataset.h = nextMade; made.innerHTML = nextMade; if (scroller && prevTop) scroller.scrollTop = prevTop; } }
+        const tb = $('#lppToolbar'); if (tb) { const nextTb = workToolbarInnerHTML(p, l, s); if (tb.dataset.h !== nextTb) { tb.dataset.h = nextTb; tb.innerHTML = nextTb; tb.hidden = !nextTb; } }
         const whereActs = $('#lppWhereActs'); if (whereActs) { const nextActs = whereActions(l, s); if (whereActs.dataset.h !== nextActs) { whereActs.dataset.h = nextActs; whereActs.innerHTML = nextActs; } }
         const where = $('#lppWhere'); if (where) { const nextWhere = whereCard(l, s); if (where.dataset.h !== nextWhere) { where.dataset.h = nextWhere; where.innerHTML = nextWhere; } }
         fillPanel(p, l, s);
@@ -4097,10 +4158,14 @@ ACT['work-review-pick'] = el => {
       },
     },
   ];
-  const anchor = el.closest('.rev-split') || el;
+  const inToolbar = Boolean(el.closest('.lpp-toolbar'));
+  const anchor = inToolbar ? el : (el.closest('.rev-split') || el);
   const resolveAnchor = () => {
-    const split = $(`.rev-split[data-rev-split="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s.id) : s.id}"]`, $('#lpPanel') || document);
-    return split && menuAnchorRect(split) ? split : null;
+    const escId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s.id) : s.id;
+    const target = inToolbar
+      ? $(`#lppToolbar [data-act="work-review-pick"][data-step="${escId}"]`, $('#lpPanel') || document)
+      : $(`.rev-split[data-rev-split="${escId}"]`, $('#lpPanel') || document);
+    return target && menuAnchorRect(target) ? target : null;
   };
   openMenu(anchor, items, { align:'left', className:'run-menu rev-menu', resolveAnchor });
 };
@@ -4882,6 +4947,22 @@ ACT['work-scope'] = async el => {
   const picked = el.dataset.scope || '';
   const next = s.scope === picked ? '' : picked;
   await saveWorkScope(l.id, s.id, next);
+};
+ACT['work-scope-menu'] = el => {
+  const p = project(), l = lineById(p, el.dataset.line || S.route.line), s = l && stationById(l, el.dataset.step);
+  if (!l || !s) return;
+  const manual = s.scope || '', current = manual || s.orchScope || 'standard';
+  const items = [
+    { head:'Task difficulty' },
+    ...WORK_SCOPES.map(([key, label]) => ({
+      label,
+      on:current === key,
+      note:manual === key ? 'Set by you' : (!manual && current === key ? 'Auto' : ''),
+      fn:() => saveWorkScope(l.id, s.id, manual === key ? '' : key),
+    })),
+    ...(manual ? [{ sep:true }, { label:'Reset to automatic', fn:() => saveWorkScope(l.id, s.id, '') }] : []),
+  ];
+  openMenu(el, items, { align:'right' });
 };
 function todoMark(l, p = project()) {
   const canMark = typeof canMarkTodo === 'function' ? canMarkTodo : (LINE_STATUS.canMarkTodo || canTodo);

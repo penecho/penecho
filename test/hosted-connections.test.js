@@ -61,3 +61,18 @@ test("catalog cache respects account identity, expiry and explicit refresh while
     await connector.hostedModels();assert.equal(catalogs,4);
   }finally{global.fetch=originalFetch;fs.rmSync(stateDir,{recursive:true,force:true});}
 });
+
+test("a wallet Cloud does not answer leaves credits unknown and still lists the models", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-hosted-wallet-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, defaultOrigin:"https://example.com" });
+    connector.writeConfiguration({ version:2, origin:"https://example.com", accountToken:"test-local-session" });
+    global.fetch = async url => url.endsWith("/models")
+      ? new Response(JSON.stringify({ models:[{ id:modelId, apiFormat:"openai", available:true, enabled:true, multiplier:1 }] }))
+      : new Response(JSON.stringify({ error:"busy" }), { status:503 });
+    const catalog = await connector.hostedModels();
+    assert.equal(catalog.models[0].id, modelId);
+    assert.equal(catalog.credits, null);
+  } finally { global.fetch = originalFetch; fs.rmSync(stateDir, { recursive:true, force:true }); }
+});

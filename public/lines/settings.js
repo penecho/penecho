@@ -1,7 +1,7 @@
 // Settings for all of PenEcho: one window over the page, opened from the gear in the rail, project settings, or the Canvas ⋯ menu.
-// Its tabs: Agents (#agents: Line agents, with their model prices at #agents/prices), Canvas AI (#agents/canvas), MCP (#agents/apps),
-// Providers (#providers: PenEcho Cloud and your API keys), Canvas (#settings/canvas: view preferences),
-// General (#settings/general: appearance, language, page zoom, other devices, about) and Archived projects (#archived).
+// Its tabs, in four groups. Project agents: Local providers (#setup: the CLIs installed here) then Preset agents (#agents, with their
+// model prices at #agents/prices). Canvas: API providers (#providers: PenEcho Cloud and your API keys) then Canvas AI (#agents/canvas),
+// and View (#settings/canvas). Integrations: MCP (#agents/apps). App: General (#settings/general) and Archived projects (#archived).
 const SET = {
   tab:'canvas',
   agentsTab:'agents',
@@ -21,6 +21,7 @@ const SET = {
   usageAsked:false,
   usageBusy:false,
   usageOpen:false,
+  cloudAccountVersion:0,
   canvasAiSaved:'',
   saving:false,
   redraw:false,
@@ -162,9 +163,10 @@ function presetFacts(x) {
   return m ? [m.picked || m.name || 'default model', presetLevel(m.pickedEffort || presetDefaultEffort(x.agent, m.picked, m)) || 'default effort'].join(' · ') : '';
 }
 function presetAccessTag(agent, access) {
-  const normal = presetRunner(agent)?.access?.normal || (agent === 'dsh' ? 'full' : '');
+  const normal = presetRunner(agent)?.access?.normal || (agent === 'dsh' || agent === 'codex' ? 'full' : '');
   if (access === 'full' && normal !== 'full') return 'full access';
   if (access === 'folders' && normal !== 'folders') return 'project folders';
+  if (access === 'reviewed' && normal !== 'reviewed') return 'reviewed';
   return '';
 }
 const presetAutoName = (agent, model, effort, access) => [agentInfo(agent).name, model, presetLevel(effort), presetAccessTag(agent, access)].filter(Boolean).join(' · ');
@@ -183,7 +185,7 @@ function presetTitle(x) {
 const ACCESS_NAMES = { reviewed:'Reviewed', folders:'Project folders', full:'Full access' };
 // What each Access choice means for a run, shown under the field (accessOf in agents.js).
 const ACCESS_HINTS = {
-  reviewed:'The agent\'s own safety check approves each command and turns down risky ones. Nobody is asked.',
+  reviewed:'The agent\'s own safety check approves each command and turns down risky ones, or asks you in PenEcho when approval is needed.',
   folders:'Changes files only in this project\'s folders. Nobody is asked.',
   full:'Runs every command without asking, anywhere on this computer.',
 };
@@ -198,25 +200,40 @@ function presetShouldShowFacts(x) {
   if (model && lowName.includes(model) && (!effort || lowName.includes(effort))) return false;
   return true;
 }
+// A saved preset whose CLI needs a fix or a sign-in says so, and takes you to Local providers.
+function presetProviderFixHTML(x) {
+  const runner = presetRunner(x.agent);
+  if (runner?.state !== 'problem') return '';
+  const signIn = (runner.problems || []).some(p => /sign[\s-]?in|log[\s-]?in|auth/i.test(`${p.title || ''} ${p.fix || ''}`));
+  return `<button type="button" class="kind-tag is-amber is-link" data-act="open-setup" title="${esc(runner.problems?.[0]?.title || `${runner.name || x.agent} needs a fix`)}">${signIn ? 'Provider needs sign-in' : 'Provider needs fix'} → Fix</button>`;
+}
+// A CLI that is installed and ready but has no preset yet, on the shelf under Your preset agents.
+function readyPresetRowHTML(x, chosen) {
+  const about = presetRunner(x.agent)?.model, model = about?.picked || about?.name || '';
+  const on = x.id === chosen;
+  const add = SET.form?.from === x.id ? '' : `<button type="button" class="btn sm soft-accent" data-act="preset-copy" data-id="${esc(x.id)}">${ic('plus', 13)}Add preset</button>`;
+  return `<div class="sys-row" data-preset="${esc(x.id)}">${av(x.agent, 28)}
+    <span class="sys-text"><strong><span>${esc(x.name)}</span>${x.agent === 'penecho' ? '<span class="kind-tag">Built in</span>' : ''}</strong><small>${esc(model ? `Default model ${model}` : 'Default model')}</small></span>
+    <span class="sys-acts">${on ? `<span class="sys-default" title="Every Ask in every project runs with it, unless a project or the Ask picks another">${ic('check', 13)}Default</span><button type="button" class="link" data-act="preset-default-clear" data-id="${esc(x.id)}">Clear</button>` : ''}${add}</span></div>`;
+}
 function presetRowHTML(x, chosen) {
+  if (x.auto) return readyPresetRowHTML(x, chosen);
   const on = x.id === chosen, act = (name, label) => `<button type="button" class="link" data-act="${name}" data-id="${esc(x.id)}">${label}</button>`;
   const builtIn = x.agent === 'penecho' ? '<span class="kind-tag">Built in</span>' : '';
   // One chip says why a found agent isn't counted yet; its reason is in the title.
   const notRated = presetNotRated(x);
   const status = notRated ? `<span class="kind-tag is-amber" title="Jobs on the agent's default effort are not counted in ratings. Pin a model and effort so they are.">Not rated</span>`
-    : x.auto && x.available ? `<span class="kind-tag" title="The Orchestrator only assigns work to pinned agents. Pin a model and effort so it can.">Not assignable</span>`
     : SET.pinned.has(x.id) ? '<span class="kind-tag is-green">Rated from next Work</span>' : '';
-  const pin = `<button type="button" class="btn sm agent-setup-button" data-act="preset-copy" data-id="${esc(x.id)}">Pin model &amp; effort</button>`;
   const facts = !x.available ? esc(x.why || 'Not on this computer') : presetShouldShowFacts(x) ? esc(presetFacts(x)) : '';
   const shown = notRated ? facts.replace(/default effort$/, '<span class="is-amber-text">default effort</span>') : facts;
-  const off = [x.showInPicker === false ? 'Hidden from agent pickers' : '', !x.auto && x.allowDelegation === false ? 'Orchestrator assignments off' : ''];
+  const off = [x.showInPicker === false ? 'Hidden from agent pickers' : '', x.allowDelegation === false ? 'Orchestrator assignments off' : ''];
   const noPrice = typeof presetNoPrice === 'function' && presetNoPrice(x)
     ? `<button type="button" class="kind-tag is-amber is-link" data-act="prices-open" data-id="${esc(x.id)}" title="PenEcho Auto and the Orchestrator can’t compare this agent’s cost. Click to get the price.">No price${ic('right', 11)}</button>` : '';
-  const makeDefault = x.available ? `<button type="button" class="link is-quiet" data-act="${x.auto ? 'preset-pin-default' : 'preset-default'}" data-id="${esc(x.id)}">Make default</button>` : '';
+  const makeDefault = x.available ? `<button type="button" class="link is-quiet" data-act="preset-default" data-id="${esc(x.id)}">Make default</button>` : '';
   return `<div class="sys-row ${x.available ? '' : 'is-off'}" data-preset="${esc(x.id)}">${av(x.agent, 28)}
     <span class="sys-text"><strong><span>${esc(presetTitle(x))}</span>${builtIn}</strong><small>${[shown, ...off].filter(Boolean).join(' · ')}</small></span>
-    <span class="sys-acts">${noPrice}${status}${on ? `<span class="sys-default" title="Every Ask in every project runs with it, unless a project or the Ask picks another">${ic('check', 13)}Default</span>${act('preset-default-clear', 'Clear')}` : makeDefault}
-      ${x.auto ? SET.form?.from === x.id ? '' : pin : `${act('preset-edit', 'Edit')}${act('preset-remove', 'Remove')}`}</span></div>`;
+    <span class="sys-acts">${presetProviderFixHTML(x)}${noPrice}${status}${on ? `<span class="sys-default" title="Every Ask in every project runs with it, unless a project or the Ask picks another">${ic('check', 13)}Default</span>${act('preset-default-clear', 'Clear')}` : makeDefault}
+      ${act('preset-edit', 'Edit')}${act('preset-remove', 'Remove')}</span></div>`;
 }
 // The levels most agents take, offered when nothing is known about the model, so effort can always be picked. A model its agent lists with no levels gets none, but one can still be typed.
 const BASIC_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
@@ -265,12 +282,15 @@ function presetEffortHTML(runner, draft, about) {
   return `<div>${picker}${input}${why ? `<small>${esc(why)}</small>` : ''}${rating}</div>`;
 }
 function presetFormHTML() {
-  const f = SET.form, runners = (S.agentCheck?.agents || []).filter(a => a.state !== 'missing' && runnableAgents().some(r => r.id === a.id));
+  const f = SET.form;
+  const runners = S.agentCheck?.agents
+    ? S.agentCheck.agents.filter(a => a.state !== 'missing' && runnableAgents().some(r => r.id === a.id))
+    : runnableAgents().filter(r => r.id !== 'workbuddy').map(r => ({ id:r.id, name:r.name || agentInfo(r.id).name }));
   if (f.id && !runners.some(a => a.id === f.agent)) runners.push(presetRunner(f.agent) || { id:f.agent, name:agentInfo(f.agent).name });
-  if (!runners.length) return '<p class="empty-line">No CLI tool here can run yet. Install or fix one under Installed CLIs on this computer below.</p>';
+  if (!runners.length) return '<p class="empty-line">No local provider can run yet. Install or fix one in <button type="button" class="sys-inline-link" data-act="open-setup">Local providers</button>.</p>';
   const r = runners.find(a => a.id === f.agent) || runners[0], m = r.model || {};
   return `<form class="sys-form" data-form="preset">
-    <label><span>Runs on</span><select name="agent">${runners.map(a => `<option value="${esc(a.id)}" ${a.id === r.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+    <label><span>Local provider</span><select name="agent">${runners.map(a => `<option value="${esc(a.id)}" ${a.id === r.id ? 'selected' : ''}>${esc(a.name)}${a.state === 'problem' ? ' (needs fix)' : ''}</option>`).join('')}</select></label>
     ${presetModelHTML(r, f, m)}
     <div data-preset-effort>${presetEffortHTML(r, f, m)}</div>
     ${presetAccessHTML(r, f)}
@@ -280,7 +300,7 @@ function presetFormHTML() {
       <label><input type="checkbox" name="showInPicker" aria-labelledby="presetPickerLabel" aria-describedby="presetPickerHint" ${f.showInPicker ? 'checked' : ''}><span><span id="presetPickerLabel">Show in agent pickers</span><small id="presetPickerHint">Choose this preset yourself when you run a Line or start an orchestrator, or let PenEcho Auto choose it.</small></span></label>
       <label><input type="checkbox" name="allowDelegation" aria-labelledby="presetAssignmentLabel" aria-describedby="presetAssignmentHint" ${f.allowDelegation ? 'checked' : ''}><span><span id="presetAssignmentLabel">Allow orchestrator assignments</span><small id="presetAssignmentHint">Let the orchestrator choose this preset when it delegates work.</small></span></label>
     </fieldset>
-    <footer><label class="sys-check"><input type="checkbox" name="makeDefault" ${f.makeDefault ? 'checked' : ''}><span>Default for every project</span></label>${presetTryHTML(f)}<button type="button" class="btn sm" data-act="preset-cancel">Cancel</button><button type="submit" class="btn sm primary" ${SET.saving ? 'disabled' : ''}>${f.from ? f.makeDefault ? 'Pin &amp; make default' : 'Pin' : f.id ? 'Save' : 'Add agent'}</button></footer>
+    <footer><label class="sys-check"><input type="checkbox" name="makeDefault" ${f.makeDefault ? 'checked' : ''}><span>Default for every project</span></label>${presetTryHTML(f)}<button type="button" class="btn sm" data-act="preset-cancel">Cancel</button><button type="submit" class="btn sm primary" ${SET.saving ? 'disabled' : ''}>${f.id ? 'Save' : f.makeDefault ? 'Add &amp; make default' : 'Add preset'}</button></footer>
   </form>`;
 }
 // A short real run with the model and effort picked here, before they are saved. Its answer shows only while they stay picked.
@@ -307,6 +327,7 @@ function presetAccessOptions(a) {
   if (!a?.normal) return [];
   const list = [['', ACCESS_NAMES[a.normal]]];
   if (a.full && a.normal !== 'full') list.push(['full', ACCESS_NAMES.full]);
+  if (a.reviewed && a.normal !== 'reviewed') list.push(['reviewed', ACCESS_NAMES.reviewed]);
   if (a.folders && a.normal !== 'folders') list.push(['folders', ACCESS_NAMES.folders]);
   return list;
 }
@@ -325,8 +346,45 @@ function presetAccessHTML(r, f) {
   return `<label><span>Access</span><select name="access" ${multi ? '' : 'disabled'}>${options.map(([v, label]) => `<option value="${v}" ${multi && v === selected ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>`;
 }
 const compareSettingsAgentNames = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity:'base', numeric:true }) || a.name.localeCompare(b.name);
+const settingsHosted = () => !S.thisComputer && typeof HOSTED !== 'undefined' && Boolean(HOSTED);
+const savedPresetsCount = () => (S.presets?.presets || []).filter(p => !p.auto).length;
+const presetRunnable = id => id !== 'workbuddy' && (typeof runnableAgents === 'function' ? runnableAgents().some(r => r.id === id) : presetRunner(id)?.state === 'ready');
+// Installed and ready CLIs that have no preset yet: added from the shelf under Your preset agents, one by one or all at once.
+const presetReadyToAdd = () => (S.presets?.presets || []).filter(x => x.auto && x.available && presetRunner(x.agent)?.state !== 'problem').sort(compareSettingsAgentNames);
+const agentsScanning = () => Boolean(S.agentChecking || (!S.agentCheck && !S.agentCheckError));
+// The effort a new preset starts with: none for PenEcho's own agent, a fixed model or one that takes no levels.
+function presetStartEffort(agent, model, about) {
+  if (!about || agent === 'penecho' || about.fixed) return '';
+  const levels = runnerEfforts(model || about.name, about);
+  return levels.length ? suggestedEffort(about, levels) : '';
+}
+// Two steps in one strip at the top of both Project agents tabs: the CLIs installed here, then the presets made from them.
+function sysFlowStepHTML(tab, num, title, sub, { active = false, tone = '' } = {}) {
+  return `<button type="button" class="sys-flow-step${active ? ' is-active' : ''}${tone === 'warn' ? ' is-warn' : ''}" data-act="settings-tab" data-tab="${tab}"${active ? ' aria-current="step"' : ''}>
+    <span class="sys-flow-num">${num}</span><span class="sys-flow-copy"><strong>${title}</strong><small${tone === 'warn' ? ' class="is-amber"' : tone === 'ok' ? ' class="is-ok"' : ''}>${sub}</small></span></button>`;
+}
+const sysFlowHTML = (label, first, second) => `<nav class="sys-flow" aria-label="${label}">${first}<span class="sys-flow-arrow" aria-hidden="true">${ic('arrowRight', 15)}</span>${second}</nav>`;
+function agentsFlowStripHTML(active) {
+  let first, second;
+  if (settingsHosted()) {
+    const open = (HOSTED.computers || []).filter(pc => pc.open).length, ready = (S.agents || []).length;
+    first = sysFlowStepHTML('setup', 1, 'Connected computers', open ? `${open} computer${open === 1 ? '' : 's'} connected` : 'Connect PenEcho on a computer', { active:active === 'setup', tone:open ? 'ok' : 'warn' });
+    second = sysFlowStepHTML('agents', 2, 'Preset agents', `${ready} available`, { active:active === 'agents' });
+  } else {
+    const agents = S.agentCheck?.agents || [];
+    const problems = agents.filter(a => a.state === 'problem').length || S.agentCheck?.problems || 0, ready = agents.filter(a => a.state === 'ready').length;
+    const sub = agentsScanning() ? ['<i class="spin"></i>Checking local CLI tools…', '']
+      : S.agentCheckError && !S.agentCheck ? ['Could not check local CLIs', 'warn']
+      : problems ? [`${problems} ${problems === 1 ? 'needs' : 'need'} a fix · ${ready} ready`, 'warn']
+      : ready ? [`${ready} ready on this computer`, 'ok'] : ['Install or sign in to a CLI tool', 'warn'];
+    const saved = savedPresetsCount();
+    first = sysFlowStepHTML('setup', 1, 'Local agent providers', sub[0], { active:active === 'setup', tone:sub[1] });
+    second = sysFlowStepHTML('agents', 2, 'Preset agents', saved ? `${saved} saved preset${saved === 1 ? '' : 's'} active` : 'Pin model &amp; effort for Auto and Orchestrator', { active:active === 'agents' });
+  }
+  return sysFlowHTML('Project agents setup', first, second);
+}
 function agentsSectionHTML() {
-  if (!S.thisComputer && typeof HOSTED !== 'undefined' && HOSTED) {
+  if (settingsHosted()) {
     const ready = [...(S.agents || [])].sort(compareSettingsAgentNames);
     const agentDesc = a => {
       if (a.id !== 'penecho') return 'Available via your computer';
@@ -338,25 +396,52 @@ function agentsSectionHTML() {
       <p class="sys-note">Custom agent presets are saved on the computer that runs PenEcho.</p>
     </section>`;
   }
-  const list = [...(S.presets?.presets || [])].sort(compareSettingsAgentNames), chosen = S.presets?.default || '';
-  const head = `<header class="sys-head"><div><h2 id="sysAgents">Set up your agents</h2><p class="sys-sub">PenEcho Auto and the Orchestrator only use the agents in this list, so pin a model and effort for each. <strong>Save the same model at several efforts</strong>, such as high and medium: Auto tries them and finds the one that fits each kind of job.</p></div>${!S.presets || SET.form ? '' : `<button type="button" class="btn sm" data-act="preset-new">${ic('plus', 14)}New agent</button>`}</header>`;
+  const all = S.presets?.presets || [], chosen = S.presets?.default || '';
+  const saved = all.filter(x => !x.auto).sort(compareSettingsAgentNames), readyToAdd = presetReadyToAdd();
+  const canNew = (S.agentCheck?.agents || []).some(a => a.state !== 'missing' && presetRunnable(a.id)) || readyToAdd.length > 0;
+  const head = `<header class="sys-head"><div><h2 id="sysAgents">Your preset agents</h2><p class="sys-sub">Saved <strong>provider + model + effort</strong> profiles used by Lines, PenEcho Auto, and Orchestrator. Save the same model at several efforts (e.g. high and medium) so Auto learns which fits each job.</p></div>${!S.presets || SET.form || !canNew || !saved.length ? '' : `<button type="button" class="btn sm" data-act="preset-new">${ic('plus', 14)}New preset</button>`}</header>`;
   if (!S.presets) return `<section class="sys-sec" aria-labelledby="sysAgents">${head}<p class="empty-line">Restart PenEcho to save agents here.</p></section>`;
+  const editing = x => SET.form?.id === x.id ? `<div class="sys-row is-editing">${presetFormHTML()}</div>` : presetRowHTML(x, chosen);
+  const empty = saved.length ? ''
+    : agentsScanning() && !readyToAdd.length ? '<div class="sys-empty" role="status"><i class="spin"></i><strong>Checking local providers…</strong></div>'
+    : SET.form && !SET.form.id && !SET.form.from ? ''
+    : `<div class="sys-empty"><strong>No preset agents yet</strong><p>${canNew ? 'Pick a local provider, a model and an effort, so Auto and the Orchestrator can use it.' : 'Install or sign in to a CLI tool in Local providers first.'}</p>
+      <div class="sys-empty-acts">${canNew ? `<button type="button" class="btn sm primary" data-act="preset-new">${ic('plus', 14)}New preset</button>` : `<button type="button" class="btn sm primary" data-act="open-setup">Go to Local providers →</button>`}</div></div>`;
+  const ready = readyToAdd.length ? `<section class="sys-sec sys-ready" aria-labelledby="sysReadyProviders">
+      <header class="sys-head"><div><h2 id="sysReadyProviders">Ready to add from Local providers</h2><p class="sys-sub">These CLIs are installed and ready but have no preset yet. Add one so Auto and the Orchestrator can use it.</p></div>
+        <button type="button" class="btn sm soft-accent" data-act="preset-quick-add-all" ${SET.saving || SET.form ? 'disabled' : ''}>Quick-add all (${readyToAdd.length})</button></header>
+      <div class="shelf-list">${readyToAdd.map(x => SET.form?.from === x.id ? `${presetRowHTML(x, chosen)}<div class="sys-row is-editing is-pinning">${presetFormHTML()}</div>` : presetRowHTML(x, chosen)).join('')}</div>
+    </section>` : '';
   return `<section class="sys-sec" aria-labelledby="sysAgents">${head}
-    ${agentsRatingStripHTML(list)}
+    ${agentsRatingStripHTML(saved)}
     ${SET.form && !SET.form.id && !SET.form.from ? presetFormHTML() : ''}
-    ${list.length ? `<div class="shelf-list">${list.map(x => SET.form?.id === x.id ? `<div class="sys-row is-editing">${presetFormHTML()}</div>`
-      : SET.form?.from === x.id ? `${presetRowHTML(x, chosen)}<div class="sys-row is-editing is-pinning">${presetFormHTML()}</div>` : presetRowHTML(x, chosen)).join('')}</div>` : '<p class="empty-line">No CLI tool can run yet. Install or fix one under Installed CLIs on this computer below, then set up your agents here.</p>'}
-    ${chosen ? '' : '<p class="sys-note">No default: each project picks its own working agent, or an agent that already builds.</p>'}
-  </section>`;
+    ${saved.length ? `<div class="shelf-list">${saved.map(editing).join('')}</div>` : empty}
+    ${chosen || !saved.length ? '' : '<p class="sys-note">No default: each project picks its own working agent, or an agent that already builds.</p>'}
+  </section>${ready}`;
 }
+// Quick-add all: one saved preset for each ready CLI, with its default model and a suggested effort.
+ACT['preset-quick-add-all'] = async () => {
+  const list = presetReadyToAdd(), chosen = S.presets?.default || '';
+  if (SET.saving || !list.length) return;
+  SET.saving = true; settingsRender();
+  let added = 0;
+  try {
+    for (const x of list) {
+      const about = presetRunner(x.agent)?.model || {}, model = about.picked || about.name || '';
+      if (await pinPreset({ agent:x.agent, model, effort:presetStartEffort(x.agent, model, about), access:'', name:'', default:x.id === chosen, showInPicker:true, allowDelegation:true })) added++;
+    }
+  } catch (error) { toast(error.message); }
+  SET.saving = false; settingsRender();
+  if (added) toast(`Added ${added} preset${added === 1 ? '' : 's'} for Auto and Orchestrator.`);
+};
 // Agents and the prices of their models, two tabs on one page. penecho.ai has no prices of its own.
 const AGENTS_PRICES = '#agents/prices';
 const agentsHavePrices = () => typeof pricesHere === 'function' && pricesHere();
 const agentsPricesUp = () => settingsUp() && sysTabNow() === 'agents' && SET.agentsTab === 'prices' && agentsHavePrices();
 function agentsTabsHTML() {
-  const on = agentsPricesUp(), n = priceWanted().length;
+  const on = agentsPricesUp(), n = priceWanted().length, saved = savedPresetsCount();
   const tab = (id, label, chosen, more = '') => `<button type="button" role="tab" id="agentsTab-${id}" aria-selected="${chosen}" aria-controls="sysPanel" data-act="agents-tab" data-tab="${id}">${label}${more}</button>`;
-  return `${tab('agents', 'Agents', !on)}${tab('prices', 'Model prices', on, n ? `<em class="setup-count" title="${n} with no price">${n}</em>` : '')}`;
+  return `${tab('agents', saved ? `Presets (${saved})` : 'Presets', !on)}${tab('prices', 'Model prices', on, n ? `<em class="setup-count" title="${n} with no price">${n}</em>` : '')}`;
 }
 ACT['agents-tab'] = el => { PRICES.target = ''; openSettings('agents', { sub:el.dataset.tab === 'prices' ? 'prices' : '' }); };
 const savedPreset = id => (S.presets?.presets || []).find(x => x.id === id);
@@ -377,6 +462,21 @@ function openPresetForm(x, copy = false, makeDefault = false) {
   requestAnimationFrame(() => $('.sys-form select, .sys-form input')?.focus());
 }
 ACT['preset-new'] = () => openPresetForm(null);
+// + Create preset on a Local providers row: Preset agents, with a new preset's form filled in for that provider.
+ACT['setup-create-preset'] = el => {
+  const agent = el.dataset.agent, about = presetRunner(agent)?.model || {}, model = about.picked || about.name || '';
+  openSettings('agents');
+  if (typeof EMBED !== 'undefined' && EMBED) return;
+  SET.pinAll = false;
+  SET.presetTry = null;
+  SET.form = { id:'', from:'', agent, model, effort:presetStartEffort(agent, model, about), access:'', name:'', makeDefault:false, showInPicker:true, allowDelegation:true };
+  settingsRender();
+  requestAnimationFrame(() => {
+    const form = $('.sys-form[data-form="preset"]');
+    form?.scrollIntoView?.({ block:'nearest' });
+    form?.querySelector('select, input')?.focus({ preventScroll:true });
+  });
+};
 ACT['preset-copy'] = el => openPresetForm(savedPreset(el.dataset.id), true);
 ACT['preset-edit'] = el => openPresetForm(savedPreset(el.dataset.id));
 // A found agent is pinned before it becomes the default, so the agent that handles most Works is rated.
@@ -511,14 +611,18 @@ function keyModelService(c) {
   const family = families.find(([, pattern]) => pattern.test(model));
   return family ? keyService(family[0]) : keyPlaceOf(c).s;
 }
-function keyRowHTML(c) {
+function keyRowHTML(c, active = canvasAiChosen()) {
   if (c.provider !== 'api') {
     return `<div class="sys-row is-off"><span class="sys-mark">${ic('x', 15)}</span><span class="sys-text"><strong>${esc(CLI_NAMES[c.provider] || c.name)}</strong><small>No longer used. Configure this CLI in its own agent settings.</small></span><span class="sys-acts">${c.removable ? `<button type="button" class="link" data-act="key-remove" data-id="${esc(c.id)}">Remove</button>` : ''}</span></div>`;
   }
   const { s } = keyPlaceOf(c), modelService = keyModelService(c);
   const place = keyPlaceLabel(c), label = modelService.id !== s.id ? `${modelService.label} · via ${place}` : place;
-  return `<div class="sys-row" data-key="${esc(c.id)}"><span class="sys-mark">${keyIconHTML(modelService)}</span><span class="sys-text"><strong>${esc(c.apiModel || c.name)}</strong><small>${esc([label, s.localKey ? '' : c.hasApiKey ? 'key saved' : 'no key'].filter(Boolean).join(' · '))}</small></span>
-    <span class="sys-acts"><button type="button" class="link" data-act="key-edit" data-id="${esc(c.id)}">Edit</button>${c.removable ? `<button type="button" class="link" data-act="key-remove" data-id="${esc(c.id)}">Remove</button>` : ''}</span></div>`;
+  // The key Canvas AI uses says so; another can be made the one in a click.
+  const inUse = c.id === active;
+  const use = inUse ? '<button type="button" class="link" data-act="settings-tab" data-tab="canvas-ai">Open Canvas AI →</button>'
+    : c.hasApiKey ? `<button type="button" class="btn sm soft-accent" data-act="key-use" data-id="${esc(c.id)}">Use in Canvas AI</button>` : '';
+  return `<div class="sys-row" data-key="${esc(c.id)}"><span class="sys-mark">${keyIconHTML(modelService)}</span><span class="sys-text"><strong><span>${esc(c.apiModel || c.name)}</span>${inUse ? '<span class="kind-tag is-accent">Active in Canvas AI</span>' : ''}</strong><small>${esc([label, s.localKey ? '' : c.hasApiKey ? 'key saved' : 'no key'].filter(Boolean).join(' · '))}</small></span>
+    <span class="sys-acts">${use}<button type="button" class="link" data-act="key-edit" data-id="${esc(c.id)}">Edit</button>${c.removable ? `<button type="button" class="link" data-act="key-remove" data-id="${esc(c.id)}">Remove</button>` : ''}</span></div>`;
 }
 // Add a provider: a find box, then a tile for each provider under its kind. A dot marks one that has a key saved already.
 const keyFindText = s => [s.label, s.id, ...s.regions.flatMap(r => [r.label, keyHost(r.url)])].join(' ').toLowerCase();
@@ -565,15 +669,17 @@ function keyFormHTML() {
     <label class="sys-wide"><span>Address</span><input name="url" value="${esc(k.url)}" placeholder="https://…/v1" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>
     <label><span>Model</span><span class="sys-inline"><input name="model" list="sysKeyModels" value="${esc(k.model)}" placeholder="${esc(s.model || 'model name')}" autocomplete="off" autocapitalize="off" spellcheck="false" required><datalist id="sysKeyModels">${(k.models || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist><button type="button" class="btn sm" data-act="key-models" ${k.busy ? 'disabled' : ''}>List models</button></span></label>
     ${local ? '' : `<label class="sys-wide"><span>API key</span><span class="sys-inline"><input name="key" type="password" value="${esc(k.key)}" placeholder="${k.id && k.hasKey ? 'Saved. Type a new one to replace it.' : 'Paste your key'}" autocomplete="off" ${k.id && k.hasKey ? '' : 'required'}>${keyUrl ? `<a class="sys-get-key" href="${esc(keyUrl)}" target="_blank" rel="noopener noreferrer">Get a key ↗</a>` : ''}</span></label>`}
+    ${k.id ? '' : `<label class="sys-check sys-wide"><input type="checkbox" name="useNow" ${k.useNow ? 'checked' : ''}><span>Use for Canvas AI right away</span></label>`}
     ${k.said ? `<p class="sys-said ${k.ok ? 'ok' : 'bad'}" role="status">${k.ok ? ic('check', 14) : ''}${esc(k.said)}</p>` : ''}
-    <footer><button type="button" class="btn sm" data-act="key-test" ${k.busy ? 'disabled' : ''}>Test</button><span class="sys-gap"></span><button type="button" class="btn sm" data-act="key-cancel">Cancel</button><button type="submit" class="btn sm primary" ${k.busy ? 'disabled' : ''}>${k.id ? 'Save' : 'Add key'}</button></footer>
+    <footer><button type="button" class="btn sm" data-act="key-test" ${k.busy ? 'disabled' : ''}>Test</button><span class="sys-gap"></span><button type="button" class="btn sm" data-act="key-cancel">Cancel</button><button type="submit" class="btn sm primary" ${k.busy ? 'disabled' : ''}>${k.id ? 'Save' : 'Add provider'}</button></footer>
   </form>`;
 }
 function cloudRowHTML() {
   const a = S.cloudAccount, m = presetRunner('penecho')?.model, credits = a?.credits?.available ?? m?.credits;
   if (a?.signedIn || m?.signedIn) {
     const left = credits !== null && credits !== undefined && Number.isFinite(Number(credits)) ? `${Number(credits).toLocaleString()} credits` : '';
-    return `<div class="sys-row"><span class="sys-mark is-cloud">${ic('cloud', 15)}</span><span class="sys-text"><strong>PenEcho Cloud</strong><small>${esc(['Signed in', a?.name || '', left].filter(Boolean).join(' · '))}</small></span><span class="sys-acts"></span></div>`;
+    const models = SET.cloud?.models?.length ? 'Cloud models ready in Canvas AI' : SET.cloudLoading ? 'Loading Cloud models…' : '';
+    return `<div class="sys-row"><span class="sys-mark is-cloud">${ic('cloud', 15)}</span><span class="sys-text"><strong><span>PenEcho Cloud</span><span class="kind-tag is-green">Connected</span></strong><small>${esc([a?.name || 'Signed in', left, models].filter(Boolean).join(' · '))}</small></span><span class="sys-acts"><button type="button" class="btn sm soft-accent" data-act="settings-tab" data-tab="canvas-ai">Pick Cloud model →</button></span></div>`;
   }
   return `<div class="sys-row"><span class="sys-mark is-cloud">${ic('cloud', 15)}</span><span class="sys-text"><strong>PenEcho Cloud</strong><small>Models paid with credits. No key needed.</small></span><span class="sys-acts"><button type="button" class="btn sm" data-act="cloud-sign-in">Sign in</button></span></div>`;
 }
@@ -583,19 +689,37 @@ function cloudRowHTML() {
 const CANVAS_AI = 'penecho-ai-connection-id';
 const localAiKey = () => `${CANVAS_AI}:local:${location.origin}`;
 const hostedAiKey = () => (SET.cloud?.account ? `${CANVAS_AI}:${SET.cloud.origin || 'https://penecho.ai'}:${SET.cloud.account}:local:hosted` : '');
+const canvasAiSettingsOpen = () => S.shelfPage === 'agents' && SET.agentsTab === 'canvas';
+const cloudSignInNeeded = () => S.cloudAccount?.signedIn === false && !S.cloudAccount.unavailable;
+function refreshCloudSettings(previous, account) {
+  const who = a => [a?.signedIn, a?.origin, a?.id || a?.name].join('\n');
+  if (account && !account.unavailable && who(account) !== who(previous)) {
+    // Discard requests and results from before sign-in, sign-out or a switch to another account.
+    SET.cloudAccountVersion++;
+    SET.cloud = SET.suggest = null;
+    SET.cloudAsked = SET.cloudLoading = SET.suggestAsked = false;
+  }
+  if ((canvasAiSettingsOpen() || S.shelfPage === 'providers' || (S.shelfPage === 'settings' && SET.tab === 'general')) && $('#view')) settingsRender();
+}
 async function loadCloudModels() {
-  SET.cloudAsked = true;
+  if (SET.cloudLoading) return;
+  const version = SET.cloudAccountVersion;
+  SET.cloudAsked = SET.cloudLoading = true;
   SET.cloudRefreshAt = Infinity;
+  let catalog = null;
   try {
     const response = typeof HOSTED !== 'undefined' && HOSTED && typeof hostedFetch === 'function'
       ? await hostedFetch('/cloud/models', { method:'GET' })
       : await fetch('/api/cloud/models', { credentials:'same-origin', cache:'no-store', headers:{ accept:'application/json' } });
     const body = response.ok ? await response.json() : null;
-    SET.cloud = body ? { account:String(body.accountId || ''), origin:String(body.origin || ''), models:(Array.isArray(body.models) ? body.models : [])
-      .filter(m => m.available === true && m.enabled !== false && !m.retiredAt && Number(m.multiplier) >= 0).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)) } : null;
-  } catch { SET.cloud = null; }
-  SET.cloudRefreshAt = Date.now() + (SET.cloud ? 300_000 : 60_000);
-  if ((S.shelfPage === 'agents' && SET.agentsTab === 'canvas') || S.shelfPage === 'providers') settingsRender();
+    if (body) catalog = { account:String(body.accountId || ''), origin:String(body.origin || ''), models:(Array.isArray(body.models) ? body.models : [])
+      .filter(m => m.available === true && m.enabled !== false && !m.retiredAt && Number(m.multiplier) >= 0).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)) };
+  } catch { /* Settings offers a retry. */ }
+  if (version !== SET.cloudAccountVersion) return;
+  SET.cloud = catalog;
+  SET.cloudLoading = false;
+  SET.cloudRefreshAt = Date.now() + (catalog ? 300_000 : 60_000);
+  if (canvasAiSettingsOpen() || S.shelfPage === 'providers') settingsRender();
   // orchestrator.js is the computer's only: penecho.ai leaves it out (PE-640).
   if (typeof paintPrices === 'function') paintPrices();
 }
@@ -620,29 +744,44 @@ function canvasAiOptionsHTML(meta) {
   ].join('');
 }
 function canvasAiCardHTML(keys) {
-  if (!SET.cloudAsked) loadCloudModels();
+  const signIn = cloudSignInNeeded();
+  if (!signIn && (!SET.cloudAsked || Date.now() >= SET.cloudRefreshAt)) loadCloudModels();
   const meta = canvasAiModelMeta(keys);
-  const providersLink = (label = 'Manage providers') => `<button type="button" class="link sys-canvas-providers" data-act="open-providers" data-focus-id="sysTab-providers">${label}</button>`;
-  const hint = meta.none
-    ? (S.thisComputer
-      ? `Sign in to PenEcho Cloud or add an API key under ${providersLink('Providers')} to pick a model for Canvas AI.`
-      : `Sign in to PenEcho Cloud under ${providersLink('Providers')} to pick a model for Canvas AI.`)
-    : meta.currentLabel
-      ? `${esc(`Currently using ${meta.currentLabel}`)} · ${providersLink()}`
-      : `Pick which model answers when you draw on a Canvas. ${providersLink()}`;
+  const providersLink = (label = 'Manage API providers') => `<button type="button" class="link sys-canvas-providers" data-act="open-providers" data-focus-id="sysTab-providers">${label}</button>`;
+  let hint = meta.currentLabel
+    ? `${esc(`Currently using ${meta.currentLabel}`)} · ${providersLink()}`
+    : `Pick which model answers when you draw on a Canvas. ${providersLink()}`;
+  let actions = '';
+  if (meta.none) {
+    if (S.thisComputer) actions = `<button type="button" class="btn sm primary" data-act="settings-go-keys">${ic('plus', 14)}Add API provider</button>`;
+    if (signIn) {
+      hint = `Sign in to PenEcho Cloud${S.thisComputer ? ' or add an API provider' : ''} to pick a model for Canvas AI. ${providersLink('API providers')}`;
+      actions += '<button type="button" class="btn sm" data-act="cloud-sign-in">Sign in to Cloud</button>';
+    } else {
+      const status = SET.cloudLoading ? 'Loading Cloud models…' : SET.cloud ? 'No Cloud models are available.' : 'Couldn’t load Cloud models.';
+      hint = `${S.cloudAccount?.signedIn ? 'Signed in to PenEcho Cloud. ' : ''}${status} ${providersLink('API providers')}`;
+      if (!SET.cloudLoading && !SET.cloud) actions += '<button type="button" class="btn sm" data-act="canvas-ai-retry">Retry</button>';
+    }
+  }
   return `<div class="sys-canvas-ai" aria-label="Canvas AI model">
     <div class="sys-canvas-ai-copy">
-      <div class="sys-canvas-ai-top">${ic('pen', 16)}<strong>Canvas AI</strong>${meta.currentLabel ? `<span class="kind-tag is-accent">${esc(meta.currentLabel)}</span>` : ''}${SET.canvasAiSaved ? `<span class="sys-saved" role="status">${ic('check', 13)}${esc(SET.canvasAiSaved)}</span>` : ''}</div>
+      <div class="sys-canvas-ai-top">${ic('pen', 16)}<strong id="settingsCanvasAiTitle" tabindex="-1">Canvas AI</strong>${meta.currentLabel ? `<span class="kind-tag is-accent">${esc(meta.currentLabel)}</span>` : ''}${SET.canvasAiSaved ? `<span class="sys-saved" role="status">${ic('check', 13)}${esc(SET.canvasAiSaved)}</span>` : ''}</div>
       <p>The <b>drawing Canvas answer AI</b> — answers right beside your strokes when you tap AI, circle ink, or turn on Auto AI.</p>
       <small>${hint}</small>
     </div>
     <div class="sys-canvas-ai-pick">
       ${meta.none
-        ? (S.thisComputer ? `<button type="button" class="btn sm" data-act="settings-go-keys">Add API key</button><button type="button" class="btn sm" data-act="cloud-sign-in">Sign in</button>` : `<button type="button" class="btn sm" data-act="cloud-sign-in">Sign in</button>`)
+        ? actions
         : `<select id="settingsCanvasAiSelect" class="sys-pick sys-canvas-pick" data-canvas-ai aria-label="Model for Canvas AI">${canvasAiOptionsHTML(meta)}</select>${canvasAiEffortHTML()}`}
     </div>
   </div>`;
 }
+ACT['canvas-ai-retry'] = button => {
+  const hadFocus = document.activeElement === button;
+  loadCloudModels();
+  settingsRender();
+  if (hadFocus) $('#settingsCanvasAiTitle')?.focus({ preventScroll:true });
+};
 // How hard Canvas AI thinks: the same choice as the effort menu in the Canvas AI bar (core.js keeps it as penecho-ai-effort).
 const CANVAS_AI_EFFORT = 'penecho-ai-effort';
 const CANVAS_AI_EFFORTS = [['config', 'Default effort'], ['none', 'No thinking'], ['low', 'Low effort'], ['medium', 'Medium effort'], ['high', 'High effort'], ['max', 'Max effort']];
@@ -662,41 +801,57 @@ document.addEventListener('change', e => {
   toast(`Canvas AI: ${box.selectedOptions[0]?.textContent || box.value}, from now on.`);
   requestAnimationFrame(settingsRender);
 });
+// Makes a PenEcho Cloud model (hosted:<id>) or a saved key the one Canvas AI uses, in the entries the Canvas reads. It throws when storage fails.
+function selectCanvasAiConnection(id) {
+  const hosted = hostedAiKey();
+  if (id.startsWith('hosted:')) {
+    if (hosted) { localStorage.setItem(hosted, id); localStorage.setItem(`${hosted}:selected`, 'true'); }
+    localStorage.setItem(CANVAS_AI, id);
+  } else {
+    localStorage.setItem(localAiKey(), id);
+    localStorage.setItem(CANVAS_AI, id);
+    if (hosted) localStorage.setItem(`${hosted}:selected`, 'false');
+  }
+}
 document.addEventListener('change', e => {
   const box = e.target;
   if (!box.matches?.('select[data-canvas-ai]') || !box.value) return;
-  const id = box.value, hosted = hostedAiKey();
   try {
-    if (id.startsWith('hosted:')) {
-      if (hosted) { localStorage.setItem(hosted, id); localStorage.setItem(`${hosted}:selected`, 'true'); }
-      localStorage.setItem(CANVAS_AI, id);
-    } else {
-      localStorage.setItem(localAiKey(), id);
-      localStorage.setItem(CANVAS_AI, id);
-      if (hosted) localStorage.setItem(`${hosted}:selected`, 'false');
-    }
+    selectCanvasAiConnection(box.value);
     const label = box.selectedOptions[0]?.textContent || 'it';
     SET.canvasAiSaved = 'Saved';
     toast(`Canvas AI uses ${label} from now on.`);
   } catch (error) { toast(error.message); }
   requestAnimationFrame(settingsRender);
 });
+// Two steps in one strip at the top of API providers and Canvas AI: connect a provider, then pick the model Canvas AI uses.
+function canvasFlowStripHTML(active) {
+  const keys = SET.keys || [], own = keys.filter(c => c.provider === 'api' && c.hasApiKey).length;
+  const cloud = Boolean(S.cloudAccount?.signedIn || presetRunner('penecho')?.model?.signedIn);
+  const sources = [cloud ? 'PenEcho Cloud' : '', own ? `${own} API key${own === 1 ? '' : 's'}` : ''].filter(Boolean);
+  const meta = canvasAiModelMeta(keys);
+  const pick = meta.currentLabel ? [`Using ${esc(meta.currentLabel)}`, 'ok'] : meta.none ? ['Pick a model after connecting a provider', ''] : ['Choose a model', 'warn'];
+  return sysFlowHTML('Canvas AI setup',
+    sysFlowStepHTML('providers', 1, 'API providers', sources.length ? esc(sources.join(' · ')) : 'No provider connected yet', { active:active === 'providers', tone:sources.length ? '' : 'warn' }),
+    sysFlowStepHTML('canvas-ai', 2, 'Canvas AI', pick[0], { active:active === 'canvas-ai', tone:pick[1] }));
+}
 function penechoSectionHTML() {
   if (!SET.keysAsked) loadKeys();
-  const keys = SET.keys || [];
-  return `<section class="sys-sec" aria-label="Providers">
+  if (!cloudSignInNeeded() && (!SET.cloudAsked || Date.now() >= SET.cloudRefreshAt)) loadCloudModels();
+  const keys = SET.keys || [], active = canvasAiChosen();
+  return `${canvasFlowStripHTML('providers')}<section class="sys-sec" aria-label="API providers">
     <div class="sys-subsec">
-      <div class="sys-subhead"><div><h3>PenEcho Cloud</h3></div></div>
+      <div class="sys-subhead"><div><h3>PenEcho Cloud</h3><p class="sys-note">Zero-key managed models for Canvas AI, paid with PenEcho Cloud credits.</p></div></div>
       <div class="shelf-list">${cloudRowHTML()}</div>
     </div>
     <div class="sys-subsec" id="sysKeys">
       <div class="sys-subhead">
-        <div><h3>API keys for Canvas AI</h3><p class="sys-note">Claude Code, Codex and other agents don’t use these keys. They use their own sign-in or key.</p></div>
-        ${!S.thisComputer || SET.key ? '' : `<button type="button" class="btn sm" data-act="key-new">${ic('plus', 14)}Add API key</button>`}
+        <div><h3>Your API keys &amp; local model servers</h3><p class="sys-note">Used strictly by <strong>Canvas AI</strong> (drawing answers &amp; handwriting). Project agents use <button type="button" class="sys-inline-link" data-act="open-setup">Local providers</button> instead.</p></div>
+        ${!S.thisComputer || SET.key ? '' : `<button type="button" class="btn sm" data-act="key-new">${ic('plus', 14)}Add API provider</button>`}
       </div>
       ${S.thisComputer ? `
         ${SET.key && !SET.key.id ? keyFormHTML() : ''}
-        <div class="shelf-list">${keys.length ? keys.map(c => SET.key?.id === c.id ? `<div class="sys-row is-editing">${keyFormHTML()}</div>` : keyRowHTML(c)).join('') : (SET.key && !SET.key.id ? '' : '<p class="empty-line sys-empty-keys">No API keys saved yet. Add a key above, or use PenEcho Cloud credits.</p>')}</div>
+        <div class="shelf-list">${keys.length ? keys.map(c => SET.key?.id === c.id ? `<div class="sys-row is-editing">${keyFormHTML()}</div>` : keyRowHTML(c, active)).join('') : (SET.key && !SET.key.id ? '' : '<p class="empty-line sys-empty-keys">No API provider yet. Add one above, or use PenEcho Cloud credits.</p>')}</div>
         ${SET.keysError ? `<p class="sys-note is-bad">${esc(SET.keysError)}</p>` : ''}
       ` : '<p class="empty-line">Custom API keys are saved privately on the computer that runs PenEcho.</p>'}
     </div>
@@ -706,7 +861,7 @@ function penechoSectionHTML() {
 function keyFormFor(c) {
   const { s, region } = c ? keyPlaceOf(c) : { s:null, region:0 };
   SET.keyFind = '';
-  return { id:c?.id || '', picking:!c, service:s?.id || '', region, format:c?.apiFormat || 'openai', url:keyFormUrl(c), model:c?.apiModel || '', key:'', hasKey:Boolean(c?.hasApiKey),
+  return { id:c?.id || '', picking:!c, useNow:!c, service:s?.id || '', region, format:c?.apiFormat || 'openai', url:keyFormUrl(c), model:c?.apiModel || '', key:'', hasKey:Boolean(c?.hasApiKey),
     saved:c ? { service:s.id, url:keyFormUrl(c), preset:c.apiPreset || '' } : null, effort:c?.effort || '', models:[], said:'', ok:false, busy:false };
 }
 // The box to fill first: a server on this computer needs only a model, Custom an address, the rest a key.
@@ -746,12 +901,20 @@ ACT['key-format'] = el => { keyFormRead(); Object.assign(SET.key, { format:el.da
 // From an Ask held for credits, or Canvas AI with no model: Providers, with a new key's form open.
 ACT['open-keys'] = () => { SET.key = keyFormFor(null); openProviders(); requestAnimationFrame(() => document.getElementById('sysKeys')?.scrollIntoView({ block:'start' })); };
 ACT['settings-go-keys'] = ACT['open-keys'];
+ACT['key-use'] = el => {
+  const c = (SET.keys || []).find(x => x.id === el.dataset.id); if (!c) return;
+  try { selectCanvasAiConnection(c.id); SET.canvasAiSaved = 'Saved'; toast(`Canvas AI uses ${c.apiModel || c.name} from now on.`); }
+  catch (error) { toast(error.message); }
+  settingsRender();
+};
 ACT['key-edit'] = el => openKeyForm((SET.keys || []).find(c => c.id === el.dataset.id));
 ACT['key-cancel'] = () => { SET.key = null; settingsRender(); };
 function keyFormRead() {
   const form = $('.sys-form[data-form="key"]'), k = SET.key; if (!form || !k) return null;
   const data = new FormData(form);
   k.url = String(data.get('url') || '').trim(); k.model = String(data.get('model') || '').trim(); k.key = String(data.get('key') || '').trim();
+  const useNow = form.querySelector('[name="useNow"]');
+  if (useNow) k.useNow = Boolean(useNow.checked);
   const s = keyService(k.service), r = s.regions[k.region] || s.regions[0];
   // The address of a known provider stays that provider's; one changed by hand is a key for another address in the same format.
   const apiPreset = r.preset && k.url === r.url ? r.preset : k.saved && k.saved.service === s.id && k.saved.url === k.url ? k.saved.preset : '';
@@ -770,11 +933,12 @@ function keySave() {
   keyBusy(async k => {
     const r = await settingsCall('/connections', { action:'save', ...(k.id ? { id:k.id } : {}), connection });
     SET.keys = r.connections || SET.keys; SET.key = null;
+    // A new key is what Canvas AI uses when that box was left ticked, and the first key of your own is until something else is chosen.
+    let using = false;
+    if ((k.useNow || !canvasAiChosen()) && r.savedId) { try { selectCanvasAiConnection(r.savedId); using = true; } catch { /* The Canvas asks for a model instead. */ } }
     // Show the persisted result now, without waiting for the independent CLI scan.
     settingsRender();
-    // The first key of your own is what Canvas AI uses until something else is chosen.
-    if (!canvasAiChosen() && r.savedId) { try { localStorage.setItem(localAiKey(), r.savedId); } catch { /* The Canvas asks for a model instead. */ } }
-    toast(k.id ? 'Saved.' : `Added. Canvas AI can use ${connection.apiModel} now.`);
+    toast(k.id ? 'Saved.' : using ? `Added. Canvas AI uses ${connection.apiModel} now.` : `Added ${connection.apiModel}.`);
   });
 }
 ACT['key-remove'] = async el => {
@@ -789,30 +953,37 @@ ACT['key-remove'] = async el => {
 // settings did. Each tab keeps its own address, so links made before the window still land on the right tab.
 const SETTINGS_PAGES = new Set(['agents', 'providers', 'settings', 'archived', 'setup']);
 const settingsUp = () => SETTINGS_PAGES.has(S.shelfPage);
+// The tabs, each in its group. A workflow's steps say so in the window's header.
+const SYS_GROUPS = [['agents', 'Project agents'], ['canvas', 'Canvas'], ['integrations', 'Integrations'], ['app', 'App']];
 const SYS_TABS = [
-  { id:'agents', label:'Agents', icon:'setAgents', page:'agents', sub:'agents', hash:'#agents' },
-  { id:'canvas-ai', label:'Canvas AI', icon:'setCanvasAi', page:'agents', sub:'canvas', hash:'#agents/canvas' },
-  { id:'apps', label:'MCP', icon:'setMcp', page:'agents', sub:'apps', hash:'#agents/apps' },
-  { id:'providers', label:'Providers', icon:'setProviders', page:'providers', hash:'#providers' },
-  { sep:true },
-  { id:'canvas', label:'Canvas', icon:'navCanvases', page:'settings', sub:'canvas', hash:'#settings/canvas' },
-  { id:'general', label:'General', icon:'setGeneral', page:'settings', sub:'general', hash:'#settings/general' },
-  { sep:true },
+  { id:'setup', label:'Local providers', icon:'setLocalProviders', page:'setup', hash:'#setup', group:'agents', domain:'Project agents · Step 1' },
+  { id:'agents', label:'Preset agents', icon:'setAgents', page:'agents', sub:'agents', hash:'#agents', group:'agents', domain:'Project agents · Step 2' },
+  { id:'providers', label:'API providers', icon:'setProviders', page:'providers', hash:'#providers', group:'canvas', domain:'Canvas AI · Step 1' },
+  { id:'canvas-ai', label:'Canvas AI', icon:'setCanvasAi', page:'agents', sub:'canvas', hash:'#agents/canvas', group:'canvas', domain:'Canvas AI · Step 2' },
+  { id:'canvas', label:'View', title:'Canvas view', icon:'navCanvases', page:'settings', sub:'canvas', hash:'#settings/canvas', group:'canvas', domain:'Canvas' },
+  { id:'apps', label:'MCP', icon:'setMcp', page:'agents', sub:'apps', hash:'#agents/apps', group:'integrations', domain:'External integration' },
+  { id:'general', label:'General', icon:'setGeneral', page:'settings', sub:'general', hash:'#settings/general', group:'app', domain:'App' },
   // penecho.ai's dashboard keeps its own projects, so there is nothing archived to list there.
-  { id:'archived', label:'Archived', icon:'navArchive', page:'archived', hash:'#archived', local:true },
+  { id:'archived', label:'Archived', icon:'navArchive', page:'archived', hash:'#archived', local:true, group:'app', domain:'App' },
 ];
-const sysTabs = () => SYS_TABS.filter(t => !(t.local && typeof HOSTED !== 'undefined' && HOSTED)).filter((t, i, all) => !t.sep || (i < all.length - 1 && !all[i + 1].sep));
-const sysTab = id => SYS_TABS.find(t => t.id === id && !t.sep) || SYS_TABS[0];
+const sysTabs = () => SYS_TABS.filter(t => !(t.local && typeof HOSTED !== 'undefined' && HOSTED));
+const sysTab = id => SYS_TABS.find(t => t.id === id) || SYS_TABS.find(t => t.id === 'agents');
 // The tab on show, from the page and its section.
 function sysTabNow() {
-  if (S.shelfPage === 'agents' || S.shelfPage === 'setup') return SET.agentsTab === 'canvas' ? 'canvas-ai' : SET.agentsTab === 'apps' ? 'apps' : 'agents';
+  if (S.shelfPage === 'setup') return 'setup';
+  if (S.shelfPage === 'agents') return SET.agentsTab === 'canvas' ? 'canvas-ai' : SET.agentsTab === 'apps' ? 'apps' : 'agents';
   if (S.shelfPage === 'settings') return SET.tab === 'general' ? 'general' : 'canvas';
   return S.shelfPage === 'archived' ? 'archived' : 'providers';
+}
+// Where the gear opens: Local providers while a CLI needs a fix or no preset is saved yet, else Preset agents. penecho.ai has no CLIs to check.
+function defaultSettingsTab() {
+  if (typeof HOSTED !== 'undefined' && HOSTED) return 'agents';
+  return (S.agentCheck?.problems || 0) > 0 || (S.presets && !(S.presets.presets || []).some(p => !p.auto)) ? 'setup' : 'agents';
 }
 // Opening keeps the page beneath as it is (New project too). Moving between tabs replaces the address, so Back closes the window.
 function openSettings(id, { replace = false, sub = '' } = {}) {
   const t = sysTab(id), was = settingsUp(), hash = t.id === 'agents' && sub === 'prices' ? AGENTS_PRICES : t.hash;
-  if (t.id === 'agents') dismissRailSettingsBadge();
+  if (t.id === 'agents' || t.id === 'setup') dismissRailSettingsBadge();
   if (typeof EMBED !== 'undefined' && EMBED) {
     if (typeof renderRail === 'function') renderRail();
     closeSwitcher?.();
@@ -833,13 +1004,14 @@ function openSettings(id, { replace = false, sub = '' } = {}) {
   if (typeof hostedAddress === 'function') hostedAddress();
   render();
 }
+const SETTINGS_TAB_IDS = new Set(['setup', 'agents', 'providers', 'canvas-ai', 'apps', 'canvas', 'general', 'archived']);
 function openSettingsTab(tab, { replace = false } = {}) {
-  openSettings({ agents:'agents', apps:'apps', canvas:'canvas', general:'general' }[tab] || 'agents', { replace });
+  openSettings(!tab ? defaultSettingsTab() : SETTINGS_TAB_IDS.has(tab) ? tab : 'agents', { replace });
 }
 function openProviders() { openSettings('providers'); }
 const agentsHashFor = tab => tab === 'canvas' || tab === 'apps' ? `#agents/${tab}` : '#agents';
-function openAgents(tab = 'agents') { openSettings(tab === 'canvas' ? 'canvas-ai' : tab === 'apps' ? 'apps' : 'agents'); }
-ACT['open-settings'] = () => openSettings('agents');
+function openAgents(tab = 'agents') { openSettings(tab === 'canvas' || tab === 'canvas-ai' ? 'canvas-ai' : tab === 'apps' ? 'apps' : 'agents'); }
+ACT['open-settings'] = () => openSettings(defaultSettingsTab());
 ACT['open-providers'] = () => openProviders();
 ACT['open-agents'] = () => openAgents();
 ACT['open-canvas-settings'] = () => openSettings('canvas');
@@ -993,16 +1165,21 @@ ACT['usage-stats-preview'] = () => {
 };
 
 async function loadSuggestStatus() {
+  const version = SET.cloudAccountVersion;
   SET.suggestAsked = true;
   const path = typeof HOSTED !== 'undefined' && HOSTED ? '/api/v1/apps/penecho-llm/suggest/status' : '/api/suggest/status';
+  let access = null;
   try {
     const r = await fetch(path, { credentials:'same-origin', cache:'no-store', headers:{ accept:'application/json' } });
     const data = r.ok ? await r.json().catch(() => null) : null;
-    SET.suggest = data?.access || data || null;
-  } catch { SET.suggest = null; }
-  if (S.shelfPage === 'agents' && SET.agentsTab === 'canvas') settingsRender();
+    access = data?.access || data || null;
+  } catch { /* Show the default allowance. */ }
+  if (version !== SET.cloudAccountVersion) return;
+  SET.suggest = access;
+  if (canvasAiSettingsOpen()) settingsRender();
 }
 async function saveSuggestPrefs(paidEnabled, dailyCreditLimit) {
+  const version = SET.cloudAccountVersion;
   const path = typeof HOSTED !== 'undefined' && HOSTED ? '/api/v1/apps/penecho-llm/suggest/preferences' : '/api/suggest/preferences';
   SET.suggestBusy = true; settingsRender();
   try {
@@ -1012,9 +1189,11 @@ async function saveSuggestPrefs(paidEnabled, dailyCreditLimit) {
       : fetch(path, { method:'POST', credentials:'same-origin', headers:{ 'content-type':'application/json', accept:'application/json', 'x-penecho-suggest':'1' }, body:JSON.stringify(body) }));
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.message || data.error || 'Could not update suggestion spending.');
-    SET.suggest = data?.access || data || SET.suggest;
-    toast('Saved suggestion spending.');
-  } catch (error) { toast(error.message); }
+    if (version === SET.cloudAccountVersion) {
+      SET.suggest = data?.access || data || SET.suggest;
+      toast('Saved suggestion spending.');
+    }
+  } catch (error) { if (version === SET.cloudAccountVersion) toast(error.message); }
   SET.suggestBusy = false; settingsRender();
 }
 
@@ -1032,7 +1211,7 @@ function cloudAsksSectionHTML() {
       : '';
   const extra = S.thisComputer && !signedIn ? '<button type="button" class="btn sm" data-act="cloud-sign-in">Sign in</button>' : '';
   return `<section class="sys-sec" id="sysCloudAsks" aria-labelledby="sysCloudAsksHead">
-    <header class="sys-head"><div><h2 id="sysCloudAsksHead">PenEcho Cloud</h2><p class="sys-sub">Run tasks sent from penecho.ai on this computer.</p></div></header>
+    <header class="sys-head"><div><h2 id="sysCloudAsksHead">PenEcho Cloud sync</h2><p class="sys-sub">Run tasks sent from penecho.ai on this computer.</p></div></header>
     <div class="shelf-list">
       ${sysSwitchRowHTML('prefComputerAsks', 'Run Asks sent from penecho.ai', note ? `${baseSub} ${note}` : baseSub, on, `${disabled ? 'disabled ' : ''}data-act="computer-asks-toggle"`, extra)}
     </div>
@@ -1040,14 +1219,14 @@ function cloudAsksSectionHTML() {
 }
 
 function installedSectionHTML() {
-  if (!S.thisComputer && typeof HOSTED !== 'undefined' && HOSTED) {
+  if (settingsHosted()) {
     const pcs = HOSTED.computers || [];
-    return `<section class="sys-sec" id="installed" aria-labelledby="sysInstalled"><header class="sys-head"><div><h2 id="sysInstalled">On your computers</h2><p class="sys-sub">Working agents installed on computers signed in to this account.</p></div></header>
+    return `${agentsFlowStripHTML('setup')}<section class="sys-sec" id="installed" aria-labelledby="sysInstalled"><header class="sys-head"><div><h2 id="sysInstalled">On your computers</h2><p class="sys-sub">Working agents installed on computers signed in to this account.</p></div></header>
       ${pcs.length ? `<div class="shelf-list">${pcs.map(pc => `<div class="sys-row"><span class="sys-mark">${ic('files', 15)}</span><span class="sys-text"><strong>${esc(pc.name || 'Computer')}</strong><small>${esc([pc.open ? 'Online now' : 'Offline', pc.runsAsks ? 'Runs Asks sent from penecho.ai' : 'Cloud Asks off', (pc.agents || []).filter(a => a.ready).map(a => a.name).join(', ') || 'No external CLI agents reported'].filter(Boolean).join(' · '))}</small></span><span class="sys-acts">${pc.open ? '<span class="sys-default">Connected</span>' : ''}</span></div>`).join('')}</div>`
         : '<p class="empty-line">No computers connected yet. Open PenEcho on your Mac or PC to see its installed agents here.</p>'}
     </section>`;
   }
-  const c = S.agentCheck, checking = S.agentChecking;
+  const c = S.agentCheck, checking = S.agentChecking, scanning = agentsScanning();
   const rows = c ? [...c.agents].sort((a, b) => SETUP_ORDER[a.state] - SETUP_ORDER[b.state]) : [];
   const problemCount = rows.filter(a => a.state === 'problem').length;
   const readyCount = rows.filter(a => a.state === 'ready').length;
@@ -1055,23 +1234,26 @@ function installedSectionHTML() {
   const signedOutCount = missingRows.filter(a => a.builtIn).length;
   const notInstalledCount = missingRows.length - signedOutCount;
   const activeRows = rows.filter(a => a.state !== 'missing');
-  const summaryBits = [
+  const summaryBits = !c ? [] : [
     problemCount ? `<span class="setup-pill is-bad">${problemCount} ${problemCount === 1 ? 'needs' : 'need'} a fix</span>` : '',
     readyCount ? `<span class="setup-pill is-ok">${readyCount} ready</span>` : '',
     signedOutCount ? `<span class="setup-pill">${signedOutCount} signed out</span>` : '',
     notInstalledCount ? `<span class="setup-pill">${notInstalledCount} not installed</span>` : '',
   ].filter(Boolean);
   const summaryHTML = summaryBits.length ? `<div class="setup-summary" aria-label="CLI status summary">${summaryBits.join('')}</div>` : '';
-  const head = `<header class="sys-head"><div><h2 id="sysInstalled">${S.thisComputer ? 'Installed CLIs on this computer' : 'Installed CLIs on the host computer'}</h2><p class="sys-sub">Checks whether local CLI tools are installed and signed in. Install or fix tools here, then configure and pin your agents in Set up your agents above.</p></div><button type="button" class="btn sm" data-act="setup-recheck" ${checking ? 'disabled' : ''}>${checking ? '<i class="spin"></i>Checking' : `${ic('retry', 13)}Check again`}</button></header>`;
-  if (!c) return `<section class="sys-sec" id="installed" aria-labelledby="sysInstalled">${head}<p class="empty-line">${S.agentCheckError ? esc(S.agentCheckError) : 'Checking the CLI tools on this computer…'}</p></section>`;
+  const head = `<header class="sys-head"><div><h2 id="sysInstalled">${S.thisComputer ? 'Installed CLIs &amp; built-in runner' : 'Installed CLIs on the host computer'}</h2><p class="sys-sub">Install, sign in, update, and verify local agent runtimes here. Configure models, efforts, and permissions in <strong>Preset agents</strong>.</p></div><button type="button" class="btn sm" data-act="setup-recheck" ${checking ? 'disabled' : ''}>${checking ? '<i class="spin"></i>Checking…' : `${ic('retry', 13)}Check again`}</button></header>`;
+  // A check in progress says so above the rows from the last one, which stay on show.
+  const notice = scanning ? `<div class="sys-notice is-checking" role="status"><i class="spin"></i><span>${c ? 'Checking local CLI tools again…' : 'Checking local CLI tools…'}</span></div>` : '';
+  const strip = agentsFlowStripHTML('setup');
+  if (!c) return `${strip}<section class="sys-sec setup-page" id="installed" aria-labelledby="sysInstalled">${head}${notice}${summaryHTML}${S.agentCheckError && !scanning ? `<p class="empty-line">${esc(S.agentCheckError)}</p>` : ''}</section>`;
   const missingGroupTitle = signedOutCount && notInstalledCount ? 'Not installed or signed out' : signedOutCount ? 'Signed out' : 'Not installed';
   const listsHTML = activeRows.length && missingRows.length
     ? `<div class="shelf-list">${activeRows.map(setupRowHTML).join('')}</div>
       <div class="setup-group-label"><span>${missingGroupTitle}</span><em>${missingRows.length}</em></div>
       <div class="shelf-list is-missing-list">${missingRows.map(setupRowHTML).join('')}</div>`
     : `<div class="shelf-list ${!activeRows.length && missingRows.length ? 'is-missing-list' : ''}">${rows.map(setupRowHTML).join('')}</div>`;
-  return `<section class="sys-sec setup-page" id="installed" aria-labelledby="sysInstalled">${head}
-    ${summaryHTML}
+  return `${strip}<section class="sys-sec setup-page" id="installed" aria-labelledby="sysInstalled">${head}
+    ${notice}${summaryHTML}
     ${c.agents.some(a => a.state === 'ready') ? '' : '<p class="setup-none">No CLI tool can run yet. Install one below, then click Check again.</p>'}
     ${listsHTML}</section>`;
 }
@@ -1089,10 +1271,11 @@ function canvasAiSectionHTML() {
   const illBg = lsGet('penecho-illustration-background', 'auto');
   const summonOn = lsGet('penecho-summon-enabled', 'true') !== 'false';
   const access = SET.suggest;
+  const suggestSignIn = !access?.signedIn && cloudSignInNeeded();
   const delaySelect = `<select class="sys-pick sys-pick-sm" data-canvas-pref="autoDelaySec" aria-label="Auto AI delay">${[0, 1, 2, 3, 5, 10].map(s => `<option value="${s}" ${String(s) === delaySec ? 'selected' : ''}>${s} s</option>`).join('')}</select>`;
   const selectRow = (label, sub, pref, opts, current) => `<div class="sys-row sys-pref-row"><div class="sys-text"><strong>${label}</strong><small>${sub}</small></div><div class="sys-acts"><select class="sys-pick" data-canvas-pref="${pref}" aria-label="${esc(label)}">${opts.map(([v, t]) => `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div></div>`;
 
-  return `${canvasAiCardHTML(keys)}
+  return `${canvasFlowStripHTML('canvas-ai')}${canvasAiCardHTML(keys)}
     <section class="sys-sec" aria-labelledby="sysCanvasAi">
       <header class="sys-head"><div><h2 id="sysCanvasAi">AI on the Canvas</h2></div></header>
       <div class="shelf-list">
@@ -1126,7 +1309,7 @@ function canvasAiSectionHTML() {
               <small>${esc(`${access.spentToday || 0} credits used today`)}</small>
             </div>
             <div class="sys-acts sys-spend-limit"><label><span>Daily limit</span><input type="number" name="dailyCreditLimit" min="0.1" max="1000" step="0.1" value="${esc(String(access.dailyCreditLimit ?? 50))}" ${SET.suggestBusy ? 'disabled' : ''}></label></div>
-          </form>` : `<div class="sys-row"><span class="sys-mark">${ic('hint', 15)}</span><span class="sys-text"><strong>${access?.subscribed ? 'Included in your subscription' : '500 free smart suggestions daily when signed in'}</strong><small>${access?.subscribed ? 'Unlimited smart suggestions are included with your plan.' : 'Signed-in accounts can opt in to 0.1 credits per suggestion after the daily free allowance.'}</small></span><span class="sys-acts">${access?.signedIn ? '' : '<button type="button" class="btn sm" data-act="cloud-sign-in">Sign in</button>'}</span></div>`}
+          </form>` : `<div class="sys-row"><span class="sys-mark">${ic('hint', 15)}</span><span class="sys-text"><strong>${access?.subscribed ? 'Included in your subscription' : '500 free smart suggestions daily when signed in'}</strong><small>${access?.subscribed ? 'Unlimited smart suggestions are included with your plan.' : 'Signed-in accounts can opt in to 0.1 credits per suggestion after the daily free allowance.'}</small></span><span class="sys-acts">${suggestSignIn ? '<button type="button" class="btn sm" data-act="cloud-sign-in">Sign in</button>' : ''}</span></div>`}
       </div>
     </section>`;
 }
@@ -1180,27 +1363,42 @@ ACT['mcp-recheck'] = () => { SET.mcpAsked = false; loadMcpStatus(); };
 function appsSectionHTML() {
   if (!SET.mcpAsked) loadMcpStatus();
   const keepAwake = lsGet('penecho-mcp-keep-awake', 'false') === 'true';
+  const scope = '<div class="sys-notice"><p><strong>Separate external integration:</strong> MCP lets outside AI apps connect <em>into</em> PenEcho to read and draw on Canvases you opt in. It does not require Canvas AI API keys or Project Agent presets.</p></div>';
+  const optIn = '<p class="sys-note">Per-Canvas access is always opt-in: turn on or pause “MCP can draw here” from any Canvas’s <code>⋯</code> menu.</p>';
   if (!S.thisComputer) {
-    return `<section class="sys-sec" aria-labelledby="sysApps">
+    return `${scope}<section class="sys-sec" aria-labelledby="sysApps">
       <header class="sys-head"><div><h2 id="sysApps">MCP</h2><p class="sys-sub">Let Claude, ChatGPT, or another MCP client draw directly on your Canvases.</p></div></header>
       <div class="shelf-list">
-        <div class="sys-row"><span class="sys-mark">${ic('hint', 15)}</span><span class="sys-text"><strong>Connect via MCP</strong><small>Open a Canvas and turn on “MCP can draw here” in its ⋯ menu, or configure local desktop clients from PenEcho on your computer.</small></span></div>
+        <div class="sys-row"><span class="sys-mark is-mcp">${ic('setMcp', 15)}</span><span class="sys-text"><strong>Connect via MCP</strong><small>Open a Canvas and turn on “MCP can draw here” in its ⋯ menu, or configure local desktop clients from PenEcho on your computer.</small></span></div>
         ${sysSwitchRowHTML('prefKeepAwake', 'Keep awake while MCP is connected', 'Prevent display sleep during live MCP drawing sessions.', keepAwake, 'data-canvas-toggle="keepAwake"')}
       </div>
     </section>`;
   }
-  const m = SET.mcp, url = m?.http?.initialUrl || '', clients = m?.configuredClients || {};
+  const m = SET.mcp, url = m?.http?.initialUrl || '', clients = m?.configuredClients || {}, busy = SET.mcpBusy ? 'disabled' : '';
   const claudeOk = Boolean(clients?.claude?.configured || clients?.claudeDesktop?.configured);
   const codexOk = Boolean(clients?.codex?.configured);
-  return `<section class="sys-sec" aria-labelledby="sysApps">
-    <header class="sys-head"><div><h2 id="sysApps">MCP on this computer</h2><p class="sys-sub">Let Claude Desktop, ChatGPT, or Codex read and draw on Canvases you opt in.</p></div><button type="button" class="btn sm" data-act="mcp-recheck">${SET.mcpError ? 'Retry' : 'Refresh'}</button></header>
+  const live = m?.connectedCanvases || 0;
+  const mark = (mono, color) => `<span class="av" style="--av:${color};--s:28px" aria-hidden="true">${mono}</span>`;
+  const client = (id, mono, color, name, sub, ok) => `<div class="sys-row">${mark(mono, color)}<span class="sys-text"><strong><span>${name}</span>${ok ? '<span class="kind-tag is-green">Configured</span>' : ''}</strong><small>${sub}</small></span>
+    <span class="sys-acts"><button type="button" class="btn sm ${ok ? '' : 'soft-accent'}" data-act="mcp-configure" data-client="${id}" ${busy}>${ok ? 'Reconfigure' : `Configure ${id === 'codex' ? 'Codex' : 'Claude'}`}</button></span></div>`;
+  return `${scope}<section class="sys-sec" aria-labelledby="sysApps">
+    <header class="sys-head"><div><h2 id="sysApps">Local MCP bridge</h2></div><button type="button" class="btn sm" data-act="mcp-recheck">${SET.mcpError ? 'Retry' : 'Refresh'}</button></header>
     ${SET.mcpError ? `<p class="sys-note is-bad">${esc(SET.mcpError)}</p>` : ''}
     <div class="shelf-list">
-      <div class="sys-row"><span class="sys-mark ${m?.connectedCanvases ? 'is-cloud' : ''}">${ic('link', 15)}</span><span class="sys-text"><strong>${m ? (m.connectedCanvases ? `Connected · ${m.connectedCanvases} Canvas${m.connectedCanvases === 1 ? '' : 'es'} live` : 'MCP ready') : 'Checking MCP bridge…'}</strong><small>${url ? `Local MCP endpoint: ${esc(url)}` : 'Local MCP service starts automatically when PenEcho runs.'}</small></span><span class="sys-acts">${url ? '<button type="button" class="btn sm" data-act="mcp-copy-url">Copy URL</button>' : ''}${m?.config ? '<button type="button" class="btn sm" data-act="mcp-copy-config">Copy JSON</button>' : ''}</span></div>
-      ${m?.canConfigureLocalClients ? `<div class="sys-row"><span class="sys-mark">${ic('code', 15)}</span><span class="sys-text"><strong>One-click desktop setup</strong><small>Add PenEcho MCP to Claude Code / Desktop or Codex on this computer.</small></span><span class="sys-acts"><button type="button" class="btn sm" data-act="mcp-configure" data-client="claude" ${SET.mcpBusy ? 'disabled' : ''}>${claudeOk ? 'Reconfigure Claude' : 'Configure Claude'}</button><button type="button" class="btn sm" data-act="mcp-configure" data-client="codex" ${SET.mcpBusy ? 'disabled' : ''}>${codexOk ? 'Reconfigure Codex' : 'Configure Codex'}</button></span></div>` : ''}
-      ${sysSwitchRowHTML('prefKeepAwake', 'Keep awake while MCP is connected', 'Stay awake while an external MCP client has a Canvas session open.', keepAwake, 'data-canvas-toggle="keepAwake"')}
+      <div class="sys-row"><span class="sys-mark is-mcp">${ic('setMcp', 15)}</span><span class="sys-text"><strong><span>${m ? (live ? `Connected · ${live} Canvas${live === 1 ? '' : 'es'} live` : 'MCP ready') : 'Checking MCP bridge…'}</span>${m ? '<span class="kind-tag is-green">Listening</span>' : ''}</strong><small>${url ? `Endpoint <code>${esc(url)}</code>` : 'Local MCP service starts automatically when PenEcho runs.'}</small></span><span class="sys-acts">${url ? '<button type="button" class="btn sm" data-act="mcp-copy-url">Copy URL</button>' : ''}${m?.config ? '<button type="button" class="btn sm" data-act="mcp-copy-config">Copy JSON</button>' : ''}</span></div>
     </div>
-    <p class="sys-note">You can also enable or pause “MCP can draw here” per Canvas from its ⋯ menu.</p>
+  </section>
+  ${m?.canConfigureLocalClients ? `<section class="sys-sec" aria-labelledby="sysMcpClients">
+    <header class="sys-head"><div><h2 id="sysMcpClients">One-click external app setup</h2></div></header>
+    <div class="shelf-list">
+      ${client('claude', 'Cl', '#d97757', 'Claude Desktop &amp; Claude Code', 'Adds PenEcho MCP to Claude on this computer.', claudeOk)}
+      ${client('codex', 'Cx', '#10a37f', 'Codex', 'Adds PenEcho MCP to Codex on this computer.', codexOk)}
+    </div>
+  </section>` : ''}
+  <section class="sys-sec" aria-labelledby="sysMcpSession">
+    <header class="sys-head"><div><h2 id="sysMcpSession">Session behavior</h2></div></header>
+    <div class="shelf-list">${sysSwitchRowHTML('prefKeepAwake', 'Keep awake while MCP is connected', 'Stay awake while an external MCP client has a Canvas session open.', keepAwake, 'data-canvas-toggle="keepAwake"')}</div>
+    ${optIn}
   </section>`;
 }
 
@@ -1213,7 +1411,13 @@ ACT['canvas-grid'] = el => {
 ACT['set-lang'] = el => {
   const lang = el.dataset.lang === 'zh' ? 'zh' : 'en';
   lsSet('penecho-language', lang);
-  settingsRender();
+  if (typeof document !== 'undefined' && document.documentElement) document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('penecho:languagechange', { detail:{ language:lang } }));
+  }
+  if (typeof window !== 'undefined') window.PenEchoCanvasShell?.syncSettings?.();
+  if (typeof linesRefreshLanguage === 'function') linesRefreshLanguage();
+  else { sysShown = {}; settingsRender(); }
 };
 ACT['set-scale'] = el => {
   const scale = Number(el.dataset.scale);
@@ -1225,7 +1429,7 @@ if (typeof window !== 'undefined' && window.PenEchoPageScale) {
     renderSettingsModal();
     // Touch browsers can finish the zoom reflow after the next frame.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const tab = $('#sysTab-general'), tabs = tab?.parentElement;
+      const tab = $('#sysTab-general'), tabs = tab?.closest('.sysm-tabs');
       if (!tabs?.clientWidth || tabs.scrollWidth <= tabs.clientWidth) return;
       const item = tab.getBoundingClientRect(), strip = tabs.getBoundingClientRect();
       const overflow = Math.max(0, item.right - strip.right) + Math.min(0, item.left - strip.left);
@@ -1242,7 +1446,7 @@ function generalSectionHTML() {
   return `<section class="sys-sec" aria-labelledby="sysGeneral"><header class="sys-head"><div><h2 id="sysGeneral">Preferences</h2></div></header>
     <div class="shelf-list">
       ${themeRow()}
-      <div class="sys-row sys-pref-row"><div class="sys-text"><strong>Language</strong><small>Language used in Canvas controls and prompts.</small></div><div class="sys-acts"><div class="seg" role="radiogroup" aria-label="Language">${[['en', 'English'], ['zh', '中文']].map(([k, l]) => `<button type="button" role="radio" aria-checked="${lang === k}" data-act="set-lang" data-lang="${k}"><span>${l}</span></button>`).join('')}</div></div></div>
+      <div class="sys-row sys-pref-row"><div class="sys-text"><strong>Language</strong><small>Language used across PenEcho and Canvas.</small></div><div class="sys-acts"><div class="seg" role="radiogroup" aria-label="Language">${[['en', 'English'], ['zh', '中文']].map(([k, l]) => `<button type="button" role="radio" aria-checked="${lang === k}" data-act="set-lang" data-lang="${k}"><span>${l}</span></button>`).join('')}</div></div></div>
       ${pageScale ? `<div class="sys-row sys-pref-row">
         <div class="sys-text"><strong id="pageZoomLabel">Page zoom</strong><small>Adjust the size of Projects and Canvas.</small></div>
         <div class="sys-acts"><div id="pageZoomOptions" class="seg" role="radiogroup" aria-labelledby="pageZoomLabel">
@@ -1255,6 +1459,7 @@ function generalSectionHTML() {
       ${S.thisComputer ? '<div class="sys-row sys-pref-row"><div class="sys-text"><strong>Other devices</strong><small>Open PenEcho from a tablet or phone on this network.</small></div><div class="sys-acts"><a class="btn sm" href="/lines/devices.html">Open</a></div></div>' : ''}
     </div>
   </section>
+  ${cloudAsksSectionHTML()}
   <section class="sys-sec" aria-labelledby="sysAbout"><header class="sys-head"><div><h2 id="sysAbout">About</h2></div></header>
     <div class="shelf-list">
       ${(typeof desktopAboutHTML === 'function' && desktopAboutHTML()) || `<div class="sys-row sys-pref-row"><div class="sys-text"><strong>PenEcho 1.5.0</strong><small>Handwriting canvas &amp; Project Lines workspace.</small></div><div class="sys-acts"><a class="btn sm" href="${CHANGELOG_URL}" target="_blank" rel="noopener noreferrer">Changelog</a></div></div>`}
@@ -1264,9 +1469,10 @@ function generalSectionHTML() {
 }
 
 function sysBodyHTML(id) {
+  if (id === 'setup') return installedSectionHTML();
   if (id === 'agents') {
-    const tabs = agentsHavePrices() ? '<div class="seg agents-tabs" id="agentsTabs" role="tablist" aria-label="Agents"></div>' : '';
-    return agentsPricesUp() ? `${tabs}${pricesHostHTML('settings')}` : `${tabs}${agentsSectionHTML()}${cloudAsksSectionHTML()}${installedSectionHTML()}`;
+    const tabs = agentsHavePrices() ? '<div class="seg agents-tabs" id="agentsTabs" role="tablist" aria-label="Preset agents"></div>' : '';
+    return `${agentsFlowStripHTML('agents')}${tabs}${agentsPricesUp() ? pricesHostHTML('settings') : agentsSectionHTML()}`;
   }
   if (id === 'canvas-ai') return canvasAiSectionHTML();
   if (id === 'apps') return appsSectionHTML();
@@ -1275,14 +1481,29 @@ function sysBodyHTML(id) {
   if (id === 'archived') return archivedProjectsHTML();
   return canvasSectionHTML();
 }
-// The tabs down the window's left side. Agents counts the problems that stop an agent working; Archived, the projects in it.
+// The tabs down the window's left side, in their groups. Local providers counts the problems that stop an agent working, Preset agents
+// the presets saved, MCP the Canvases live, and Archived the projects in it.
+function sysNavBadgeHTML(id) {
+  if (id === 'setup') {
+    const n = S.agentCheck?.problems || 0;
+    return n ? `<em class="setup-count" title="${n} to fix">${n}</em>` : S.agentChecking ? '<em class="sys-nav-muted" title="Checking">…</em>' : '';
+  }
+  if (id === 'agents') { const n = savedPresetsCount(); return n ? `<em>${n}</em>` : ''; }
+  if (id === 'apps') { const n = SET.mcp?.connectedCanvases || 0; return n > 0 ? `<em class="sys-nav-ok">${n} live</em>` : ''; }
+  if (id === 'archived') { const n = (S.projects || []).filter(p => p.archived).length; return n ? `<em>${n}</em>` : ''; }
+  return '';
+}
 function sysNavHTML(now) {
-  const n = S.agentCheck?.problems || 0, archived = S.projects.filter(p => p.archived).length;
-  return sysTabs().map(t => t.sep ? '<hr>' : `<button type="button" id="sysTab-${t.id}" role="tab" aria-selected="${t.id === now}" aria-controls="sysPanel" tabindex="${t.id === now ? 0 : -1}" data-act="settings-tab" data-tab="${t.id}">${ic(t.icon, 16)}<span>${t.label}</span>${t.id === 'agents' && n ? `<em class="setup-count" title="${n} to fix">${n}</em>` : t.id === 'archived' && archived ? `<em>${archived}</em>` : ''}</button>`).join('');
+  const tabs = sysTabs();
+  return SYS_GROUPS.map(([group, label]) => {
+    const list = tabs.filter(t => t.group === group);
+    return list.length ? `<div class="sysm-group" role="presentation"><div class="sysm-group-label" aria-hidden="true">${label}</div>${list.map(t => `<button type="button" id="sysTab-${t.id}" role="tab" aria-selected="${t.id === now}" aria-controls="sysPanel" tabindex="${t.id === now ? 0 : -1}" data-act="settings-tab" data-tab="${t.id}"${t.title ? ` title="${t.title}"` : ''}>${ic(t.icon, 16)}<span>${t.label}</span>${sysNavBadgeHTML(t.id)}</button>`).join('')}</div>` : '';
+  }).join('');
 }
 // Drawn into a layer of its own over the page. Each part is written only when it changed, so a button you are on stays put,
 // and a box you are typing in is not redrawn under you: the window catches up when you leave it.
 let sysShown = {};
+function resetSettingsCache() { sysShown = {}; }
 function renderSettingsModal() {
   let host = document.getElementById('sysModal');
   const fresh = !host;
@@ -1291,22 +1512,23 @@ function renderSettingsModal() {
     host.id = 'sysModal'; host.className = 'sysm-layer';
     host.innerHTML = `<div class="sysm-scrim" data-act="settings-close"></div><section class="sysm" role="dialog" aria-modal="true" aria-labelledby="sysmTitle">
       <nav class="sysm-nav"><h2 id="sysmTitle">Settings</h2><div class="sysm-tabs" role="tablist" aria-orientation="vertical" aria-labelledby="sysmTitle"></div></nav>
-      <div class="sysm-main"><header class="sysm-head"><div class="sysm-back"></div><h3></h3><button type="button" class="icon-btn sysm-x" data-act="settings-close" aria-label="Close settings" title="Close (Esc)">${ic('x', 18)}</button></header>
+      <div class="sysm-main"><header class="sysm-head"><div class="sysm-back"></div><div class="sysm-title"><h3></h3><span class="sys-domain-tag"></span></div><button type="button" class="icon-btn sysm-x" data-act="settings-close" aria-label="Close settings" title="Close (Esc)">${ic('x', 18)}</button></header>
       <div class="sysm-body" id="sysPanel" role="tabpanel"></div></div></section>`;
     document.body.append(host);
     sysShown = {};
   }
   const now = sysTabNow(), t = sysTab(now), ret = settingsReturnInfo();
-  if (now === 'agents') dismissRailSettingsBadge();
-  // An older or shorter address (#setup, #settings/agents, #settings) takes the tab's own.
+  if (now === 'agents' || now === 'setup') dismissRailSettingsBadge();
+  // An older or shorter address (#settings/agents, #settings) takes the tab's own.
   const prices = agentsPricesUp(), hash = prices ? AGENTS_PRICES : t.hash, shown = prices ? 'prices' : now;
   if (location.hash !== hash) { S.hashWrite = hash; history.replaceState(null, '', hash); }
   const nav = sysNavHTML(now), body = sysBodyHTML(now), back = ret ? `<button type="button" class="sys-back" data-act="settings-return">${ic('left', 14)}<span>Back to ${esc(ret.label)}</span></button>` : '';
-  document.title = `${t.label} · Settings · PenEcho Lines`;
+  document.title = `${t.title || t.label} · Settings · PenEcho Lines`;
   const focusId = host.contains(document.activeElement) ? document.activeElement.id : '';
   if (sysShown.nav !== nav) $('.sysm-tabs', host).innerHTML = nav;
   if (sysShown.back !== back) $('.sysm-back', host).innerHTML = back;
-  $('.sysm-head h3', host).textContent = t.label;
+  $('.sysm-head h3', host).textContent = t.title || t.label;
+  $('.sysm-head .sys-domain-tag', host).textContent = t.domain || '';
   const panel = $('#sysPanel', host), moved = sysShown.tab !== shown;
   panel.setAttribute('aria-labelledby', `sysTab-${now}`);
   const typing = !moved && !SET.redraw && panel.querySelector('.sys-form')?.contains(document.activeElement);
@@ -1315,14 +1537,16 @@ function renderSettingsModal() {
   const strip = $('#agentsTabs', panel), tabs = strip ? agentsTabsHTML() : '';
   if (strip && strip.dataset.h !== tabs) strip.innerHTML = strip.dataset.h = tabs;
   if (prices) paintPriceLists();
+  if (typeof linesTranslateTree === 'function' && typeof linesIsZh === 'function' && linesIsZh()) {
+    linesTranslateTree(host);
+    if (typeof linesTranslateTitle === 'function') document.title = linesTranslateTitle(document.title);
+  }
   if (focusId && document.activeElement?.id !== focusId) document.getElementById(focusId)?.focus({ preventScroll:true });
   sysShown = { nav, back, body:typing ? sysShown.body : body, tab:shown };
   if (typing) return;
   // On a narrow screen the tabs are one row across the top: the one on show is scrolled into it.
   if (moved) $(`#sysTab-${now}`, host)?.scrollIntoView?.({ block:'nearest', inline:'nearest' });
-  // #setup is Agents, scrolled to the agents installed on this computer.
-  if (S.shelfPage === 'setup') { S.shelfPage = 'agents'; requestAnimationFrame(() => $('#installed')?.scrollIntoView({ block:'start' })); }
-  else if (moved) panel.scrollTop = 0;
+  if (moved) panel.scrollTop = 0;
   if (fresh) $(`#sysTab-${now}`, host)?.focus({ preventScroll:true });
   if (moved && strip) queueMicrotask(() => loadPrices(true));
   if ((fresh || (!S.agentCheck && !S.agentCheckError)) && !S.agentChecking) queueMicrotask(() => checkAgents());
@@ -1373,7 +1597,7 @@ document.addEventListener('keydown', e => {
   }
   const tabBtn = e.target.closest?.('.sysm-tabs [role="tab"]');
   if (!tabBtn) return;
-  const tabs = [...tabBtn.parentElement.querySelectorAll('[role="tab"]')];
+  const tabs = [...tabBtn.closest('.sysm-tabs').querySelectorAll('[role="tab"]')];
   const idx = tabs.indexOf(tabBtn);
   if (idx < 0) return;
   let nextIdx = -1;

@@ -204,6 +204,11 @@
     });
   }
 
+  function syncSettings() {
+    if (!state.frame?.contentWindow || !state.booted) return false;
+    return postToFrame({ action:'sync-settings' });
+  }
+
   function syncMenu() {
     if (typeof window.PenEchoDesktopMenuSync === 'function') window.PenEchoDesktopMenuSync();
   }
@@ -465,6 +470,8 @@
     if (h === '#agents/apps' || h === '#agents/mcp' || h === '#settings/apps' || h === '#settings/mcp') return 'apps';
     if (h === '#providers') return 'providers';
     if (h === '#archived') return 'archived';
+    if (h === '#setup') return 'setup';
+    if (h === '#settings') return typeof defaultSettingsTab === 'function' ? defaultSettingsTab() : 'agents';
     return 'agents';
   }
 
@@ -665,6 +672,7 @@
     openSettingsOverCanvas,
     onSettingsClosed,
     syncChrome,
+    syncSettings,
     sendMenuCommand,
     menuState,
   };
